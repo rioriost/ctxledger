@@ -1,6 +1,72 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    container_name: ctxledger-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ctxledger
+      POSTGRES_USER: ctxledger
+      POSTGRES_PASSWORD: ctxledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../schemas/postgres.sql:/docker-entrypoint-initdb.d/001-postgres.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ctxledger -d ctxledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
 
   ctxledger:
-    build: .
+    image: python:3.14-slim
+    container_name: ctxledger-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CTXLEDGER_APP_NAME: ctxledger
+      CTXLEDGER_APP_VERSION: 0.1.0
+      CTXLEDGER_ENV: docker
+      CTXLEDGER_DATABASE_URL: postgresql://ctxledger:ctxledger@postgres:5432/ctxledger
+      CTXLEDGER_TRANSPORT: http
+      CTXLEDGER_ENABLE_HTTP: "true"
+      CTXLEDGER_ENABLE_STDIO: "false"
+      CTXLEDGER_HOST: 0.0.0.0
+      CTXLEDGER_PORT: 8080
+      CTXLEDGER_HTTP_PATH: /mcp
+      CTXLEDGER_REQUIRE_AUTH: "false"
+      CTXLEDGER_PROJECTION_ENABLED: "true"
+      CTXLEDGER_PROJECTION_DIRECTORY: .agent
+      CTXLEDGER_PROJECTION_WRITE_JSON: "true"
+      CTXLEDGER_PROJECTION_WRITE_MARKDOWN: "true"
+      CTXLEDGER_LOG_LEVEL: info
+      CTXLEDGER_LOG_STRUCTURED: "true"
+      CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS: 5
+      PYTHONPATH: /app/src
+    working_dir: /app
+    command:
+      [
+        "sh",
+        "-lc",
+        "python -m pip install --upgrade pip && python -m pip install -e . && python -m ctxledger serve --transport http --host 0.0.0.0 --port 8080",
+      ]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ..:/app
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "from ctxledger.config import load_settings; from ctxledger.server import create_server; s = load_settings(); app = create_server(s); app.configure_logging(); print(app.health().status)"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  postgres_data:
