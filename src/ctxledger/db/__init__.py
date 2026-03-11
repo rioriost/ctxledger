@@ -9,6 +9,7 @@ from ctxledger.db.postgres import (
     build_postgres_uow_factory,
 )
 from ctxledger.workflow.service import (
+    ProjectionArtifactType,
     ProjectionFailureInfo,
     ProjectionFailureRepository,
     ProjectionInfo,
@@ -214,26 +215,54 @@ class InMemoryVerifyReportRepository(VerifyReportRepository):
 class InMemoryProjectionStateRepository(ProjectionStateRepository):
     def __init__(
         self,
-        projection_states_by_key: dict[tuple[object, object], ProjectionInfo],
+        projection_states_by_key: dict[
+            tuple[object, object, ProjectionArtifactType], ProjectionInfo
+        ],
     ) -> None:
         self._projection_states_by_key = projection_states_by_key
 
-    def get_resume_projection(
+    def get_resume_projections(
         self,
         workspace_id: object,
         workflow_instance_id: object,
-    ) -> ProjectionInfo | None:
-        return self._projection_states_by_key.get((workspace_id, workflow_instance_id))
+    ) -> tuple[ProjectionInfo, ...]:
+        candidates = [
+            projection
+            for (
+                candidate_workspace_id,
+                candidate_workflow_instance_id,
+                _,
+            ), projection in self._projection_states_by_key.items()
+            if candidate_workspace_id == workspace_id
+            and candidate_workflow_instance_id == workflow_instance_id
+        ]
+        candidates.sort(
+            key=lambda projection: (
+                projection.last_canonical_update_at is not None,
+                projection.last_canonical_update_at,
+                projection.last_successful_write_at is not None,
+                projection.last_successful_write_at,
+                projection.projection_type.value,
+            ),
+            reverse=True,
+        )
+        return tuple(candidates)
 
     def record_resume_projection(self, projection: RecordProjectionStateInput) -> None:
-        self._projection_states_by_key[
-            (projection.workspace_id, projection.workflow_instance_id)
-        ] = ProjectionInfo(
+        key = (
+            projection.workspace_id,
+            projection.workflow_instance_id,
+            projection.projection_type,
+        )
+        existing = self._projection_states_by_key.get(key)
+        open_failure_count = existing.open_failure_count if existing is not None else 0
+        self._projection_states_by_key[key] = ProjectionInfo(
+            projection_type=projection.projection_type,
             status=projection.status,
             target_path=projection.target_path,
             last_successful_write_at=projection.last_successful_write_at,
             last_canonical_update_at=projection.last_canonical_update_at,
-            open_failure_count=0,
+            open_failure_count=open_failure_count,
         )
 
     def set_resume_projection(
@@ -242,32 +271,54 @@ class InMemoryProjectionStateRepository(ProjectionStateRepository):
         workflow_instance_id: object,
         projection: ProjectionInfo,
     ) -> None:
-        self._projection_states_by_key[(workspace_id, workflow_instance_id)] = (
-            projection
-        )
+        self._projection_states_by_key[
+            (workspace_id, workflow_instance_id, projection.projection_type)
+        ] = projection
 
 
 class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
     def __init__(
         self,
-        failures_by_key: dict[tuple[object, object], list[ProjectionFailureInfo]],
+        failures_by_key: dict[
+            tuple[object, object, ProjectionArtifactType], list[ProjectionFailureInfo]
+        ],
+        projection_states_by_key: dict[
+            tuple[object, object, ProjectionArtifactType], ProjectionInfo
+        ],
     ) -> None:
         self._failures_by_key = failures_by_key
+        self._projection_states_by_key = projection_states_by_key
 
     def get_open_failures_by_workflow_id(
         self,
         workspace_id: object,
         workflow_instance_id: object,
     ) -> list[ProjectionFailureInfo]:
-        return list(self._failures_by_key.get((workspace_id, workflow_instance_id), []))
+        failures: list[ProjectionFailureInfo] = []
+        for (
+            candidate_workspace_id,
+            candidate_workflow_instance_id,
+            _,
+        ), candidate_failures in self._failures_by_key.items():
+            if (
+                candidate_workspace_id == workspace_id
+                and candidate_workflow_instance_id == workflow_instance_id
+            ):
+                failures.extend(candidate_failures)
+        return list(failures)
 
     def record_resume_projection_failure(
         self,
         failure: RecordProjectionFailureInput,
     ) -> ProjectionFailureInfo:
-        key = (failure.workspace_id, failure.workflow_instance_id)
+        key = (
+            failure.workspace_id,
+            failure.workflow_instance_id,
+            failure.projection_type,
+        )
         existing = self._failures_by_key.get(key, [])
         failure_info = ProjectionFailureInfo(
+            projection_type=failure.projection_type,
             error_code=failure.error_code,
             error_message=failure.error_message,
             target_path=failure.target_path,
@@ -275,7 +326,50 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
         )
         existing.append(failure_info)
         self._failures_by_key[key] = existing
+
+        current_projection = self._projection_states_by_key.get(key)
+        if current_projection is not None:
+            self._projection_states_by_key[key] = ProjectionInfo(
+                projection_type=current_projection.projection_type,
+                status=current_projection.status,
+                target_path=current_projection.target_path,
+                last_successful_write_at=current_projection.last_successful_write_at,
+                last_canonical_update_at=current_projection.last_canonical_update_at,
+                open_failure_count=len(existing),
+            )
+
         return failure_info
+
+    def resolve_resume_projection_failures(
+        self,
+        workspace_id: object,
+        workflow_instance_id: object,
+    ) -> int:
+        resolved_count = 0
+
+        for projection_type in (
+            ProjectionArtifactType.RESUME_JSON,
+            ProjectionArtifactType.RESUME_MD,
+        ):
+            key = (workspace_id, workflow_instance_id, projection_type)
+            existing = self._failures_by_key.get(key, [])
+            resolved_count += len(existing)
+
+            if existing:
+                self._failures_by_key[key] = []
+
+            current_projection = self._projection_states_by_key.get(key)
+            if current_projection is not None:
+                self._projection_states_by_key[key] = ProjectionInfo(
+                    projection_type=current_projection.projection_type,
+                    status=current_projection.status,
+                    target_path=current_projection.target_path,
+                    last_successful_write_at=current_projection.last_successful_write_at,
+                    last_canonical_update_at=current_projection.last_canonical_update_at,
+                    open_failure_count=0,
+                )
+
+        return resolved_count
 
 
 class InMemoryUnitOfWork(UnitOfWork):
@@ -288,10 +382,12 @@ class InMemoryUnitOfWork(UnitOfWork):
         attempts_by_id: dict[object, WorkflowAttempt] | None = None,
         checkpoints_by_id: dict[object, WorkflowCheckpoint] | None = None,
         verify_reports_by_id: dict[object, VerifyReport] | None = None,
-        projection_states_by_key: dict[tuple[object, object], ProjectionInfo]
+        projection_states_by_key: dict[
+            tuple[object, object, ProjectionArtifactType], ProjectionInfo
+        ]
         | None = None,
         projection_failures_by_key: dict[
-            tuple[object, object], list[ProjectionFailureInfo]
+            tuple[object, object, ProjectionArtifactType], list[ProjectionFailureInfo]
         ]
         | None = None,
     ) -> None:
@@ -337,7 +433,8 @@ class InMemoryUnitOfWork(UnitOfWork):
             self._projection_states_by_key
         )
         self.projection_failures = InMemoryProjectionFailureRepository(
-            self._projection_failures_by_key
+            self._projection_failures_by_key,
+            self._projection_states_by_key,
         )
 
     def __enter__(self) -> InMemoryUnitOfWork:
@@ -362,8 +459,12 @@ class InMemoryStore:
     attempts_by_id: dict[object, WorkflowAttempt]
     checkpoints_by_id: dict[object, WorkflowCheckpoint]
     verify_reports_by_id: dict[object, VerifyReport]
-    projection_states_by_key: dict[tuple[object, object], ProjectionInfo]
-    projection_failures_by_key: dict[tuple[object, object], list[ProjectionFailureInfo]]
+    projection_states_by_key: dict[
+        tuple[object, object, ProjectionArtifactType], ProjectionInfo
+    ]
+    projection_failures_by_key: dict[
+        tuple[object, object, ProjectionArtifactType], list[ProjectionFailureInfo]
+    ]
 
     @classmethod
     def create(cls) -> InMemoryStore:

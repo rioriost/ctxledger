@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 
@@ -15,12 +17,43 @@ from ctxledger.config import (
     StdioSettings,
     TransportMode,
 )
+from ctxledger.memory.service import MemoryService
 from ctxledger.server import (
     CtxLedgerServer,
+    HttpRuntimeAdapter,
+    McpToolResponse,
     ReadinessStatus,
     ServerBootstrapError,
+    StdioRuntimeAdapter,
+    WorkflowResumeResponse,
     build_database_health_checker,
+    build_http_runtime_adapter,
+    build_memory_get_context_tool_handler,
+    build_memory_remember_episode_tool_handler,
+    build_memory_search_tool_handler,
+    build_resume_workflow_tool_handler,
+    build_stdio_runtime_adapter,
+    build_workflow_resume_http_handler,
     create_runtime,
+    create_server,
+    parse_workflow_resume_request_path,
+    serialize_workflow_resume,
+)
+from ctxledger.workflow.service import (
+    ProjectionArtifactType,
+    ProjectionInfo,
+    ProjectionStatus,
+    ResumableStatus,
+    ResumeIssue,
+    VerifyReport,
+    VerifyStatus,
+    WorkflowAttempt,
+    WorkflowAttemptStatus,
+    WorkflowCheckpoint,
+    WorkflowInstance,
+    WorkflowInstanceStatus,
+    WorkflowResume,
+    Workspace,
 )
 
 
@@ -54,6 +87,116 @@ class FakeRuntime:
 
     def stop(self) -> None:
         self.stop_calls += 1
+
+
+@dataclass
+class FakeWorkflowService:
+    resume_result: WorkflowResume
+    resume_calls: list[object] | None = None
+
+    def __post_init__(self) -> None:
+        if self.resume_calls is None:
+            self.resume_calls = []
+
+    def resume_workflow(self, data: object) -> WorkflowResume:
+        assert self.resume_calls is not None
+        self.resume_calls.append(data)
+        return self.resume_result
+
+
+def make_resume_fixture() -> WorkflowResume:
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+    attempt_id = uuid4()
+    checkpoint_id = uuid4()
+    verify_id = uuid4()
+
+    workspace = Workspace(
+        workspace_id=workspace_id,
+        repo_url="https://example.com/org/repo.git",
+        canonical_path="/tmp/repo",
+        default_branch="main",
+        metadata={"team": "platform"},
+        created_at=datetime(2024, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 2, tzinfo=UTC),
+    )
+    workflow_instance = WorkflowInstance(
+        workflow_instance_id=workflow_instance_id,
+        workspace_id=workspace_id,
+        ticket_id="SRV-123",
+        status=WorkflowInstanceStatus.RUNNING,
+        metadata={"priority": "high"},
+        created_at=datetime(2024, 1, 3, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 4, tzinfo=UTC),
+    )
+    attempt = WorkflowAttempt(
+        attempt_id=attempt_id,
+        workflow_instance_id=workflow_instance_id,
+        attempt_number=2,
+        status=WorkflowAttemptStatus.RUNNING,
+        failure_reason=None,
+        verify_status=VerifyStatus.PASSED,
+        started_at=datetime(2024, 1, 5, tzinfo=UTC),
+        finished_at=None,
+        created_at=datetime(2024, 1, 5, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 5, tzinfo=UTC),
+    )
+    latest_checkpoint = WorkflowCheckpoint(
+        checkpoint_id=checkpoint_id,
+        workflow_instance_id=workflow_instance_id,
+        attempt_id=attempt_id,
+        step_name="implement_server_api",
+        summary="Expose workflow resume payload",
+        checkpoint_json={"next_intended_action": "Serialize resume output"},
+        created_at=datetime(2024, 1, 6, tzinfo=UTC),
+    )
+    latest_verify_report = VerifyReport(
+        verify_id=verify_id,
+        attempt_id=attempt_id,
+        status=VerifyStatus.PASSED,
+        report_json={"checks": ["pytest"], "status": "passed"},
+        created_at=datetime(2024, 1, 7, tzinfo=UTC),
+    )
+    projections = (
+        ProjectionInfo(
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FRESH,
+            target_path=".agent/resume.json",
+            last_successful_write_at=datetime(2024, 1, 8, tzinfo=UTC),
+            last_canonical_update_at=datetime(2024, 1, 8, tzinfo=UTC),
+            open_failure_count=0,
+        ),
+        ProjectionInfo(
+            projection_type=ProjectionArtifactType.RESUME_MD,
+            status=ProjectionStatus.STALE,
+            target_path=".agent/resume.md",
+            last_successful_write_at=datetime(2024, 1, 8, tzinfo=UTC),
+            last_canonical_update_at=datetime(2024, 1, 7, tzinfo=UTC),
+            open_failure_count=1,
+        ),
+    )
+    warnings = (
+        ResumeIssue(
+            code="stale_projection",
+            message="resume projection is stale relative to canonical workflow state",
+            details={
+                "projection_type": "resume_md",
+                "target_path": ".agent/resume.md",
+            },
+        ),
+    )
+
+    return WorkflowResume(
+        workspace=workspace,
+        workflow_instance=workflow_instance,
+        attempt=attempt,
+        latest_checkpoint=latest_checkpoint,
+        latest_verify_report=latest_verify_report,
+        resumable_status=ResumableStatus.RESUMABLE,
+        projections=projections,
+        warnings=warnings,
+        next_hint="Serialize resume output",
+    )
 
 
 def make_settings(
@@ -359,3 +502,623 @@ def test_build_database_health_checker_returns_postgres_when_psycopg_is_availabl
     )
 
     assert checker.__class__.__name__ == "PostgresDatabaseHealthChecker"
+
+
+def test_get_workflow_resume_returns_resume_from_initialized_workflow_service() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    server.startup()
+    returned = server.get_workflow_resume(resume.workflow_instance.workflow_instance_id)
+
+    assert returned == resume
+    assert fake_workflow_service.resume_calls is not None
+    assert len(fake_workflow_service.resume_calls) == 1
+    assert (
+        fake_workflow_service.resume_calls[0].workflow_instance_id
+        == resume.workflow_instance.workflow_instance_id
+    )
+
+
+def test_get_workflow_resume_raises_when_workflow_service_is_not_initialized() -> None:
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+
+    with pytest.raises(
+        ServerBootstrapError,
+        match="workflow service is not initialized",
+    ):
+        server.get_workflow_resume(uuid4())
+
+
+def test_serialize_workflow_resume_returns_api_ready_payload() -> None:
+    resume = make_resume_fixture()
+
+    payload = serialize_workflow_resume(resume)
+
+    assert payload["workspace"]["workspace_id"] == str(resume.workspace.workspace_id)
+    assert payload["workspace"]["repo_url"] == resume.workspace.repo_url
+    assert payload["workflow"]["workflow_instance_id"] == str(
+        resume.workflow_instance.workflow_instance_id
+    )
+    assert payload["workflow"]["ticket_id"] == resume.workflow_instance.ticket_id
+    assert payload["attempt"]["attempt_id"] == str(resume.attempt.attempt_id)
+    assert payload["attempt"]["status"] == resume.attempt.status.value
+    assert payload["latest_checkpoint"]["step_name"] == "implement_server_api"
+    assert payload["latest_verify_report"]["status"] == VerifyStatus.PASSED.value
+    assert payload["projections"] == [
+        {
+            "projection_type": "resume_json",
+            "status": "fresh",
+            "target_path": ".agent/resume.json",
+            "last_successful_write_at": "2024-01-08T00:00:00+00:00",
+            "last_canonical_update_at": "2024-01-08T00:00:00+00:00",
+            "open_failure_count": 0,
+        },
+        {
+            "projection_type": "resume_md",
+            "status": "stale",
+            "target_path": ".agent/resume.md",
+            "last_successful_write_at": "2024-01-08T00:00:00+00:00",
+            "last_canonical_update_at": "2024-01-07T00:00:00+00:00",
+            "open_failure_count": 1,
+        },
+    ]
+    assert payload["resumable_status"] == "resumable"
+    assert payload["next_hint"] == "Serialize resume output"
+    assert payload["warnings"] == [
+        {
+            "code": "stale_projection",
+            "message": "resume projection is stale relative to canonical workflow state",
+            "details": {
+                "projection_type": "resume_md",
+                "target_path": ".agent/resume.md",
+            },
+        }
+    ]
+
+
+def test_build_workflow_resume_response_returns_success_payload() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    server.startup()
+
+    response = server.build_workflow_resume_response(
+        resume.workflow_instance.workflow_instance_id
+    )
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 200
+    assert response.payload == serialize_workflow_resume(resume)
+
+
+def test_build_workflow_resume_response_returns_503_when_workflow_service_is_not_initialized() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+
+    response = server.build_workflow_resume_response(uuid4())
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 503
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+
+
+def test_parse_workflow_resume_request_path_returns_uuid_for_valid_path() -> None:
+    workflow_instance_id = uuid4()
+
+    assert (
+        parse_workflow_resume_request_path(f"/workflow-resume/{workflow_instance_id}")
+        == workflow_instance_id
+    )
+    assert (
+        parse_workflow_resume_request_path(
+            f"/workflow-resume/{workflow_instance_id}?format=json"
+        )
+        == workflow_instance_id
+    )
+
+
+def test_parse_workflow_resume_request_path_returns_none_for_invalid_path() -> None:
+    assert parse_workflow_resume_request_path("") is None
+    assert parse_workflow_resume_request_path("/") is None
+    assert parse_workflow_resume_request_path("/workflow-resume") is None
+    assert parse_workflow_resume_request_path("/workflow-resume/not-a-uuid") is None
+    assert parse_workflow_resume_request_path("/other/endpoint") is None
+
+
+def test_build_workflow_resume_http_handler_returns_success_response() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_workflow_resume_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}"
+    )
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 200
+    assert response.payload == serialize_workflow_resume(resume)
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_resume_http_handler_returns_not_found_for_invalid_path() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_resume_http_handler(server)
+
+    response = handler("/workflow-resume/not-a-uuid")
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "workflow resume endpoint requires /workflow-resume/{workflow_instance_id}",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_resume_http_handler_returns_503_when_server_is_not_ready() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_resume_http_handler(server)
+
+    response = handler(f"/workflow-resume/{uuid4()}")
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 503
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_http_runtime_adapter_dispatches_registered_workflow_resume_handler() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = HttpRuntimeAdapter(settings)
+    runtime.register_handler(
+        "workflow_resume",
+        build_workflow_resume_http_handler(server),
+    )
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "workflow_resume",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}",
+    )
+
+    assert response.status_code == 200
+    assert response.payload == serialize_workflow_resume(resume)
+    assert response.headers == {"content-type": "application/json"}
+    assert runtime.registered_routes() == ("workflow_resume",)
+
+
+def test_http_runtime_adapter_returns_404_for_unregistered_route() -> None:
+    settings = make_settings()
+    runtime = HttpRuntimeAdapter(settings)
+
+    response = runtime.dispatch("missing_route", f"/workflow-resume/{uuid4()}")
+
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "route_not_found",
+            "message": "no HTTP handler is registered for route 'missing_route'",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    assert isinstance(runtime, HttpRuntimeAdapter)
+    assert runtime.registered_routes() == ("workflow_resume",)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "workflow_resume",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}",
+    )
+
+    assert response.status_code == 200
+    assert response.payload == serialize_workflow_resume(resume)
+
+
+def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    assert isinstance(server.runtime, HttpRuntimeAdapter)
+    assert server.runtime.registered_routes() == ("workflow_resume",)
+
+    server.startup()
+
+    response = server.runtime.dispatch(
+        "workflow_resume",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}",
+    )
+
+    assert response.status_code == 200
+    assert response.payload == serialize_workflow_resume(resume)
+
+
+def test_build_resume_workflow_tool_handler_returns_success_payload() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_resume_workflow_tool_handler(server)
+
+    server.startup()
+
+    response = handler(
+        {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)}
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload["ok"] is True
+    assert response.payload["result"]["workflow"]["workflow_instance_id"] == str(
+        resume.workflow_instance.workflow_instance_id
+    )
+
+
+def test_build_resume_workflow_tool_handler_returns_invalid_request_for_missing_id() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_resume_workflow_tool_handler(server)
+
+    response = handler({})
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_instance_id must be a non-empty string",
+            "details": {"field": "workflow_instance_id"},
+        },
+    }
+
+
+def test_build_resume_workflow_tool_handler_returns_invalid_request_for_bad_uuid() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_resume_workflow_tool_handler(server)
+
+    response = handler({"workflow_instance_id": "not-a-uuid"})
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_instance_id must be a valid UUID",
+            "details": {"field": "workflow_instance_id"},
+        },
+    }
+
+
+def test_build_resume_workflow_tool_handler_returns_server_not_ready_error() -> None:
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_resume_workflow_tool_handler(server)
+
+    response = handler({"workflow_instance_id": str(uuid4())})
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+            "details": {},
+        },
+    }
+
+
+def test_build_memory_remember_episode_tool_handler_returns_stub_payload() -> None:
+    handler = build_memory_remember_episode_tool_handler(MemoryService())
+
+    response = handler(
+        {
+            "workflow_instance_id": "wf-123",
+            "summary": "Capture useful implementation notes",
+            "attempt_id": "attempt-1",
+            "metadata": {"source": "agent"},
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload["ok"] is True
+    assert response.payload["result"]["feature"] == "memory_remember_episode"
+    assert response.payload["result"]["implemented"] is False
+
+
+def test_build_memory_remember_episode_tool_handler_returns_invalid_request() -> None:
+    handler = build_memory_remember_episode_tool_handler(MemoryService())
+
+    response = handler({"workflow_instance_id": "", "summary": ""})
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload["ok"] is False
+    assert response.payload["error"]["code"] == "memory_invalid_request"
+
+
+def test_build_memory_search_tool_handler_returns_stub_payload() -> None:
+    handler = build_memory_search_tool_handler(MemoryService())
+
+    response = handler(
+        {
+            "query": "projection drift",
+            "workspace_id": "workspace-1",
+            "limit": 5,
+            "filters": {"kind": "summary"},
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload["ok"] is True
+    assert response.payload["result"]["feature"] == "memory_search"
+    assert response.payload["result"]["implemented"] is False
+
+
+def test_build_memory_search_tool_handler_returns_invalid_request() -> None:
+    handler = build_memory_search_tool_handler(MemoryService())
+
+    response = handler({"query": "", "limit": 0})
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload["ok"] is False
+    assert response.payload["error"]["code"] == "memory_invalid_request"
+
+
+def test_build_memory_get_context_tool_handler_returns_stub_payload() -> None:
+    handler = build_memory_get_context_tool_handler(MemoryService())
+
+    response = handler(
+        {
+            "workflow_instance_id": "wf-123",
+            "limit": 3,
+            "include_episodes": True,
+            "include_memory_items": False,
+            "include_summaries": True,
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload["ok"] is True
+    assert response.payload["result"]["feature"] == "memory_get_context"
+    assert response.payload["result"]["implemented"] is False
+
+
+def test_build_memory_get_context_tool_handler_returns_invalid_request() -> None:
+    handler = build_memory_get_context_tool_handler(MemoryService())
+
+    response = handler({})
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload["ok"] is False
+    assert response.payload["error"]["code"] == "memory_invalid_request"
+
+
+def test_stdio_runtime_adapter_dispatches_registered_tool_handler() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+    runtime.register_tool_handler(
+        "resume_workflow",
+        build_resume_workflow_tool_handler(server),
+    )
+
+    server.startup()
+
+    response = runtime.dispatch_tool(
+        "resume_workflow",
+        {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)},
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload["ok"] is True
+    assert runtime.registered_tools() == ("resume_workflow",)
+
+
+def test_stdio_runtime_adapter_returns_tool_not_found_for_unregistered_tool() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+
+    response = runtime.dispatch_tool("missing_tool", {})
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "error": {
+            "code": "tool_not_found",
+            "message": "no MCP tool handler is registered for tool 'missing_tool'",
+        }
+    }
+
+
+def test_build_stdio_runtime_adapter_registers_expected_tools() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_stdio_runtime_adapter(server)
+
+    assert isinstance(runtime, StdioRuntimeAdapter)
+    assert runtime.registered_tools() == (
+        "memory_get_context",
+        "memory_remember_episode",
+        "memory_search",
+        "resume_workflow",
+    )
+
+    server.startup()
+
+    response = runtime.dispatch_tool(
+        "resume_workflow",
+        {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)},
+    )
+
+    assert response.payload["ok"] is True
+
+
+def test_create_server_wires_stdio_runtime_with_registered_tools() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    assert isinstance(server.runtime, StdioRuntimeAdapter)
+    assert server.runtime.registered_tools() == (
+        "memory_get_context",
+        "memory_remember_episode",
+        "memory_search",
+        "resume_workflow",
+    )
+
+    server.startup()
+
+    response = server.runtime.dispatch_tool(
+        "resume_workflow",
+        {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)},
+    )
+
+    assert response.payload["ok"] is True

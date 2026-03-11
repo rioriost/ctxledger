@@ -7,6 +7,7 @@ from typing import Any
 
 from ctxledger.config import ProjectionSettings
 from ctxledger.workflow.service import (
+    ProjectionArtifactType,
     ProjectionStatus,
     RecordProjectionFailureInput,
     RecordProjectionStateInput,
@@ -69,6 +70,7 @@ class ResumeProjectionWriter:
                     self._build_state_update(
                         workspace_id=workspace_id,
                         workflow_instance_id=workflow_instance_id,
+                        projection_type=ProjectionArtifactType.RESUME_JSON,
                         target_path=self._relative_target_path(
                             workspace_root_path, json_path
                         ),
@@ -79,6 +81,7 @@ class ResumeProjectionWriter:
                     self._build_failure_update(
                         workspace_id=workspace_id,
                         workflow_instance_id=workflow_instance_id,
+                        projection_type=ProjectionArtifactType.RESUME_JSON,
                         target_path=self._relative_target_path(
                             workspace_root_path, json_path
                         ),
@@ -89,6 +92,7 @@ class ResumeProjectionWriter:
                     self._build_failed_state_update(
                         workspace_id=workspace_id,
                         workflow_instance_id=workflow_instance_id,
+                        projection_type=ProjectionArtifactType.RESUME_JSON,
                         target_path=self._relative_target_path(
                             workspace_root_path, json_path
                         ),
@@ -109,6 +113,7 @@ class ResumeProjectionWriter:
                     self._build_state_update(
                         workspace_id=workspace_id,
                         workflow_instance_id=workflow_instance_id,
+                        projection_type=ProjectionArtifactType.RESUME_MD,
                         target_path=self._relative_target_path(
                             workspace_root_path,
                             markdown_path,
@@ -120,6 +125,7 @@ class ResumeProjectionWriter:
                     self._build_failure_update(
                         workspace_id=workspace_id,
                         workflow_instance_id=workflow_instance_id,
+                        projection_type=ProjectionArtifactType.RESUME_MD,
                         target_path=self._relative_target_path(
                             workspace_root_path,
                             markdown_path,
@@ -131,6 +137,7 @@ class ResumeProjectionWriter:
                     self._build_failed_state_update(
                         workspace_id=workspace_id,
                         workflow_instance_id=workflow_instance_id,
+                        projection_type=ProjectionArtifactType.RESUME_MD,
                         target_path=self._relative_target_path(
                             workspace_root_path,
                             markdown_path,
@@ -144,6 +151,24 @@ class ResumeProjectionWriter:
             state_updates=tuple(state_updates),
             failure_updates=tuple(failure_updates),
         )
+
+    def write_and_reconcile_resume_projection(
+        self,
+        *,
+        workspace_root: str | Path,
+        workflow_instance_id: Any,
+        workspace_id: Any,
+    ) -> ResumeProjectionResult:
+        result = self.write_resume_projection(
+            workspace_root=workspace_root,
+            workflow_instance_id=workflow_instance_id,
+            workspace_id=workspace_id,
+        )
+        self.workflow_service.reconcile_resume_projection(
+            success_updates=result.state_updates,
+            failure_updates=result.failure_updates,
+        )
+        return result
 
     def _projection_root(self, workspace_root: Path) -> Path:
         directory_name = self.projection_settings.directory_name.strip()
@@ -174,11 +199,13 @@ class ResumeProjectionWriter:
         *,
         workspace_id: Any,
         workflow_instance_id: Any,
+        projection_type: ProjectionArtifactType,
         target_path: str,
     ) -> RecordProjectionStateInput:
         return RecordProjectionStateInput(
             workspace_id=workspace_id,
             workflow_instance_id=workflow_instance_id,
+            projection_type=projection_type,
             status=ProjectionStatus.FRESH,
             target_path=target_path,
         )
@@ -188,11 +215,13 @@ class ResumeProjectionWriter:
         *,
         workspace_id: Any,
         workflow_instance_id: Any,
+        projection_type: ProjectionArtifactType,
         target_path: str,
     ) -> RecordProjectionStateInput:
         return RecordProjectionStateInput(
             workspace_id=workspace_id,
             workflow_instance_id=workflow_instance_id,
+            projection_type=projection_type,
             status=ProjectionStatus.FAILED,
             target_path=target_path,
         )
@@ -202,6 +231,7 @@ class ResumeProjectionWriter:
         *,
         workspace_id: Any,
         workflow_instance_id: Any,
+        projection_type: ProjectionArtifactType,
         target_path: str,
         exc: Exception,
     ) -> RecordProjectionFailureInput:
@@ -209,6 +239,7 @@ class ResumeProjectionWriter:
         return RecordProjectionFailureInput(
             workspace_id=workspace_id,
             workflow_instance_id=workflow_instance_id,
+            projection_type=projection_type,
             target_path=target_path,
             error_message=str(exc),
             error_code=error_code if isinstance(error_code, str) else None,
@@ -280,25 +311,25 @@ class ResumeProjectionWriter:
                 if resume.latest_verify_report is not None
                 else None
             ),
-            "projection": (
+            "projections": [
                 {
-                    "status": resume.projection.status.value,
-                    "target_path": resume.projection.target_path,
+                    "projection_type": projection.projection_type.value,
+                    "status": projection.status.value,
+                    "target_path": projection.target_path,
                     "last_successful_write_at": (
-                        resume.projection.last_successful_write_at.isoformat()
-                        if resume.projection.last_successful_write_at is not None
+                        projection.last_successful_write_at.isoformat()
+                        if projection.last_successful_write_at is not None
                         else None
                     ),
                     "last_canonical_update_at": (
-                        resume.projection.last_canonical_update_at.isoformat()
-                        if resume.projection.last_canonical_update_at is not None
+                        projection.last_canonical_update_at.isoformat()
+                        if projection.last_canonical_update_at is not None
                         else None
                     ),
-                    "open_failure_count": resume.projection.open_failure_count,
+                    "open_failure_count": projection.open_failure_count,
                 }
-                if resume.projection is not None
-                else None
-            ),
+                for projection in resume.projections
+            ],
             "resumable_status": resume.resumable_status.value,
             "next_hint": resume.next_hint,
             "warnings": [
@@ -357,17 +388,19 @@ class ResumeProjectionWriter:
                 lines.append(f"- Next intended action: {next_action.strip()}")
         lines.append("")
 
-        lines.append("## Projection")
+        lines.append("## Projections")
         lines.append("")
-        if resume.projection is None:
+        if not resume.projections:
             lines.append("- No projection metadata available")
         else:
-            lines.append(f"- Projection status: `{resume.projection.status.value}`")
-            if resume.projection.target_path:
-                lines.append(f"- Target path: `{resume.projection.target_path}`")
-            lines.append(
-                f"- Open failure count: `{resume.projection.open_failure_count}`"
-            )
+            for projection in resume.projections:
+                lines.append(f"- Projection type: `{projection.projection_type.value}`")
+                lines.append(f"  - Projection status: `{projection.status.value}`")
+                if projection.target_path:
+                    lines.append(f"  - Target path: `{projection.target_path}`")
+                lines.append(
+                    f"  - Open failure count: `{projection.open_failure_count}`"
+                )
         lines.append("")
 
         lines.append("## Warnings")

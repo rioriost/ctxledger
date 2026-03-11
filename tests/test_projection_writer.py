@@ -14,6 +14,7 @@ from ctxledger.projection.writer import (
 )
 from ctxledger.workflow.service import (
     CreateCheckpointInput,
+    ProjectionArtifactType,
     ProjectionStatus,
     RecordProjectionFailureInput,
     RecordProjectionStateInput,
@@ -111,8 +112,10 @@ def test_write_resume_projection_writes_json_and_markdown_under_workspace_root(
     assert "Run projection writer" in markdown
 
     assert len(result.state_updates) == 2
+    assert result.state_updates[0].projection_type == ProjectionArtifactType.RESUME_JSON
     assert result.state_updates[0].status == ProjectionStatus.FRESH
     assert result.state_updates[0].target_path == ".agent/resume.json"
+    assert result.state_updates[1].projection_type == ProjectionArtifactType.RESUME_MD
     assert result.state_updates[1].target_path == ".agent/resume.md"
 
 
@@ -134,9 +137,9 @@ def test_write_resume_projection_can_write_only_json(tmp_path: Path) -> None:
     assert result.markdown_path is None
     assert (tmp_path / ".agent" / "resume.json").exists()
     assert not (tmp_path / ".agent" / "resume.md").exists()
-    assert [update.target_path for update in result.state_updates] == [
-        ".agent/resume.json"
-    ]
+    assert len(result.state_updates) == 1
+    assert result.state_updates[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert result.state_updates[0].target_path == ".agent/resume.json"
 
 
 def test_write_resume_projection_can_write_only_markdown(tmp_path: Path) -> None:
@@ -157,9 +160,9 @@ def test_write_resume_projection_can_write_only_markdown(tmp_path: Path) -> None
     assert result.markdown_path == (tmp_path / ".agent" / "resume.md").resolve()
     assert not (tmp_path / ".agent" / "resume.json").exists()
     assert (tmp_path / ".agent" / "resume.md").exists()
-    assert [update.target_path for update in result.state_updates] == [
-        ".agent/resume.md"
-    ]
+    assert len(result.state_updates) == 1
+    assert result.state_updates[0].projection_type == ProjectionArtifactType.RESUME_MD
+    assert result.state_updates[0].target_path == ".agent/resume.md"
 
 
 def test_write_resume_projection_allows_nested_safe_projection_directory(
@@ -254,11 +257,192 @@ def test_state_updates_can_be_recorded_back_into_workflow_service(
         )
     )
 
-    assert resume.projection is not None
-    assert resume.projection.status == ProjectionStatus.FRESH
-    assert resume.projection.target_path == ".agent/resume.json"
-    assert resume.projection.last_successful_write_at is not None
-    assert resume.projection.last_canonical_update_at is not None
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FRESH
+    assert resume.projections[0].target_path == ".agent/resume.json"
+    assert resume.projections[0].last_successful_write_at is not None
+    assert resume.projections[0].last_canonical_update_at is not None
+
+
+def test_reconcile_resume_projection_records_state_updates(
+    tmp_path: Path,
+) -> None:
+    service = make_service()
+    workspace, started, _ = create_resumable_workflow(service, tmp_path)
+    writer = ResumeProjectionWriter(
+        workflow_service=service,
+        projection_settings=make_projection_settings(write_markdown=False),
+    )
+
+    result = writer.write_resume_projection(
+        workspace_root=tmp_path,
+        workflow_instance_id=started.workflow_instance.workflow_instance_id,
+        workspace_id=workspace.workspace_id,
+    )
+
+    reconciled = service.reconcile_resume_projection(
+        success_updates=result.state_updates,
+        failure_updates=result.failure_updates,
+    )
+
+    assert len(reconciled) == 1
+    assert reconciled[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert reconciled[0].status == ProjectionStatus.FRESH
+    assert reconciled[0].target_path == ".agent/resume.json"
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FRESH
+    assert resume.projections[0].target_path == ".agent/resume.json"
+    assert resume.projections[0].open_failure_count == 0
+
+
+def test_write_and_reconcile_resume_projection_updates_canonical_projection_state(
+    tmp_path: Path,
+) -> None:
+    service = make_service()
+    workspace, started, _ = create_resumable_workflow(service, tmp_path)
+    writer = ResumeProjectionWriter(
+        workflow_service=service,
+        projection_settings=make_projection_settings(write_markdown=False),
+    )
+
+    result = writer.write_and_reconcile_resume_projection(
+        workspace_root=tmp_path,
+        workflow_instance_id=started.workflow_instance.workflow_instance_id,
+        workspace_id=workspace.workspace_id,
+    )
+
+    assert result.json_path == (tmp_path / ".agent" / "resume.json").resolve()
+    assert result.failure_updates == ()
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FRESH
+    assert resume.projections[0].target_path == ".agent/resume.json"
+    assert resume.projections[0].last_successful_write_at is not None
+    assert resume.projections[0].last_canonical_update_at is not None
+
+
+def test_reconcile_resume_projection_resolves_open_failures_on_success(
+    tmp_path: Path,
+) -> None:
+    service = make_service()
+    workspace, started, _ = create_resumable_workflow(service, tmp_path)
+
+    service.record_resume_projection(
+        RecordProjectionStateInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FAILED,
+            target_path=".agent/resume.json",
+        )
+    )
+    service.record_resume_projection_failure(
+        RecordProjectionFailureInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            target_path=".agent/resume.json",
+            error_message="disk full",
+            error_code="io_error",
+        )
+    )
+
+    reconciled = service.reconcile_resume_projection(
+        success_updates=(
+            RecordProjectionStateInput(
+                workspace_id=workspace.workspace_id,
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                status=ProjectionStatus.FRESH,
+                target_path=".agent/resume.json",
+            ),
+        ),
+        failure_updates=(),
+    )
+
+    assert len(reconciled) == 1
+    assert reconciled[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert reconciled[0].status == ProjectionStatus.FRESH
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FRESH
+    assert resume.projections[0].open_failure_count == 0
+    assert all(warning.code != "open_projection_failure" for warning in resume.warnings)
+
+
+def test_write_and_reconcile_resume_projection_clears_existing_failures(
+    tmp_path: Path,
+) -> None:
+    service = make_service()
+    workspace, started, _ = create_resumable_workflow(service, tmp_path)
+
+    service.record_resume_projection(
+        RecordProjectionStateInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FAILED,
+            target_path=".agent/resume.json",
+        )
+    )
+    service.record_resume_projection_failure(
+        RecordProjectionFailureInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            target_path=".agent/resume.json",
+            error_message="permission denied",
+            error_code="permission_error",
+        )
+    )
+
+    writer = ResumeProjectionWriter(
+        workflow_service=service,
+        projection_settings=make_projection_settings(write_markdown=False),
+    )
+
+    result = writer.write_and_reconcile_resume_projection(
+        workspace_root=tmp_path,
+        workflow_instance_id=started.workflow_instance.workflow_instance_id,
+        workspace_id=workspace.workspace_id,
+    )
+
+    assert result.failure_updates == ()
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FRESH
+    assert resume.projections[0].open_failure_count == 0
+    assert all(warning.code != "open_projection_failure" for warning in resume.warnings)
 
 
 def test_failure_updates_can_be_recorded_in_memory_for_failed_projection(
@@ -270,6 +454,7 @@ def test_failure_updates_can_be_recorded_in_memory_for_failed_projection(
     failure = RecordProjectionFailureInput(
         workspace_id=workspace.workspace_id,
         workflow_instance_id=started.workflow_instance.workflow_instance_id,
+        projection_type=ProjectionArtifactType.RESUME_JSON,
         target_path=".agent/resume.json",
         error_message="disk full",
         error_code="io_error",
@@ -278,16 +463,15 @@ def test_failure_updates_can_be_recorded_in_memory_for_failed_projection(
         RecordProjectionStateInput(
             workspace_id=workspace.workspace_id,
             workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
             status=ProjectionStatus.FAILED,
             target_path=".agent/resume.json",
         )
     )
 
-    with service._uow_factory() as uow:
-        assert uow.projection_failures is not None
-        failure_info = uow.projection_failures.record_resume_projection_failure(failure)
-        uow.commit()
+    failure_info = service.record_resume_projection_failure(failure)
 
+    assert failure_info.projection_type == ProjectionArtifactType.RESUME_JSON
     assert failure_info.error_code == "io_error"
     assert failure_info.error_message == "disk full"
     assert failure_info.target_path == ".agent/resume.json"
@@ -299,9 +483,10 @@ def test_failure_updates_can_be_recorded_in_memory_for_failed_projection(
         )
     )
 
-    assert resume.projection is not None
-    assert resume.projection.status == ProjectionStatus.FAILED
-    assert resume.projection.open_failure_count == 1
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FAILED
+    assert resume.projections[0].open_failure_count == 1
     assert any(warning.code == "open_projection_failure" for warning in resume.warnings)
 
 
@@ -315,39 +500,43 @@ def test_multiple_in_memory_projection_failures_increment_open_failure_count(
         RecordProjectionStateInput(
             workspace_id=workspace.workspace_id,
             workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
             status=ProjectionStatus.FAILED,
             target_path=".agent/resume.json",
         )
     )
 
+    first = service.record_resume_projection_failure(
+        RecordProjectionFailureInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            target_path=".agent/resume.json",
+            error_message="first failure",
+            error_code="io_error",
+        )
+    )
+    second = service.record_resume_projection_failure(
+        RecordProjectionFailureInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_MD,
+            target_path=".agent/resume.md",
+            error_message="second failure",
+            error_code="permission_error",
+        )
+    )
     with service._uow_factory() as uow:
         assert uow.projection_failures is not None
-        first = uow.projection_failures.record_resume_projection_failure(
-            RecordProjectionFailureInput(
-                workspace_id=workspace.workspace_id,
-                workflow_instance_id=started.workflow_instance.workflow_instance_id,
-                target_path=".agent/resume.json",
-                error_message="first failure",
-                error_code="io_error",
-            )
-        )
-        second = uow.projection_failures.record_resume_projection_failure(
-            RecordProjectionFailureInput(
-                workspace_id=workspace.workspace_id,
-                workflow_instance_id=started.workflow_instance.workflow_instance_id,
-                target_path=".agent/resume.md",
-                error_message="second failure",
-                error_code="permission_error",
-            )
-        )
         failures = uow.projection_failures.get_open_failures_by_workflow_id(
             workspace.workspace_id,
             started.workflow_instance.workflow_instance_id,
         )
-        uow.commit()
 
+    assert first.projection_type == ProjectionArtifactType.RESUME_JSON
     assert first.open_failure_count == 1
-    assert second.open_failure_count == 2
+    assert second.projection_type == ProjectionArtifactType.RESUME_MD
+    assert second.open_failure_count == 1
     assert len(failures) == 2
     assert failures[0].target_path == ".agent/resume.json"
     assert failures[1].target_path == ".agent/resume.md"
@@ -358,9 +547,10 @@ def test_multiple_in_memory_projection_failures_increment_open_failure_count(
         )
     )
 
-    assert resume.projection is not None
-    assert resume.projection.status == ProjectionStatus.FAILED
-    assert resume.projection.open_failure_count == 2
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FAILED
+    assert resume.projections[0].open_failure_count == 1
 
 
 def test_state_update_object_contains_expected_identifiers(tmp_path: Path) -> None:
@@ -381,6 +571,7 @@ def test_state_update_object_contains_expected_identifiers(tmp_path: Path) -> No
     assert isinstance(update, RecordProjectionStateInput)
     assert update.workspace_id == workspace.workspace_id
     assert update.workflow_instance_id == started.workflow_instance.workflow_instance_id
+    assert update.projection_type == ProjectionArtifactType.RESUME_JSON
     assert update.status == ProjectionStatus.FRESH
     assert update.target_path == ".agent/resume.json"
 
@@ -411,6 +602,7 @@ def test_written_json_contains_expected_identity_fields(tmp_path: Path) -> None:
     assert payload["latest_checkpoint"]["checkpoint_id"] == str(
         checkpoint.checkpoint.checkpoint_id
     )
+    assert payload["projections"] == []
     assert payload["warnings"] == []
 
 
@@ -433,3 +625,5 @@ def test_written_markdown_contains_status_summary_for_resumable_workflow(
     markdown = (tmp_path / ".agent" / "resume.md").read_text(encoding="utf-8")
     assert "## Resume status summary" in markdown
     assert "Workflow can be resumed from the latest checkpoint." in markdown
+    assert "## Projections" in markdown
+    assert "- No projection metadata available" in markdown

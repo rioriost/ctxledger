@@ -7,10 +7,19 @@ from dataclasses import dataclass
 from types import FrameType
 from typing import Any, Protocol
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID
 
 from .config import AppSettings, TransportMode, get_settings
 from .db.postgres import PostgresConfig, build_postgres_uow_factory
-from .workflow.service import WorkflowService
+from .memory.service import (
+    GetMemoryContextRequest,
+    MemoryService,
+    MemoryServiceError,
+    RememberEpisodeRequest,
+    SearchMemoryRequest,
+    StubResponse,
+)
+from .workflow.service import ResumeWorkflowInput, WorkflowResume, WorkflowService
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +60,22 @@ class ReadinessStatus:
     ready: bool
     status: str
     details: dict[str, Any]
+
+
+@dataclass(slots=True)
+class WorkflowResumeResponse:
+    status_code: int
+    payload: dict[str, Any]
+    headers: dict[str, str]
+
+
+@dataclass(slots=True)
+class McpToolResponse:
+    payload: dict[str, Any]
+
+
+WorkflowHttpHandler = Any
+McpToolHandler = Any
 
 
 class ServerBootstrapError(RuntimeError):
@@ -172,9 +197,36 @@ class HttpRuntimeAdapter:
     MCP Streamable HTTP implementation.
     """
 
-    def __init__(self, settings: AppSettings) -> None:
+    def __init__(
+        self,
+        settings: AppSettings,
+        handlers: dict[str, WorkflowHttpHandler] | None = None,
+    ) -> None:
         self.settings = settings
         self._started = False
+        self._handlers: dict[str, WorkflowHttpHandler] = handlers or {}
+
+    def register_handler(self, route_name: str, handler: WorkflowHttpHandler) -> None:
+        self._handlers[route_name] = handler
+
+    def registered_routes(self) -> tuple[str, ...]:
+        return tuple(sorted(self._handlers.keys()))
+
+    def dispatch(self, route_name: str, path: str) -> WorkflowResumeResponse:
+        handler = self._handlers.get(route_name)
+        if handler is None:
+            return WorkflowResumeResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "route_not_found",
+                        "message": f"no HTTP handler is registered for route '{route_name}'",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return handler(path)
 
     def start(self) -> None:
         logger.info(
@@ -185,6 +237,7 @@ class HttpRuntimeAdapter:
                 "port": self.settings.http.port,
                 "path": self.settings.http.path,
                 "mcp_url": self.settings.http.mcp_url,
+                "registered_routes": list(self.registered_routes()),
             },
         )
         self._started = True
@@ -199,6 +252,7 @@ class HttpRuntimeAdapter:
                 "transport": "http",
                 "host": self.settings.http.host,
                 "port": self.settings.http.port,
+                "registered_routes": list(self.registered_routes()),
             },
         )
         self._started = False
@@ -212,15 +266,43 @@ class StdioRuntimeAdapter:
     MCP stdio implementation.
     """
 
-    def __init__(self, settings: AppSettings) -> None:
+    def __init__(
+        self,
+        settings: AppSettings,
+        tool_handlers: dict[str, McpToolHandler] | None = None,
+    ) -> None:
         self.settings = settings
         self._started = False
+        self._tool_handlers: dict[str, McpToolHandler] = tool_handlers or {}
+
+    def register_tool_handler(self, tool_name: str, handler: McpToolHandler) -> None:
+        self._tool_handlers[tool_name] = handler
+
+    def registered_tools(self) -> tuple[str, ...]:
+        return tuple(sorted(self._tool_handlers.keys()))
+
+    def dispatch_tool(
+        self, tool_name: str, arguments: dict[str, Any]
+    ) -> McpToolResponse:
+        handler = self._tool_handlers.get(tool_name)
+        if handler is None:
+            return McpToolResponse(
+                payload={
+                    "error": {
+                        "code": "tool_not_found",
+                        "message": f"no MCP tool handler is registered for tool '{tool_name}'",
+                    }
+                }
+            )
+
+        return handler(arguments)
 
     def start(self) -> None:
         logger.info(
             "stdio runtime adapter starting",
             extra={
                 "transport": "stdio",
+                "registered_tools": list(self.registered_tools()),
             },
         )
         self._started = True
@@ -233,6 +315,7 @@ class StdioRuntimeAdapter:
             "stdio runtime adapter stopping",
             extra={
                 "transport": "stdio",
+                "registered_tools": list(self.registered_tools()),
             },
         )
         self._started = False
@@ -301,6 +384,37 @@ class CtxLedgerServer:
         self.workflow_service_factory = workflow_service_factory
         self.workflow_service: WorkflowService | None = None
         self._started = False
+
+    def get_workflow_resume(self, workflow_instance_id: UUID) -> WorkflowResume:
+        if self.workflow_service is None:
+            raise ServerBootstrapError("workflow service is not initialized")
+        return self.workflow_service.resume_workflow(
+            ResumeWorkflowInput(workflow_instance_id=workflow_instance_id)
+        )
+
+    def build_workflow_resume_response(
+        self,
+        workflow_instance_id: UUID,
+    ) -> WorkflowResumeResponse:
+        try:
+            resume = self.get_workflow_resume(workflow_instance_id)
+        except ServerBootstrapError as exc:
+            return WorkflowResumeResponse(
+                status_code=503,
+                payload={
+                    "error": {
+                        "code": "server_not_ready",
+                        "message": str(exc),
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return WorkflowResumeResponse(
+            status_code=200,
+            payload=serialize_workflow_resume(resume),
+            headers={"content-type": "application/json"},
+        )
 
     def validate_configuration(self) -> None:
         self.settings.validate()
@@ -429,14 +543,408 @@ class CtxLedgerServer:
         )
 
 
-def create_runtime(settings: AppSettings) -> ServerRuntime | None:
+def serialize_workflow_resume(resume: WorkflowResume) -> dict[str, Any]:
+    return {
+        "workspace": {
+            "workspace_id": str(resume.workspace.workspace_id),
+            "repo_url": resume.workspace.repo_url,
+            "canonical_path": resume.workspace.canonical_path,
+            "default_branch": resume.workspace.default_branch,
+            "metadata": resume.workspace.metadata,
+        },
+        "workflow": {
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "workspace_id": str(resume.workflow_instance.workspace_id),
+            "ticket_id": resume.workflow_instance.ticket_id,
+            "status": resume.workflow_instance.status.value,
+            "metadata": resume.workflow_instance.metadata,
+        },
+        "attempt": (
+            {
+                "attempt_id": str(resume.attempt.attempt_id),
+                "workflow_instance_id": str(resume.attempt.workflow_instance_id),
+                "attempt_number": resume.attempt.attempt_number,
+                "status": resume.attempt.status.value,
+                "failure_reason": resume.attempt.failure_reason,
+                "verify_status": (
+                    resume.attempt.verify_status.value
+                    if resume.attempt.verify_status is not None
+                    else None
+                ),
+                "started_at": resume.attempt.started_at.isoformat(),
+                "finished_at": (
+                    resume.attempt.finished_at.isoformat()
+                    if resume.attempt.finished_at is not None
+                    else None
+                ),
+            }
+            if resume.attempt is not None
+            else None
+        ),
+        "latest_checkpoint": (
+            {
+                "checkpoint_id": str(resume.latest_checkpoint.checkpoint_id),
+                "workflow_instance_id": str(
+                    resume.latest_checkpoint.workflow_instance_id
+                ),
+                "attempt_id": str(resume.latest_checkpoint.attempt_id),
+                "step_name": resume.latest_checkpoint.step_name,
+                "summary": resume.latest_checkpoint.summary,
+                "checkpoint_json": resume.latest_checkpoint.checkpoint_json,
+                "created_at": resume.latest_checkpoint.created_at.isoformat(),
+            }
+            if resume.latest_checkpoint is not None
+            else None
+        ),
+        "latest_verify_report": (
+            {
+                "verify_id": str(resume.latest_verify_report.verify_id),
+                "attempt_id": str(resume.latest_verify_report.attempt_id),
+                "status": resume.latest_verify_report.status.value,
+                "report_json": resume.latest_verify_report.report_json,
+                "created_at": resume.latest_verify_report.created_at.isoformat(),
+            }
+            if resume.latest_verify_report is not None
+            else None
+        ),
+        "projections": [
+            {
+                "projection_type": projection.projection_type.value,
+                "status": projection.status.value,
+                "target_path": projection.target_path,
+                "last_successful_write_at": (
+                    projection.last_successful_write_at.isoformat()
+                    if projection.last_successful_write_at is not None
+                    else None
+                ),
+                "last_canonical_update_at": (
+                    projection.last_canonical_update_at.isoformat()
+                    if projection.last_canonical_update_at is not None
+                    else None
+                ),
+                "open_failure_count": projection.open_failure_count,
+            }
+            for projection in resume.projections
+        ],
+        "resumable_status": resume.resumable_status.value,
+        "next_hint": resume.next_hint,
+        "warnings": [
+            {
+                "code": warning.code,
+                "message": warning.message,
+                "details": warning.details,
+            }
+            for warning in resume.warnings
+        ],
+    }
+
+
+def serialize_stub_response(response: StubResponse) -> dict[str, Any]:
+    return {
+        "feature": response.feature.value,
+        "implemented": response.implemented,
+        "message": response.message,
+        "status": response.status,
+        "available_in_version": response.available_in_version,
+        "timestamp": response.timestamp.isoformat(),
+        "details": response.details,
+    }
+
+
+def build_mcp_success_response(result: dict[str, Any]) -> McpToolResponse:
+    return McpToolResponse(
+        payload={
+            "ok": True,
+            "result": result,
+        }
+    )
+
+
+def build_mcp_error_response(
+    *,
+    code: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+) -> McpToolResponse:
+    return McpToolResponse(
+        payload={
+            "ok": False,
+            "error": {
+                "code": code,
+                "message": message,
+                "details": details or {},
+            },
+        }
+    )
+
+
+def build_workflow_resume_response(
+    server: CtxLedgerServer,
+    workflow_instance_id: UUID,
+) -> WorkflowResumeResponse:
+    return server.build_workflow_resume_response(workflow_instance_id)
+
+
+def parse_workflow_resume_request_path(path: str) -> UUID | None:
+    normalized_path = path.strip()
+    if not normalized_path:
+        return None
+
+    path_without_query = normalized_path.split("?", 1)[0]
+    trimmed = path_without_query.strip("/")
+    if not trimmed:
+        return None
+
+    parts = trimmed.split("/")
+    if len(parts) != 2 or parts[0] != "workflow-resume":
+        return None
+
+    try:
+        return UUID(parts[1])
+    except ValueError:
+        return None
+
+
+def build_workflow_resume_http_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(path: str) -> WorkflowResumeResponse:
+        workflow_instance_id = parse_workflow_resume_request_path(path)
+        if workflow_instance_id is None:
+            return WorkflowResumeResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": "workflow resume endpoint requires /workflow-resume/{workflow_instance_id}",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return build_workflow_resume_response(server, workflow_instance_id)
+
+    return _handler
+
+
+def build_resume_workflow_tool_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
+        workflow_instance_id_raw = arguments.get("workflow_instance_id")
+        if (
+            not isinstance(workflow_instance_id_raw, str)
+            or not workflow_instance_id_raw.strip()
+        ):
+            return build_mcp_error_response(
+                code="invalid_request",
+                message="workflow_instance_id must be a non-empty string",
+                details={"field": "workflow_instance_id"},
+            )
+
+        try:
+            workflow_instance_id = UUID(workflow_instance_id_raw)
+        except ValueError:
+            return build_mcp_error_response(
+                code="invalid_request",
+                message="workflow_instance_id must be a valid UUID",
+                details={"field": "workflow_instance_id"},
+            )
+
+        response = build_workflow_resume_response(server, workflow_instance_id)
+        if response.status_code != 200:
+            error = response.payload.get("error", {})
+            return build_mcp_error_response(
+                code=str(error.get("code", "server_error")),
+                message=str(error.get("message", "failed to resume workflow")),
+                details={},
+            )
+
+        return build_mcp_success_response(response.payload)
+
+    return _handler
+
+
+def build_memory_remember_episode_tool_handler(
+    memory_service: MemoryService,
+):
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
+        try:
+            response = memory_service.remember_episode(
+                RememberEpisodeRequest(
+                    workflow_instance_id=str(arguments.get("workflow_instance_id", "")),
+                    summary=str(arguments.get("summary", "")),
+                    attempt_id=(
+                        str(arguments["attempt_id"])
+                        if arguments.get("attempt_id") is not None
+                        else None
+                    ),
+                    metadata=(
+                        arguments["metadata"]
+                        if isinstance(arguments.get("metadata"), dict)
+                        else {}
+                    ),
+                )
+            )
+            return build_mcp_success_response(serialize_stub_response(response))
+        except MemoryServiceError as exc:
+            return build_mcp_error_response(
+                code=exc.code.value,
+                message=exc.message,
+                details=exc.details,
+            )
+
+    return _handler
+
+
+def build_memory_search_tool_handler(
+    memory_service: MemoryService,
+):
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
+        try:
+            response = memory_service.search(
+                SearchMemoryRequest(
+                    query=str(arguments.get("query", "")),
+                    workspace_id=(
+                        str(arguments["workspace_id"])
+                        if arguments.get("workspace_id") is not None
+                        else None
+                    ),
+                    limit=(
+                        arguments["limit"]
+                        if isinstance(arguments.get("limit"), int)
+                        else 10
+                    ),
+                    filters=(
+                        arguments["filters"]
+                        if isinstance(arguments.get("filters"), dict)
+                        else {}
+                    ),
+                )
+            )
+            return build_mcp_success_response(serialize_stub_response(response))
+        except MemoryServiceError as exc:
+            return build_mcp_error_response(
+                code=exc.code.value,
+                message=exc.message,
+                details=exc.details,
+            )
+
+    return _handler
+
+
+def build_memory_get_context_tool_handler(
+    memory_service: MemoryService,
+):
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
+        try:
+            response = memory_service.get_context(
+                GetMemoryContextRequest(
+                    query=(
+                        str(arguments["query"])
+                        if arguments.get("query") is not None
+                        else None
+                    ),
+                    workspace_id=(
+                        str(arguments["workspace_id"])
+                        if arguments.get("workspace_id") is not None
+                        else None
+                    ),
+                    workflow_instance_id=(
+                        str(arguments["workflow_instance_id"])
+                        if arguments.get("workflow_instance_id") is not None
+                        else None
+                    ),
+                    ticket_id=(
+                        str(arguments["ticket_id"])
+                        if arguments.get("ticket_id") is not None
+                        else None
+                    ),
+                    limit=(
+                        arguments["limit"]
+                        if isinstance(arguments.get("limit"), int)
+                        else 10
+                    ),
+                    include_episodes=(
+                        arguments["include_episodes"]
+                        if isinstance(arguments.get("include_episodes"), bool)
+                        else True
+                    ),
+                    include_memory_items=(
+                        arguments["include_memory_items"]
+                        if isinstance(arguments.get("include_memory_items"), bool)
+                        else True
+                    ),
+                    include_summaries=(
+                        arguments["include_summaries"]
+                        if isinstance(arguments.get("include_summaries"), bool)
+                        else True
+                    ),
+                )
+            )
+            return build_mcp_success_response(serialize_stub_response(response))
+        except MemoryServiceError as exc:
+            return build_mcp_error_response(
+                code=exc.code.value,
+                message=exc.message,
+                details=exc.details,
+            )
+
+    return _handler
+
+
+def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
+    runtime = HttpRuntimeAdapter(server.settings)
+    runtime.register_handler(
+        "workflow_resume",
+        build_workflow_resume_http_handler(server),
+    )
+    return runtime
+
+
+def build_stdio_runtime_adapter(server: CtxLedgerServer) -> StdioRuntimeAdapter:
+    runtime = StdioRuntimeAdapter(server.settings)
+    memory_service = MemoryService()
+    runtime.register_tool_handler(
+        "resume_workflow",
+        build_resume_workflow_tool_handler(server),
+    )
+    runtime.register_tool_handler(
+        "memory_remember_episode",
+        build_memory_remember_episode_tool_handler(memory_service),
+    )
+    runtime.register_tool_handler(
+        "memory_search",
+        build_memory_search_tool_handler(memory_service),
+    )
+    runtime.register_tool_handler(
+        "memory_get_context",
+        build_memory_get_context_tool_handler(memory_service),
+    )
+    return runtime
+
+
+def create_runtime(
+    settings: AppSettings,
+    server: CtxLedgerServer | None = None,
+) -> ServerRuntime | None:
     runtimes: list[ServerRuntime] = []
 
     if settings.http.enabled:
-        runtimes.append(HttpRuntimeAdapter(settings))
+        http_runtime = (
+            build_http_runtime_adapter(server)
+            if server is not None
+            else HttpRuntimeAdapter(settings)
+        )
+        runtimes.append(http_runtime)
 
     if settings.stdio.enabled:
-        runtimes.append(StdioRuntimeAdapter(settings))
+        stdio_runtime = (
+            build_stdio_runtime_adapter(server)
+            if server is not None
+            else StdioRuntimeAdapter(settings)
+        )
+        runtimes.append(stdio_runtime)
 
     if not runtimes:
         return None
@@ -468,16 +976,20 @@ def create_server(
     runtime: ServerRuntime | None = None,
     workflow_service_factory: WorkflowServiceFactory | None = None,
 ) -> CtxLedgerServer:
-    return CtxLedgerServer(
+    server = CtxLedgerServer(
         settings=settings,
         db_health_checker=db_health_checker,
-        runtime=runtime if runtime is not None else create_runtime(settings),
+        runtime=None,
         workflow_service_factory=(
             workflow_service_factory
             if workflow_service_factory is not None
             else build_workflow_service_factory(settings)
         ),
     )
+    server.runtime = (
+        runtime if runtime is not None else create_runtime(settings, server)
+    )
+    return server
 
 
 def _apply_overrides(
@@ -601,13 +1113,28 @@ __all__ = [
     "DefaultDatabaseHealthChecker",
     "HealthStatus",
     "HttpRuntimeAdapter",
+    "McpToolResponse",
     "ReadinessStatus",
     "ServerBootstrapError",
     "ServerRuntime",
     "StdioRuntimeAdapter",
+    "WorkflowResumeResponse",
     "WorkflowServiceFactory",
+    "build_http_runtime_adapter",
+    "build_mcp_error_response",
+    "build_mcp_success_response",
+    "build_memory_get_context_tool_handler",
+    "build_memory_remember_episode_tool_handler",
+    "build_memory_search_tool_handler",
+    "build_resume_workflow_tool_handler",
+    "build_stdio_runtime_adapter",
+    "build_workflow_resume_http_handler",
+    "build_workflow_resume_response",
     "build_workflow_service_factory",
     "create_runtime",
     "create_server",
+    "parse_workflow_resume_request_path",
     "run_server",
+    "serialize_stub_response",
+    "serialize_workflow_resume",
 ]

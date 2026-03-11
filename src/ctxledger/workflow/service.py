@@ -46,6 +46,11 @@ class ProjectionStatus(StrEnum):
     FAILED = "failed"
 
 
+class ProjectionArtifactType(StrEnum):
+    RESUME_JSON = "resume_json"
+    RESUME_MD = "resume_md"
+
+
 class WorkflowError(Exception):
     code = "workflow_error"
 
@@ -176,6 +181,7 @@ class VerifyReport:
 
 @dataclass(slots=True, frozen=True)
 class ProjectionInfo:
+    projection_type: ProjectionArtifactType
     status: ProjectionStatus
     target_path: str | None = None
     last_successful_write_at: datetime | None = None
@@ -185,6 +191,7 @@ class ProjectionInfo:
 
 @dataclass(slots=True, frozen=True)
 class ProjectionFailureInfo:
+    projection_type: ProjectionArtifactType
     error_code: str | None
     error_message: str
     target_path: str
@@ -195,6 +202,7 @@ class ProjectionFailureInfo:
 class RecordProjectionStateInput:
     workspace_id: UUID
     workflow_instance_id: UUID
+    projection_type: ProjectionArtifactType
     status: ProjectionStatus
     target_path: str
     last_successful_write_at: datetime | None = None
@@ -209,6 +217,7 @@ class RecordProjectionStateInput:
         return RecordProjectionStateInput(
             workspace_id=self.workspace_id,
             workflow_instance_id=self.workflow_instance_id,
+            projection_type=self.projection_type,
             status=self.status,
             target_path=self.target_path,
             last_successful_write_at=write_at,
@@ -220,6 +229,7 @@ class RecordProjectionStateInput:
 class RecordProjectionFailureInput:
     workspace_id: UUID
     workflow_instance_id: UUID
+    projection_type: ProjectionArtifactType
     target_path: str
     error_message: str
     error_code: str | None = None
@@ -240,7 +250,7 @@ class WorkflowResume:
     latest_checkpoint: WorkflowCheckpoint | None
     latest_verify_report: VerifyReport | None
     resumable_status: ResumableStatus
-    projection: ProjectionInfo | None = None
+    projections: tuple[ProjectionInfo, ...] = ()
     warnings: tuple[ResumeIssue, ...] = ()
     next_hint: str | None = None
 
@@ -391,9 +401,9 @@ class VerifyReportRepository:
 
 
 class ProjectionStateRepository:
-    def get_resume_projection(
+    def get_resume_projections(
         self, workspace_id: UUID, workflow_instance_id: UUID
-    ) -> ProjectionInfo | None:
+    ) -> tuple[ProjectionInfo, ...]:
         raise NotImplementedError
 
     def record_resume_projection(self, projection: RecordProjectionStateInput) -> None:
@@ -409,6 +419,13 @@ class ProjectionFailureRepository:
     def record_resume_projection_failure(
         self, failure: RecordProjectionFailureInput
     ) -> ProjectionFailureInfo:
+        raise NotImplementedError
+
+    def resolve_resume_projection_failures(
+        self,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+    ) -> int:
         raise NotImplementedError
 
 
@@ -647,11 +664,20 @@ class WorkflowService:
                 else None
             )
 
-            projection = None
+            projections: tuple[ProjectionInfo, ...] = ()
             if getattr(uow, "projection_states", None) is not None:
-                projection = uow.projection_states.get_resume_projection(
+                projections = uow.projection_states.get_resume_projections(
                     workspace.workspace_id,
                     workflow.workflow_instance_id,
+                )
+
+            open_projection_failures: list[ProjectionFailureInfo] = []
+            if getattr(uow, "projection_failures", None) is not None:
+                open_projection_failures = (
+                    uow.projection_failures.get_open_failures_by_workflow_id(
+                        workspace.workspace_id,
+                        workflow.workflow_instance_id,
+                    )
                 )
 
             warnings = list(
@@ -660,7 +686,8 @@ class WorkflowService:
                     attempt,
                     latest_checkpoint,
                     latest_verify_report,
-                    projection,
+                    projections,
+                    open_projection_failures,
                 )
             )
             resumable_status = self._classify_resumable_status(
@@ -677,7 +704,7 @@ class WorkflowService:
                 latest_checkpoint=latest_checkpoint,
                 latest_verify_report=latest_verify_report,
                 resumable_status=resumable_status,
-                projection=projection,
+                projections=projections,
                 warnings=tuple(warnings),
                 next_hint=next_hint,
             )
@@ -711,12 +738,99 @@ class WorkflowService:
             uow.commit()
 
             return ProjectionInfo(
+                projection_type=normalized.projection_type,
                 status=normalized.status,
                 target_path=normalized.target_path,
                 last_successful_write_at=normalized.last_successful_write_at,
                 last_canonical_update_at=normalized.last_canonical_update_at,
                 open_failure_count=0,
             )
+
+    def record_resume_projection_failure(
+        self, data: RecordProjectionFailureInput
+    ) -> ProjectionFailureInfo:
+        if not data.target_path.strip():
+            raise ValidationError("target_path must not be empty")
+        if not data.error_message.strip():
+            raise ValidationError("error_message must not be empty")
+
+        with self._uow_factory() as uow:
+            workspace = self._require_workspace(uow, data.workspace_id)
+            workflow = self._require_workflow(uow, data.workflow_instance_id)
+
+            if workflow.workspace_id != workspace.workspace_id:
+                raise WorkflowAttemptMismatchError(
+                    "workflow does not belong to workspace",
+                    details={
+                        "workspace_id": str(workspace.workspace_id),
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "workflow.workspace_id": str(workflow.workspace_id),
+                    },
+                )
+
+            if getattr(uow, "projection_failures", None) is None:
+                raise PersistenceError("projection failure repository is not available")
+
+            failure_info = uow.projection_failures.record_resume_projection_failure(
+                data
+            )
+            uow.commit()
+            return failure_info
+
+    def resolve_resume_projection_failures(
+        self,
+        *,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+    ) -> int:
+        with self._uow_factory() as uow:
+            workspace = self._require_workspace(uow, workspace_id)
+            workflow = self._require_workflow(uow, workflow_instance_id)
+
+            if workflow.workspace_id != workspace.workspace_id:
+                raise WorkflowAttemptMismatchError(
+                    "workflow does not belong to workspace",
+                    details={
+                        "workspace_id": str(workspace.workspace_id),
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "workflow.workspace_id": str(workflow.workspace_id),
+                    },
+                )
+
+            if getattr(uow, "projection_failures", None) is None:
+                raise PersistenceError("projection failure repository is not available")
+
+            resolved_count = uow.projection_failures.resolve_resume_projection_failures(
+                workspace.workspace_id,
+                workflow.workflow_instance_id,
+            )
+            uow.commit()
+            return resolved_count
+
+    def reconcile_resume_projection(
+        self,
+        *,
+        success_updates: tuple[RecordProjectionStateInput, ...] = (),
+        failure_updates: tuple[RecordProjectionFailureInput, ...] = (),
+    ) -> tuple[ProjectionInfo, ...]:
+        reconciled: list[ProjectionInfo] = []
+
+        resolved_workflows: set[tuple[UUID, UUID]] = set()
+
+        for state in success_updates:
+            key = (state.workspace_id, state.workflow_instance_id)
+            if key not in resolved_workflows:
+                self.resolve_resume_projection_failures(
+                    workspace_id=state.workspace_id,
+                    workflow_instance_id=state.workflow_instance_id,
+                )
+                resolved_workflows.add(key)
+            reconciled.append(self.record_resume_projection(state))
+
+        for failure in failure_updates:
+            self.record_resume_projection_failure(failure)
+
+        return tuple(reconciled)
 
     def complete_workflow(self, data: CompleteWorkflowInput) -> WorkflowCompleteResult:
         with self._uow_factory() as uow:
@@ -862,8 +976,9 @@ class WorkflowService:
         attempt: WorkflowAttempt | None,
         latest_checkpoint: WorkflowCheckpoint | None,
         latest_verify_report: VerifyReport | None,
-        projection: ProjectionInfo | None,
-    ) -> list[ResumeIssue]:
+        projections: tuple[ProjectionInfo, ...],
+        open_projection_failures: list[ProjectionFailureInfo] | None = None,
+    ) -> tuple[ResumeIssue, ...]:
         warnings: list[ResumeIssue] = []
 
         if workflow.status == WorkflowInstanceStatus.RUNNING and attempt is None:
@@ -900,24 +1015,53 @@ class WorkflowService:
                 )
             )
 
-        if projection is not None:
+        failures_by_projection_type: dict[
+            ProjectionArtifactType, list[ProjectionFailureInfo]
+        ] = {}
+        if open_projection_failures:
+            for failure in open_projection_failures:
+                failures_by_projection_type.setdefault(
+                    failure.projection_type, []
+                ).append(failure)
+
+        for projection in projections:
             if projection.status == ProjectionStatus.STALE:
                 warnings.append(
                     ResumeIssue(
                         code="stale_projection",
                         message="resume projection is stale relative to canonical workflow state",
-                        details={"target_path": projection.target_path or ""},
+                        details={
+                            "projection_type": projection.projection_type.value,
+                            "target_path": projection.target_path or "",
+                        },
                     )
                 )
             elif projection.status == ProjectionStatus.FAILED:
+                projection_failures = failures_by_projection_type.get(
+                    projection.projection_type, []
+                )
+                failure_details: dict[str, Any] = {
+                    "projection_type": projection.projection_type.value,
+                    "target_path": projection.target_path or "",
+                    "open_failure_count": projection.open_failure_count,
+                }
+                if projection_failures:
+                    failure_details["failures"] = [
+                        {
+                            "projection_type": failure.projection_type.value,
+                            "target_path": failure.target_path,
+                            "error_code": failure.error_code,
+                            "error_message": failure.error_message,
+                            "open_failure_count": failure.open_failure_count,
+                        }
+                        for failure in projection_failures
+                    ]
+
                 warnings.append(
                     ResumeIssue(
                         code="open_projection_failure",
                         message="resume projection has unresolved write failures",
-                        details={
-                            "target_path": projection.target_path or "",
-                            "open_failure_count": projection.open_failure_count,
-                        },
+                        details=failure_details,
                     )
                 )
             elif projection.status == ProjectionStatus.MISSING:
@@ -925,11 +1069,14 @@ class WorkflowService:
                     ResumeIssue(
                         code="missing_projection",
                         message="resume projection has not been generated yet",
-                        details={"target_path": projection.target_path or ""},
+                        details={
+                            "projection_type": projection.projection_type.value,
+                            "target_path": projection.target_path or "",
+                        },
                     )
                 )
 
-        return warnings
+        return tuple(warnings)
 
     def _derive_next_hint(
         self,

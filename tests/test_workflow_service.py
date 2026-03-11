@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import uuid4
+
+import pytest
 
 from ctxledger.db import InMemoryStore, build_in_memory_uow_factory
 from ctxledger.workflow.service import (
@@ -9,8 +12,11 @@ from ctxledger.workflow.service import (
     CompleteWorkflowInput,
     CreateCheckpointInput,
     InvalidStateTransitionError,
+    ProjectionArtifactType,
+    ProjectionFailureInfo,
     ProjectionInfo,
     ProjectionStatus,
+    RecordProjectionFailureInput,
     RecordProjectionStateInput,
     RegisterWorkspaceInput,
     ResumableStatus,
@@ -289,8 +295,13 @@ def test_resume_workflow_returns_resumable_with_projection_warning() -> None:
     )
 
     uow.projection_states_by_key[
-        (workspace.workspace_id, started.workflow_instance.workflow_instance_id)
+        (
+            workspace.workspace_id,
+            started.workflow_instance.workflow_instance_id,
+            ProjectionArtifactType.RESUME_JSON,
+        )
     ] = ProjectionInfo(
+        projection_type=ProjectionArtifactType.RESUME_JSON,
         status=ProjectionStatus.STALE,
         target_path=".agent/resume.json",
         open_failure_count=0,
@@ -316,9 +327,14 @@ def test_resume_workflow_returns_resumable_with_projection_warning() -> None:
         == checkpoint_result.checkpoint.checkpoint_id
     )
     assert resume.resumable_status == ResumableStatus.RESUMABLE
-    assert resume.projection is not None
-    assert resume.projection.status == ProjectionStatus.STALE
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.STALE
     assert any(warning.code == "stale_projection" for warning in resume.warnings)
+    stale_warning = next(
+        warning for warning in resume.warnings if warning.code == "stale_projection"
+    )
+    assert stale_warning.details["projection_type"] == "resume_json"
     assert resume.next_hint == "Resume implementation"
 
 
@@ -336,6 +352,7 @@ def test_record_resume_projection_persists_projection_state() -> None:
         RecordProjectionStateInput(
             workspace_id=workspace.workspace_id,
             workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
             status=ProjectionStatus.FRESH,
             target_path=".agent/resume.json",
         )
@@ -347,11 +364,13 @@ def test_record_resume_projection_persists_projection_state() -> None:
         )
     )
 
+    assert recorded.projection_type == ProjectionArtifactType.RESUME_JSON
     assert recorded.status == ProjectionStatus.FRESH
     assert recorded.target_path == ".agent/resume.json"
-    assert resume.projection is not None
-    assert resume.projection.status == ProjectionStatus.FRESH
-    assert resume.projection.target_path == ".agent/resume.json"
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FRESH
+    assert resume.projections[0].target_path == ".agent/resume.json"
 
 
 def test_record_resume_projection_rejects_empty_target_path() -> None:
@@ -369,6 +388,7 @@ def test_record_resume_projection_rejects_empty_target_path() -> None:
             RecordProjectionStateInput(
                 workspace_id=workspace.workspace_id,
                 workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                projection_type=ProjectionArtifactType.RESUME_JSON,
                 status=ProjectionStatus.FRESH,
                 target_path="   ",
             )
@@ -407,6 +427,7 @@ def test_record_resume_projection_rejects_workflow_from_another_workspace() -> N
             RecordProjectionStateInput(
                 workspace_id=second_workspace.workspace_id,
                 workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                projection_type=ProjectionArtifactType.RESUME_JSON,
                 status=ProjectionStatus.STALE,
                 target_path=".agent/resume.json",
             )

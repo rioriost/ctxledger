@@ -10,6 +10,9 @@ from uuid import UUID, uuid4
 import pytest
 
 from ctxledger.workflow.service import (
+    PersistenceError,
+    ProjectionArtifactType,
+    ProjectionFailureInfo,
     ProjectionInfo,
     ProjectionStateRepository,
     ProjectionStatus,
@@ -168,6 +171,7 @@ def sample_verify_report(attempt_id: UUID) -> VerifyReport:
 
 def sample_projection_info() -> ProjectionInfo:
     return ProjectionInfo(
+        projection_type=ProjectionArtifactType.RESUME_JSON,
         status=ProjectionStatus.FRESH,
         target_path=".agent/resume.json",
         last_successful_write_at=datetime(2024, 1, 8, tzinfo=UTC),
@@ -305,14 +309,17 @@ def test_projection_state_repository_contract_returns_resume_projection() -> Non
     workflow = sample_workflow(workspace.workspace_id)
     projection = sample_projection_info()
 
-    repo.items[(workspace.workspace_id, workflow.workflow_instance_id)] = projection
-
-    assert (
-        repo.get_resume_projection(
-            workspace.workspace_id, workflow.workflow_instance_id
+    repo.items[
+        (
+            workspace.workspace_id,
+            workflow.workflow_instance_id,
+            projection.projection_type,
         )
-        == projection
-    )
+    ] = projection
+
+    assert repo.get_resume_projections(
+        workspace.workspace_id, workflow.workflow_instance_id
+    ) == (projection,)
 
 
 @pytest.mark.parametrize(
@@ -515,22 +522,47 @@ class _VerifyReportRepoStub(VerifyReportRepository):
 
 class _ProjectionStateRepoStub(ProjectionStateRepository):
     def __init__(self) -> None:
-        self.items: dict[tuple[UUID, UUID], ProjectionInfo] = {}
+        self.items: dict[tuple[UUID, UUID, ProjectionArtifactType], ProjectionInfo] = {}
 
-    def get_resume_projection(
+    def get_resume_projections(
         self,
         workspace_id: UUID,
         workflow_instance_id: UUID,
-    ) -> ProjectionInfo | None:
-        return self.items.get((workspace_id, workflow_instance_id))
+    ) -> tuple[ProjectionInfo, ...]:
+        candidates = [
+            projection
+            for (
+                candidate_workspace_id,
+                candidate_workflow_instance_id,
+                _,
+            ), projection in self.items.items()
+            if candidate_workspace_id == workspace_id
+            and candidate_workflow_instance_id == workflow_instance_id
+        ]
+        candidates.sort(
+            key=lambda projection: (
+                projection.last_canonical_update_at is not None,
+                projection.last_canonical_update_at,
+                projection.last_successful_write_at is not None,
+                projection.last_successful_write_at,
+                projection.projection_type.value,
+            ),
+            reverse=True,
+        )
+        return tuple(candidates)
 
     def record_resume_projection(self, projection: RecordProjectionStateInput) -> None:
-        self.items[(projection.workspace_id, projection.workflow_instance_id)] = (
-            ProjectionInfo(
-                status=projection.status,
-                target_path=projection.target_path,
-                last_successful_write_at=projection.last_successful_write_at,
-                last_canonical_update_at=projection.last_canonical_update_at,
-                open_failure_count=0,
+        self.items[
+            (
+                projection.workspace_id,
+                projection.workflow_instance_id,
+                projection.projection_type,
             )
+        ] = ProjectionInfo(
+            projection_type=projection.projection_type,
+            status=projection.status,
+            target_path=projection.target_path,
+            last_successful_write_at=projection.last_successful_write_at,
+            last_canonical_update_at=projection.last_canonical_update_at,
+            open_failure_count=0,
         )

@@ -13,7 +13,9 @@ from ctxledger.db.postgres import PostgresConfig, build_postgres_uow_factory
 from ctxledger.workflow.service import (
     CompleteWorkflowInput,
     CreateCheckpointInput,
+    ProjectionArtifactType,
     ProjectionStatus,
+    RecordProjectionFailureInput,
     RecordProjectionStateInput,
     RegisterWorkspaceInput,
     ResumableStatus,
@@ -305,8 +307,183 @@ def test_postgres_workflow_service_resume_without_projection_state_is_still_resu
     )
 
     assert resume.resumable_status == ResumableStatus.RESUMABLE
-    assert resume.projection is None
+    assert resume.projections == ()
     assert all(warning.code != "stale_projection" for warning in resume.warnings)
+
+
+def test_postgres_workflow_service_records_projection_failures(
+    postgres_workflow_service: WorkflowService,
+) -> None:
+    service = postgres_workflow_service
+
+    workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-projection.git",
+            canonical_path="/tmp/integration-repo-projection",
+            default_branch="main",
+        )
+    )
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-PROJ-1",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="checkpointed",
+            checkpoint_json={"next_intended_action": "Retry projection write"},
+        )
+    )
+
+    service.record_resume_projection(
+        RecordProjectionStateInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FAILED,
+            target_path=".agent/resume.json",
+        )
+    )
+
+    first_failure = service.record_resume_projection_failure(
+        RecordProjectionFailureInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            target_path=".agent/resume.json",
+            error_message="disk full",
+            error_code="io_error",
+        )
+    )
+    second_failure = service.record_resume_projection_failure(
+        RecordProjectionFailureInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_MD,
+            target_path=".agent/resume.md",
+            error_message="permission denied",
+            error_code="permission_error",
+        )
+    )
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert first_failure.open_failure_count == 1
+    assert second_failure.open_failure_count == 2
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FAILED
+    assert resume.projections[0].open_failure_count == 1
+    assert any(warning.code == "open_projection_failure" for warning in resume.warnings)
+
+    open_failure_warnings = [
+        warning
+        for warning in resume.warnings
+        if warning.code == "open_projection_failure"
+    ]
+    assert len(open_failure_warnings) == 1
+
+    open_failure_warning = open_failure_warnings[0]
+    assert open_failure_warning.details["projection_type"] == "resume_json"
+    assert open_failure_warning.details["open_failure_count"] == 1
+    assert open_failure_warning.details["target_path"] == ".agent/resume.json"
+    assert len(open_failure_warning.details["failures"]) == 1
+    assert (
+        open_failure_warning.details["failures"][0]["projection_type"] == "resume_json"
+    )
+    assert open_failure_warning.details["failures"][0]["error_code"] == "io_error"
+
+
+def test_postgres_workflow_service_resolves_projection_failures_after_successful_projection_write(
+    postgres_workflow_service: WorkflowService,
+) -> None:
+    service = postgres_workflow_service
+
+    workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-projection-resolve.git",
+            canonical_path="/tmp/integration-repo-projection-resolve",
+            default_branch="main",
+        )
+    )
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-PROJ-RESOLVE-1",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="checkpointed",
+            checkpoint_json={"next_intended_action": "Rewrite projection successfully"},
+        )
+    )
+
+    service.record_resume_projection(
+        RecordProjectionStateInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FAILED,
+            target_path=".agent/resume.json",
+        )
+    )
+    service.record_resume_projection_failure(
+        RecordProjectionFailureInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            target_path=".agent/resume.json",
+            error_message="disk full",
+            error_code="io_error",
+        )
+    )
+    service.record_resume_projection_failure(
+        RecordProjectionFailureInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_MD,
+            target_path=".agent/resume.md",
+            error_message="permission denied",
+            error_code="permission_error",
+        )
+    )
+
+    resolved_count = service.resolve_resume_projection_failures(
+        workspace_id=workspace.workspace_id,
+        workflow_instance_id=started.workflow_instance.workflow_instance_id,
+    )
+    recorded = service.record_resume_projection(
+        RecordProjectionStateInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FRESH,
+            target_path=".agent/resume.json",
+        )
+    )
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert resolved_count == 2
+    assert recorded.status == ProjectionStatus.FRESH
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FRESH
+    assert resume.projections[0].open_failure_count == 0
+    assert all(warning.code != "open_projection_failure" for warning in resume.warnings)
 
 
 def test_postgres_settings_can_build_uow_factory_from_loaded_settings(
@@ -407,6 +584,7 @@ def test_postgres_projection_state_can_be_observed_after_projection_write(
         RecordProjectionStateInput(
             workspace_id=workspace.workspace_id,
             workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
             status=ProjectionStatus.FRESH,
             target_path=".agent/resume.json",
         )
@@ -419,12 +597,13 @@ def test_postgres_projection_state_can_be_observed_after_projection_write(
     )
 
     assert resume.resumable_status == ResumableStatus.RESUMABLE
-    assert resume.projection is not None
-    assert resume.projection.status == ProjectionStatus.FRESH
-    assert resume.projection.target_path == ".agent/resume.json"
-    assert resume.projection.last_successful_write_at is not None
-    assert resume.projection.last_canonical_update_at is not None
-    assert resume.projection.open_failure_count == 0
+    assert len(resume.projections) == 1
+    assert resume.projections[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert resume.projections[0].status == ProjectionStatus.FRESH
+    assert resume.projections[0].target_path == ".agent/resume.json"
+    assert resume.projections[0].last_successful_write_at is not None
+    assert resume.projections[0].last_canonical_update_at is not None
+    assert resume.projections[0].open_failure_count == 0
     assert all(
         warning.code not in {"stale_projection", "missing_projection"}
         for warning in resume.warnings

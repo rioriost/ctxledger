@@ -10,9 +10,13 @@ from uuid import UUID
 
 from ctxledger.workflow.service import (
     PersistenceError,
+    ProjectionArtifactType,
+    ProjectionFailureInfo,
+    ProjectionFailureRepository,
     ProjectionInfo,
     ProjectionStateRepository,
     ProjectionStatus,
+    RecordProjectionFailureInput,
     RecordProjectionStateInput,
     UnitOfWork,
     VerifyReport,
@@ -839,44 +843,61 @@ class PostgresProjectionStateRepository(ProjectionStateRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
 
-    def get_resume_projection(
+    def get_resume_projections(
         self,
         workspace_id: UUID,
         workflow_instance_id: UUID,
-    ) -> ProjectionInfo | None:
+    ) -> tuple[ProjectionInfo, ...]:
         with self._conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT
-                    status,
-                    target_path,
-                    last_successful_write_at,
-                    last_canonical_update_at
-                FROM projection_states
-                WHERE workspace_id = %s
-                  AND workflow_instance_id = %s
-                ORDER BY updated_at DESC
-                LIMIT 1
+                    ps.projection_type,
+                    ps.status,
+                    ps.target_path,
+                    ps.last_successful_write_at,
+                    ps.last_canonical_update_at,
+                    COUNT(pf.projection_failure_id) FILTER (
+                        WHERE pf.status = 'open'
+                    ) AS open_failure_count
+                FROM projection_states AS ps
+                LEFT JOIN projection_failures AS pf
+                  ON pf.workspace_id = ps.workspace_id
+                 AND pf.workflow_instance_id = ps.workflow_instance_id
+                 AND pf.projection_type = ps.projection_type
+                WHERE ps.workspace_id = %s
+                  AND ps.workflow_instance_id = %s
+                GROUP BY
+                    ps.projection_type,
+                    ps.status,
+                    ps.target_path,
+                    ps.last_successful_write_at,
+                    ps.last_canonical_update_at,
+                    ps.updated_at
+                ORDER BY
+                    ps.last_canonical_update_at DESC NULLS LAST,
+                    ps.last_successful_write_at DESC NULLS LAST,
+                    ps.updated_at DESC,
+                    ps.projection_type DESC
                 """,
                 (workspace_id, workflow_instance_id),
             )
-            row = cur.fetchone()
+            rows = cur.fetchall()
 
-        if row is None:
-            return None
-
-        return ProjectionInfo(
-            status=ProjectionStatus(str(row["status"])),
-            target_path=row["target_path"],
-            last_successful_write_at=_optional_datetime(
-                row["last_successful_write_at"]
-            ),
-            last_canonical_update_at=_optional_datetime(
-                row["last_canonical_update_at"]
-            ),
-            open_failure_count=self._count_open_failures(
-                workspace_id, workflow_instance_id
-            ),
+        return tuple(
+            ProjectionInfo(
+                projection_type=ProjectionArtifactType(str(row["projection_type"])),
+                status=ProjectionStatus(str(row["status"])),
+                target_path=row["target_path"],
+                last_successful_write_at=_optional_datetime(
+                    row["last_successful_write_at"]
+                ),
+                last_canonical_update_at=_optional_datetime(
+                    row["last_canonical_update_at"]
+                ),
+                open_failure_count=int(row["open_failure_count"] or 0),
+            )
+            for row in rows
         )
 
     def record_resume_projection(self, projection: RecordProjectionStateInput) -> None:
@@ -897,7 +918,7 @@ class PostgresProjectionStateRepository(ProjectionStateRepository):
                     gen_random_uuid(),
                     %s,
                     %s,
-                    'resume_json',
+                    %s,
                     %s,
                     %s,
                     %s,
@@ -914,12 +935,130 @@ class PostgresProjectionStateRepository(ProjectionStateRepository):
                 (
                     projection.workspace_id,
                     projection.workflow_instance_id,
+                    projection.projection_type.value,
                     projection.target_path,
                     projection.status.value,
                     projection.last_successful_write_at,
                     projection.last_canonical_update_at,
                 ),
             )
+
+
+class PostgresProjectionFailureRepository(ProjectionFailureRepository):
+    def __init__(self, conn: Connection) -> None:
+        self._conn = conn
+
+    def get_open_failures_by_workflow_id(
+        self,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+    ) -> list[ProjectionFailureInfo]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    projection_type,
+                    error_code,
+                    error_message,
+                    target_path
+                FROM projection_failures
+                WHERE workspace_id = %s
+                  AND workflow_instance_id = %s
+                  AND status = 'open'
+                ORDER BY occurred_at ASC
+                """,
+                (workspace_id, workflow_instance_id),
+            )
+            rows = cur.fetchall()
+
+        failures: list[ProjectionFailureInfo] = []
+        for index, row in enumerate(rows, start=1):
+            failures.append(
+                ProjectionFailureInfo(
+                    projection_type=ProjectionArtifactType.RESUME_JSON
+                    if str(row["target_path"]).endswith(".json")
+                    else ProjectionArtifactType.RESUME_MD,
+                    error_code=row["error_code"],
+                    error_message=row["error_message"],
+                    target_path=row["target_path"],
+                    open_failure_count=index,
+                )
+            )
+        return failures
+
+    def record_resume_projection_failure(
+        self,
+        failure: RecordProjectionFailureInput,
+    ) -> ProjectionFailureInfo:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO projection_failures (
+                    projection_failure_id,
+                    workspace_id,
+                    workflow_instance_id,
+                    projection_type,
+                    target_path,
+                    error_code,
+                    error_message,
+                    status,
+                    retry_count,
+                    occurred_at
+                )
+                VALUES (
+                    gen_random_uuid(),
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    'open',
+                    0,
+                    now()
+                )
+                """,
+                (
+                    failure.workspace_id,
+                    failure.workflow_instance_id,
+                    failure.projection_type.value,
+                    failure.target_path,
+                    failure.error_code,
+                    failure.error_message,
+                ),
+            )
+
+        open_failure_count = self._count_open_failures(
+            failure.workspace_id,
+            failure.workflow_instance_id,
+        )
+        return ProjectionFailureInfo(
+            projection_type=failure.projection_type,
+            error_code=failure.error_code,
+            error_message=failure.error_message,
+            target_path=failure.target_path,
+            open_failure_count=open_failure_count,
+        )
+
+    def resolve_resume_projection_failures(
+        self,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+    ) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE projection_failures
+                SET
+                    status = 'resolved',
+                    resolved_at = now()
+                WHERE workspace_id = %s
+                  AND workflow_instance_id = %s
+                  AND status = 'open'
+                """,
+                (workspace_id, workflow_instance_id),
+            )
+            return cur.rowcount
 
     def _count_open_failures(
         self,
@@ -958,6 +1097,7 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
         self.workflow_checkpoints = PostgresWorkflowCheckpointRepository(self._conn)
         self.verify_reports = PostgresVerifyReportRepository(self._conn)
         self.projection_states = PostgresProjectionStateRepository(self._conn)
+        self.projection_failures = PostgresProjectionFailureRepository(self._conn)
         self._committed = False
         return self
 
