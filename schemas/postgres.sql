@@ -1,0 +1,10 @@
+workspaces
+workflow_instances
+workflow_attempts
+workflow_checkpoints
+verify_reports
+
+episodes
+episode_events
+memory_items
+memory_embeddings

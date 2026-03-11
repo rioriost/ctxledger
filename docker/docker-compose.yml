@@ -1,0 +1,6 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+
+  ctxledger:
+    build: .
