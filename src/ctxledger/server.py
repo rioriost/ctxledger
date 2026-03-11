@@ -70,8 +70,30 @@ class WorkflowResumeResponse:
 
 
 @dataclass(slots=True)
+class RuntimeIntrospectionResponse:
+    status_code: int
+    payload: dict[str, Any]
+    headers: dict[str, str]
+
+
+@dataclass(slots=True)
 class McpToolResponse:
     payload: dict[str, Any]
+
+
+@dataclass(slots=True)
+class RuntimeDispatchResult:
+    transport: str
+    target: str
+    status: str
+    response: WorkflowResumeResponse | McpToolResponse
+
+
+@dataclass(slots=True)
+class RuntimeIntrospection:
+    transport: str
+    routes: tuple[str, ...] = ()
+    tools: tuple[str, ...] = ()
 
 
 WorkflowHttpHandler = Any
@@ -212,21 +234,14 @@ class HttpRuntimeAdapter:
     def registered_routes(self) -> tuple[str, ...]:
         return tuple(sorted(self._handlers.keys()))
 
-    def dispatch(self, route_name: str, path: str) -> WorkflowResumeResponse:
-        handler = self._handlers.get(route_name)
-        if handler is None:
-            return WorkflowResumeResponse(
-                status_code=404,
-                payload={
-                    "error": {
-                        "code": "route_not_found",
-                        "message": f"no HTTP handler is registered for route '{route_name}'",
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
+    def introspect(self) -> RuntimeIntrospection:
+        return RuntimeIntrospection(
+            transport="http",
+            routes=self.registered_routes(),
+        )
 
-        return handler(path)
+    def dispatch(self, route_name: str, path: str) -> WorkflowResumeResponse:
+        return dispatch_http_request(self, route_name, path).response
 
     def start(self) -> None:
         logger.info(
@@ -281,21 +296,16 @@ class StdioRuntimeAdapter:
     def registered_tools(self) -> tuple[str, ...]:
         return tuple(sorted(self._tool_handlers.keys()))
 
+    def introspect(self) -> RuntimeIntrospection:
+        return RuntimeIntrospection(
+            transport="stdio",
+            tools=self.registered_tools(),
+        )
+
     def dispatch_tool(
         self, tool_name: str, arguments: dict[str, Any]
     ) -> McpToolResponse:
-        handler = self._tool_handlers.get(tool_name)
-        if handler is None:
-            return McpToolResponse(
-                payload={
-                    "error": {
-                        "code": "tool_not_found",
-                        "message": f"no MCP tool handler is registered for tool '{tool_name}'",
-                    }
-                }
-            )
-
-        return handler(arguments)
+        return dispatch_mcp_tool(self, tool_name, arguments).response
 
     def start(self) -> None:
         logger.info(
@@ -416,6 +426,50 @@ class CtxLedgerServer:
             headers={"content-type": "application/json"},
         )
 
+    def build_runtime_introspection_response(self) -> RuntimeIntrospectionResponse:
+        introspections = collect_runtime_introspection(self.runtime)
+        return RuntimeIntrospectionResponse(
+            status_code=200,
+            payload={
+                "runtime": serialize_runtime_introspection_collection(introspections),
+            },
+            headers={"content-type": "application/json"},
+        )
+
+    def build_runtime_routes_response(self) -> RuntimeIntrospectionResponse:
+        introspections = collect_runtime_introspection(self.runtime)
+        return RuntimeIntrospectionResponse(
+            status_code=200,
+            payload={
+                "routes": [
+                    {
+                        "transport": introspection.transport,
+                        "routes": list(introspection.routes),
+                    }
+                    for introspection in introspections
+                    if introspection.routes
+                ],
+            },
+            headers={"content-type": "application/json"},
+        )
+
+    def build_runtime_tools_response(self) -> RuntimeIntrospectionResponse:
+        introspections = collect_runtime_introspection(self.runtime)
+        return RuntimeIntrospectionResponse(
+            status_code=200,
+            payload={
+                "tools": [
+                    {
+                        "transport": introspection.transport,
+                        "tools": list(introspection.tools),
+                    }
+                    for introspection in introspections
+                    if introspection.tools
+                ],
+            },
+            headers={"content-type": "application/json"},
+        )
+
     def validate_configuration(self) -> None:
         self.settings.validate()
 
@@ -462,6 +516,9 @@ class CtxLedgerServer:
                 "port": self.settings.http.port,
                 "mcp_url": self.settings.http.mcp_url,
                 "workflow_service_initialized": self.workflow_service is not None,
+                "runtime": serialize_runtime_introspection_collection(
+                    collect_runtime_introspection(self.runtime)
+                ),
             },
         )
 
@@ -476,6 +533,7 @@ class CtxLedgerServer:
         logger.info("ctxledger shutdown complete")
 
     def health(self) -> HealthStatus:
+        runtime_introspection = collect_runtime_introspection(self.runtime)
         return HealthStatus(
             ok=True,
             status="ok",
@@ -484,10 +542,14 @@ class CtxLedgerServer:
                 "version": self.settings.app_version,
                 "started": self._started,
                 "workflow_service_initialized": self.workflow_service is not None,
+                "runtime": serialize_runtime_introspection_collection(
+                    runtime_introspection
+                ),
             },
         )
 
     def readiness(self) -> ReadinessStatus:
+        runtime_introspection = collect_runtime_introspection(self.runtime)
         details: dict[str, Any] = {
             "service": self.settings.app_name,
             "version": self.settings.app_version,
@@ -496,6 +558,9 @@ class CtxLedgerServer:
             "http_enabled": self.settings.http.enabled,
             "stdio_enabled": self.settings.stdio.enabled,
             "workflow_service_initialized": self.workflow_service is not None,
+            "runtime": serialize_runtime_introspection_collection(
+                runtime_introspection
+            ),
         }
 
         if not self._started:
@@ -651,6 +716,16 @@ def serialize_stub_response(response: StubResponse) -> dict[str, Any]:
     }
 
 
+def serialize_runtime_introspection(
+    introspection: RuntimeIntrospection,
+) -> dict[str, Any]:
+    return {
+        "transport": introspection.transport,
+        "routes": list(introspection.routes),
+        "tools": list(introspection.tools),
+    }
+
+
 def build_mcp_success_response(result: dict[str, Any]) -> McpToolResponse:
     return McpToolResponse(
         payload={
@@ -678,11 +753,153 @@ def build_mcp_error_response(
     )
 
 
+def _extract_bearer_token(path: str) -> str | None:
+    normalized_path = path.strip()
+    if not normalized_path:
+        return None
+
+    parsed = urlparse(normalized_path)
+    authorization_values = parse_qs(parsed.query).get("authorization", [])
+    if not authorization_values:
+        return None
+
+    authorization = authorization_values[0].strip()
+    if not authorization:
+        return None
+
+    scheme, separator, token = authorization.partition(" ")
+    if separator == "" or scheme.lower() != "bearer":
+        return None
+
+    token = token.strip()
+    return token or None
+
+
+def _http_auth_error_response(message: str) -> WorkflowResumeResponse:
+    return WorkflowResumeResponse(
+        status_code=401,
+        payload={
+            "error": {
+                "code": "authentication_error",
+                "message": message,
+            }
+        },
+        headers={
+            "content-type": "application/json",
+            "www-authenticate": 'Bearer realm="ctxledger"',
+        },
+    )
+
+
+def _require_http_bearer_auth(
+    server: CtxLedgerServer,
+    path: str,
+) -> WorkflowResumeResponse | None:
+    if not server.settings.auth.is_enabled:
+        return None
+
+    expected_token = server.settings.auth.bearer_token
+    if expected_token is None:
+        return _http_auth_error_response("bearer token is not configured")
+
+    presented_token = _extract_bearer_token(path)
+    if presented_token is None:
+        return _http_auth_error_response("missing bearer token")
+
+    if presented_token != expected_token:
+        return _http_auth_error_response("invalid bearer token")
+
+    return None
+
+
+def dispatch_http_request(
+    runtime: HttpRuntimeAdapter,
+    route_name: str,
+    path: str,
+) -> RuntimeDispatchResult:
+    handler = runtime._handlers.get(route_name)
+    if handler is None:
+        response = WorkflowResumeResponse(
+            status_code=404,
+            payload={
+                "error": {
+                    "code": "route_not_found",
+                    "message": f"no HTTP handler is registered for route '{route_name}'",
+                }
+            },
+            headers={"content-type": "application/json"},
+        )
+        return RuntimeDispatchResult(
+            transport="http",
+            target=route_name,
+            status="route_not_found",
+            response=response,
+        )
+
+    response = handler(path)
+    return RuntimeDispatchResult(
+        transport="http",
+        target=route_name,
+        status="ok" if response.status_code < 400 else "error",
+        response=response,
+    )
+
+
+def dispatch_mcp_tool(
+    runtime: StdioRuntimeAdapter,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> RuntimeDispatchResult:
+    handler = runtime._tool_handlers.get(tool_name)
+    if handler is None:
+        response = McpToolResponse(
+            payload={
+                "error": {
+                    "code": "tool_not_found",
+                    "message": f"no MCP tool handler is registered for tool '{tool_name}'",
+                }
+            }
+        )
+        return RuntimeDispatchResult(
+            transport="stdio",
+            target=tool_name,
+            status="tool_not_found",
+            response=response,
+        )
+
+    response = handler(arguments)
+    error_payload = response.payload.get("error")
+    return RuntimeDispatchResult(
+        transport="stdio",
+        target=tool_name,
+        status="error" if error_payload is not None else "ok",
+        response=response,
+    )
+
+
 def build_workflow_resume_response(
     server: CtxLedgerServer,
     workflow_instance_id: UUID,
 ) -> WorkflowResumeResponse:
     return server.build_workflow_resume_response(workflow_instance_id)
+
+
+def build_runtime_introspection_response(
+    server: CtxLedgerServer,
+) -> RuntimeIntrospectionResponse:
+    return server.build_runtime_introspection_response()
+
+
+def build_runtime_routes_response(
+    server: CtxLedgerServer,
+) -> RuntimeIntrospectionResponse:
+    return server.build_runtime_routes_response()
+
+
+def build_runtime_tools_response(
+    server: CtxLedgerServer,
+) -> RuntimeIntrospectionResponse:
+    return server.build_runtime_tools_response()
 
 
 def parse_workflow_resume_request_path(path: str) -> UUID | None:
@@ -709,6 +926,10 @@ def build_workflow_resume_http_handler(
     server: CtxLedgerServer,
 ):
     def _handler(path: str) -> WorkflowResumeResponse:
+        auth_error = _require_http_bearer_auth(server, path)
+        if auth_error is not None:
+            return auth_error
+
         workflow_instance_id = parse_workflow_resume_request_path(path)
         if workflow_instance_id is None:
             return WorkflowResumeResponse(
@@ -723,6 +944,99 @@ def build_workflow_resume_http_handler(
             )
 
         return build_workflow_resume_response(server, workflow_instance_id)
+
+    return _handler
+
+
+def build_runtime_introspection_http_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(path: str) -> RuntimeIntrospectionResponse:
+        auth_error = _require_http_bearer_auth(server, path)
+        if auth_error is not None:
+            return RuntimeIntrospectionResponse(
+                status_code=auth_error.status_code,
+                payload=auth_error.payload,
+                headers=auth_error.headers,
+            )
+
+        normalized_path = path.strip()
+        path_without_query = normalized_path.split("?", 1)[0].strip("/")
+        if path_without_query != "debug/runtime":
+            return RuntimeIntrospectionResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": "runtime introspection endpoint requires /debug/runtime",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return build_runtime_introspection_response(server)
+
+    return _handler
+
+
+def build_runtime_routes_http_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(path: str) -> RuntimeIntrospectionResponse:
+        auth_error = _require_http_bearer_auth(server, path)
+        if auth_error is not None:
+            return RuntimeIntrospectionResponse(
+                status_code=auth_error.status_code,
+                payload=auth_error.payload,
+                headers=auth_error.headers,
+            )
+
+        normalized_path = path.strip()
+        path_without_query = normalized_path.split("?", 1)[0].strip("/")
+        if path_without_query != "debug/routes":
+            return RuntimeIntrospectionResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": "runtime routes endpoint requires /debug/routes",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return build_runtime_routes_response(server)
+
+    return _handler
+
+
+def build_runtime_tools_http_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(path: str) -> RuntimeIntrospectionResponse:
+        auth_error = _require_http_bearer_auth(server, path)
+        if auth_error is not None:
+            return RuntimeIntrospectionResponse(
+                status_code=auth_error.status_code,
+                payload=auth_error.payload,
+                headers=auth_error.headers,
+            )
+
+        normalized_path = path.strip()
+        path_without_query = normalized_path.split("?", 1)[0].strip("/")
+        if path_without_query != "debug/tools":
+            return RuntimeIntrospectionResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": "runtime tools endpoint requires /debug/tools",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return build_runtime_tools_response(server)
 
     return _handler
 
@@ -895,11 +1209,60 @@ def build_memory_get_context_tool_handler(
 
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
     runtime = HttpRuntimeAdapter(server.settings)
+    debug_settings = getattr(server.settings, "debug", None)
+    debug_http_endpoints_enabled = (
+        True if debug_settings is None else getattr(debug_settings, "enabled", True)
+    )
+
+    if debug_http_endpoints_enabled:
+        runtime.register_handler(
+            "runtime_introspection",
+            build_runtime_introspection_http_handler(server),
+        )
+        runtime.register_handler(
+            "runtime_routes",
+            build_runtime_routes_http_handler(server),
+        )
+        runtime.register_handler(
+            "runtime_tools",
+            build_runtime_tools_http_handler(server),
+        )
+
     runtime.register_handler(
         "workflow_resume",
         build_workflow_resume_http_handler(server),
     )
     return runtime
+
+
+def collect_runtime_introspection(
+    runtime: ServerRuntime | None,
+) -> tuple[RuntimeIntrospection, ...]:
+    if runtime is None:
+        return ()
+
+    if isinstance(runtime, CompositeRuntimeAdapter):
+        collected: list[RuntimeIntrospection] = []
+        for nested_runtime in runtime._runtimes:
+            collected.extend(collect_runtime_introspection(nested_runtime))
+        return tuple(collected)
+
+    if isinstance(runtime, HttpRuntimeAdapter):
+        return (runtime.introspect(),)
+
+    if isinstance(runtime, StdioRuntimeAdapter):
+        return (runtime.introspect(),)
+
+    return ()
+
+
+def serialize_runtime_introspection_collection(
+    introspections: tuple[RuntimeIntrospection, ...],
+) -> list[dict[str, Any]]:
+    return [
+        serialize_runtime_introspection(introspection)
+        for introspection in introspections
+    ]
 
 
 def build_stdio_runtime_adapter(server: CtxLedgerServer) -> StdioRuntimeAdapter:
@@ -1058,6 +1421,9 @@ def _install_signal_handlers(server: CtxLedgerServer) -> None:
 def _print_runtime_summary(server: CtxLedgerServer) -> None:
     readiness = server.readiness()
     health = server.health()
+    runtime_introspection = serialize_runtime_introspection_collection(
+        collect_runtime_introspection(server.runtime)
+    )
 
     print(
         f"{server.settings.app_name} {server.settings.app_version} started",
@@ -1065,6 +1431,7 @@ def _print_runtime_summary(server: CtxLedgerServer) -> None:
     )
     print(f"health={health.status}", file=sys.stderr)
     print(f"readiness={readiness.status}", file=sys.stderr)
+    print(f"runtime={runtime_introspection}", file=sys.stderr)
 
     if server.settings.http.enabled:
         print(f"mcp_endpoint={server.settings.http.mcp_url}", file=sys.stderr)
@@ -1115,6 +1482,9 @@ __all__ = [
     "HttpRuntimeAdapter",
     "McpToolResponse",
     "ReadinessStatus",
+    "RuntimeDispatchResult",
+    "RuntimeIntrospection",
+    "RuntimeIntrospectionResponse",
     "ServerBootstrapError",
     "ServerRuntime",
     "StdioRuntimeAdapter",
@@ -1124,17 +1494,28 @@ __all__ = [
     "build_mcp_error_response",
     "build_mcp_success_response",
     "build_memory_get_context_tool_handler",
+    "build_runtime_introspection_http_handler",
+    "build_runtime_introspection_response",
+    "build_runtime_routes_http_handler",
+    "build_runtime_routes_response",
+    "build_runtime_tools_http_handler",
+    "build_runtime_tools_response",
     "build_memory_remember_episode_tool_handler",
     "build_memory_search_tool_handler",
     "build_resume_workflow_tool_handler",
     "build_stdio_runtime_adapter",
+    "collect_runtime_introspection",
     "build_workflow_resume_http_handler",
     "build_workflow_resume_response",
     "build_workflow_service_factory",
     "create_runtime",
     "create_server",
+    "dispatch_http_request",
+    "dispatch_mcp_tool",
     "parse_workflow_resume_request_path",
     "run_server",
+    "serialize_runtime_introspection",
+    "serialize_runtime_introspection_collection",
     "serialize_stub_response",
     "serialize_workflow_resume",
 ]

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+import uuid
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -10,6 +12,7 @@ from ctxledger.config import (
     AppSettings,
     AuthSettings,
     DatabaseSettings,
+    DebugSettings,
     HttpSettings,
     LoggingSettings,
     LogLevel,
@@ -23,20 +26,30 @@ from ctxledger.server import (
     HttpRuntimeAdapter,
     McpToolResponse,
     ReadinessStatus,
+    RuntimeDispatchResult,
+    RuntimeIntrospection,
     ServerBootstrapError,
     StdioRuntimeAdapter,
     WorkflowResumeResponse,
+    _print_runtime_summary,
     build_database_health_checker,
     build_http_runtime_adapter,
     build_memory_get_context_tool_handler,
     build_memory_remember_episode_tool_handler,
     build_memory_search_tool_handler,
     build_resume_workflow_tool_handler,
+    build_runtime_introspection_http_handler,
+    build_runtime_introspection_response,
     build_stdio_runtime_adapter,
     build_workflow_resume_http_handler,
+    collect_runtime_introspection,
     create_runtime,
     create_server,
+    dispatch_http_request,
+    dispatch_mcp_tool,
     parse_workflow_resume_request_path,
+    serialize_runtime_introspection,
+    serialize_runtime_introspection_collection,
     serialize_workflow_resume,
 )
 from ctxledger.workflow.service import (
@@ -207,6 +220,8 @@ def make_settings(
     stdio_enabled: bool = False,
     host: str = "127.0.0.1",
     port: int = 8080,
+    auth_bearer_token: str | None = None,
+    require_auth: bool = False,
 ) -> AppSettings:
     return AppSettings(
         app_name="ctxledger",
@@ -228,8 +243,11 @@ def make_settings(
             enabled=stdio_enabled,
         ),
         auth=AuthSettings(
-            bearer_token=None,
-            require_auth=False,
+            bearer_token=auth_bearer_token,
+            require_auth=require_auth,
+        ),
+        debug=DebugSettings(
+            enabled=True,
         ),
         projection=ProjectionSettings(
             enabled=True,
@@ -262,11 +280,13 @@ def test_startup_marks_server_started_when_configuration_and_db_are_valid() -> N
     assert health.ok is True
     assert health.status == "ok"
     assert health.details["started"] is True
+    assert health.details["runtime"] == []
 
     assert readiness.ready is True
     assert readiness.status == "ready"
     assert readiness.details["database_reachable"] is True
     assert readiness.details["schema_ready"] is True
+    assert readiness.details["runtime"] == []
 
     assert db_checker.ping_calls >= 2
     assert db_checker.schema_ready_calls >= 2
@@ -384,6 +404,7 @@ def test_readiness_reports_not_started_before_startup() -> None:
     assert readiness.ready is False
     assert readiness.status == "not_started"
     assert readiness.details["started"] is False
+    assert readiness.details["runtime"] == []
 
 
 def test_startup_raises_for_invalid_configuration() -> None:
@@ -787,7 +808,12 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
     runtime = build_http_runtime_adapter(server)
 
     assert isinstance(runtime, HttpRuntimeAdapter)
-    assert runtime.registered_routes() == ("workflow_resume",)
+    assert runtime.registered_routes() == (
+        "runtime_introspection",
+        "runtime_routes",
+        "runtime_tools",
+        "workflow_resume",
+    )
 
     server.startup()
 
@@ -798,6 +824,157 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
 
     assert response.status_code == 200
     assert response.payload == serialize_workflow_resume(resume)
+
+
+def test_http_workflow_resume_route_requires_bearer_token_when_auth_is_enabled() -> (
+    None
+):
+    settings = make_settings(
+        auth_bearer_token="secret-token",
+        require_auth=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    assert isinstance(runtime, HttpRuntimeAdapter)
+    assert runtime.registered_routes() == (
+        "runtime_introspection",
+        "runtime_routes",
+        "runtime_tools",
+        "workflow_resume",
+    )
+
+    server.startup()
+
+    missing_token_response = runtime.dispatch(
+        "workflow_resume",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}",
+    )
+    invalid_token_response = runtime.dispatch(
+        "workflow_resume",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}?authorization=Bearer wrong-token",
+    )
+    valid_token_response = runtime.dispatch(
+        "workflow_resume",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}?authorization=Bearer secret-token",
+    )
+
+    assert missing_token_response.status_code == 401
+    assert missing_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "missing bearer token",
+        }
+    }
+    assert missing_token_response.headers == {
+        "content-type": "application/json",
+        "www-authenticate": 'Bearer realm="ctxledger"',
+    }
+
+    assert invalid_token_response.status_code == 401
+    assert invalid_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "invalid bearer token",
+        }
+    }
+    assert invalid_token_response.headers == {
+        "content-type": "application/json",
+        "www-authenticate": 'Bearer realm="ctxledger"',
+    }
+
+    assert valid_token_response.status_code == 200
+    assert valid_token_response.payload == serialize_workflow_resume(resume)
+
+
+def test_http_debug_routes_require_bearer_token_when_auth_is_enabled() -> None:
+    settings = make_settings(
+        auth_bearer_token="secret-token",
+        require_auth=True,
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    assert isinstance(server.runtime, HttpRuntimeAdapter)
+    assert server.runtime.registered_routes() == (
+        "runtime_introspection",
+        "runtime_routes",
+        "runtime_tools",
+        "workflow_resume",
+    )
+
+    runtime_introspection_missing_token_response = server.runtime.dispatch(
+        "runtime_introspection",
+        "/debug/runtime",
+    )
+    runtime_introspection_valid_token_response = server.runtime.dispatch(
+        "runtime_introspection",
+        "/debug/runtime?authorization=Bearer secret-token",
+    )
+
+    runtime_routes_missing_token_response = server.runtime.dispatch(
+        "runtime_routes",
+        "/debug/routes",
+    )
+    runtime_routes_valid_token_response = server.runtime.dispatch(
+        "runtime_routes",
+        "/debug/routes?authorization=Bearer secret-token",
+    )
+
+    runtime_tools_missing_token_response = server.runtime.dispatch(
+        "runtime_tools",
+        "/debug/tools",
+    )
+    runtime_tools_valid_token_response = server.runtime.dispatch(
+        "runtime_tools",
+        "/debug/tools?authorization=Bearer secret-token",
+    )
+
+    expected_auth_headers = {
+        "content-type": "application/json",
+        "www-authenticate": 'Bearer realm="ctxledger"',
+    }
+
+    assert runtime_introspection_missing_token_response.status_code == 401
+    assert runtime_introspection_missing_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "missing bearer token",
+        }
+    }
+    assert runtime_introspection_missing_token_response.headers == expected_auth_headers
+    assert runtime_introspection_valid_token_response.status_code == 200
+
+    assert runtime_routes_missing_token_response.status_code == 401
+    assert runtime_routes_missing_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "missing bearer token",
+        }
+    }
+    assert runtime_routes_missing_token_response.headers == expected_auth_headers
+    assert runtime_routes_valid_token_response.status_code == 200
+
+    assert runtime_tools_missing_token_response.status_code == 401
+    assert runtime_tools_missing_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "missing bearer token",
+        }
+    }
+    assert runtime_tools_missing_token_response.headers == expected_auth_headers
+    assert runtime_tools_valid_token_response.status_code == 200
 
 
 def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
@@ -812,7 +989,12 @@ def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
     )
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
-    assert server.runtime.registered_routes() == ("workflow_resume",)
+    assert server.runtime.registered_routes() == (
+        "runtime_introspection",
+        "runtime_routes",
+        "runtime_tools",
+        "workflow_resume",
+    )
 
     server.startup()
 
@@ -1122,3 +1304,1126 @@ def test_create_server_wires_stdio_runtime_with_registered_tools() -> None:
     )
 
     assert response.payload["ok"] is True
+
+
+def test_dispatch_http_request_returns_dispatch_result_for_success() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    result = dispatch_http_request(
+        runtime,
+        "workflow_resume",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}",
+    )
+
+    assert isinstance(result, RuntimeDispatchResult)
+    assert result.transport == "http"
+    assert result.target == "workflow_resume"
+    assert result.status == "ok"
+    assert isinstance(result.response, WorkflowResumeResponse)
+    assert result.response.status_code == 200
+    assert result.response.payload == serialize_workflow_resume(resume)
+
+
+def test_dispatch_http_request_returns_route_not_found_result() -> None:
+    settings = make_settings()
+    runtime = HttpRuntimeAdapter(settings)
+
+    result = dispatch_http_request(
+        runtime,
+        "missing_route",
+        f"/workflow-resume/{uuid4()}",
+    )
+
+    assert isinstance(result, RuntimeDispatchResult)
+    assert result.transport == "http"
+    assert result.target == "missing_route"
+    assert result.status == "route_not_found"
+    assert isinstance(result.response, WorkflowResumeResponse)
+    assert result.response.status_code == 404
+    assert result.response.payload == {
+        "error": {
+            "code": "route_not_found",
+            "message": "no HTTP handler is registered for route 'missing_route'",
+        }
+    }
+
+
+def test_dispatch_http_request_returns_error_result_for_handler_error_response() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    runtime = build_http_runtime_adapter(server)
+
+    result = dispatch_http_request(
+        runtime,
+        "workflow_resume",
+        f"/workflow-resume/{uuid4()}",
+    )
+
+    assert isinstance(result, RuntimeDispatchResult)
+    assert result.transport == "http"
+    assert result.target == "workflow_resume"
+    assert result.status == "error"
+    assert isinstance(result.response, WorkflowResumeResponse)
+    assert result.response.status_code == 503
+    assert result.response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+
+
+def test_dispatch_mcp_tool_returns_dispatch_result_for_success() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_stdio_runtime_adapter(server)
+
+    server.startup()
+
+    result = dispatch_mcp_tool(
+        runtime,
+        "resume_workflow",
+        {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)},
+    )
+
+    assert isinstance(result, RuntimeDispatchResult)
+    assert result.transport == "stdio"
+    assert result.target == "resume_workflow"
+    assert result.status == "ok"
+    assert isinstance(result.response, McpToolResponse)
+    assert result.response.payload["ok"] is True
+    assert result.response.payload["result"]["workflow"]["workflow_instance_id"] == str(
+        resume.workflow_instance.workflow_instance_id
+    )
+
+
+def test_dispatch_mcp_tool_returns_tool_not_found_result() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+
+    result = dispatch_mcp_tool(runtime, "missing_tool", {})
+
+    assert isinstance(result, RuntimeDispatchResult)
+    assert result.transport == "stdio"
+    assert result.target == "missing_tool"
+    assert result.status == "tool_not_found"
+    assert isinstance(result.response, McpToolResponse)
+    assert result.response.payload == {
+        "error": {
+            "code": "tool_not_found",
+            "message": "no MCP tool handler is registered for tool 'missing_tool'",
+        }
+    }
+
+
+def test_dispatch_mcp_tool_returns_error_result_for_tool_error_response() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    runtime = build_stdio_runtime_adapter(server)
+
+    result = dispatch_mcp_tool(runtime, "resume_workflow", {})
+
+    assert isinstance(result, RuntimeDispatchResult)
+    assert result.transport == "stdio"
+    assert result.target == "resume_workflow"
+    assert result.status == "error"
+    assert isinstance(result.response, McpToolResponse)
+    assert result.response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_instance_id must be a non-empty string",
+            "details": {"field": "workflow_instance_id"},
+        },
+    }
+
+
+def test_http_runtime_adapter_introspect_returns_registered_routes() -> None:
+    settings = make_settings()
+    runtime = HttpRuntimeAdapter(settings)
+    runtime.register_handler(
+        "workflow_resume",
+        lambda path: WorkflowResumeResponse(
+            status_code=200,
+            payload={"path": path},
+            headers={"content-type": "application/json"},
+        ),
+    )
+
+    introspection = runtime.introspect()
+
+    assert isinstance(introspection, RuntimeIntrospection)
+    assert introspection.transport == "http"
+    assert introspection.routes == ("workflow_resume",)
+    assert introspection.tools == ()
+
+
+def test_stdio_runtime_adapter_introspect_returns_registered_tools() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+    runtime.register_tool_handler(
+        "resume_workflow",
+        lambda arguments: McpToolResponse(payload={"ok": True, "result": arguments}),
+    )
+
+    introspection = runtime.introspect()
+
+    assert isinstance(introspection, RuntimeIntrospection)
+    assert introspection.transport == "stdio"
+    assert introspection.routes == ()
+    assert introspection.tools == ("resume_workflow",)
+
+
+def test_collect_runtime_introspection_returns_empty_tuple_for_none() -> None:
+    assert collect_runtime_introspection(None) == ()
+
+
+def test_collect_runtime_introspection_returns_http_runtime_introspection() -> None:
+    settings = make_settings()
+    runtime = HttpRuntimeAdapter(settings)
+    runtime.register_handler(
+        "workflow_resume",
+        lambda path: WorkflowResumeResponse(
+            status_code=200,
+            payload={"path": path},
+            headers={"content-type": "application/json"},
+        ),
+    )
+
+    introspections = collect_runtime_introspection(runtime)
+
+    assert introspections == (
+        RuntimeIntrospection(
+            transport="http",
+            routes=("workflow_resume",),
+            tools=(),
+        ),
+    )
+
+
+def test_collect_runtime_introspection_returns_stdio_runtime_introspection() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+    runtime.register_tool_handler(
+        "resume_workflow",
+        lambda arguments: McpToolResponse(payload={"ok": True, "result": arguments}),
+    )
+
+    introspections = collect_runtime_introspection(runtime)
+
+    assert introspections == (
+        RuntimeIntrospection(
+            transport="stdio",
+            routes=(),
+            tools=("resume_workflow",),
+        ),
+    )
+
+
+def test_collect_runtime_introspection_returns_both_transports_for_composite_runtime() -> (
+    None
+):
+    settings = make_settings(
+        transport=TransportMode.BOTH,
+        http_enabled=True,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    introspections = collect_runtime_introspection(server.runtime)
+
+    assert introspections == (
+        RuntimeIntrospection(
+            transport="http",
+            routes=(
+                "runtime_introspection",
+                "runtime_routes",
+                "runtime_tools",
+                "workflow_resume",
+            ),
+            tools=(),
+        ),
+        RuntimeIntrospection(
+            transport="stdio",
+            routes=(),
+            tools=(
+                "memory_get_context",
+                "memory_remember_episode",
+                "memory_search",
+                "resume_workflow",
+            ),
+        ),
+    )
+
+
+def test_serialize_runtime_introspection_returns_json_ready_payload() -> None:
+    introspection = RuntimeIntrospection(
+        transport="http",
+        routes=("workflow_resume",),
+        tools=(),
+    )
+
+    payload = serialize_runtime_introspection(introspection)
+
+    assert payload == {
+        "transport": "http",
+        "routes": ["workflow_resume"],
+        "tools": [],
+    }
+
+
+def test_serialize_runtime_introspection_collection_returns_json_ready_payloads() -> (
+    None
+):
+    introspections = (
+        RuntimeIntrospection(
+            transport="http",
+            routes=("workflow_resume",),
+            tools=(),
+        ),
+        RuntimeIntrospection(
+            transport="stdio",
+            routes=(),
+            tools=("resume_workflow",),
+        ),
+    )
+
+    payload = serialize_runtime_introspection_collection(introspections)
+
+    assert payload == [
+        {
+            "transport": "http",
+            "routes": ["workflow_resume"],
+            "tools": [],
+        },
+        {
+            "transport": "stdio",
+            "routes": [],
+            "tools": ["resume_workflow"],
+        },
+    ]
+
+
+def test_build_runtime_introspection_response_returns_http_payload_for_single_runtime() -> (
+    None
+):
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    response = build_runtime_introspection_response(server)
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "runtime": [
+            {
+                "transport": "http",
+                "routes": [
+                    "runtime_introspection",
+                    "runtime_routes",
+                    "runtime_tools",
+                    "workflow_resume",
+                ],
+                "tools": [],
+            }
+        ]
+    }
+
+
+def test_build_runtime_introspection_response_returns_http_payload_for_composite_runtime() -> (
+    None
+):
+    settings = make_settings(
+        transport=TransportMode.BOTH,
+        http_enabled=True,
+        stdio_enabled=True,
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    response = build_runtime_introspection_response(server)
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "runtime": [
+            {
+                "transport": "http",
+                "routes": [
+                    "runtime_introspection",
+                    "runtime_routes",
+                    "runtime_tools",
+                    "workflow_resume",
+                ],
+                "tools": [],
+            },
+            {
+                "transport": "stdio",
+                "routes": [],
+                "tools": [
+                    "memory_get_context",
+                    "memory_remember_episode",
+                    "memory_search",
+                    "resume_workflow",
+                ],
+            },
+        ]
+    }
+
+
+def test_build_runtime_introspection_response_returns_empty_runtime_list_when_runtime_is_missing() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=None,
+    )
+
+    response = build_runtime_introspection_response(server)
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {"runtime": []}
+
+
+def test_build_runtime_introspection_http_handler_returns_success_response() -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+    handler = build_runtime_introspection_http_handler(server)
+
+    response = handler("/debug/runtime")
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "runtime": [
+            {
+                "transport": "http",
+                "routes": [
+                    "runtime_introspection",
+                    "runtime_routes",
+                    "runtime_tools",
+                    "workflow_resume",
+                ],
+                "tools": [],
+            }
+        ]
+    }
+
+
+def test_build_runtime_introspection_http_handler_returns_not_found_for_invalid_path() -> (
+    None
+):
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+    handler = build_runtime_introspection_http_handler(server)
+
+    response = handler("/debug/routes")
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 404
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "runtime introspection endpoint requires /debug/runtime",
+        }
+    }
+
+
+def test_build_http_runtime_adapter_omits_runtime_introspection_route_when_debug_endpoints_are_disabled() -> (
+    None
+):
+    settings = make_settings()
+    settings = replace(
+        settings,
+        debug=DebugSettings(enabled=False),
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    assert isinstance(server.runtime, HttpRuntimeAdapter)
+    assert "runtime_introspection" not in server.runtime._handlers
+    assert server.runtime.registered_routes() == ("workflow_resume",)
+
+
+def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handler() -> (
+    None
+):
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+    assert isinstance(server.runtime, HttpRuntimeAdapter)
+
+    response = server.runtime.dispatch(
+        "runtime_introspection",
+        "/debug/runtime",
+    )
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "runtime": [
+            {
+                "transport": "http",
+                "routes": [
+                    "runtime_introspection",
+                    "runtime_routes",
+                    "runtime_tools",
+                    "workflow_resume",
+                ],
+                "tools": [],
+            }
+        ]
+    }
+
+
+def test_health_includes_runtime_summary_details_for_http_runtime() -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    health = server.health()
+
+    assert health.ok is True
+    assert health.status == "ok"
+    assert health.details["runtime"] == [
+        {
+            "transport": "http",
+            "routes": [
+                "runtime_introspection",
+                "runtime_routes",
+                "runtime_tools",
+                "workflow_resume",
+            ],
+            "tools": [],
+        }
+    ]
+
+
+def test_health_includes_runtime_summary_details_for_composite_runtime() -> None:
+    settings = make_settings(
+        transport=TransportMode.BOTH,
+        http_enabled=True,
+        stdio_enabled=True,
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    health = server.health()
+
+    assert health.ok is True
+    assert health.status == "ok"
+    assert health.details["runtime"] == [
+        {
+            "transport": "http",
+            "routes": [
+                "runtime_introspection",
+                "runtime_routes",
+                "runtime_tools",
+                "workflow_resume",
+            ],
+            "tools": [],
+        },
+        {
+            "transport": "stdio",
+            "routes": [],
+            "tools": [
+                "memory_get_context",
+                "memory_remember_episode",
+                "memory_search",
+                "resume_workflow",
+            ],
+        },
+    ]
+
+
+def test_readiness_includes_runtime_summary_details_for_http_runtime() -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    server.startup()
+    readiness = server.readiness()
+
+    assert readiness.ready is True
+    assert readiness.status == "ready"
+    assert readiness.details["runtime"] == [
+        {
+            "transport": "http",
+            "routes": [
+                "runtime_introspection",
+                "runtime_routes",
+                "runtime_tools",
+                "workflow_resume",
+            ],
+            "tools": [],
+        }
+    ]
+
+
+def test_readiness_includes_runtime_summary_details_for_composite_runtime() -> None:
+    settings = make_settings(
+        transport=TransportMode.BOTH,
+        http_enabled=True,
+        stdio_enabled=True,
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    server.startup()
+    readiness = server.readiness()
+
+    assert readiness.ready is True
+    assert readiness.status == "ready"
+    assert readiness.details["runtime"] == [
+        {
+            "transport": "http",
+            "routes": [
+                "runtime_introspection",
+                "runtime_routes",
+                "runtime_tools",
+                "workflow_resume",
+            ],
+            "tools": [],
+        },
+        {
+            "transport": "stdio",
+            "routes": [],
+            "tools": [
+                "memory_get_context",
+                "memory_remember_episode",
+                "memory_search",
+                "resume_workflow",
+            ],
+        },
+    ]
+
+
+def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+    info_calls: list[tuple[str, dict[str, object]]] = []
+
+    original_logger_info = logging.getLogger("ctxledger.server").info
+
+    def capture_info(message: str, *args: object, **kwargs: object) -> None:
+        extra = kwargs.get("extra")
+        if isinstance(extra, dict):
+            info_calls.append((message, dict(extra)))
+        original_logger_info(message, *args, **kwargs)
+
+    monkeypatch.setattr(logging.getLogger("ctxledger.server"), "info", capture_info)
+
+    server.startup()
+
+    startup_complete_extra = next(
+        extra
+        for message, extra in info_calls
+        if message == "ctxledger startup complete"
+    )
+
+    assert startup_complete_extra["http_enabled"] is True
+    assert startup_complete_extra["stdio_enabled"] is False
+    assert startup_complete_extra["host"] == settings.http.host
+    assert startup_complete_extra["port"] == settings.http.port
+    assert startup_complete_extra["mcp_url"] == settings.http.mcp_url
+    assert startup_complete_extra["workflow_service_initialized"] is True
+    assert startup_complete_extra["runtime"] == [
+        {
+            "transport": "http",
+            "routes": [
+                "runtime_introspection",
+                "runtime_routes",
+                "runtime_tools",
+                "workflow_resume",
+            ],
+            "tools": [],
+        }
+    ]
+
+
+def test_startup_logs_runtime_introspection_metadata_for_composite_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings(
+        transport=TransportMode.BOTH,
+        http_enabled=True,
+        stdio_enabled=True,
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+    info_calls: list[tuple[str, dict[str, object]]] = []
+
+    original_logger_info = logging.getLogger("ctxledger.server").info
+
+    def capture_info(message: str, *args: object, **kwargs: object) -> None:
+        extra = kwargs.get("extra")
+        if isinstance(extra, dict):
+            info_calls.append((message, dict(extra)))
+        original_logger_info(message, *args, **kwargs)
+
+    monkeypatch.setattr(logging.getLogger("ctxledger.server"), "info", capture_info)
+
+    server.startup()
+
+    startup_complete_extra = next(
+        extra
+        for message, extra in info_calls
+        if message == "ctxledger startup complete"
+    )
+
+    assert startup_complete_extra["http_enabled"] is True
+    assert startup_complete_extra["stdio_enabled"] is True
+    assert startup_complete_extra["host"] == settings.http.host
+    assert startup_complete_extra["port"] == settings.http.port
+    assert startup_complete_extra["mcp_url"] == settings.http.mcp_url
+    assert startup_complete_extra["workflow_service_initialized"] is True
+    assert startup_complete_extra["runtime"] == [
+        {
+            "transport": "http",
+            "routes": [
+                "runtime_introspection",
+                "runtime_routes",
+                "runtime_tools",
+                "workflow_resume",
+            ],
+            "tools": [],
+        },
+        {
+            "transport": "stdio",
+            "routes": [],
+            "tools": [
+                "memory_get_context",
+                "memory_remember_episode",
+                "memory_search",
+                "resume_workflow",
+            ],
+        },
+    ]
+
+
+def test_build_debug_routes_http_handler_returns_runtime_routes_only() -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    handler = server.runtime._handlers["runtime_routes"]
+    response = handler("/debug/routes")
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "routes": [
+            {
+                "transport": "http",
+                "routes": [
+                    "runtime_introspection",
+                    "runtime_routes",
+                    "runtime_tools",
+                    "workflow_resume",
+                ],
+            }
+        ]
+    }
+
+
+def test_build_debug_routes_http_handler_returns_both_transports_with_empty_stdio_routes() -> (
+    None
+):
+    settings = make_settings(
+        transport=TransportMode.BOTH,
+        http_enabled=True,
+        stdio_enabled=True,
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    handler = server.runtime._runtimes[0]._handlers["runtime_routes"]
+    response = handler("/debug/routes")
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "routes": [
+            {
+                "transport": "http",
+                "routes": [
+                    "runtime_introspection",
+                    "runtime_routes",
+                    "runtime_tools",
+                    "workflow_resume",
+                ],
+            }
+        ]
+    }
+
+
+def test_build_debug_routes_http_handler_returns_not_found_for_invalid_path() -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    handler = server.runtime._handlers["runtime_routes"]
+    response = handler("/debug/runtime")
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 404
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "runtime routes endpoint requires /debug/routes",
+        }
+    }
+
+
+def test_build_http_runtime_adapter_omits_runtime_routes_handler_when_debug_endpoints_are_disabled() -> (
+    None
+):
+    settings = make_settings()
+    settings = replace(
+        settings,
+        debug=DebugSettings(enabled=False),
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    assert isinstance(server.runtime, HttpRuntimeAdapter)
+    assert "runtime_routes" not in server.runtime._handlers
+    assert server.runtime.registered_routes() == ("workflow_resume",)
+
+
+def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
+    settings = make_settings(
+        transport=TransportMode.BOTH,
+        http_enabled=True,
+        stdio_enabled=True,
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    handler = server.runtime._runtimes[0]._handlers["runtime_tools"]
+    response = handler("/debug/tools")
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "tools": [
+            {
+                "transport": "stdio",
+                "tools": [
+                    "memory_get_context",
+                    "memory_remember_episode",
+                    "memory_search",
+                    "resume_workflow",
+                ],
+            }
+        ]
+    }
+
+
+def test_build_debug_tools_http_handler_returns_http_only_empty_tools() -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    handler = server.runtime._handlers["runtime_tools"]
+    response = handler("/debug/tools")
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {"tools": []}
+
+
+def test_build_debug_tools_http_handler_returns_not_found_for_invalid_path() -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    handler = server.runtime._handlers["runtime_tools"]
+    response = handler("/debug/routes")
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 404
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "runtime tools endpoint requires /debug/tools",
+        }
+    }
+
+
+def test_build_http_runtime_adapter_omits_runtime_tools_handler_when_debug_endpoints_are_disabled() -> (
+    None
+):
+    settings = make_settings()
+    settings = replace(
+        settings,
+        debug=DebugSettings(enabled=False),
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    assert isinstance(server.runtime, HttpRuntimeAdapter)
+    assert "runtime_tools" not in server.runtime._handlers
+    assert server.runtime.registered_routes() == ("workflow_resume",)
+
+
+def test_print_runtime_summary_includes_http_runtime_introspection(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    server.startup()
+    _print_runtime_summary(server)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "ctxledger 0.1.0 started" in captured.err
+    assert "health=ok" in captured.err
+    assert "readiness=ready" in captured.err
+    assert (
+        "runtime=[{'transport': 'http', 'routes': ['runtime_introspection', "
+        "'runtime_routes', 'runtime_tools', 'workflow_resume'], 'tools': []}]"
+        in captured.err
+    )
+    assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
+
+
+def test_print_runtime_summary_includes_composite_runtime_introspection(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings(
+        transport=TransportMode.BOTH,
+        http_enabled=True,
+        stdio_enabled=True,
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    server.startup()
+    _print_runtime_summary(server)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "ctxledger 0.1.0 started" in captured.err
+    assert "health=ok" in captured.err
+    assert "readiness=ready" in captured.err
+    assert (
+        "runtime=[{'transport': 'http', 'routes': ['runtime_introspection', "
+        "'runtime_routes', 'runtime_tools', 'workflow_resume'], 'tools': []}, "
+        "{'transport': 'stdio', 'routes': [], 'tools': ['memory_get_context', "
+        "'memory_remember_episode', 'memory_search', 'resume_workflow']}]"
+        in captured.err
+    )
+    assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
+    assert "stdio_transport=enabled" in captured.err
+
+
+def test_http_runtime_adapter_dispatches_registered_debug_routes_handler() -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    response = server.runtime.dispatch(
+        "runtime_routes",
+        "/debug/routes",
+    )
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "routes": [
+            {
+                "transport": "http",
+                "routes": [
+                    "runtime_introspection",
+                    "runtime_routes",
+                    "runtime_tools",
+                    "workflow_resume",
+                ],
+            }
+        ]
+    }
+
+
+def test_http_runtime_adapter_dispatches_registered_debug_tools_handler() -> None:
+    settings = make_settings(
+        transport=TransportMode.BOTH,
+        http_enabled=True,
+        stdio_enabled=True,
+    )
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    http_runtime = server.runtime._runtimes[0]
+    response = http_runtime.dispatch(
+        "runtime_tools",
+        "/debug/tools",
+    )
+
+    assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "tools": [
+            {
+                "transport": "stdio",
+                "tools": [
+                    "memory_get_context",
+                    "memory_remember_episode",
+                    "memory_search",
+                    "resume_workflow",
+                ],
+            }
+        ]
+    }

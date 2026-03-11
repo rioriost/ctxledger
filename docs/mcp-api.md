@@ -519,6 +519,226 @@ Return support context such as:
 
 ---
 
+## 5.9 Operational Status and Debug Endpoints
+
+These operational endpoints are HTTP debug surfaces intended for deployment verification, runtime inspection, and bootstrap diagnostics.
+
+They are not canonical workflow resources and do not replace MCP Tools or Resources.
+
+### Purpose
+
+They provide a thin inspection layer for:
+
+- process liveness visibility
+- service readiness visibility
+- runtime transport wiring visibility
+- registered HTTP route visibility
+- registered MCP tool visibility
+
+### Status Surface Summary
+
+The current operational status surface includes:
+
+- startup stderr summary
+- `health()`
+- `readiness()`
+- `/debug/runtime`
+- `/debug/routes`
+- `/debug/tools`
+
+### `health()`
+
+#### Purpose
+Return liveness-oriented process status.
+
+#### Typical response content
+- `service`
+- `version`
+- `started`
+- `workflow_service_initialized`
+- `runtime`
+
+#### Typical response shape
+
+```/dev/null/json#L1-14
+{
+  "ok": true,
+  "status": "ok",
+  "details": {
+    "service": "ctxledger",
+    "version": "0.1.0",
+    "started": true,
+    "workflow_service_initialized": true,
+    "runtime": [
+      {
+        "transport": "http",
+        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume"],
+        "tools": []
+      }
+    ]
+  }
+}
+```
+
+### `readiness()`
+
+#### Purpose
+Return dependency-aware service readiness.
+
+#### Typical response content
+- `service`
+- `version`
+- `started`
+- `database_configured`
+- `http_enabled`
+- `stdio_enabled`
+- `workflow_service_initialized`
+- `runtime`
+- `database_reachable` (when checked)
+- `schema_ready` (when checked)
+- `error` (when applicable)
+
+#### Typical statuses
+- `not_started`
+- `ready`
+- `database_unavailable`
+- `schema_check_failed`
+- `schema_not_ready`
+
+#### Typical response shape
+
+```/dev/null/json#L1-18
+{
+  "ready": true,
+  "status": "ready",
+  "details": {
+    "service": "ctxledger",
+    "version": "0.1.0",
+    "started": true,
+    "database_configured": true,
+    "http_enabled": true,
+    "stdio_enabled": false,
+    "workflow_service_initialized": true,
+    "runtime": [
+      {
+        "transport": "http",
+        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume"],
+        "tools": []
+      }
+    ],
+    "database_reachable": true,
+    "schema_ready": true
+  }
+}
+```
+
+### `/debug/runtime`
+
+#### Purpose
+Return runtime wiring grouped by transport.
+
+#### Response intent
+Expose both registered HTTP routes and registered MCP tools for each active transport.
+
+#### Typical response shape
+
+```/dev/null/json#L1-18
+{
+  "runtime": [
+    {
+      "transport": "http",
+      "routes": [
+        "runtime_introspection",
+        "runtime_routes",
+        "runtime_tools",
+        "workflow_resume"
+      ],
+      "tools": []
+    }
+  ]
+}
+```
+
+If both HTTP and stdio are enabled, a stdio entry is also returned.
+
+### `/debug/routes`
+
+#### Purpose
+Return registered HTTP route wiring only.
+
+#### Response intent
+Filter runtime introspection down to route registrations.
+
+#### Typical response shape
+
+```/dev/null/json#L1-14
+{
+  "routes": [
+    {
+      "transport": "http",
+      "routes": [
+        "runtime_introspection",
+        "runtime_routes",
+        "runtime_tools",
+        "workflow_resume"
+      ]
+    }
+  ]
+}
+```
+
+Transports without routes are omitted.
+
+### `/debug/tools`
+
+#### Purpose
+Return registered MCP tool wiring only.
+
+#### Response intent
+Filter runtime introspection down to tool registrations.
+
+#### Typical response shape
+
+```/dev/null/json#L1-14
+{
+  "tools": [
+    {
+      "transport": "stdio",
+      "tools": [
+        "memory_get_context",
+        "memory_remember_episode",
+        "memory_search",
+        "resume_workflow"
+      ]
+    }
+  ]
+}
+```
+
+Transports without tools are omitted.
+
+### Startup stderr summary
+
+On successful startup, the service also emits a short operational summary to stderr.
+
+Typical content includes:
+
+- `{app_name} {app_version} started`
+- `health=...`
+- `readiness=...`
+- `runtime=[...]`
+- `mcp_endpoint=...` when HTTP is enabled
+- `stdio_transport=enabled` when stdio is enabled
+
+### Error behavior
+
+For invalid debug endpoint paths, the HTTP handler returns a normalized `404` payload with:
+
+- `error.code = "not_found"`
+- a path-specific explanatory message
+
+---
+
 ## 6. Resource Catalog
 
 ## 6.1 `workspace://{workspace_id}/resume`
@@ -877,11 +1097,17 @@ Memory APIs may exist in documented stub form until the corresponding subsystems
 ## 13. Initial `v0.1.0` Contract Summary
 
 ### Required Practical Surface
+
 - `workspace_register`
 - `workflow_start`
 - `workflow_checkpoint`
 - `workflow_resume`
 - `workflow_complete`
+- `health()`
+- `readiness()`
+- `/debug/runtime`
+- `/debug/routes`
+- `/debug/tools`
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 

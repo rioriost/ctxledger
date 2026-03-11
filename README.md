@@ -125,7 +125,82 @@ Some memory APIs may remain stubbed in `v0.1.0` while the workflow subsystem is 
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
 
+### Runtime debug endpoints
+- `/debug/runtime`
+- `/debug/routes`
+- `/debug/tools`
+
+These HTTP debug endpoints expose the currently wired runtime surface.
+
+Typical intent:
+
+- `/debug/runtime` returns transport-level route/tool summary
+- `/debug/routes` returns HTTP route registrations only
+- `/debug/tools` returns MCP tool registrations only
+
+Typical payload shapes:
+
+```/dev/null/json#L1-24
+{
+  "runtime": [
+    {
+      "transport": "http",
+      "routes": [
+        "runtime_introspection",
+        "runtime_routes",
+        "runtime_tools",
+        "workflow_resume"
+      ],
+      "tools": []
+    },
+    {
+      "transport": "stdio",
+      "routes": [],
+      "tools": [
+        "memory_get_context",
+        "memory_remember_episode",
+        "memory_search",
+        "resume_workflow"
+      ]
+    }
+  ]
+}
+```
+
+```/dev/null/json#L1-18
+{
+  "routes": [
+    {
+      "transport": "http",
+      "routes": [
+        "runtime_introspection",
+        "runtime_routes",
+        "runtime_tools",
+        "workflow_resume"
+      ]
+    }
+  ]
+}
+```
+
+```/dev/null/json#L1-18
+{
+  "tools": [
+    {
+      "transport": "stdio",
+      "tools": [
+        "memory_get_context",
+        "memory_remember_episode",
+        "memory_search",
+        "resume_workflow"
+      ]
+    }
+  ]
+}
+```
+
 ---
+
 
 ## Workflow Model Highlights
 
@@ -208,6 +283,7 @@ Important environment variables include:
 - `CTXLEDGER_HTTP_PATH`
 - `CTXLEDGER_REQUIRE_AUTH`
 - `CTXLEDGER_AUTH_BEARER_TOKEN`
+- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS`
 - `CTXLEDGER_PROJECTION_ENABLED`
 - `CTXLEDGER_PROJECTION_DIRECTORY`
 - `CTXLEDGER_PROJECTION_WRITE_JSON`
@@ -215,7 +291,19 @@ Important environment variables include:
 - `CTXLEDGER_LOG_LEVEL`
 - `CTXLEDGER_LOG_STRUCTURED`
 
+### Configuration notes
+
+- `CTXLEDGER_REQUIRE_AUTH=true` enables bearer token authentication for protected HTTP endpoints
+- `CTXLEDGER_AUTH_BEARER_TOKEN` is required when `CTXLEDGER_REQUIRE_AUTH=true`
+- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` removes `/debug/*` routes from the HTTP runtime entirely
+- when bearer auth is enabled, `/debug/*` follows the same authentication boundary as other protected HTTP endpoints
+- for internet-exposed production deployments, prefer:
+  - `CTXLEDGER_REQUIRE_AUTH=true`
+  - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false`
+
 ### Typical local example
+
+See `./.env.example` for a committed local-development configuration template.
 
 ```/dev/null/.env.example#L1-13
 CTXLEDGER_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ctxledger
@@ -226,6 +314,7 @@ CTXLEDGER_HOST=0.0.0.0
 CTXLEDGER_PORT=8080
 CTXLEDGER_HTTP_PATH=/mcp
 CTXLEDGER_REQUIRE_AUTH=false
+CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=true
 CTXLEDGER_PROJECTION_ENABLED=true
 CTXLEDGER_PROJECTION_DIRECTORY=.agent
 CTXLEDGER_PROJECTION_WRITE_JSON=true
@@ -233,11 +322,37 @@ CTXLEDGER_PROJECTION_WRITE_MARKDOWN=true
 CTXLEDGER_LOG_LEVEL=info
 ```
 
+### Production-like example
+
+See `./.env.production.example` for a committed production-oriented configuration template.
+
+```/dev/null/.env.production.example#L1-15
+CTXLEDGER_DATABASE_URL=postgresql://ctxledger:replace-me@db.internal:5432/ctxledger
+CTXLEDGER_TRANSPORT=http
+CTXLEDGER_ENABLE_HTTP=true
+CTXLEDGER_ENABLE_STDIO=false
+CTXLEDGER_HOST=0.0.0.0
+CTXLEDGER_PORT=8080
+CTXLEDGER_HTTP_PATH=/mcp
+CTXLEDGER_REQUIRE_AUTH=true
+CTXLEDGER_AUTH_BEARER_TOKEN=replace-me-with-a-strong-secret
+CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false
+CTXLEDGER_PROJECTION_ENABLED=true
+CTXLEDGER_PROJECTION_DIRECTORY=.agent
+CTXLEDGER_PROJECTION_WRITE_JSON=true
+CTXLEDGER_PROJECTION_WRITE_MARKDOWN=true
+CTXLEDGER_LOG_LEVEL=info
+```
+
+In production-like environments, also prefer TLS termination and reverse-proxy access in front of the HTTP service.
+
 ---
 
 ## Local Startup
 
 The recommended local path is Docker-based.
+
+On successful startup, `ctxledger` also prints a short runtime summary to stderr so you can quickly verify the active transport wiring.
 
 ### Option A: Docker Compose
 
@@ -308,6 +423,30 @@ Expected local MCP endpoint:
 ```/dev/null/txt#L1-1
 http://localhost:8080/mcp
 ```
+
+#### 6. Inspect startup summary and debug surfaces
+
+A typical startup summary shape is:
+
+```/dev/null/txt#L1-6
+ctxledger 0.1.0 started
+health=ok
+readiness=ready
+runtime=[{'transport': 'http', 'routes': ['runtime_introspection', 'runtime_routes', 'runtime_tools', 'workflow_resume'], 'tools': []}]
+mcp_endpoint=http://localhost:8080/mcp
+```
+
+When stdio is also enabled, the summary additionally includes composite runtime wiring and:
+
+```/dev/null/txt#L1-2
+stdio_transport=enabled
+```
+
+You can then inspect the same runtime wiring through:
+
+- `/debug/runtime`
+- `/debug/routes`
+- `/debug/tools`
 
 ### Option C: Python direct startup
 
@@ -392,7 +531,7 @@ For production-like environments, the recommended topology is:
 - canonical state must survive restarts
 - readiness should be tied to DB and schema health
 
-For more detail, see `docs/deployment.md`.
+For more detail, see `docs/deployment.md` and `docs/SECURITY.md`.
 
 ---
 
@@ -408,6 +547,10 @@ Recommended production posture:
 
 - put the service behind a reverse proxy
 - use TLS
+- set `CTXLEDGER_REQUIRE_AUTH=true` for HTTP deployments that are not fully private
+- provide `CTXLEDGER_AUTH_BEARER_TOKEN` through environment variables or secret-management tooling
+- set `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` for internet-exposed production deployments unless operator access to `/debug/*` is explicitly required
+- if `/debug/*` must remain enabled in production, keep it behind the same bearer auth boundary and restrict access to trusted operators
 - inject secrets through environment variables or secret-management tooling
 - do not hardcode credentials in repository files
 
@@ -461,6 +604,7 @@ This validates the core promise of the system:
 - `docs/mcp-api.md`
 - `docs/memory-model.md`
 - `docs/deployment.md`
+- `docs/SECURITY.md`
 - `docs/design-principles.md`
 - `docs/roadmap.md`
 

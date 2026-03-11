@@ -135,11 +135,44 @@ Recommended environment variables include:
 - `CTXLEDGER_HOST`
 - `CTXLEDGER_PORT`
 - `CTXLEDGER_TRANSPORT`
+- `CTXLEDGER_REQUIRE_AUTH`
 - `CTXLEDGER_AUTH_BEARER_TOKEN`
 - `CTXLEDGER_ENABLE_HTTP`
 - `CTXLEDGER_ENABLE_STDIO`
+- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS`
 - `CTXLEDGER_PROJECTION_ENABLED`
 - `CTXLEDGER_LOG_LEVEL`
+
+### 6.0 Environment Variable Guidance
+
+The following variables are especially important for deployment and production hardening.
+
+See also:
+
+- `../.env.example`
+- `../.env.production.example`
+- `SECURITY.md`
+
+| Variable | Default | Purpose | Local / internal recommendation | Internet-exposed production recommendation |
+| --- | --- | --- | --- | --- |
+| `CTXLEDGER_DATABASE_URL` | none | PostgreSQL connection string for canonical state | set to local or shared development database | required; inject through secret management |
+| `CTXLEDGER_TRANSPORT` | `http` | selects enabled transport mode | `http` for Docker/local deployment, `both` only when explicitly needed | `http` unless there is a controlled need for `stdio` |
+| `CTXLEDGER_ENABLE_HTTP` | derived from transport | enables HTTP transport | keep aligned with `CTXLEDGER_TRANSPORT` | keep aligned with `CTXLEDGER_TRANSPORT` |
+| `CTXLEDGER_ENABLE_STDIO` | derived from transport | enables stdio transport | disable unless actively using stdio workflows | usually `false` |
+| `CTXLEDGER_HOST` | `0.0.0.0` | HTTP bind host | `0.0.0.0` is acceptable in containers/local networks | bind according to network policy, typically behind a reverse proxy |
+| `CTXLEDGER_PORT` | `8080` | HTTP listen port | `8080` is a reasonable default | set explicitly to match deployment and proxy routing |
+| `CTXLEDGER_HTTP_PATH` | `/mcp` | MCP HTTP endpoint path | keep default unless integration requires a different path | keep stable and document it for proxy configuration |
+| `CTXLEDGER_REQUIRE_AUTH` | `false` | requires bearer auth for protected HTTP endpoints | `false` is acceptable for isolated local development; prefer `true` in shared environments | `true` |
+| `CTXLEDGER_AUTH_BEARER_TOKEN` | none | expected bearer token when auth is required | set when `CTXLEDGER_REQUIRE_AUTH=true` | required when `CTXLEDGER_REQUIRE_AUTH=true`; inject as a secret |
+| `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS` | `true` | controls whether `/debug/*` routes are registered at all | `true` is acceptable for local/operator use | usually `false`; enable only for a clear operational need |
+| `CTXLEDGER_PROJECTION_ENABLED` | `true` | enables derived projection writing | `true` unless testing explicitly without projections | set according to operational need; does not replace canonical persistence |
+| `CTXLEDGER_LOG_LEVEL` | `info` | log verbosity | `info` or `debug` during development | `info` or stricter, depending on operational policy |
+
+Authentication and debug exposure expectations:
+
+- if `CTXLEDGER_REQUIRE_AUTH=true`, `CTXLEDGER_AUTH_BEARER_TOKEN` must also be set or startup validation fails
+- when HTTP bearer authentication is enabled, `/debug/*` follows the same authentication boundary as other protected HTTP endpoints
+- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` removes `/debug/*` from the registered HTTP route surface instead of returning debug-specific responses from still-registered handlers
 
 Optional future variables may include:
 
@@ -160,6 +193,48 @@ Examples of critical configuration:
 - incompatible transport mode
 - malformed authentication configuration
 - invalid host/port configuration
+- invalid debug endpoint exposure configuration
+
+## 6.2 Debug Endpoint Exposure Policy
+
+`ctxledger` exposes operational debug endpoints under `/debug/*` for runtime introspection.
+
+Current debug surfaces include:
+
+- `/debug/runtime`
+- `/debug/routes`
+- `/debug/tools`
+
+Deployment policy:
+
+1. debug endpoints are intended for operator visibility, not general client use
+2. if bearer token authentication is enabled for HTTP access, `/debug/*` should be protected by the same authentication policy
+3. production deployments should be able to disable `/debug/*` entirely with configuration
+4. when debug endpoints are disabled, the preferred behavior is to avoid registering those routes at all so the HTTP surface does not advertise unnecessary debug endpoints
+
+Operational recommendation:
+
+- enable `/debug/*` by default only in local development or controlled internal environments
+- require authentication whenever the HTTP surface is authenticated
+- disable `/debug/*` in internet-exposed production deployments unless there is a clear operational need
+- if exposure is required in production, place the service behind TLS and a reverse proxy, and restrict access to trusted operators
+
+Current implementation behavior:
+
+- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` removes `/debug/*` handlers from the HTTP runtime registration surface
+- when HTTP bearer token authentication is enabled, `/debug/*` should follow the same authentication boundary as other protected HTTP endpoints
+- operators should treat `/debug/*` responses as authenticated operational metadata rather than public diagnostics
+
+The payloads returned by `/debug/*` may reveal details such as:
+
+- enabled transports
+- registered HTTP routes
+- registered stdio tools
+- runtime wiring state
+
+These details are useful for diagnostics but increase observability exposure, so they should be treated as operationally sensitive.
+
+For the broader security posture around bearer authentication, secret handling, and `/debug/*` exposure, see `SECURITY.md`.
 
 ---
 
@@ -340,6 +415,9 @@ This matters operationally, but canonical reads must still come from PostgreSQL.
 ---
 
 ## 11. Security Guidance
+
+This section summarizes deployment-relevant security posture.  
+For the fuller security model and operational guidance, see `SECURITY.md`.
 
 ## 11.1 Authentication
 

@@ -49,6 +49,7 @@ def minimum_valid_env() -> dict[str, str]:
         "CTXLEDGER_PORT": "8080",
         "CTXLEDGER_HTTP_PATH": "/mcp",
         "CTXLEDGER_REQUIRE_AUTH": "false",
+        "CTXLEDGER_ENABLE_DEBUG_ENDPOINTS": "true",
         "CTXLEDGER_PROJECTION_ENABLED": "true",
         "CTXLEDGER_PROJECTION_DIRECTORY": ".agent",
         "CTXLEDGER_PROJECTION_WRITE_JSON": "true",
@@ -87,6 +88,7 @@ def test_load_settings_with_minimum_valid_env(clean_ctxledger_env: None) -> None
     assert settings.http.mcp_url == "http://0.0.0.0:8080/mcp"
     assert settings.logging.level == LogLevel.INFO
     assert settings.auth.is_enabled is False
+    assert settings.debug.enabled is True
     assert settings.projection.enabled is True
     assert settings.projection.directory_name == ".agent"
 
@@ -184,6 +186,37 @@ def test_auth_enabled_with_token_is_valid(clean_ctxledger_env: None) -> None:
     assert settings.auth.require_auth is True
     assert settings.auth.bearer_token == "secret-token"
     assert settings.auth.is_enabled is True
+
+
+def test_debug_endpoints_enabled_by_default(clean_ctxledger_env: None) -> None:
+    with patched_env(**minimum_valid_env()):
+        settings = load_settings()
+
+    assert settings.debug.enabled is True
+
+
+def test_debug_endpoints_can_be_disabled(clean_ctxledger_env: None) -> None:
+    env = minimum_valid_env()
+    env["CTXLEDGER_ENABLE_DEBUG_ENDPOINTS"] = "false"
+
+    with patched_env(**env):
+        settings = load_settings()
+
+    assert settings.debug.enabled is False
+
+
+def test_invalid_debug_endpoints_value_raises_config_error(
+    clean_ctxledger_env: None,
+) -> None:
+    env = minimum_valid_env()
+    env["CTXLEDGER_ENABLE_DEBUG_ENDPOINTS"] = "maybe"
+
+    with patched_env(**env):
+        with pytest.raises(
+            ConfigError,
+            match="CTXLEDGER_ENABLE_DEBUG_ENDPOINTS must be a boolean value",
+        ):
+            load_settings()
 
 
 def test_transport_both_requires_consistent_enablement(

@@ -37,7 +37,14 @@ services:
       CTXLEDGER_HOST: 0.0.0.0
       CTXLEDGER_PORT: 8080
       CTXLEDGER_HTTP_PATH: /mcp
+      # Local Docker default:
+      # - keep auth disabled for convenience
+      # - enable auth and provide a bearer token in shared or internet-exposed environments
       CTXLEDGER_REQUIRE_AUTH: "false"
+      # CTXLEDGER_AUTH_BEARER_TOKEN: replace-me-with-a-strong-secret
+      # Debug endpoints are enabled by default for local operator visibility.
+      # Disable them in production unless there is a clear operational need.
+      CTXLEDGER_ENABLE_DEBUG_ENDPOINTS: "true"
       CTXLEDGER_PROJECTION_ENABLED: "true"
       CTXLEDGER_PROJECTION_DIRECTORY: .agent
       CTXLEDGER_PROJECTION_WRITE_JSON: "true"

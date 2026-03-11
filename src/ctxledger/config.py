@@ -146,6 +146,11 @@ class AuthSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class DebugSettings:
+    enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectionSettings:
     enabled: bool
     directory_name: str
@@ -169,6 +174,7 @@ class AppSettings:
     http: HttpSettings
     stdio: StdioSettings
     auth: AuthSettings
+    debug: DebugSettings
     projection: ProjectionSettings
     logging: LoggingSettings
 
@@ -277,6 +283,9 @@ def load_settings() -> AppSettings:
         auth=AuthSettings(
             bearer_token=_get_env("CTXLEDGER_AUTH_BEARER_TOKEN"),
             require_auth=_parse_bool("CTXLEDGER_REQUIRE_AUTH", False),
+        ),
+        debug=DebugSettings(
+            enabled=_parse_bool("CTXLEDGER_ENABLE_DEBUG_ENDPOINTS", True),
         ),
         projection=ProjectionSettings(
             enabled=_parse_bool("CTXLEDGER_PROJECTION_ENABLED", True),
