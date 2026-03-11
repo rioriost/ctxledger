@@ -42,6 +42,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Print the absolute schema path",
     )
 
+    apply_schema_parser = subparsers.add_parser(
+        "apply-schema",
+        help="Apply the bundled PostgreSQL schema to the configured database",
+    )
+    apply_schema_parser.add_argument(
+        "--database-url",
+        help="Override the database URL instead of using CTXLEDGER_DATABASE_URL",
+    )
+
+    write_resume_projection_parser = subparsers.add_parser(
+        "write-resume-projection",
+        help="Write resume projections for a workflow instance",
+    )
+    write_resume_projection_parser.add_argument(
+        "--workflow-instance-id",
+        required=True,
+        help="Workflow instance ID to project",
+    )
+
     subparsers.add_parser(
         "version",
         help="Print the ctxledger package version",
@@ -68,6 +87,60 @@ def _print_schema_path(absolute: bool) -> int:
     path = _schema_path()
     print(path if absolute else path.as_posix())
     return 0
+
+
+def _apply_schema(args: argparse.Namespace) -> int:
+    try:
+        from .config import get_settings
+        from .db.postgres import load_postgres_schema_sql
+
+        try:
+            import psycopg
+        except ImportError as exc:
+            print(
+                "Failed to import PostgreSQL driver. Install psycopg[binary] first.",
+                file=sys.stderr,
+            )
+            return 1
+
+        database_url = args.database_url
+        if database_url is None:
+            settings = get_settings()
+            database_url = settings.database.url
+
+        if not database_url:
+            print(
+                "Database URL is required. Set CTXLEDGER_DATABASE_URL or pass --database-url.",
+                file=sys.stderr,
+            )
+            return 1
+
+        schema_sql = load_postgres_schema_sql()
+
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(schema_sql)
+            connection.commit()
+
+        print("Schema applied successfully.")
+        return 0
+    except Exception as exc:
+        print(f"Failed to apply schema: {exc}", file=sys.stderr)
+        return 1
+
+
+def _write_resume_projection(args: argparse.Namespace) -> int:
+    try:
+        from uuid import UUID
+
+        from .projection.writer import write_resume_projection
+
+        write_resume_projection(UUID(args.workflow_instance_id))
+        print("Resume projection written successfully.")
+        return 0
+    except Exception as exc:
+        print(f"Failed to write resume projection: {exc}", file=sys.stderr)
+        return 1
 
 
 def _serve(args: argparse.Namespace) -> int:
@@ -99,6 +172,10 @@ def main(argv: list[str] | None = None) -> int:
         return _serve(args)
     if command == "print-schema-path":
         return _print_schema_path(args.absolute)
+    if command == "apply-schema":
+        return _apply_schema(args)
+    if command == "write-resume-projection":
+        return _write_resume_projection(args)
     if command == "version":
         return _print_version()
 

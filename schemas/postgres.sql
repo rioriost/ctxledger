@@ -50,6 +50,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_canonical_path
 CREATE INDEX IF NOT EXISTS idx_workspaces_repo_url
   ON workspaces (repo_url);
 
+DROP TRIGGER IF EXISTS trg_workspaces_set_updated_at ON workspaces;
 CREATE TRIGGER trg_workspaces_set_updated_at
 BEFORE UPDATE ON workspaces
 FOR EACH ROW
@@ -85,6 +86,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_instances_one_running_per_workspa
   ON workflow_instances (workspace_id)
   WHERE status = 'running';
 
+DROP TRIGGER IF EXISTS trg_workflow_instances_set_updated_at ON workflow_instances;
 CREATE TRIGGER trg_workflow_instances_set_updated_at
 BEFORE UPDATE ON workflow_instances
 FOR EACH ROW
@@ -133,6 +135,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_attempts_one_running_per_workflow
   ON workflow_attempts (workflow_instance_id)
   WHERE status = 'running';
 
+DROP TRIGGER IF EXISTS trg_workflow_attempts_set_updated_at ON workflow_attempts;
 CREATE TRIGGER trg_workflow_attempts_set_updated_at
 BEFORE UPDATE ON workflow_attempts
 FOR EACH ROW
@@ -255,6 +258,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_projection_states_workspace_projection_typ
 CREATE INDEX IF NOT EXISTS idx_projection_states_workflow_projection_type
   ON projection_states (workflow_instance_id, projection_type);
 
+DROP TRIGGER IF EXISTS trg_projection_states_set_updated_at ON projection_states;
 CREATE TRIGGER trg_projection_states_set_updated_at
 BEFORE UPDATE ON projection_states
 FOR EACH ROW
@@ -367,6 +371,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_workflow_instance
 CREATE INDEX IF NOT EXISTS idx_episodes_created_desc
   ON episodes (created_at DESC);
 
+DROP TRIGGER IF EXISTS trg_episodes_set_updated_at ON episodes;
 CREATE TRIGGER trg_episodes_set_updated_at
 BEFORE UPDATE ON episodes
 FOR EACH ROW
@@ -472,6 +477,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_items_episode_created_desc
 CREATE INDEX IF NOT EXISTS idx_memory_items_type
   ON memory_items (type);
 
+DROP TRIGGER IF EXISTS trg_memory_items_set_updated_at ON memory_items;
 CREATE TRIGGER trg_memory_items_set_updated_at
 BEFORE UPDATE ON memory_items
 FOR EACH ROW

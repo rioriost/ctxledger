@@ -6,8 +6,11 @@ import sys
 from dataclasses import dataclass
 from types import FrameType
 from typing import Any, Protocol
+from urllib.parse import parse_qs, urlparse
 
-from .config import AppSettings, LogLevel, TransportMode, get_settings
+from .config import AppSettings, TransportMode, get_settings
+from .db.postgres import PostgresConfig, build_postgres_uow_factory
+from .workflow.service import WorkflowService
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,10 @@ class DatabaseHealthChecker(Protocol):
 class ServerRuntime(Protocol):
     def start(self) -> None: ...
     def stop(self) -> None: ...
+
+
+class WorkflowServiceFactory(Protocol):
+    def __call__(self) -> WorkflowService: ...
 
 
 @dataclass(slots=True)
@@ -58,10 +65,8 @@ class DefaultDatabaseHealthChecker:
     PostgreSQL driver in the initial runtime bootstrap. It validates that a DB
     URL is configured and treats schema readiness as a deploy-time guarantee.
 
-    A future implementation should:
-    - open a real DB connection
-    - run a lightweight ping query
-    - verify required tables/indexes/schema version
+    When a PostgreSQL driver is available, use `build_database_health_checker()`
+    to get a real health checker instead of instantiating this class directly.
     """
 
     def __init__(self, database_url: str | None) -> None:
@@ -73,6 +78,90 @@ class DefaultDatabaseHealthChecker:
 
     def schema_ready(self) -> bool:
         return bool(self._database_url)
+
+
+class PostgresDatabaseHealthChecker:
+    def __init__(self, database_url: str | None) -> None:
+        self._database_url = database_url
+
+    def _connect_timeout_seconds(self) -> int:
+        if not self._database_url:
+            return 5
+
+        parsed = urlparse(self._database_url)
+        query = parse_qs(parsed.query)
+        raw_timeout = query.get("connect_timeout", [None])[0]
+        if raw_timeout is None:
+            return 5
+
+        try:
+            timeout = int(raw_timeout)
+        except ValueError:
+            return 5
+
+        return timeout if timeout > 0 else 5
+
+    def _connect(self) -> Any:
+        if not self._database_url:
+            raise ServerBootstrapError("database_url is not configured")
+
+        try:
+            import psycopg
+        except ImportError as exc:
+            raise ServerBootstrapError(
+                "PostgreSQL health checker requires psycopg to be installed"
+            ) from exc
+
+        return psycopg.connect(
+            self._database_url,
+            connect_timeout=self._connect_timeout_seconds(),
+        )
+
+    def ping(self) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+
+    def schema_ready(self) -> bool:
+        required_tables = (
+            "workspaces",
+            "workflow_instances",
+            "workflow_attempts",
+            "workflow_checkpoints",
+            "verify_reports",
+            "projection_states",
+        )
+
+        query = """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = %s
+        )
+        """
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                for table_name in required_tables:
+                    cursor.execute(query, (table_name,))
+                    row = cursor.fetchone()
+                    if row is None or row[0] is not True:
+                        return False
+
+        return True
+
+
+def build_database_health_checker(database_url: str | None) -> DatabaseHealthChecker:
+    if not database_url:
+        return DefaultDatabaseHealthChecker(database_url)
+
+    try:
+        import psycopg  # noqa: F401
+    except ImportError:
+        return DefaultDatabaseHealthChecker(database_url)
+
+    return PostgresDatabaseHealthChecker(database_url)
 
 
 class HttpRuntimeAdapter:
@@ -202,12 +291,15 @@ class CtxLedgerServer:
         settings: AppSettings,
         db_health_checker: DatabaseHealthChecker | None = None,
         runtime: ServerRuntime | None = None,
+        workflow_service_factory: WorkflowServiceFactory | None = None,
     ) -> None:
         self.settings = settings
-        self.db_health_checker = db_health_checker or DefaultDatabaseHealthChecker(
+        self.db_health_checker = db_health_checker or build_database_health_checker(
             settings.database.url
         )
         self.runtime = runtime
+        self.workflow_service_factory = workflow_service_factory
+        self.workflow_service: WorkflowService | None = None
         self._started = False
 
     def validate_configuration(self) -> None:
@@ -240,6 +332,9 @@ class CtxLedgerServer:
         if not self.db_health_checker.schema_ready():
             raise ServerBootstrapError("database schema is not ready")
 
+        if self.workflow_service_factory is not None:
+            self.workflow_service = self.workflow_service_factory()
+
         if self.runtime is not None:
             self.runtime.start()
 
@@ -252,6 +347,7 @@ class CtxLedgerServer:
                 "host": self.settings.http.host,
                 "port": self.settings.http.port,
                 "mcp_url": self.settings.http.mcp_url,
+                "workflow_service_initialized": self.workflow_service is not None,
             },
         )
 
@@ -261,6 +357,7 @@ class CtxLedgerServer:
         if self.runtime is not None and self._started:
             self.runtime.stop()
 
+        self.workflow_service = None
         self._started = False
         logger.info("ctxledger shutdown complete")
 
@@ -272,6 +369,7 @@ class CtxLedgerServer:
                 "service": self.settings.app_name,
                 "version": self.settings.app_version,
                 "started": self._started,
+                "workflow_service_initialized": self.workflow_service is not None,
             },
         )
 
@@ -283,6 +381,7 @@ class CtxLedgerServer:
             "database_configured": bool(self.settings.database.url),
             "http_enabled": self.settings.http.enabled,
             "stdio_enabled": self.settings.stdio.enabled,
+            "workflow_service_initialized": self.workflow_service is not None,
         }
 
         if not self._started:
@@ -348,15 +447,36 @@ def create_runtime(settings: AppSettings) -> ServerRuntime | None:
     return CompositeRuntimeAdapter(runtimes)
 
 
+def build_workflow_service_factory(
+    settings: AppSettings,
+) -> WorkflowServiceFactory | None:
+    if not settings.database.url:
+        return None
+
+    postgres_config = PostgresConfig.from_settings(settings)
+    uow_factory = build_postgres_uow_factory(postgres_config)
+
+    def _factory() -> WorkflowService:
+        return WorkflowService(uow_factory)
+
+    return _factory
+
+
 def create_server(
     settings: AppSettings,
     db_health_checker: DatabaseHealthChecker | None = None,
     runtime: ServerRuntime | None = None,
+    workflow_service_factory: WorkflowServiceFactory | None = None,
 ) -> CtxLedgerServer:
     return CtxLedgerServer(
         settings=settings,
         db_health_checker=db_health_checker,
         runtime=runtime if runtime is not None else create_runtime(settings),
+        workflow_service_factory=(
+            workflow_service_factory
+            if workflow_service_factory is not None
+            else build_workflow_service_factory(settings)
+        ),
     )
 
 
@@ -485,6 +605,8 @@ __all__ = [
     "ServerBootstrapError",
     "ServerRuntime",
     "StdioRuntimeAdapter",
+    "WorkflowServiceFactory",
+    "build_workflow_service_factory",
     "create_runtime",
     "create_server",
     "run_server",

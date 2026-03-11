@@ -32,8 +32,7 @@ def _get_env(name: str, default: str | None = None) -> str | None:
     value = os.getenv(name)
     if value is None:
         return default
-    value = value.strip()
-    return value if value != "" else default
+    return value.strip()
 
 
 def _parse_bool(name: str, default: bool) -> bool:
@@ -194,9 +193,6 @@ class AppSettings:
                 "CTXLEDGER_AUTH_BEARER_TOKEN is required when CTXLEDGER_REQUIRE_AUTH is enabled"
             )
 
-        if not self.http.enabled and not self.stdio.enabled:
-            raise ConfigError("At least one transport must be enabled")
-
         expected_http_enabled = self.transport in (
             TransportMode.HTTP,
             TransportMode.BOTH,
@@ -218,7 +214,10 @@ class AppSettings:
                 "set transport consistently with CTXLEDGER_ENABLE_STDIO"
             )
 
-        if self.projection.directory_name.strip() == "":
+        if not self.http.enabled and not self.stdio.enabled:
+            raise ConfigError("At least one transport must be enabled")
+
+        if self.projection.directory_name == "":
             raise ConfigError("CTXLEDGER_PROJECTION_DIRECTORY must not be empty")
 
         if not self.projection.write_json and not self.projection.write_markdown:
@@ -281,8 +280,7 @@ def load_settings() -> AppSettings:
         ),
         projection=ProjectionSettings(
             enabled=_parse_bool("CTXLEDGER_PROJECTION_ENABLED", True),
-            directory_name=_get_env("CTXLEDGER_PROJECTION_DIRECTORY", ".agent")
-            or ".agent",
+            directory_name=_get_env("CTXLEDGER_PROJECTION_DIRECTORY", ".agent"),
             write_markdown=_parse_bool("CTXLEDGER_PROJECTION_WRITE_MARKDOWN", True),
             write_json=_parse_bool("CTXLEDGER_PROJECTION_WRITE_JSON", True),
         ),

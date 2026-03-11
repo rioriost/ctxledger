@@ -184,6 +184,48 @@ class ProjectionInfo:
 
 
 @dataclass(slots=True, frozen=True)
+class ProjectionFailureInfo:
+    error_code: str | None
+    error_message: str
+    target_path: str
+    open_failure_count: int = 1
+
+
+@dataclass(slots=True, frozen=True)
+class RecordProjectionStateInput:
+    workspace_id: UUID
+    workflow_instance_id: UUID
+    status: ProjectionStatus
+    target_path: str
+    last_successful_write_at: datetime | None = None
+    last_canonical_update_at: datetime | None = None
+
+    def normalized(self) -> RecordProjectionStateInput:
+        if self.status != ProjectionStatus.FRESH:
+            return self
+
+        write_at = self.last_successful_write_at or utc_now()
+        canonical_update_at = self.last_canonical_update_at or write_at
+        return RecordProjectionStateInput(
+            workspace_id=self.workspace_id,
+            workflow_instance_id=self.workflow_instance_id,
+            status=self.status,
+            target_path=self.target_path,
+            last_successful_write_at=write_at,
+            last_canonical_update_at=canonical_update_at,
+        )
+
+
+@dataclass(slots=True, frozen=True)
+class RecordProjectionFailureInput:
+    workspace_id: UUID
+    workflow_instance_id: UUID
+    target_path: str
+    error_message: str
+    error_code: str | None = None
+
+
+@dataclass(slots=True, frozen=True)
 class ResumeIssue:
     code: str
     message: str
@@ -354,6 +396,21 @@ class ProjectionStateRepository:
     ) -> ProjectionInfo | None:
         raise NotImplementedError
 
+    def record_resume_projection(self, projection: RecordProjectionStateInput) -> None:
+        raise NotImplementedError
+
+
+class ProjectionFailureRepository:
+    def get_open_failures_by_workflow_id(
+        self, workspace_id: UUID, workflow_instance_id: UUID
+    ) -> list[ProjectionFailureInfo]:
+        raise NotImplementedError
+
+    def record_resume_projection_failure(
+        self, failure: RecordProjectionFailureInput
+    ) -> ProjectionFailureInfo:
+        raise NotImplementedError
+
 
 class UnitOfWork:
     workspaces: WorkspaceRepository
@@ -362,6 +419,7 @@ class UnitOfWork:
     workflow_checkpoints: WorkflowCheckpointRepository
     verify_reports: VerifyReportRepository
     projection_states: ProjectionStateRepository | None
+    projection_failures: ProjectionFailureRepository | None
 
     def __enter__(self) -> UnitOfWork:
         return self
@@ -622,6 +680,42 @@ class WorkflowService:
                 projection=projection,
                 warnings=tuple(warnings),
                 next_hint=next_hint,
+            )
+
+    def record_resume_projection(
+        self, data: RecordProjectionStateInput
+    ) -> ProjectionInfo:
+        if not data.target_path.strip():
+            raise ValidationError("target_path must not be empty")
+
+        normalized = data.normalized()
+
+        with self._uow_factory() as uow:
+            workspace = self._require_workspace(uow, normalized.workspace_id)
+            workflow = self._require_workflow(uow, normalized.workflow_instance_id)
+
+            if workflow.workspace_id != workspace.workspace_id:
+                raise WorkflowAttemptMismatchError(
+                    "workflow does not belong to workspace",
+                    details={
+                        "workspace_id": str(workspace.workspace_id),
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "workflow.workspace_id": str(workflow.workspace_id),
+                    },
+                )
+
+            if getattr(uow, "projection_states", None) is None:
+                raise PersistenceError("projection state repository is not available")
+
+            uow.projection_states.record_resume_projection(normalized)
+            uow.commit()
+
+            return ProjectionInfo(
+                status=normalized.status,
+                target_path=normalized.target_path,
+                last_successful_write_at=normalized.last_successful_write_at,
+                last_canonical_update_at=normalized.last_canonical_update_at,
+                open_failure_count=0,
             )
 
     def complete_workflow(self, data: CompleteWorkflowInput) -> WorkflowCompleteResult:

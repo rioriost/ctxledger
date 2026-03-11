@@ -7,7 +7,9 @@ authors = [
     { name = "Rio Fujita", email = "rio_github@rio.st" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "psycopg[binary]>=3.2",
+]
 
 [project.scripts]
 ctxledger = "ctxledger:main"

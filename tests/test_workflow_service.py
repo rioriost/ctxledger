@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import replace
-from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
+from ctxledger.db import InMemoryStore, build_in_memory_uow_factory
 from ctxledger.workflow.service import (
     ActiveWorkflowExistsError,
     AttemptNotFoundError,
@@ -11,25 +10,16 @@ from ctxledger.workflow.service import (
     CreateCheckpointInput,
     InvalidStateTransitionError,
     ProjectionInfo,
-    ProjectionStateRepository,
     ProjectionStatus,
+    RecordProjectionStateInput,
     RegisterWorkspaceInput,
     ResumableStatus,
     ResumeWorkflowInput,
     StartWorkflowInput,
-    VerifyReport,
-    VerifyReportRepository,
     VerifyStatus,
-    WorkflowAttempt,
     WorkflowAttemptMismatchError,
-    WorkflowAttemptRepository,
     WorkflowAttemptStatus,
-    WorkflowCheckpoint,
-    WorkflowCheckpointRepository,
     WorkflowCompleteResult,
-    WorkflowError,
-    WorkflowInstance,
-    WorkflowInstanceRepository,
     WorkflowInstanceStatus,
     WorkflowNotFoundError,
     WorkflowResume,
@@ -37,203 +27,14 @@ from ctxledger.workflow.service import (
     Workspace,
     WorkspaceNotFoundError,
     WorkspaceRegistrationConflictError,
-    WorkspaceRepository,
 )
 
 
-class InMemoryWorkspaceRepository(WorkspaceRepository):
-    def __init__(self) -> None:
-        self.items: dict[UUID, Workspace] = {}
-
-    def get_by_id(self, workspace_id: UUID) -> Workspace | None:
-        return self.items.get(workspace_id)
-
-    def get_by_canonical_path(self, canonical_path: str) -> Workspace | None:
-        for workspace in self.items.values():
-            if workspace.canonical_path == canonical_path:
-                return workspace
-        return None
-
-    def get_by_repo_url(self, repo_url: str) -> list[Workspace]:
-        return [
-            workspace
-            for workspace in self.items.values()
-            if workspace.repo_url == repo_url
-        ]
-
-    def create(self, workspace: Workspace) -> Workspace:
-        self.items[workspace.workspace_id] = workspace
-        return workspace
-
-    def update(self, workspace: Workspace) -> Workspace:
-        self.items[workspace.workspace_id] = workspace
-        return workspace
-
-
-class InMemoryWorkflowInstanceRepository(WorkflowInstanceRepository):
-    def __init__(self) -> None:
-        self.items: dict[UUID, WorkflowInstance] = {}
-
-    def get_by_id(self, workflow_instance_id: UUID) -> WorkflowInstance | None:
-        return self.items.get(workflow_instance_id)
-
-    def get_running_by_workspace_id(
-        self, workspace_id: UUID
-    ) -> WorkflowInstance | None:
-        candidates = [
-            workflow
-            for workflow in self.items.values()
-            if workflow.workspace_id == workspace_id
-            and workflow.status == WorkflowInstanceStatus.RUNNING
-        ]
-        return max(candidates, key=lambda item: item.created_at, default=None)
-
-    def get_latest_by_workspace_id(self, workspace_id: UUID) -> WorkflowInstance | None:
-        candidates = [
-            workflow
-            for workflow in self.items.values()
-            if workflow.workspace_id == workspace_id
-        ]
-        return max(candidates, key=lambda item: item.created_at, default=None)
-
-    def create(self, workflow: WorkflowInstance) -> WorkflowInstance:
-        self.items[workflow.workflow_instance_id] = workflow
-        return workflow
-
-    def update(self, workflow: WorkflowInstance) -> WorkflowInstance:
-        self.items[workflow.workflow_instance_id] = workflow
-        return workflow
-
-
-class InMemoryWorkflowAttemptRepository(WorkflowAttemptRepository):
-    def __init__(self) -> None:
-        self.items: dict[UUID, WorkflowAttempt] = {}
-
-    def get_by_id(self, attempt_id: UUID) -> WorkflowAttempt | None:
-        return self.items.get(attempt_id)
-
-    def get_running_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowAttempt | None:
-        candidates = [
-            attempt
-            for attempt in self.items.values()
-            if attempt.workflow_instance_id == workflow_instance_id
-            and attempt.status == WorkflowAttemptStatus.RUNNING
-        ]
-        return max(candidates, key=lambda item: item.started_at, default=None)
-
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowAttempt | None:
-        candidates = [
-            attempt
-            for attempt in self.items.values()
-            if attempt.workflow_instance_id == workflow_instance_id
-        ]
-        return max(
-            candidates,
-            key=lambda item: (item.attempt_number, item.started_at),
-            default=None,
-        )
-
-    def get_next_attempt_number(self, workflow_instance_id: UUID) -> int:
-        latest = self.get_latest_by_workflow_id(workflow_instance_id)
-        if latest is None:
-            return 1
-        return latest.attempt_number + 1
-
-    def create(self, attempt: WorkflowAttempt) -> WorkflowAttempt:
-        self.items[attempt.attempt_id] = attempt
-        return attempt
-
-    def update(self, attempt: WorkflowAttempt) -> WorkflowAttempt:
-        self.items[attempt.attempt_id] = attempt
-        return attempt
-
-
-class InMemoryWorkflowCheckpointRepository(WorkflowCheckpointRepository):
-    def __init__(self) -> None:
-        self.items: dict[UUID, WorkflowCheckpoint] = {}
-
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowCheckpoint | None:
-        candidates = [
-            checkpoint
-            for checkpoint in self.items.values()
-            if checkpoint.workflow_instance_id == workflow_instance_id
-        ]
-        return max(candidates, key=lambda item: item.created_at, default=None)
-
-    def get_latest_by_attempt_id(self, attempt_id: UUID) -> WorkflowCheckpoint | None:
-        candidates = [
-            checkpoint
-            for checkpoint in self.items.values()
-            if checkpoint.attempt_id == attempt_id
-        ]
-        return max(candidates, key=lambda item: item.created_at, default=None)
-
-    def create(self, checkpoint: WorkflowCheckpoint) -> WorkflowCheckpoint:
-        self.items[checkpoint.checkpoint_id] = checkpoint
-        return checkpoint
-
-
-class InMemoryVerifyReportRepository(VerifyReportRepository):
-    def __init__(self) -> None:
-        self.items: dict[UUID, VerifyReport] = {}
-
-    def get_latest_by_attempt_id(self, attempt_id: UUID) -> VerifyReport | None:
-        candidates = [
-            report for report in self.items.values() if report.attempt_id == attempt_id
-        ]
-        return max(candidates, key=lambda item: item.created_at, default=None)
-
-    def create(self, verify_report: VerifyReport) -> VerifyReport:
-        self.items[verify_report.verify_id] = verify_report
-        return verify_report
-
-
-class InMemoryProjectionStateRepository(ProjectionStateRepository):
-    def __init__(self) -> None:
-        self.items: dict[tuple[UUID, UUID], ProjectionInfo] = {}
-
-    def get_resume_projection(
-        self,
-        workspace_id: UUID,
-        workflow_instance_id: UUID,
-    ) -> ProjectionInfo | None:
-        return self.items.get((workspace_id, workflow_instance_id))
-
-
-class InMemoryUnitOfWork:
-    def __init__(self) -> None:
-        self.workspaces = InMemoryWorkspaceRepository()
-        self.workflow_instances = InMemoryWorkflowInstanceRepository()
-        self.workflow_attempts = InMemoryWorkflowAttemptRepository()
-        self.workflow_checkpoints = InMemoryWorkflowCheckpointRepository()
-        self.verify_reports = InMemoryVerifyReportRepository()
-        self.projection_states = InMemoryProjectionStateRepository()
-        self.committed = False
-        self.rolled_back = False
-
-    def __enter__(self) -> InMemoryUnitOfWork:
-        return self
-
-    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
-        return None
-
-    def commit(self) -> None:
-        self.committed = True
-
-    def rollback(self) -> None:
-        self.rolled_back = True
-
-
-def make_service_and_uow() -> tuple[WorkflowService, InMemoryUnitOfWork]:
-    uow = InMemoryUnitOfWork()
-    service = WorkflowService(lambda: uow)
-    return service, uow
+def make_service_and_uow() -> tuple[WorkflowService, object]:
+    store = InMemoryStore.create()
+    uow_factory = build_in_memory_uow_factory(store)
+    service = WorkflowService(uow_factory)
+    return service, store
 
 
 def register_workspace(service: WorkflowService) -> Workspace:
@@ -258,12 +59,11 @@ def test_register_workspace_creates_workspace() -> None:
         )
     )
 
-    assert workspace.workspace_id in uow.workspaces.items
+    assert workspace.workspace_id in uow.workspaces_by_id
     assert workspace.repo_url == "https://example.com/org/repo.git"
     assert workspace.canonical_path == "/tmp/repo"
     assert workspace.default_branch == "main"
     assert workspace.metadata == {"language": "python"}
-    assert uow.committed is True
 
 
 def test_register_workspace_rejects_canonical_path_conflict_without_workspace_id() -> (
@@ -310,8 +110,8 @@ def test_start_workflow_creates_running_workflow_and_attempt() -> None:
     assert result.attempt.attempt_number == 1
     assert result.attempt.status == WorkflowAttemptStatus.RUNNING
 
-    assert result.workflow_instance.workflow_instance_id in uow.workflow_instances.items
-    assert result.attempt.attempt_id in uow.workflow_attempts.items
+    assert result.workflow_instance.workflow_instance_id in uow.workflows_by_id
+    assert result.attempt.attempt_id in uow.attempts_by_id
 
 
 def test_start_workflow_rejects_second_running_workflow_in_same_workspace() -> None:
@@ -374,7 +174,7 @@ def test_create_checkpoint_persists_snapshot_and_verify_report() -> None:
     assert result.verify_report.status == VerifyStatus.PASSED
     assert result.attempt.verify_status == VerifyStatus.PASSED
 
-    stored_attempt = uow.workflow_attempts.get_by_id(started.attempt.attempt_id)
+    stored_attempt = uow.attempts_by_id.get(started.attempt.attempt_id)
     assert stored_attempt is not None
     assert stored_attempt.verify_status == VerifyStatus.PASSED
 
@@ -488,7 +288,7 @@ def test_resume_workflow_returns_resumable_with_projection_warning() -> None:
         )
     )
 
-    uow.projection_states.items[
+    uow.projection_states_by_key[
         (workspace.workspace_id, started.workflow_instance.workflow_instance_id)
     ] = ProjectionInfo(
         status=ProjectionStatus.STALE,
@@ -520,6 +320,101 @@ def test_resume_workflow_returns_resumable_with_projection_warning() -> None:
     assert resume.projection.status == ProjectionStatus.STALE
     assert any(warning.code == "stale_projection" for warning in resume.warnings)
     assert resume.next_hint == "Resume implementation"
+
+
+def test_record_resume_projection_persists_projection_state() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="TICKET-PROJECTION",
+        )
+    )
+
+    recorded = service.record_resume_projection(
+        RecordProjectionStateInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            status=ProjectionStatus.FRESH,
+            target_path=".agent/resume.json",
+        )
+    )
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert recorded.status == ProjectionStatus.FRESH
+    assert recorded.target_path == ".agent/resume.json"
+    assert resume.projection is not None
+    assert resume.projection.status == ProjectionStatus.FRESH
+    assert resume.projection.target_path == ".agent/resume.json"
+
+
+def test_record_resume_projection_rejects_empty_target_path() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="TICKET-PROJECTION-EMPTY",
+        )
+    )
+
+    try:
+        service.record_resume_projection(
+            RecordProjectionStateInput(
+                workspace_id=workspace.workspace_id,
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                status=ProjectionStatus.FRESH,
+                target_path="   ",
+            )
+        )
+    except Exception as exc:
+        assert getattr(exc, "code", None) == "validation_error"
+    else:
+        raise AssertionError("Expected validation_error for empty target_path")
+
+
+def test_record_resume_projection_rejects_workflow_from_another_workspace() -> None:
+    service, _ = make_service_and_uow()
+    first_workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-a.git",
+            canonical_path="/tmp/repo-a",
+            default_branch="main",
+        )
+    )
+    second_workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-b.git",
+            canonical_path="/tmp/repo-b",
+            default_branch="main",
+        )
+    )
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=first_workspace.workspace_id,
+            ticket_id="TICKET-PROJECTION-MISMATCH",
+        )
+    )
+
+    try:
+        service.record_resume_projection(
+            RecordProjectionStateInput(
+                workspace_id=second_workspace.workspace_id,
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                status=ProjectionStatus.STALE,
+                target_path=".agent/resume.json",
+            )
+        )
+    except WorkflowAttemptMismatchError as exc:
+        assert exc.code == "workflow_attempt_mismatch"
+    else:
+        raise AssertionError("Expected WorkflowAttemptMismatchError")
 
 
 def test_resume_workflow_returns_blocked_when_running_attempt_has_no_checkpoint() -> (

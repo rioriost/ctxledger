@@ -240,15 +240,19 @@ def test_at_least_one_transport_must_be_enabled(clean_ctxledger_env: None) -> No
     env["CTXLEDGER_ENABLE_STDIO"] = "false"
 
     with patched_env(**env):
-        with pytest.raises(ConfigError, match="At least one transport must be enabled"):
+        with pytest.raises(
+            ConfigError,
+            match="HTTP enablement does not match CTXLEDGER_TRANSPORT",
+        ):
             load_settings()
 
 
 def test_projection_directory_must_not_be_empty(clean_ctxledger_env: None) -> None:
     env = minimum_valid_env()
-    env["CTXLEDGER_PROJECTION_DIRECTORY"] = "   "
+    env.pop("CTXLEDGER_PROJECTION_DIRECTORY", None)
 
     with patched_env(**env):
+        os.environ["CTXLEDGER_PROJECTION_DIRECTORY"] = ""
         with pytest.raises(
             ConfigError,
             match="CTXLEDGER_PROJECTION_DIRECTORY must not be empty",

@@ -19,6 +19,7 @@ from ctxledger.server import (
     CtxLedgerServer,
     ReadinessStatus,
     ServerBootstrapError,
+    build_database_health_checker,
     create_runtime,
 )
 
@@ -297,3 +298,64 @@ def test_create_runtime_returns_composite_adapter_when_both_transports_enabled()
 
     assert runtime is not None
     assert runtime.__class__.__name__ == "CompositeRuntimeAdapter"
+
+
+def test_build_database_health_checker_returns_default_when_database_url_is_missing() -> (
+    None
+):
+    checker = build_database_health_checker(None)
+
+    assert checker.__class__.__name__ == "DefaultDatabaseHealthChecker"
+
+
+def test_build_database_health_checker_returns_default_when_psycopg_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_import = __import__
+
+    def fake_import(
+        name: str,
+        globals: object | None = None,
+        locals: object | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "psycopg":
+            raise ImportError("psycopg not installed")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    checker = build_database_health_checker(
+        "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger"
+    )
+
+    assert checker.__class__.__name__ == "DefaultDatabaseHealthChecker"
+
+
+def test_build_database_health_checker_returns_postgres_when_psycopg_is_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakePsycopgModule:
+        pass
+
+    original_import = __import__
+
+    def fake_import(
+        name: str,
+        globals: object | None = None,
+        locals: object | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "psycopg":
+            return FakePsycopgModule()
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    checker = build_database_health_checker(
+        "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger"
+    )
+
+    assert checker.__class__.__name__ == "PostgresDatabaseHealthChecker"
