@@ -1,64 +1,30 @@
-Patch 2 の続きとして、今回は **wrapper dependency cleanup in HTTP runtime wiring** を進め、`server.py` に残っていた HTTP runtime wiring 経由の wrapper 依存をさらに整理しました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers の抽出を土台にして、**HTTP runtime registration path の direct canonical wiring** を進めています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
+Patch 2 の続きとして、今回は **HTTP validation helper dependency cleanup** を進め、`runtime/http_handlers.py` に残っていた validation helper の `server.py` 経由依存をさらに整理しました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers / HTTP runtime registration wiring cleanup を土台にして、**HTTP validation path の direct canonical wiring** を進めています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
 
 今回の実装でやったこと:
 
-- `ctxledger/src/ctxledger/runtime/http_runtime.py` を更新して HTTP runtime registration helper を明示化
-- `ctxledger/src/ctxledger/runtime/http_handlers.py` を更新して response helper wrapper ではなく canonical response builder module を直接使う形に変更
-- 一度 circular import を踏んだため、`http_runtime.py` 内の stdio runtime builder import を function-local に戻して修正
+- `ctxledger/src/ctxledger/runtime/http_handlers.py` を更新して validation helper が `server.py` の `build_mcp_error_response(...)` wrapper ではなく canonical MCP tool handler module を直接使う形に変更
 - 回帰確認として `tests/test_server.py` と `tests/test_mcp_modules.py` を再実行
 - 最終的に green を維持
 
-## 1. `ctxledger/src/ctxledger/runtime/http_runtime.py`
-今回の中心です。HTTP runtime の registration wiring が `server.py` wrapper を経由しすぎていたため、canonical module 直結の形へ一段進めました。
+## 1. `ctxledger/src/ctxledger/runtime/http_handlers.py`
+今回の中心です。HTTP request argument validation helper が、まだ `server.py` の MCP error helper wrapper を経由していたため、canonical module へ直接向ける形に変更しました。
 
 変更したこと:
-- `register_http_runtime_handlers(runtime, server)` を追加
-- `build_http_runtime_adapter(server)` は `HttpRuntimeAdapter` を生成したあと、`register_http_runtime_handlers(...)` を使う形へ整理
-- handler registration 時に使う各 HTTP handler builder は `runtime/http_handlers.py` から直接 import する形へ変更
-
-ポイント:
-- HTTP runtime wiring の責務が `runtime/http_runtime.py` により明確に寄りました
-- `server.py` の HTTP handler wrapper を経由しなくても route registration できる形になりました
-- registration path と adapter construction path の責務が読みやすくなりました
-
-## 2. `ctxledger/src/ctxledger/runtime/http_handlers.py`
-HTTP handler helper 側も、`server.py` の wrapper 関数ではなく canonical response builder module を直接使う形へ更新しました。
-
-変更したこと:
-- `build_workflow_resume_http_handler(...)` が `runtime/server_responses.py` の `build_workflow_resume_response(...)` を直接使う形に変更
-- `build_closed_projection_failures_http_handler(...)` も同様に変更
-- `build_projection_failures_ignore_http_handler(...)` も同様に変更
-- `build_projection_failures_resolve_http_handler(...)` も同様に変更
-- `build_runtime_introspection_http_handler(...)` も同様に変更
-- `build_runtime_routes_http_handler(...)` も同様に変更
-- `build_runtime_tools_http_handler(...)` も同様に変更
+- `parse_required_uuid_argument(...)` が `..server` ではなく `..mcp.tool_handlers` の `build_mcp_error_response(...)` を直接使う形に変更
+- `parse_optional_projection_type_argument(...)` も同様に変更
 
 維持しているもの:
-- HTTP auth error response shape
-- invalid path 時の 404 response shape
-- projection failures ignore/resolve の validation/error behavior
-- runtime debug endpoint の response shape
-- workflow resume / closed projection failures の response shape
+- UUID validation error shape
+- projection type validation error shape
+- `invalid_request` code
+- error payload の details shape
+- HTTP projection failure endpoints の 400 mapping
+- HTTP handler 全体の response shape
 
 ポイント:
-- handler module から `server.py` wrapper への依存を一段減らせました
-- HTTP handler 実装は transport/path/auth/validation により寄り、response building は canonical response builder に寄る形が少し進みました
-- helper module 間 dependency の向きが少し自然になりました
-
-## 3. 循環参照の修正
-今回の作業中に一度 circular import が発生しました。
-
-起きたこと:
-- `runtime/http_runtime.py` が module import 時に `runtime/orchestration.py` の `build_stdio_runtime_adapter(...)` を import するようにしたところ、
-  `runtime/orchestration.py` 側が `runtime/http_runtime.py` を import しているため、test collection 時に partially initialized module error が発生
-
-対応:
-- `build_stdio_runtime_adapter(...)` の import は `register_http_runtime_handlers(...)` の function-local import に戻して修正
-
-ポイント:
-- direct canonical wiring を進めつつ、module initialization order は壊さない形へ調整しました
-- handler builder の direct import は残しつつ、循環参照の起点だけを局所的に遅延 import しています
-- 最終状態は green です
+- `runtime/http_handlers.py` から `server.py` の validation-related wrapper dependency を一段減らせました
+- validation error response の canonical source を、実際の所有者である MCP tool handler module 側に寄せられました
+- small change ですが dependency graph をきれいにする意味があります
 
 ## 挙動面での現状
 今回の変更も extraction / canonicalization 中心で、機能追加ではなく責務整理を優先しています。
@@ -85,13 +51,12 @@ HTTP handler helper 側も、`server.py` の wrapper 関数ではなく canonica
 - bootstrap failure / startup failure の既存 shape
 
 今回新しく進んだこと:
-- HTTP runtime wiring が `server.py` wrapper に依存する箇所を一部整理
-- HTTP handler module が canonical response builder module を直接使う形に進んだ
-- `runtime/http_runtime.py` が registration wiring の中心としてさらに明確になった
+- HTTP validation helper が `server.py` wrapper を経由しない形に進んだ
+- `runtime/http_handlers.py` の validation/error dependency が canonical MCP helper 側に少し寄った
 - `server.py` は top-level facade / compatibility export としてさらに薄くなった
 
 まだ残っているもの:
-- `runtime/http_handlers.py` の request argument validation はまだ `server.py` の MCP error helper に依存している
+- `runtime/http_handlers.py` は型参照や protocol でまだ `server.py` に依存している
 - `server.py` には application-facing server surface がまだ多く残っている
 - helper module は一部 `server.py` の wrapper / protocol / adapter class に依存している
 - readiness / health / DB/bootstrap helper 境界の最終整理は未完
@@ -111,9 +76,8 @@ HTTP handler helper 側も、`server.py` の wrapper 関数ではなく canonica
 - `pytest -q tests/test_server.py tests/test_mcp_modules.py`
 
 補足:
-- 一度 circular import により test collection error が出ました
-- `build_stdio_runtime_adapter(...)` の import を function-local に戻すことで解消しました
-- 修正後の focused regression は green です
+- 今回の変更は小さく、focused regression のみ確認
+- 最終状態は green です
 
 ## コミット
 このセッション時点では、まだコミットは切っていません。
@@ -121,26 +85,24 @@ HTTP handler helper 側も、`server.py` の wrapper 関数ではなく canonica
 次の人は `.rules` に従って、作業ループ完了時に descriptive message で `git commit` してください。
 
 コミット候補メッセージ例:
-- `Clean up HTTP runtime wrapper dependencies`
-- `Directly wire HTTP runtime handlers`
+- `Clean up HTTP validation helper dependencies`
+- `Directly wire HTTP validation error helpers`
 
 ## 注意
 - この session では `last_session.md` 更新までを意図しています
 - ワークツリー上には別件の変更が存在する可能性があります
-- 今回の変更は wrapper dependency cleanup in HTTP runtime wiring が中心で、behavioral rewrite ではありません
+- 今回の変更は HTTP validation helper dependency cleanup が中心で、behavioral rewrite ではありません
 
 ## 実装の評価
-今回の整理は小さめですが、依存関係の見通しを良くするうえで意味があります。
+今回の整理はかなり小さいですが、依存関係の見通しを良くするうえで意味があります。
 
 進んだこと:
-- HTTP runtime registration path が `server.py` wrapper に依存しすぎない形に寄せられた
-- HTTP handler 群が canonical response builder を直接使うようになった
-- `runtime/http_runtime.py` が registration wiring の所有者としてさらに明確になった
-- circular import を局所修正しつつ安全に前進できた
-- 既存 test expectation を保ったまま前進できた
+- HTTP validation helper が `server.py` wrapper に依存しない形に寄せられた
+- validation error helper の canonical source がより明確になった
+- `server.py` の facade 化を少しだけ前に進められた
+- 既存 test expectation を保ったまま安全に前進できた
 
 まだ未着手に近いこと:
-- HTTP handler の request validation helper と MCP error helper の依存整理
 - helper module から `server.py` adapter/protocol への依存整理
 - readiness / health / bootstrap boundary の整理
 - stdio removal path を前提にした dependency cleanup
@@ -151,7 +113,7 @@ HTTP handler helper 側も、`server.py` の wrapper 関数ではなく canonica
 次は以下のどれかが自然です。
 
 候補:
-1. `runtime/http_handlers.py` の validation/error helper dependency をさらに整理する
+1. `runtime/http_handlers.py` の type/protocol dependency をさらに整理する
 2. readiness / health / DB/bootstrap boundary を整理する
 3. canonical protocol/dataclass/serializer/helper の配置をさらに見直す
 4. stdio removal path を意識して transport-specific code をさらに隔離する
@@ -184,14 +146,15 @@ HTTP handler helper 側も、`server.py` の wrapper 関数ではなく canonica
 17. shared bootstrap error canonicalization が入っている
 18. shared runtime types extraction が入っている
 19. shared runtime serializers extraction が入っている
-20. 今回、HTTP runtime wrapper dependency cleanup が入った
-21. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
-22. `docs/specification.md` は引き続き触らない
-23. まだ compliance claim はしない
-24. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
+20. HTTP runtime wrapper dependency cleanup が入っている
+21. 今回、HTTP validation helper dependency cleanup が入った
+22. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
+23. `docs/specification.md` は引き続き触らない
+24. まだ compliance claim はしない
+25. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
 
 注意点:
-- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation / server response building / server construction wiring / database health helper / shared bootstrap error / shared runtime response types / shared runtime serializers / HTTP runtime wrapper dependency cleanup の本体は外へ出始めた
+- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation / server response building / server construction wiring / database health helper / shared bootstrap error / shared runtime response types / shared runtime serializers / HTTP runtime wrapper dependency cleanup / HTTP validation helper dependency cleanup の本体は外へ出始めた
 - `create_runtime(...)` は public surface 維持のため `server.py` に wrapper として残っている
 - `_print_runtime_summary(...)` も test/import 互換のため `server.py` に wrapper として残してある
 - `build_http_runtime_adapter(...)` も public surface 維持のため `server.py` に wrapper を残してある
@@ -236,6 +199,7 @@ HTTP handler helper 側も、`server.py` の wrapper 関数ではなく canonica
 - shared runtime response/status dataclasses
 - shared runtime serializers
 - HTTP runtime registration wiring cleanup
+- HTTP validation helper dependency cleanup
 
 ### まだ `server.py` に残るもの
 - application-facing server surface 全般
@@ -244,13 +208,13 @@ HTTP handler helper 側も、`server.py` の wrapper 関数ではなく canonica
 - helper 群の最終 dependency boundary 調整
 
 ## 次に自然な一手
-ここまで来たので、次は **HTTP helper dependency と public surface boundary の整理** が一番きれいです。
+ここまで来たので、次は **HTTP type/protocol dependency と public surface boundary の整理** が一番きれいです。
 
 たとえば:
-- `runtime/http_handlers.py` の request argument validation helper
-- MCP error response helper の ownership
+- `runtime/http_handlers.py` の type/protocol dependency
 - `server.py` に残る adapter/protocol/wrapper dependency
 - readiness / health helper の ownership
+- transport helper と top-level facade の境界
 
 を dedicated helper/core boundary に寄せる段階です。
 

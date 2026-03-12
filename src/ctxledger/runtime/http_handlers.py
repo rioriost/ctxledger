@@ -91,7 +91,7 @@ def parse_required_uuid_argument(
 ) -> UUID | McpToolResponse:
     from uuid import UUID
 
-    from ..server import build_mcp_error_response
+    from ..mcp.tool_handlers import build_mcp_error_response
 
     raw_value = arguments.get(field_name)
     if not isinstance(raw_value, str) or not raw_value.strip():
@@ -114,7 +114,7 @@ def parse_required_uuid_argument(
 def parse_optional_projection_type_argument(
     arguments: dict[str, Any],
 ) -> ProjectionArtifactType | None | McpToolResponse:
-    from ..server import build_mcp_error_response
+    from ..mcp.tool_handlers import build_mcp_error_response
 
     raw_value = arguments.get("projection_type")
     if raw_value is None:
