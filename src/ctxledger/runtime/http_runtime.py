@@ -2,27 +2,27 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .http_handlers import (
+    build_closed_projection_failures_http_handler,
+    build_mcp_http_handler,
+    build_projection_failures_ignore_http_handler,
+    build_projection_failures_resolve_http_handler,
+    build_runtime_introspection_http_handler,
+    build_runtime_routes_http_handler,
+    build_runtime_tools_http_handler,
+    build_workflow_resume_http_handler,
+)
+
 if TYPE_CHECKING:
     from ..server import CtxLedgerServer, HttpRuntimeAdapter
-    from .introspection import RuntimeIntrospection
-    from .orchestration import ServerRuntime
 
 
-def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
-    from ..server import (
-        HttpRuntimeAdapter,
-        build_closed_projection_failures_http_handler,
-        build_mcp_http_handler,
-        build_projection_failures_ignore_http_handler,
-        build_projection_failures_resolve_http_handler,
-        build_runtime_introspection_http_handler,
-        build_runtime_routes_http_handler,
-        build_runtime_tools_http_handler,
-        build_workflow_resume_http_handler,
-    )
+def register_http_runtime_handlers(
+    runtime: HttpRuntimeAdapter,
+    server: CtxLedgerServer,
+) -> HttpRuntimeAdapter:
     from .orchestration import build_stdio_runtime_adapter
 
-    runtime = HttpRuntimeAdapter(server.settings)
     mcp_runtime = build_stdio_runtime_adapter(server)
     debug_settings = getattr(server.settings, "debug", None)
     debug_http_endpoints_enabled = (
@@ -67,6 +67,14 @@ def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
     return runtime
 
 
+def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
+    from ..server import HttpRuntimeAdapter
+
+    runtime = HttpRuntimeAdapter(server.settings)
+    return register_http_runtime_handlers(runtime, server)
+
+
 __all__ = [
     "build_http_runtime_adapter",
+    "register_http_runtime_handlers",
 ]

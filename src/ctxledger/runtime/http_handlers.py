@@ -195,7 +195,7 @@ def parse_closed_projection_failures_request_path(path: str):
 def build_workflow_resume_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import build_workflow_resume_response
+    from .server_responses import build_workflow_resume_response
     from .types import WorkflowResumeResponse
 
     def _handler(path: str) -> WorkflowResumeResponse:
@@ -227,7 +227,7 @@ def build_workflow_resume_http_handler(
 def build_closed_projection_failures_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import build_closed_projection_failures_response
+    from .server_responses import build_closed_projection_failures_response
     from .types import ProjectionFailureHistoryResponse
 
     def _handler(path: str) -> ProjectionFailureHistoryResponse:
@@ -264,7 +264,7 @@ def build_closed_projection_failures_http_handler(
 def build_projection_failures_ignore_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import build_projection_failures_ignore_response
+    from .server_responses import build_projection_failures_ignore_response
     from .types import McpToolResponse, ProjectionFailureActionResponse
 
     def _handler(path: str) -> ProjectionFailureActionResponse:
@@ -337,7 +337,7 @@ def build_projection_failures_ignore_http_handler(
 def build_projection_failures_resolve_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import build_projection_failures_resolve_response
+    from .server_responses import build_projection_failures_resolve_response
     from .types import McpToolResponse, ProjectionFailureActionResponse
 
     def _handler(path: str) -> ProjectionFailureActionResponse:
@@ -410,7 +410,7 @@ def build_projection_failures_resolve_http_handler(
 def build_runtime_introspection_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import build_runtime_introspection_response
+    from .server_responses import build_runtime_introspection_response
     from .types import RuntimeIntrospectionResponse
 
     def _handler(path: str) -> RuntimeIntrospectionResponse:
@@ -446,7 +446,7 @@ def build_runtime_introspection_http_handler(
 def build_runtime_routes_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import build_runtime_routes_response
+    from .server_responses import build_runtime_routes_response
     from .types import RuntimeIntrospectionResponse
 
     def _handler(path: str) -> RuntimeIntrospectionResponse:
@@ -480,7 +480,7 @@ def build_runtime_routes_http_handler(
 def build_runtime_tools_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import build_runtime_tools_response
+    from .server_responses import build_runtime_tools_response
     from .types import RuntimeIntrospectionResponse
 
     def _handler(path: str) -> RuntimeIntrospectionResponse:
