@@ -221,7 +221,7 @@ Typical payload shapes:
         "memory_get_context",
         "memory_remember_episode",
         "memory_search",
-        "resume_workflow"
+        "workflow_resume"
       ]
     }
   ]
@@ -254,7 +254,7 @@ Typical payload shapes:
         "memory_get_context",
         "memory_remember_episode",
         "memory_search",
-        "resume_workflow"
+        "workflow_resume"
       ]
     }
   ]

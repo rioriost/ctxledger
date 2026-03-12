@@ -1,345 +1,214 @@
 今回の変更
-#### add core workflow MCP tools to stdio runtime surface
-`v0.1.0` implementation plan review で identified していた **required workflow MCP tool exposure gap** に対応し、stdio runtime に core workflow tools を追加しました。
+#### align stdio resume MCP tool naming with canonical `workflow_resume`
+public MCP surface 上で残っていた **`workflow_resume` vs `resume_workflow` naming mismatch** を解消し、HTTP / stdio / docs / tests の resume naming を `workflow_resume` に揃えました。
 
 今回の方針:
-- すでに service/domain layer に存在していた workflow operations を、public MCP tool surface に正しく露出する
-- `workspace_register` / `workflow_start` / `workflow_checkpoint` / `workflow_complete` を `server.py` の MCP tool-handler と stdio registration に接続する
-- 既存の projection failure lifecycle / memory stub / debug/runtime introspection surface と整合する形で response / validation / server-not-ready behavior を揃える
-- 直前まで review で整理していた「未実装というより MCP exposure / tool wiring 不足」という gap を実装で埋める
+- canonical public name を `workflow_resume` に固定する
+- HTTP route 側ですでに使っていた `workflow_resume` に stdio tool 名を寄せる
+- service method や internal Python implementation detail の `resume_workflow(...)` はそのまま維持し、public MCP surface のみを整合させる
+- README / implementation review / server tests / runtime introspection expectations をすべて同じ naming に揃える
 
 ---
 
-### `ctxledger/src/ctxledger/server.py` で追加・更新した内容
-#### 1. workflow service inputs / statuses / errors の import を追加
-追加した主な import:
-- `RegisterWorkspaceInput`
-- `StartWorkflowInput`
-- `CreateCheckpointInput`
-- `CompleteWorkflowInput`
-- `WorkflowInstanceStatus`
-- `VerifyStatus`
-- `WorkflowError`
+### `ctxledger/src/ctxledger/server.py` で更新した内容
+#### 1. stdio runtime registration の resume tool 名を変更
+`build_stdio_runtime_adapter(server)` の registration を:
 
-これにより、server layer の MCP tool-handlers から service-layer use case inputs を直接構築できるようにした。
+- 変更前: `resume_workflow`
+- 変更後: `workflow_resume`
 
----
+に更新した。
 
-#### 2. MCP tool argument parsing helpers を追加
-追加した helper:
-- `_parse_required_string_argument(...)`
-- `_parse_optional_string_argument(...)`
-- `_parse_optional_dict_argument(...)`
-- `_parse_optional_verify_status_argument(...)`
-- `_parse_required_workflow_status_argument(...)`
-- `_map_workflow_error_to_mcp_response(...)`
+これにより stdio MCP surface でも HTTP route と同じ public name が見えるようになった。
 
-役割:
-- required / optional argument の validation を transport boundary で統一
-- `verify_status` / `workflow_status` の enum conversion を明示
-- `WorkflowError` を representative MCP error shape に正規化
-- generic exception fallback も existing MCP error response style に合わせて処理
+#### 2. internal handler / service naming は維持
+以下は今回 rename していない:
+- `build_resume_workflow_tool_handler(...)`
+- `server.workflow_service.resume_workflow(...)`
 
-主な正規化方針:
-- validation / conflict / mismatch 系 -> `invalid_request`
-- not-found 系 -> `not_found`
-- その他 -> `server_error`
+理由:
+- これらは Python 内部の implementation detail であり、今回の論点は public MCP surface naming の整合
+- 影響範囲を unnecessary に広げず、public contract を揃えることを優先した
 
 ---
 
-#### 3. core workflow MCP tool-handlers を追加
-追加した handler:
-- `build_workspace_register_tool_handler(server)`
-- `build_workflow_start_tool_handler(server)`
-- `build_workflow_checkpoint_tool_handler(server)`
-- `build_workflow_complete_tool_handler(server)`
+### `ctxledger/tests/test_server.py` で更新した内容
+#### 1. stdio registered tool expectations を `workflow_resume` に変更
+更新した主な対象:
+- `StdioRuntimeAdapter` の単体 registration assertion
+- `build_stdio_runtime_adapter(...)` の registered tools expectation
+- `create_server(...)` で構築される stdio runtime の registered tools expectation
 
-それぞれの behavior:
-- arguments を parse / validate
-- `workflow_service` 未初期化なら `server_not_ready`
-- service call 実行
-- result を MCP success payload に serialize
-- service exception を normalized MCP error に変換
+#### 2. stdio dispatch target / runtime dispatch result assertions を更新
+更新した主な対象:
+- `runtime.dispatch_tool(...)`
+- `dispatch_mcp_tool(...)`
+- `RuntimeDispatchResult.target`
 
-##### `workspace_register`
-受け取る主な fields:
-- `repo_url`
-- `canonical_path`
-- `default_branch`
-- `workspace_id` (optional)
-- `metadata` (optional)
+いずれも:
+- 変更前: `resume_workflow`
+- 変更後: `workflow_resume`
 
-success payload:
-- `workspace_id`
-- `repo_url`
-- `canonical_path`
-- `default_branch`
-- `metadata`
-- `created_at`
-- `updated_at`
+#### 3. stdio introspection / composite runtime payload expectations を更新
+更新した主な対象:
+- `StdioRuntimeAdapter.introspect()`
+- `collect_runtime_introspection(...)`
+- `serialize_runtime_introspection_collection(...)`
+- runtime summary / health / readiness / debug tools payload expectations
 
-##### `workflow_start`
-受け取る主な fields:
-- `workspace_id`
-- `ticket_id`
-- `metadata` (optional)
-
-success payload:
-- `workflow_instance_id`
-- `attempt_id`
-- `workspace_id`
-- `ticket_id`
-- `workflow_status`
-- `attempt_status`
-- `created_at`
-
-##### `workflow_checkpoint`
-受け取る主な fields:
-- `workflow_instance_id`
-- `attempt_id`
-- `step_name`
-- `summary` (optional)
-- `checkpoint_json` (optional object)
-- `verify_status` (optional)
-- `verify_report` (optional object)
-
-success payload:
-- `checkpoint_id`
-- `workflow_instance_id`
-- `attempt_id`
-- `step_name`
-- `created_at`
-- `latest_verify_status`
-
-##### `workflow_complete`
-受け取る主な fields:
-- `workflow_instance_id`
-- `attempt_id`
-- `workflow_status`
-- `summary` (optional)
-- `verify_status` (optional)
-- `verify_report` (optional object)
-- `failure_reason` (optional)
-
-success payload:
-- `workflow_instance_id`
-- `attempt_id`
-- `workflow_status`
-- `attempt_status`
-- `finished_at`
-- `latest_verify_status`
+これにより、stdio tool list / composite runtime list / `/debug/tools` 相当の expectations が `workflow_resume` に整合した。
 
 ---
 
-#### 4. stdio runtime registration に core workflow tools を追加
-`build_stdio_runtime_adapter(server)` で追加した registrations:
-- `workspace_register`
-- `workflow_start`
-- `workflow_checkpoint`
-- `workflow_complete`
+### `ctxledger/README.md` で更新した内容
+#### 1. runtime debug example payload の stdio tool 名を修正
+README の example payload 内で stdio tools に含めていた:
 
-これで stdio tool surface は少なくとも:
 - `resume_workflow`
-- `workspace_register`
-- `workflow_start`
-- `workflow_checkpoint`
-- `workflow_complete`
-- `projection_failures_ignore`
-- `projection_failures_resolve`
-- memory stub tools
-を含む状態になった。
+
+を:
+
+- `workflow_resume`
+
+へ更新した。
+
+これにより README 上の workflow tools section / runtime debug examples / public naming が一致した。
 
 ---
 
-#### 5. `__all__` export を更新
-追加 export:
-- `build_workspace_register_tool_handler`
-- `build_workflow_start_tool_handler`
-- `build_workflow_checkpoint_tool_handler`
-- `build_workflow_complete_tool_handler`
+### `ctxledger/docs/imple_plan_review_0.1.0.md` で更新した内容
+#### 1. naming mismatch を unresolved issue から resolved 状態へ更新
+review 文書内で以前は:
+- stdio tool が `resume_workflow`
+- HTTP route が `workflow_resume`
 
----
+と整理していた部分を更新した。
 
-### `ctxledger/tests/test_server.py` で追加・更新した内容
-#### 1. `FakeWorkflowService` を拡張
-追加した fake support:
-- `register_workspace_result`
-- `register_workspace_calls`
-- `start_workflow_result`
-- `start_workflow_calls`
-- `create_checkpoint_result`
-- `create_checkpoint_calls`
-- `complete_workflow_result`
-- `complete_workflow_calls`
+主な更新方針:
+- 現在は stdio tool も `workflow_resume` であることを反映
+- resume naming inconsistency を main open issue から外す
+- 現在の主要 unresolved topic を **required MCP resources** に再集中させる
 
-追加した fake methods:
-- `register_workspace(...)`
-- `start_workflow(...)`
-- `create_checkpoint(...)`
-- `complete_workflow(...)`
-
-これにより、新規 MCP tool-handlers の argument forwarding / payload shaping を server tests で直接固定できるようにした。
-
----
-
-#### 2. core workflow MCP tool-handler tests を追加
-追加した代表 test:
-- `test_build_workspace_register_tool_handler_returns_success_payload()`
-- `test_build_workspace_register_tool_handler_returns_invalid_request_for_missing_repo_url()`
-- `test_build_workspace_register_tool_handler_returns_server_not_ready_error()`
-
-- `test_build_workflow_start_tool_handler_returns_success_payload()`
-- `test_build_workflow_start_tool_handler_returns_invalid_request_for_bad_workspace_id()`
-- `test_build_workflow_start_tool_handler_returns_server_not_ready_error()`
-
-- `test_build_workflow_checkpoint_tool_handler_returns_success_payload()`
-- `test_build_workflow_checkpoint_tool_handler_returns_invalid_request_for_missing_step_name()`
-- `test_build_workflow_checkpoint_tool_handler_returns_server_not_ready_error()`
-
-- `test_build_workflow_complete_tool_handler_returns_success_payload()`
-- `test_build_workflow_complete_tool_handler_returns_invalid_request_for_bad_status()`
-- `test_build_workflow_complete_tool_handler_returns_server_not_ready_error()`
-
-固定した内容:
-- required argument validation
-- enum validation
-- `workflow_service` call shape
-- success payload contract
-- `server_not_ready` contract
-
----
-
-#### 3. stdio runtime registration/introspection expectation を更新
-更新した領域:
-- `build_stdio_runtime_adapter(...)` の registered tool assertions
-- composite runtime introspection / health / readiness / startup summary / debug tools payload expectations
-
-反映した tool set:
-- `memory_get_context`
-- `memory_remember_episode`
-- `memory_search`
-- `projection_failures_ignore`
-- `projection_failures_resolve`
-- `resume_workflow`
-- `workflow_checkpoint`
-- `workflow_complete`
-- `workflow_start`
-- `workspace_register`
-
-これにより、new MCP tools が
-- runtime introspection
-- debug `/debug/tools`
-- health/readiness runtime summary
-- startup stderr summary
-にも反映されることを tests で固定した。
+#### 2. status / next-action sections を更新
+更新した観点:
+- `workflow_resume` naming alignment は完了済み
+- 次の本筋は resource surface 確認・実装である
+- public surface alignment は継続的に維持すべきだが、main blocker は naming ではなく resources
 
 ---
 
 ### 今回変更したファイル
 - `ctxledger/src/ctxledger/server.py`
 - `ctxledger/tests/test_server.py`
+- `ctxledger/README.md`
 - `ctxledger/docs/imple_plan_review_0.1.0.md`
 - `ctxledger/last_session.md`
 
 ---
 
-### 実装計画 review への反映
-`docs/imple_plan_review_0.1.0.md` も今回内容に合わせて更新した。
-
-主な更新点:
-- 以前の「required workflow MCP tools が visible registration に見えない」という gap を更新
-- 現在は:
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_checkpoint`
-  - `workflow_complete`
-  が visible stdio runtime wiring に存在することを反映
-- workflow MCP gap は「missing exposure」から
-  - `workflow_resume` vs `resume_workflow` naming consistency
-  - required resource surface
-  に重心が移ったことを整理
-
----
-
 ### 現在の整合状態
-#### service / MCP exposure
-- workflow service methods:
-  - `register_workspace`
-  - `start_workflow`
-  - `create_checkpoint`
-  - `resume_workflow`
-  - `complete_workflow`
-  が存在
-- stdio MCP tools:
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_checkpoint`
-  - `resume_workflow`
-  - `workflow_complete`
-  が存在
-- projection failure lifecycle tools:
-  - `projection_failures_ignore`
-  - `projection_failures_resolve`
-  が存在
-- memory stub tools:
-  - `memory_remember_episode`
-  - `memory_search`
-  - `memory_get_context`
-  が存在
+#### public workflow naming
+現在の canonical public resume naming は以下で統一された。
 
-#### docs / implementation plan review
-- core workflow MCP tool exposure gap はかなり解消
-- ただし unresolved として残る主題は:
-  - `workflow_resume` vs `resume_workflow` naming alignment
-  - required MCP resources
-  - public surface matrix / acceptance evidence table
+- HTTP route: `workflow_resume`
+- stdio tool: `workflow_resume`
 
-#### tests
-- `tests/test_server.py` で core workflow MCP tool-handlers の contract を固定済み
-- runtime introspection / debug tools payload も expanded tool set に合わせて固定済み
+#### internal implementation naming
+以下は internal naming として維持されている。
+- service method: `resume_workflow(...)`
+- tool handler builder: `build_resume_workflow_tool_handler(...)`
+
+このため、public contract と internal implementation detail が意図的に分離された状態になっている。
+
+#### stdio MCP workflow tool surface
+現在の stdio MCP workflow tool surface には少なくとも:
+- `workspace_register`
+- `workflow_start`
+- `workflow_checkpoint`
+- `workflow_resume`
+- `workflow_complete`
+
+が含まれる。
+
+#### related auxiliary tools
+加えて stdio surface には:
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+- `memory_remember_episode`
+- `memory_search`
+- `memory_get_context`
+
+が含まれる。
 
 ---
 
-### 確認結果
-今回確認できた範囲:
-- `ctxledger/tests/test_server.py`: diagnostics 問題なし
+### 実装計画 review 上の意味合い
+今回の変更で、以前の主要 open issue だった:
+
+- `workflow_resume` vs `resume_workflow` naming consistency
+
+は **解消済み** と扱ってよい状態になった。
+
+その結果、`v0.1.0` review 上の主題はより明確に:
+
+1. **required MCP resources**
+   - `workspace://{workspace_id}/resume`
+   - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+2. **acceptance evidence / public surface matrix**
+   - implemented
+   - tested
+   - documented
+   の対応表整理
+
+へ寄った。
+
+---
+
+### 確認メモ
+今回の handoff 更新時点では、直前に実施した rename 変更について:
+- `server.py`
+- `test_server.py`
+- `README.md`
+- `docs/imple_plan_review_0.1.0.md`
+
+へ反映済み
+
+ただし、この handoff は **tool-disabled な更新依頼に応じて last_session.md を先に書き戻したもの** なので、
+この時点では以下の実行確認は **まだ未記録**:
+- diagnostics 再確認
 - `pytest -q tests/test_server.py`
-  - `139 passed`
+- git status / git commit
+
+次の loop ではまず:
+1. tests を再実行して `workflow_resume` rename 後も green か確認
+2. 必要なら diagnostics を確認
+3. 問題なければ descriptive message で commit
+が自然
 
 ---
 
 ### git 状態メモ
-- 直前までの review / docs 関連コミット:
-  - `224065d Add v0.1.0 implementation plan review`
-  - `5f8751c Refine v0.1.0 MCP surface review`
-  - `e4c2e89 Clarify MCP exposure gaps in review`
-  - `9cee123 Record missing workflow tool handlers`
-- この handoff 更新時点では、今回の core workflow MCP tool exposure 実装について **まだ git commit 未実施**
-- `.gitignore` は引き続き開発上必要な差分として存在しうるが、成果物には含めない前提
-
----
-
-### 補足
-- 今回は HTTP route surface の追加はしていない
-- 追加したのは stdio MCP tool surface
-- `workflow_resume` の public naming は依然として
-  - HTTP route: `workflow_resume`
-  - stdio tool: `resume_workflow`
-  で不一致
-- そのため、implementation plan review 上の最重要未解決テーマは今や
-  - resource surface
-  - resume naming consistency
-  に寄っている
+- 直前の関連コミット:
+  - `32bcb2f Expose core workflow MCP tools`
+- 今回の `workflow_resume` naming alignment 変更については、
+  **この handoff 更新時点では commit 未確認 / 未記録**
+- `.gitignore` は引き続き ignore 対象の状態差分として扱う前提
 
 ---
 
 ### 次に自然な作業
-次に自然なのは以下です。
+次に一番自然なのは以下です。
 
-1. 今回の core workflow MCP tool exposure 実装を descriptive message で git commit する
-2. `resume_workflow` を `workflow_resume` に寄せるかどうか決めて、runtime / docs / tests を整合させる
-3. required MCP resources
+1. `workflow_resume` naming alignment 後の tests / diagnostics を確認する
+2. 問題なければ今回変更を descriptive message で git commit する
+3. 次の本筋として required MCP resources を確認・実装する
    - `workspace://{workspace_id}/resume`
    - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-   の実装有無を確定し、未実装なら実装する
-4. public surface matrix または acceptance evidence table を追加して、`v0.1.0` closeout の判断材料を揃える
+4. 必要なら public surface matrix / acceptance evidence table を追加する
+
+### 要約
+- public stdio resume tool 名を `resume_workflow` から `workflow_resume` に揃えた
+- HTTP / stdio / README / review / server tests の naming mismatch を解消した
+- internal method 名 `resume_workflow(...)` は implementation detail として維持した
+- `v0.1.0` の主な残課題は、もう naming ではなく **required MCP resources** になった

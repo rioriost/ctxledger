@@ -2371,7 +2371,7 @@ def build_stdio_runtime_adapter(server: CtxLedgerServer) -> StdioRuntimeAdapter:
     runtime = StdioRuntimeAdapter(server.settings)
     memory_service = MemoryService()
     runtime.register_tool_handler(
-        "resume_workflow",
+        "workflow_resume",
         build_resume_workflow_tool_handler(server),
     )
     runtime.register_tool_handler(

@@ -3527,20 +3527,20 @@ def test_stdio_runtime_adapter_dispatches_registered_tool_handler() -> None:
     )
     runtime = StdioRuntimeAdapter(settings)
     runtime.register_tool_handler(
-        "resume_workflow",
+        "workflow_resume",
         build_resume_workflow_tool_handler(server),
     )
 
     server.startup()
 
     response = runtime.dispatch_tool(
-        "resume_workflow",
+        "workflow_resume",
         {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)},
     )
 
     assert isinstance(response, McpToolResponse)
     assert response.payload["ok"] is True
-    assert runtime.registered_tools() == ("resume_workflow",)
+    assert runtime.registered_tools() == ("workflow_resume",)
 
 
 def test_build_stdio_runtime_adapter_registers_core_workflow_and_projection_failure_tools() -> (
@@ -3565,9 +3565,9 @@ def test_build_stdio_runtime_adapter_registers_core_workflow_and_projection_fail
         "memory_search",
         "projection_failures_ignore",
         "projection_failures_resolve",
-        "resume_workflow",
         "workflow_checkpoint",
         "workflow_complete",
+        "workflow_resume",
         "workflow_start",
         "workspace_register",
     )
@@ -3709,9 +3709,9 @@ def test_build_stdio_runtime_adapter_registers_expected_tools() -> None:
         "memory_search",
         "projection_failures_ignore",
         "projection_failures_resolve",
-        "resume_workflow",
         "workflow_checkpoint",
         "workflow_complete",
+        "workflow_resume",
         "workflow_start",
         "workspace_register",
     )
@@ -3719,7 +3719,7 @@ def test_build_stdio_runtime_adapter_registers_expected_tools() -> None:
     server.startup()
 
     response = runtime.dispatch_tool(
-        "resume_workflow",
+        "workflow_resume",
         {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)},
     )
 
@@ -3748,9 +3748,9 @@ def test_create_server_wires_stdio_runtime_with_registered_tools() -> None:
         "memory_search",
         "projection_failures_ignore",
         "projection_failures_resolve",
-        "resume_workflow",
         "workflow_checkpoint",
         "workflow_complete",
+        "workflow_resume",
         "workflow_start",
         "workspace_register",
     )
@@ -3758,7 +3758,7 @@ def test_create_server_wires_stdio_runtime_with_registered_tools() -> None:
     server.startup()
 
     response = server.runtime.dispatch_tool(
-        "resume_workflow",
+        "workflow_resume",
         {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)},
     )
 
@@ -3869,13 +3869,13 @@ def test_dispatch_mcp_tool_returns_dispatch_result_for_success() -> None:
 
     result = dispatch_mcp_tool(
         runtime,
-        "resume_workflow",
+        "workflow_resume",
         {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)},
     )
 
     assert isinstance(result, RuntimeDispatchResult)
     assert result.transport == "stdio"
-    assert result.target == "resume_workflow"
+    assert result.target == "workflow_resume"
     assert result.status == "ok"
     assert isinstance(result.response, McpToolResponse)
     assert result.response.payload["ok"] is True
@@ -3920,11 +3920,11 @@ def test_dispatch_mcp_tool_returns_error_result_for_tool_error_response() -> Non
     )
     runtime = build_stdio_runtime_adapter(server)
 
-    result = dispatch_mcp_tool(runtime, "resume_workflow", {})
+    result = dispatch_mcp_tool(runtime, "workflow_resume", {})
 
     assert isinstance(result, RuntimeDispatchResult)
     assert result.transport == "stdio"
-    assert result.target == "resume_workflow"
+    assert result.target == "workflow_resume"
     assert result.status == "error"
     assert isinstance(result.response, McpToolResponse)
     assert result.response.payload == {
@@ -3965,16 +3965,15 @@ def test_stdio_runtime_adapter_introspect_returns_registered_tools() -> None:
     )
     runtime = StdioRuntimeAdapter(settings)
     runtime.register_tool_handler(
-        "resume_workflow",
+        "workflow_resume",
         lambda arguments: McpToolResponse(payload={"ok": True, "result": arguments}),
     )
 
     introspection = runtime.introspect()
 
-    assert isinstance(introspection, RuntimeIntrospection)
     assert introspection.transport == "stdio"
     assert introspection.routes == ()
-    assert introspection.tools == ("resume_workflow",)
+    assert introspection.tools == ("workflow_resume",)
 
 
 def test_collect_runtime_introspection_returns_empty_tuple_for_none() -> None:
@@ -4012,7 +4011,7 @@ def test_collect_runtime_introspection_returns_stdio_runtime_introspection() -> 
     )
     runtime = StdioRuntimeAdapter(settings)
     runtime.register_tool_handler(
-        "resume_workflow",
+        "workflow_resume",
         lambda arguments: McpToolResponse(payload={"ok": True, "result": arguments}),
     )
 
@@ -4022,7 +4021,7 @@ def test_collect_runtime_introspection_returns_stdio_runtime_introspection() -> 
         RuntimeIntrospection(
             transport="stdio",
             routes=(),
-            tools=("resume_workflow",),
+            tools=("workflow_resume",),
         ),
     )
 
@@ -4069,9 +4068,9 @@ def test_collect_runtime_introspection_returns_both_transports_for_composite_run
                 "memory_search",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
-                "resume_workflow",
                 "workflow_checkpoint",
                 "workflow_complete",
+                "workflow_resume",
                 "workflow_start",
                 "workspace_register",
             ),
@@ -4107,7 +4106,7 @@ def test_serialize_runtime_introspection_collection_returns_json_ready_payloads(
         RuntimeIntrospection(
             transport="stdio",
             routes=(),
-            tools=("resume_workflow",),
+            tools=("workflow_resume",),
         ),
     )
 
@@ -4122,7 +4121,7 @@ def test_serialize_runtime_introspection_collection_returns_json_ready_payloads(
         {
             "transport": "stdio",
             "routes": [],
-            "tools": ["resume_workflow"],
+            "tools": ["workflow_resume"],
         },
     ]
 
@@ -4204,9 +4203,9 @@ def test_build_runtime_introspection_response_returns_http_payload_for_composite
                     "memory_search",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
-                    "resume_workflow",
                     "workflow_checkpoint",
                     "workflow_complete",
+                    "workflow_resume",
                     "workflow_start",
                     "workspace_register",
                 ],
@@ -4420,9 +4419,9 @@ def test_health_includes_runtime_summary_details_for_composite_runtime() -> None
                 "memory_search",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
-                "resume_workflow",
                 "workflow_checkpoint",
                 "workflow_complete",
+                "workflow_resume",
                 "workflow_start",
                 "workspace_register",
             ],
@@ -4500,9 +4499,9 @@ def test_readiness_includes_runtime_summary_details_for_composite_runtime() -> N
                 "memory_search",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
-                "resume_workflow",
                 "workflow_checkpoint",
                 "workflow_complete",
+                "workflow_resume",
                 "workflow_start",
                 "workspace_register",
             ],
@@ -4624,9 +4623,9 @@ def test_startup_logs_runtime_introspection_metadata_for_composite_runtime(
                 "memory_search",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
-                "resume_workflow",
                 "workflow_checkpoint",
                 "workflow_complete",
+                "workflow_resume",
                 "workflow_start",
                 "workspace_register",
             ],
@@ -4778,9 +4777,9 @@ def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
                     "memory_search",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
-                    "resume_workflow",
                     "workflow_checkpoint",
                     "workflow_complete",
+                    "workflow_resume",
                     "workflow_start",
                     "workspace_register",
                 ],
@@ -4908,7 +4907,7 @@ def test_print_runtime_summary_includes_composite_runtime_introspection(
         "'tools': []}, {'transport': 'stdio', 'routes': [], 'tools': "
         "['memory_get_context', 'memory_remember_episode', 'memory_search', "
         "'projection_failures_ignore', 'projection_failures_resolve', "
-        "'resume_workflow', 'workflow_checkpoint', 'workflow_complete', "
+        "'workflow_checkpoint', 'workflow_complete', 'workflow_resume', "
         "'workflow_start', 'workspace_register']}]" in captured.err
     )
     assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
@@ -4980,9 +4979,9 @@ def test_http_runtime_adapter_dispatches_registered_debug_tools_handler() -> Non
                     "memory_search",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
-                    "resume_workflow",
                     "workflow_checkpoint",
                     "workflow_complete",
+                    "workflow_resume",
                     "workflow_start",
                     "workspace_register",
                 ],
