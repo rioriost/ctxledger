@@ -93,7 +93,7 @@ def _optional_str_enum(enum_type: Any, value: Any) -> Any | None:
 
 
 def _schema_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "schemas" / "postgres.sql"
+    return Path(__file__).resolve().parents[3] / "schemas" / "postgres.sql"
 
 
 def _connect(database_url: str) -> Connection:
