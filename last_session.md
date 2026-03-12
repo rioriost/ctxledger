@@ -1,96 +1,112 @@
 今回の変更
-#### docs follow-up for HTTP projection failure action routes
-projection failure lifecycle の HTTP action surface について、**representative reverse proxy example** を docs に追加しました。
+#### dispatch-level invalid path coverage for HTTP projection failure action routes
+projection failure lifecycle の HTTP action surface について、**runtime dispatch level での invalid path -> `404 not_found` coverage** を追加しました。
 
 今回の方針:
-- 直前までに整備した strict path-shape requirement / proxy alignment / observability guidance を、実際の運用イメージに落とし込みやすい形で補強する
-- reverse proxy / gateway 側で exact path matching をどう扱うべきかを、抽象論だけでなく representative example でも示す
-- operator 向け mutation routes の contract を、implementation / tests / docs / edge configuration guidance の各層でさらに揃える
+- これまでの handler-level invalid path coverage に加えて、HTTP runtime dispatch 経由でも same contract を明示的に固定する
+- `projection_failures_ignore` / `projection_failures_resolve` について、registered route に対して wrong path を渡したときの behavior を tests で直接担保する
+- implementation / handler contract / runtime dispatch surface / docs の整合をさらに強める
 
 ---
 
-### `ctxledger/docs/deployment.md` で更新した内容
-#### 1. representative reverse proxy example を追加
-対象セクション:
-- HTTP projection failure action routes の operational guidance
+### `ctxledger/tests/test_server.py` で追加した内容
+#### 1. ignore action route の dispatch-level invalid path coverage を追加
+追加した test:
+- `test_http_projection_failures_ignore_route_returns_not_found_for_invalid_path()`
 
-追加した内容:
-- Nginx-style の representative example を追加
-- exact path matching の例:
-  - `location = /projection_failures_ignore`
-  - `location = /projection_failures_resolve`
-- upstream forwarding の representative header 例:
-  - `Host`
-  - `X-Forwarded-Proto`
-  - `X-Forwarded-For`
-- action route 用 access log の representative 例
+確認した内容:
+- `runtime.dispatch("projection_failures_ignore", "/not_projection_failures_ignore?...")` が `404` を返すこと
+- payload が expected `not_found` contract になること
+- `content-type` header が維持されること
 
-追加した example の意図:
-- exact path matching を使って unexpected alternate action paths を受け付けないことを具体化する
-- operator-facing action routes に対して、proxy / gateway 層でも normal request logging を維持するイメージを示す
-- “strict path requirement を infra 側でどう守るか” を deployment docs 上でより実践的に伝える
+代表 assertion:
+- `status_code == 404`
+- `error.code == "not_found"`
+- `projection failure ignore endpoint requires /projection_failures_ignore`
 
 ---
 
-#### 2. reverse proxy example からの operational implications を明記
-追加した主な観点:
-- prefixed / rewritten / alternate action paths を誤って accepted path にしないこと
-- auth / TLS policy を両 action routes で一貫させること
-- incident review に必要な request / response visibility を保持すること
-- query parameters に operational identifiers が含まれる前提で、log retention / access policy を考えること
+#### 2. resolve action route の dispatch-level invalid path coverage を追加
+追加した test:
+- `test_http_projection_failures_resolve_route_returns_not_found_for_invalid_path()`
 
-これで deployment docs 上も、
-- exact path matching
-- auth/TLS consistency
-- observability
-- identifier sensitivity
-を example 付きで読めるようになりました。
+確認した内容:
+- `runtime.dispatch("projection_failures_resolve", "/not_projection_failures_resolve?...")` が `404` を返すこと
+- payload が expected `not_found` contract になること
+- `content-type` header が維持されること
+
+代表 assertion:
+- `status_code == 404`
+- `error.code == "not_found"`
+- `projection failure resolve endpoint requires /projection_failures_resolve`
+
+---
+
+### 今回の変更で追加で固定された contract
+今回の追加により、projection failure lifecycle の HTTP mutation surface は少なくとも以下を dispatch-level でも明示的に固定しています。
+
+#### ignore
+- auth enforcement
+- success payload
+- validation failure
+- invalid path -> `404 not_found`
+- server-not-ready
+
+#### resolve
+- auth enforcement
+- success payload
+- validation failure
+- invalid path -> `404 not_found`
+- server-not-ready
+
+これにより、mutation-side HTTP surface は
+- handler 直呼び
+- runtime dispatch
+の両レベルで invalid path handling が明示的に固定された状態になりました。
 
 ---
 
 ### 今回変更したファイル
-- `ctxledger/docs/deployment.md`
+- `ctxledger/tests/test_server.py`
 - `ctxledger/last_session.md`
 
 ---
 
 ### 確認結果
 今回確認できている範囲:
-- `ctxledger/docs/deployment.md`: diagnostics 問題なし
+- `ctxledger/tests/test_server.py`: diagnostics 問題なし
+- `pytest -q tests/test_server.py`
+  - `127 passed`
 
 直前までに確認済みの状態:
 - `ctxledger/src/ctxledger/server.py`: diagnostics 問題なし
-- `ctxledger/tests/test_server.py`: diagnostics 問題なし
-- `pytest -q tests/test_server.py`
-  - `125 passed`
 - `ctxledger/docs/mcp-api.md`: diagnostics 問題なし
 - `ctxledger/docs/SECURITY.md`: diagnostics 問題なし
+- `ctxledger/docs/deployment.md`: diagnostics 問題なし
 - `ctxledger/docs/CHANGELOG.md`: diagnostics 問題なし
 
 ---
 
 ### git 状態メモ
 - 直前の commit:
-  - `b567c76 Clarify HTTP action route operations`
-- この handoff 更新時点の未コミット変更:
-  - `docs/deployment.md`
-  - `last_session.md`
+  - `c44ae90 Add HTTP action route proxy example`
+- この handoff 更新時点では、今回の dispatch-level invalid path coverage 追加について **まだ git commit 未実施**
 - `.gitignore` は引き続き変更対象に含めない前提
 
 ---
 
 ### 補足
-- 今回は production code / tests の追加変更はなし
-- docs 側で reverse proxy / gateway exact path matching guidance を、representative example まで含めて補強した
+- 今回は production code の追加変更はなし
+- 既存 implementation の strict path validation を、runtime dispatch level でも明示的に tests で固定した
 - public HTTP mutation contract について、少なくとも
   - implementation
-  - tests
+  - handler-level tests
+  - dispatch-level tests
   - MCP API docs
   - security docs
   - deployment docs
   - changelog
  でかなり明示的に整合している状態
-- 特に deployment docs では、strict path handling を edge configuration の具体例まで含めて説明できる状態になった
 
 ---
 
@@ -117,6 +133,12 @@ projection failure lifecycle の public surface は、少なくとも以下が d
 - validation failures return `400 invalid_request`
 - unmapped service failures fall through to `500 server_error`
 
+#### mutation-side (HTTP dispatch-level contract)
+- `runtime.dispatch(...)` through `projection_failures_ignore` / `projection_failures_resolve` also preserves:
+  - invalid path -> `404 not_found`
+  - expected `content-type`
+  - expected route-specific `not_found` message
+
 #### docs
 - `docs/mcp-api.md`
   - auth enabled / disabled request examples を反映済み
@@ -141,13 +163,14 @@ projection failure lifecycle の public surface は、少なくとも以下が d
   - HTTP action route の auth / validation / success / server-not-ready を coverage 済み
   - HTTP action handler の success / validation edge cases / service error mapping を coverage 済み
   - HTTP action handler の invalid path -> `404 not_found` を coverage 済み
+  - HTTP action route dispatch の invalid path -> `404 not_found` を coverage 済み
 
 ---
 
 ### 次に自然な作業
 次に自然なのは以下です。
 
-1. 今回の reverse proxy example 追加を descriptive message で git commit する
-2. 必要なら `docs/SECURITY.md` にも representative edge logging example を追加する
+1. 今回の dispatch-level invalid path coverage 追加を descriptive message で git commit する
+2. 必要なら `docs/SECURITY.md` に representative edge logging example を追加する
 3. action route の observability guidance を `docs/mcp-api.md` / `docs/CHANGELOG.md` に軽く波及させる
-4. HTTP runtime dispatch level でも invalid path expectations をさらに明示するか検討する
+4. 必要なら projection failure action routes の response examples に `404 not_found` example も追加する

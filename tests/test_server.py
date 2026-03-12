@@ -2117,6 +2117,43 @@ def test_http_projection_failures_ignore_route_returns_invalid_request_for_bad_p
     assert response.headers == {"content-type": "application/json"}
 
 
+def test_http_projection_failures_ignore_route_returns_not_found_for_invalid_path() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "projection_failures_ignore",
+        (
+            "/not_projection_failures_ignore"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        ),
+    )
+
+    assert response.status_code == 404
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "projection failure ignore endpoint requires /projection_failures_ignore",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
 def test_http_projection_failures_ignore_route_returns_server_not_ready_error() -> None:
     settings = make_settings()
     server = CtxLedgerServer(
@@ -2273,6 +2310,43 @@ def test_http_projection_failures_resolve_route_returns_invalid_request_for_bad_
             "code": "invalid_request",
             "message": "workflow_instance_id must be a valid UUID",
             "details": {"field": "workflow_instance_id"},
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_http_projection_failures_resolve_route_returns_not_found_for_invalid_path() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "projection_failures_resolve",
+        (
+            "/not_projection_failures_resolve"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        ),
+    )
+
+    assert response.status_code == 404
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "projection failure resolve endpoint requires /projection_failures_resolve",
         }
     }
     assert response.headers == {"content-type": "application/json"}
