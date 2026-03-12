@@ -1,118 +1,64 @@
 今回の変更
-#### docs 更新
-closed projection failure history の dedicated HTTP read surface に合わせて、関連ドキュメントを更新しました。
+#### `ctxledger/src/ctxledger/server.py`
+closed projection failure history の HTTP route 名と invalid path 時の error message の表記ゆれを揃えました。
 
-更新したファイル:
-- `ctxledger/README.md`
-- `ctxledger/docs/mcp-api.md`
-- `ctxledger/docs/architecture.md`
-- `ctxledger/docs/specification.md`
-
----
-
-#### `ctxledger/README.md`
-以下を反映しました。
-
-- resume / projection failure lifecycle の説明に、dedicated HTTP history endpoint を追加
-- `## MCP Surface` に concrete HTTP read endpoints を追加
-  - `/workflow-resume/{workflow_instance_id}`
-  - `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
-- closed failure history endpoint の response shape を追記
-  - `workflow_instance_id`
+反映内容:
+- `build_http_runtime_adapter(...)` で登録する route 名を
   - `closed_projection_failures`
-- 各 closed failure entry の主要 field を追記
-  - `projection_type`
-  - `target_path`
-  - `attempt_id`
-  - `error_code`
-  - `error_message`
-  - `occurred_at`
-  - `resolved_at`
-  - `open_failure_count`
-  - `retry_count`
-  - `status`
-- debug/runtime と debug/routes の example route list を更新
-  - `workflow_closed_projection_failures` を追加
-- startup summary example の runtime route list も更新
+  から
+  - `workflow_closed_projection_failures`
+  に変更
+- `build_closed_projection_failures_http_handler(...)` の 404 message を
+  - `closed projection failure endpoint requires ...`
+  から
+  - `closed projection failures endpoint requires ...`
+  に変更
+
+意図:
+- runtime introspection / debug routes / README examples / tests で使っている route 名
+  `workflow_closed_projection_failures`
+  と server 実装を一致させる
+- singular / plural の message 表記ゆれを解消する
 
 ---
 
-#### `ctxledger/docs/mcp-api.md`
-以下を反映しました。
+#### docs / tests / examples との整合性
+今回の修正で、少なくとも以下の整合が取れた状態です。
 
-- `## 3.4 Dedicated HTTP Read Surface` を新設
-- `/workflow-resume/{workflow_instance_id}/closed-projection-failures` を明文化
-- endpoint の位置づけを整理
-  - canonical state 上の read-only assembled HTTP surface
-  - full resume を取らずに closed failure history だけ読める narrow surface
-  - MCP tools / resources の責務分離は維持
-- `workflow_resume` 節にも、
-  - 同じ closed failure history が dedicated HTTP route でも読めること
-  - narrow payload が `workflow_instance_id` + `closed_projection_failures` であること
-  を追記
+- HTTP runtime route 名
+  - `workflow_resume`
+  - `workflow_closed_projection_failures`
+- dedicated endpoint path
+  - `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+- invalid path 時の expected message
+  - `closed projection failures endpoint requires /workflow-resume/{workflow_instance_id}/closed-projection-failures`
 
 ---
 
-#### `ctxledger/docs/architecture.md`
-以下を反映しました。
-
-- composite resume view の説明に、
-  - assembled read model が concrete server-specific HTTP read surface としても expose されうること
-  を追記
-- projection failure visibility rules に、
-  - dedicated HTTP read surface
-    `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
-  - representative payload
-    - `workflow_instance_id`
-    - `closed_projection_failures`
-  - closed failure entry field 群
-  を追記
-- この surface は canonical projection failure history 上の read-only convenience endpoint であり、
-  PostgreSQL canonical / projection derived の原則は変わらないことを明記
-
----
-
-#### `ctxledger/docs/specification.md`
-以下を反映しました。
-
-- `workflow_resume` の representative response contents に
-  - closed projection failure history
-  を追加
-- resume 経由の closed history に加えて、
-  dedicated HTTP read surface を追加
-  - `GET /workflow-resume/{workflow_instance_id}/closed-projection-failures`
-- representative response fields / behavior notes を追記
-  - read-only assembled HTTP surface
-  - closed lifecycle history only
-  - open failures は引き続き resume warnings 側で可視化
-  - closed lifecycle records は `resolved` または `ignored`
-
----
+### 確認
+- `ctxledger/src/ctxledger/server.py`: diagnostics 問題なし
 
 ### 現在の状態
-docs は、新しく追加済みの concrete server surface に概ね追従しました。
+closed projection failure history まわりは、少なくとも次の観点で揃っています。
 
-少なくとも次が docs 上で説明される状態です。
-
-- resume 全体での closed projection failure history 可視化
-- dedicated HTTP endpoint:
-  - `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
-- route-level runtime examples における
-  - `workflow_closed_projection_failures`
-  の反映
+- server 実装の route 登録名
+- runtime/debug surface に出る route 名
+- README の runtime example
+- tests の期待値
+- invalid path error message の文言
 
 ### 未実施
 この時点では次はまだやっていません。
 
-- `ctxledger/docs/CHANGELOG.md` への今回 docs 変更の明示的追記
-- `ctxledger/last_session.md` の今回内容への更新
-- `git commit`
+- `ctxledger/tests/test_server.py` の diagnostics 再確認
+- 必要なら route 名変更分の最終 commit
+- 今回の handoff を含めた git 状態の整理
 
 ### 次に自然な作業
 次に自然なのは以下です。
 
-1. `ctxledger/last_session.md` を今回の docs 更新内容で更新
-2. 必要なら `docs/CHANGELOG.md` に docs 反映や endpoint 追加の記述を整える
-3. 変更一式を `git commit` する
+1. `ctxledger/tests/test_server.py` と project 全体の diagnostics を確認
+2. 必要なら README / docs の route 名表記を最終見直し
+3. 変更一式を commit する
 
-必要なら次セッションで、そのまま handoff 更新と commit まで続けます。
+必要なら次セッションで、そのまま diagnostics 確認から commit まで続けます。

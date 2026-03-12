@@ -1091,7 +1091,7 @@ def build_closed_projection_failures_http_handler(
                 payload={
                     "error": {
                         "code": "not_found",
-                        "message": "closed projection failure endpoint requires /workflow-resume/{workflow_instance_id}/closed-projection-failures",
+                        "message": "closed projection failures endpoint requires /workflow-resume/{workflow_instance_id}/closed-projection-failures",
                     }
                 },
                 headers={"content-type": "application/json"},
@@ -1387,7 +1387,7 @@ def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
         build_workflow_resume_http_handler(server),
     )
     runtime.register_handler(
-        "closed_projection_failures",
+        "workflow_closed_projection_failures",
         build_closed_projection_failures_http_handler(server),
     )
     return runtime
