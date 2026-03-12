@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
@@ -39,6 +38,8 @@ from ctxledger.server import (
     build_memory_get_context_tool_handler,
     build_memory_remember_episode_tool_handler,
     build_memory_search_tool_handler,
+    build_projection_failures_ignore_tool_handler,
+    build_projection_failures_resolve_tool_handler,
     build_resume_workflow_tool_handler,
     build_runtime_introspection_http_handler,
     build_runtime_introspection_response,
@@ -109,15 +110,57 @@ class FakeRuntime:
 class FakeWorkflowService:
     resume_result: WorkflowResume
     resume_calls: list[object] | None = None
+    ignore_result: int = 0
+    resolve_result: int = 0
+    ignore_calls: list[object] | None = None
+    resolve_calls: list[object] | None = None
 
     def __post_init__(self) -> None:
         if self.resume_calls is None:
             self.resume_calls = []
+        if self.ignore_calls is None:
+            self.ignore_calls = []
+        if self.resolve_calls is None:
+            self.resolve_calls = []
 
     def resume_workflow(self, data: object) -> WorkflowResume:
         assert self.resume_calls is not None
         self.resume_calls.append(data)
         return self.resume_result
+
+    def ignore_resume_projection_failures(
+        self,
+        *,
+        workspace_id: object,
+        workflow_instance_id: object,
+        projection_type: object = None,
+    ) -> int:
+        assert self.ignore_calls is not None
+        self.ignore_calls.append(
+            {
+                "workspace_id": workspace_id,
+                "workflow_instance_id": workflow_instance_id,
+                "projection_type": projection_type,
+            }
+        )
+        return self.ignore_result
+
+    def resolve_resume_projection_failures(
+        self,
+        *,
+        workspace_id: object,
+        workflow_instance_id: object,
+        projection_type: object = None,
+    ) -> int:
+        assert self.resolve_calls is not None
+        self.resolve_calls.append(
+            {
+                "workspace_id": workspace_id,
+                "workflow_instance_id": workflow_instance_id,
+                "projection_type": projection_type,
+            }
+        )
+        return self.resolve_result
 
 
 def make_resume_fixture(
@@ -1547,6 +1590,247 @@ def test_build_resume_workflow_tool_handler_returns_server_not_ready_error() -> 
     }
 
 
+def test_build_projection_failures_ignore_tool_handler_returns_success_payload() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    workspace_id = resume.workspace.workspace_id
+    workflow_instance_id = resume.workflow_instance.workflow_instance_id
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        ignore_result=2,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_ignore_tool_handler(server)
+
+    server.startup()
+
+    response = handler(
+        {
+            "workspace_id": str(workspace_id),
+            "workflow_instance_id": str(workflow_instance_id),
+            "projection_type": "resume_json",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workspace_id": str(workspace_id),
+            "workflow_instance_id": str(workflow_instance_id),
+            "projection_type": "resume_json",
+            "updated_failure_count": 2,
+            "status": "ignored",
+        },
+    }
+    assert fake_workflow_service.ignore_calls == [
+        {
+            "workspace_id": workspace_id,
+            "workflow_instance_id": workflow_instance_id,
+            "projection_type": ProjectionArtifactType.RESUME_JSON,
+        }
+    ]
+
+
+def test_build_projection_failures_ignore_tool_handler_returns_invalid_request_for_missing_workspace_id() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_projection_failures_ignore_tool_handler(server)
+
+    response = handler({"workflow_instance_id": str(uuid4())})
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workspace_id must be a non-empty string",
+            "details": {"field": "workspace_id"},
+        },
+    }
+
+
+def test_build_projection_failures_ignore_tool_handler_returns_invalid_request_for_bad_projection_type() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_projection_failures_ignore_tool_handler(server)
+
+    response = handler(
+        {
+            "workspace_id": str(uuid4()),
+            "workflow_instance_id": str(uuid4()),
+            "projection_type": "not-a-real-projection",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "projection_type must be a supported projection artifact type",
+            "details": {
+                "field": "projection_type",
+                "allowed_values": ["resume_json", "resume_markdown"],
+            },
+        },
+    }
+
+
+def test_build_projection_failures_ignore_tool_handler_returns_server_not_ready_error() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_projection_failures_ignore_tool_handler(server)
+
+    response = handler(
+        {
+            "workspace_id": str(uuid4()),
+            "workflow_instance_id": str(uuid4()),
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+            "details": {},
+        },
+    }
+
+
+def test_build_projection_failures_resolve_tool_handler_returns_success_payload() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    workspace_id = resume.workspace.workspace_id
+    workflow_instance_id = resume.workflow_instance.workflow_instance_id
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        resolve_result=3,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_resolve_tool_handler(server)
+
+    server.startup()
+
+    response = handler(
+        {
+            "workspace_id": str(workspace_id),
+            "workflow_instance_id": str(workflow_instance_id),
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workspace_id": str(workspace_id),
+            "workflow_instance_id": str(workflow_instance_id),
+            "projection_type": None,
+            "updated_failure_count": 3,
+            "status": "resolved",
+        },
+    }
+    assert fake_workflow_service.resolve_calls == [
+        {
+            "workspace_id": workspace_id,
+            "workflow_instance_id": workflow_instance_id,
+            "projection_type": None,
+        }
+    ]
+
+
+def test_build_projection_failures_resolve_tool_handler_returns_invalid_request_for_bad_workflow_id() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_projection_failures_resolve_tool_handler(server)
+
+    response = handler(
+        {
+            "workspace_id": str(uuid4()),
+            "workflow_instance_id": "not-a-uuid",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_instance_id must be a valid UUID",
+            "details": {"field": "workflow_instance_id"},
+        },
+    }
+
+
+def test_build_projection_failures_resolve_tool_handler_returns_server_not_ready_error() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_projection_failures_resolve_tool_handler(server)
+
+    response = handler(
+        {
+            "workspace_id": str(uuid4()),
+            "workflow_instance_id": str(uuid4()),
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+            "details": {},
+        },
+    }
+
+
 def test_build_memory_remember_episode_tool_handler_returns_stub_payload() -> None:
     handler = build_memory_remember_episode_tool_handler(MemoryService())
 
@@ -1662,6 +1946,125 @@ def test_stdio_runtime_adapter_dispatches_registered_tool_handler() -> None:
     assert isinstance(response, McpToolResponse)
     assert response.payload["ok"] is True
     assert runtime.registered_tools() == ("resume_workflow",)
+
+
+def test_build_stdio_runtime_adapter_registers_projection_failure_lifecycle_tools() -> (
+    None
+):
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+
+    runtime = build_stdio_runtime_adapter(server)
+
+    assert runtime.registered_tools() == (
+        "memory_get_context",
+        "memory_remember_episode",
+        "memory_search",
+        "projection_failures_ignore",
+        "projection_failures_resolve",
+        "resume_workflow",
+    )
+
+
+def test_stdio_runtime_adapter_dispatches_projection_failures_ignore_tool() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        ignore_result=1,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+    runtime.register_tool_handler(
+        "projection_failures_ignore",
+        build_projection_failures_ignore_tool_handler(server),
+    )
+
+    server.startup()
+
+    response = runtime.dispatch_tool(
+        "projection_failures_ignore",
+        {
+            "workspace_id": str(resume.workspace.workspace_id),
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "projection_type": "resume_json",
+        },
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workspace_id": str(resume.workspace.workspace_id),
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "projection_type": "resume_json",
+            "updated_failure_count": 1,
+            "status": "ignored",
+        },
+    }
+
+
+def test_stdio_runtime_adapter_dispatches_projection_failures_resolve_tool() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        resolve_result=4,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+    runtime.register_tool_handler(
+        "projection_failures_resolve",
+        build_projection_failures_resolve_tool_handler(server),
+    )
+
+    server.startup()
+
+    response = runtime.dispatch_tool(
+        "projection_failures_resolve",
+        {
+            "workspace_id": str(resume.workspace.workspace_id),
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+        },
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workspace_id": str(resume.workspace.workspace_id),
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "projection_type": None,
+            "updated_failure_count": 4,
+            "status": "resolved",
+        },
+    }
 
 
 def test_stdio_runtime_adapter_returns_tool_not_found_for_unregistered_tool() -> None:

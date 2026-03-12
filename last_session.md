@@ -1,133 +1,141 @@
 今回の変更
-#### `ctxledger/docs/mcp-api.md`
-projection failure lifecycle の operator action surface を concrete API 設計として整理する追記を行いました。
+#### `ctxledger/src/ctxledger/server.py`
+projection failure lifecycle の operator action surface を、まず MCP tool として実装しました。
 
-主な追加内容:
-- dedicated closed failure history read surface に加えて、
-  operator action surface の存在意義を明文化
-- representative operator action intents を追加
-  - matching open projection failures を `ignored` にする
-  - matching open projection failures を `resolved` にする
-  - 単一 `projection_type` または workflow 全体で scope できる
-- action surface の design constraints を追加
-  - canonical projection failure lifecycle state を mutate する
-  - projection file contents を直接 mutate するものではない
-  - failure history は削除せず保持する
-  - `ignored` と `resolved` の意味を混同しない
-  - narrow read-only history endpoint とは責務を分ける
+追加した主な内容:
+- `ProjectionArtifactType` の import
+- `_parse_required_uuid_argument(...)`
+- `_parse_optional_projection_type_argument(...)`
+- `build_projection_failures_ignore_tool_handler(...)`
+- `build_projection_failures_resolve_tool_handler(...)`
+
+また、`build_resume_workflow_tool_handler(...)` でも UUID parse helper を使う形に整理しました。
 
 ---
 
-#### `workflow_resume` 節で整理した operator action API design
-`docs/mcp-api.md` の `workflow_resume` / projection lifecycle 節に、
-representative future tool design として以下を追記しました。
+#### 実装した MCP tools
+追加した representative mutation-side tool:
 
-Representative future tool examples:
 - `projection_failures_ignore`
 - `projection_failures_resolve`
 
-Representative intended behavior:
-- `projection_failures_ignore`
-  - matching `open` projection failure records を `ignored` として close
-  - closed history は保持
-  - `open projection failure` warning は消える
-  - successful projection repair を主張しない
-- `projection_failures_resolve`
-  - matching `open` projection failure records を `resolved` として close
-  - closed history は保持
-  - successful reconciliation または recovery-oriented closure を記録
-  - `open projection failure` warning は消える
+#### `projection_failures_ignore`
+役割:
+- matching `open` projection failure records を `ignored` として close する
 
-Representative selector fields:
+入力:
+- `workspace_id` (required)
+- `workflow_instance_id` (required)
+- `projection_type` (optional)
+
+成功時 response:
 - `workspace_id`
 - `workflow_instance_id`
 - `projection_type`
+- `updated_failure_count`
+- `status = "ignored"`
 
-Representative response fields:
+#### `projection_failures_resolve`
+役割:
+- matching `open` projection failure records を `resolved` として close する
+
+入力:
+- `workspace_id` (required)
+- `workflow_instance_id` (required)
+- `projection_type` (optional)
+
+成功時 response:
 - `workspace_id`
 - `workflow_instance_id`
-- `projection_type` (scoped の場合)
+- `projection_type`
 - `updated_failure_count`
-- `status`
-
-Representative response status values:
-- `ignored`
-- `resolved`
-
-Representative error cases:
-- workspace not found
-- workflow not found
-- workflow/workspace mismatch
-- authentication failure
-- persistence failure
-
-Design note として明記したこと:
-- canonical projection failure lifecycle state を操作する API である
-- failure history は delete しない
-- projection write / reconciliation 自体を代替する API ではない
-- `ignored` と `resolved` の差分は、その後の resume / closed history でも見え続けるべき
+- `status = "resolved"`
 
 ---
 
-#### 既存実装との関係
-この設計追記は、少なくとも既存の service / repository にある次の capability と整合する想定です。
+#### validation / error handling
+少なくとも次を追加しています。
 
-- `resolve_resume_projection_failures(...)`
-- `ignore_resume_projection_failures(...)`
+- required UUID fields の validation
+  - `workspace_id`
+  - `workflow_instance_id`
+- optional `projection_type` validation
+- workflow service 未初期化時
+  - `server_not_ready`
+- service 呼び出し例外の MCP error mapping
+  - `not_found`
+  - `invalid_request`
+  - `server_error`
 
-つまり今回の docs は、
-完全な新概念を追加したというより、
-
-- 既存の internal capability
-- 既存の read-side lifecycle semantics
-- 今後の public mutation surface
-
-をつなぐための API design 整理です。
+`projection_type` の invalid input では、allowed values を details に返す形にしています。
 
 ---
 
-#### read-side との責務分離
-この時点で projection failure lifecycle の surface は、概念上は次の 2 系統に分けて整理されています。
+#### stdio runtime registration
+`build_stdio_runtime_adapter(...)` に次の tool registration を追加しました。
 
-1. read-side
-- `workflow_resume`
-- dedicated history endpoint
-  - `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+- `projection_failures_ignore`
+- `projection_failures_resolve`
 
-2. operator action / mutation-side
-- future MCP tools
+この結果、stdio tool surface は少なくとも次を含む状態です。
+
+- `resume_workflow`
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+- `memory_remember_episode`
+- `memory_search`
+- `memory_get_context`
+
+---
+
+#### `ctxledger/tests/test_server.py`
+server 向けテストも追加しました。
+
+追加した主なテスト:
+- `build_projection_failures_ignore_tool_handler(...)`
+  - success
+  - missing `workspace_id`
+  - bad `projection_type`
+  - server not ready
+- `build_projection_failures_resolve_tool_handler(...)`
+  - success
+  - bad `workflow_instance_id`
+  - server not ready
+- `build_stdio_runtime_adapter(...)`
+  - projection failure lifecycle tools の registration
+- `StdioRuntimeAdapter.dispatch_tool(...)`
   - `projection_failures_ignore`
   - `projection_failures_resolve`
 
-重要な整理:
-- read-side は assembled view を返す
-- mutation-side は canonical lifecycle state を更新する
-- read-side と mutation-side を混同しない
-- `ignored` は visibility/handling closure
-- `resolved` は recovery/evidence-backed closure
+また、`FakeWorkflowService` に以下の fake capability を追加しました。
+
+- `ignore_resume_projection_failures(...)`
+- `resolve_resume_projection_failures(...)`
 
 ---
 
 ### 現在の状態
-projection failure lifecycle まわりは、少なくとも docs 上では次の観点でかなり揃っています。
+projection failure lifecycle まわりは、少なくとも次の 2 系統が揃いつつあります。
 
-- lifecycle semantics
-  - `open`
-  - `resolved`
-  - `ignored`
-- closed failure history read-side
-- dedicated HTTP history endpoint
-- runtime/debug route naming
-- operator semantics
-- future operator action API design
-
-特に、次の整理が docs 上で明確です。
-
+1. read-side
+- `workflow_resume`
 - `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
-  は narrow read-only history surface
-- `projection_failures_ignore` / `projection_failures_resolve`
-  は future mutation surface の representative design
-- `ignored` と `resolved` は後続の resume / history でも区別され続けるべき
+
+2. mutation-side
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+
+これで docs 上の representative design を、まず MCP tool surface として実装側へ降ろし始めた状態です。
+
+---
+
+### 確認状況
+- `ctxledger/src/ctxledger/server.py`: diagnostics 問題なし
+
+一方で、
+- `ctxledger/tests/test_server.py`
+
+については、内容と噛み合わない古い unused import warning が残って見えており、diagnostics 表示側のずれか、あるいは別状態との差分確認が必要そうです。実ファイル内容上は unused import はかなり整理済みの想定です。
 
 ---
 
@@ -138,14 +146,11 @@ projection failure lifecycle まわりは、少なくとも docs 上では次の
 ---
 
 ### 次に自然な作業
-次に自然なのは、docs 設計から implementation へ進めることです。例えば:
+次に自然なのは以下です。
 
-1. `projection_failures_ignore` / `projection_failures_resolve` の public surface を実装する
-   - MCP tool として出すか
-   - HTTP action endpoint としても出すか
-   - あるいは両方出すか
-2. request / response schema を具体化する
-3. auth / error mapping / tests を追加する
-4. docs と implementation を同時に前進させる
+1. `tests/test_server.py` の diagnostics 表示ずれを確認して解消する
+2. 新 MCP tools を docs に implemented surface として反映する
+3. 必要なら HTTP action endpoint 版も追加する
+4. 実 service / integration tests 側にも public surface 観点の coverage を広げる
 
-この時点では、operator action surface の API design は docs 上でかなり整理された状態です。
+この時点では、projection failure lifecycle の operator action surface は docs だけでなく MCP tool 実装としても入り始めた状態です。
