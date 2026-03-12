@@ -113,6 +113,9 @@ from .runtime.http_handlers import (
 from .runtime.http_handlers import (
     parse_workflow_resume_request_path as extracted_parse_workflow_resume_request_path,
 )
+from .runtime.http_runtime import (
+    build_http_runtime_adapter as extracted_build_http_runtime_adapter,
+)
 from .runtime.introspection import (
     RuntimeIntrospection,
     collect_runtime_introspection,
@@ -489,14 +492,17 @@ def build_workflow_resume_response(
     server: CtxLedgerServer,
     workflow_instance_id: UUID,
 ) -> WorkflowResumeResponse:
-    return server.build_workflow_resume_response(workflow_instance_id)
+    return extracted_build_workflow_resume_response(server, workflow_instance_id)
 
 
 def build_closed_projection_failures_response(
     server: CtxLedgerServer,
     workflow_instance_id: UUID,
 ) -> ProjectionFailureHistoryResponse:
-    return server.build_closed_projection_failures_response(workflow_instance_id)
+    return extracted_build_closed_projection_failures_response(
+        server,
+        workflow_instance_id,
+    )
 
 
 def build_projection_failures_ignore_response(
@@ -506,7 +512,8 @@ def build_projection_failures_ignore_response(
     workflow_instance_id: UUID,
     projection_type: ProjectionArtifactType | None = None,
 ) -> ProjectionFailureActionResponse:
-    return server.build_projection_failures_ignore_response(
+    return extracted_build_projection_failures_ignore_response(
+        server,
         workspace_id=workspace_id,
         workflow_instance_id=workflow_instance_id,
         projection_type=projection_type,
@@ -520,7 +527,8 @@ def build_projection_failures_resolve_response(
     workflow_instance_id: UUID,
     projection_type: ProjectionArtifactType | None = None,
 ) -> ProjectionFailureActionResponse:
-    return server.build_projection_failures_resolve_response(
+    return extracted_build_projection_failures_resolve_response(
+        server,
         workspace_id=workspace_id,
         workflow_instance_id=workflow_instance_id,
         projection_type=projection_type,
@@ -530,19 +538,19 @@ def build_projection_failures_resolve_response(
 def build_runtime_introspection_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
-    return server.build_runtime_introspection_response()
+    return extracted_build_runtime_introspection_response(server)
 
 
 def build_runtime_routes_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
-    return server.build_runtime_routes_response()
+    return extracted_build_runtime_routes_response(server)
 
 
 def build_runtime_tools_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
-    return server.build_runtime_tools_response()
+    return extracted_build_runtime_tools_response(server)
 
 
 def _parse_required_uuid_argument(
@@ -616,11 +624,7 @@ def build_mcp_http_handler(
 
 
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
-    from .runtime.http_runtime import (
-        build_http_runtime_adapter as _build_http_runtime_adapter,
-    )
-
-    return _build_http_runtime_adapter(server)
+    return extracted_build_http_runtime_adapter(server)
 
 
 def build_workflow_service_factory(
