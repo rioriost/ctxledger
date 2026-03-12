@@ -83,6 +83,16 @@ Examples:
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
 
+Implemented in the current `v0.1.0` stdio runtime surface:
+
+- `workspace://{workspace_id}/resume`
+- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+Not yet implemented and still future-facing/stubbed as resources:
+
+- `memory://episode/{episode_id}`
+- `memory://summary/{scope}`
+
 ## 3.3 Special Case: `workflow_resume`
 
 `workflow_resume` is semantically a read operation, because it assembles a composite resume view from canonical state.
@@ -1120,6 +1130,9 @@ For invalid debug endpoint paths, the HTTP handler returns a normalized `404` pa
 ### Purpose
 Return the workspace-scoped current operational resume view.
 
+### Implementation Status
+Implemented on the stdio MCP runtime surface in the current `v0.1.0` repository state.
+
 ### Category
 Resource
 
@@ -1135,6 +1148,25 @@ Selection rule:
 
 ### Response Intent
 Return a composite workflow resume view suitable for agent recovery.
+
+### Current response shape
+The implemented resource currently returns:
+
+- `uri`
+- `resource`
+
+Where `resource` is the same composite payload shape produced by `workflow_resume` / workflow resume serialization, including representative sections such as:
+
+- `workspace`
+- `workflow`
+- `attempt`
+- `latest_checkpoint`
+- `latest_verify_report`
+- `projections`
+- `resumable_status`
+- `next_hint`
+- `warnings`
+- `closed_projection_failures`
 
 Typical content:
 
@@ -1154,6 +1186,9 @@ Typical content:
 ### Purpose
 Return read-only detail for an exact workflow instance.
 
+### Implementation Status
+Implemented on the stdio MCP runtime surface in the current `v0.1.0` repository state.
+
 ### Category
 Resource
 
@@ -1163,6 +1198,14 @@ Unlike the workspace resume resource, it does not perform current-workflow selec
 
 ### Response Intent
 Return exact workflow detail, including:
+
+### Current response shape
+The implemented resource currently returns:
+
+- `uri`
+- `resource`
+
+Where `resource` is the same composite workflow resume payload shape used by the current workflow read model assembly, but selected by exact workflow identity instead of workspace-level current/latest selection.
 
 - workflow instance
 - attempts

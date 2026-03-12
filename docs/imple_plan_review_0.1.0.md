@@ -346,7 +346,7 @@ Keep documentation, tests, and changelog entries consistent with the canonical p
 
 ---
 
-## 6.2 Required MCP resources are not confirmed as implemented
+## 6.2 Required MCP resources are now implemented on the stdio runtime
 
 ### Plan requirement
 Required resources:
@@ -355,62 +355,65 @@ Required resources:
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
 ### Current visible evidence
-These resources are documented in:
+A current implementation audit now shows explicit stdio runtime resource support in `src/ctxledger/server.py`, including:
 
-- `docs/imple_plan_0.1.0.md`
-- `README.md`
-- `docs/mcp-api.md`
+- resource response type:
+  - `McpResourceResponse`
+- stdio runtime resource registration support:
+  - `register_resource_handler(...)`
+  - `registered_resources()`
+  - `dispatch_resource(...)`
+- resource dispatch support:
+  - `dispatch_mcp_resource(...)`
+- resource URI parsers:
+  - `parse_workspace_resume_resource_uri(...)`
+  - `parse_workflow_detail_resource_uri(...)`
+- workflow resource handlers:
+  - `build_workspace_resume_resource_handler(...)`
+  - `build_workflow_detail_resource_handler(...)`
+- workflow resource response builders:
+  - `build_workspace_resume_resource_response(...)`
+  - `build_workflow_detail_resource_response(...)`
 
-However, a concrete grep-based implementation audit of the currently visible Python sources did not reveal evidence for:
+Visible stdio runtime resource registrations now include:
 
-- resource handler registration
-- resource resolver layer
-- `workspace://...` runtime wiring
-- `memory://...` runtime wiring
+- `workspace://{workspace_id}/resume`
+- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-No direct implementation evidence has yet been confirmed for:
+Associated server tests now also exist in `tests/test_server.py`, including coverage for:
 
-- resource handler registration
-- resource resolver layer
-- tests for resource access
-- runtime introspection including resources
+- valid and invalid resource URI parsing
+- resource handler success payloads
+- `server_not_ready`
+- `resource_not_found`
+- stdio runtime introspection including `resources`
+- composite runtime introspection including stdio resource visibility
 
 ### Why this matters
-Resources are explicitly listed as required in the implementation plan, not optional.
+These resources were explicitly listed as required in the implementation plan, so visible implementation and test evidence materially improves `v0.1.0` closeout confidence.
 
 ### Status
-**Gap / likely unresolved**
+**Confirmed aligned**
 
-### Task
-Confirm whether resource support exists.
+### Remaining follow-up
+Keep documentation and acceptance evidence aligned with the implemented stdio resource surface:
 
-If not:
-- add resource registration and resolver implementation for:
-  - `workspace://{workspace_id}/resume`
-  - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+- `workspace://{workspace_id}/resume`
+- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-If it does exist elsewhere:
-- add explicit tests
-- ensure docs accurately describe the implementation path
-
-### Suggested priority
-**Highest**
+Note that current evidence reflects stdio MCP resource support; it does not imply a separate HTTP resource endpoint surface.
 
 ---
 
-## 6.3 Public workflow tool naming is inconsistent across plan, README, and runtime
+## 6.3 Public workflow tool naming is now aligned across plan, README, and runtime
 
-### Observed inconsistency
-Plan and README emphasize:
+### Current visible naming
+Plan, README, and visible runtime registration now consistently use:
 
 - `workflow_resume`
 
-Visible runtime registration shows:
-
-- `resume_workflow`
-
 ### Why this matters
-This is not a cosmetic issue. It affects:
+This removes a public-surface ambiguity that previously affected:
 
 - client expectations
 - documentation correctness
@@ -419,10 +422,10 @@ This is not a cosmetic issue. It affects:
 - change history clarity
 
 ### Status
-**Gap / unresolved naming decision**
+**Confirmed aligned**
 
-### Task
-Choose one canonical public name and align:
+### Remaining follow-up
+Keep future surface changes aligned across:
 
 - implementation
 - tests
@@ -430,9 +433,6 @@ Choose one canonical public name and align:
 - `docs/mcp-api.md`
 - `docs/imple_plan_0.1.0.md` if needed
 - changelog
-
-### Suggested priority
-**High**
 
 ---
 
@@ -553,14 +553,15 @@ Next step:
 ### Task C — Confirm and implement required MCP resources
 Concrete implementation audit result:
 
-- no visible resource registration or resolver wiring was found in the inspected Python implementation
-- no visible `workspace://...` or `memory://...` runtime wiring was found
-
-Next step:
-- confirm whether resource support exists outside the inspected surface
-- if not, implement required MCP resources:
+- visible stdio resource registration and dispatch wiring now exists
+- visible workflow resource parsers, handlers, and response builders now exist
+- visible required workflow resource registrations now include:
   - `workspace://{workspace_id}/resume`
   - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+Next step:
+- keep docs and acceptance evidence aligned with the implemented stdio resource surface
+- decide whether any additional HTTP-facing resource exposure is needed, or whether stdio MCP resource support is sufficient for `v0.1.0`
 
 ---
 
@@ -640,10 +641,12 @@ Current concrete audit findings sharpen that question:
 - `workflow_resume` is visible as both an HTTP route and a stdio tool
 - `workspace_register`, `workflow_start`, `workflow_checkpoint`, and `workflow_complete` are now visibly registered in the inspected stdio runtime wiring
 - corresponding workflow service methods and visible MCP tool-handler definitions for those operations are present
-- the previous workflow-tool exposure gap has therefore narrowed to naming/surface alignment rather than missing workflow-domain behavior
-- no resource registration or `workspace://...` resolver wiring was visibly confirmed in the inspected implementation
+- required stdio workflow resources are now also visibly implemented:
+  - `workspace://{workspace_id}/resume`
+  - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+- corresponding resource parsers, handlers, response builders, dispatch wiring, and tests are present
 
-That is the key blocker to declaring the `v0.1.0` implementation plan complete.
+This means the previous blocker has narrowed further: the main remaining work is no longer missing workflow resources, but closeout-quality acceptance evidence and final public-surface documentation alignment.
 
 ---
 
@@ -653,8 +656,8 @@ The current repository is not a minimal skeleton anymore; it contains substantia
 
 But relative to `docs/imple_plan_0.1.0.md`, the following still need resolution:
 
-- required MCP resource exposure
-- required MCP resources remain the main unresolved surface item
+- acceptance evidence / public surface matrix
+- final documentation alignment for the implemented resource surface
 - explicit public-surface alignment should be maintained as implementation evolves
 
 Until those are resolved or formally reconciled, `v0.1.0` should be treated as **close, but not yet cleanly closed against the implementation plan**.
@@ -676,18 +679,21 @@ Start from the concrete audit findings already established:
    - `memory_remember_episode`
    - `memory_search`
    - `memory_get_context`
-2. treat the currently confirmed HTTP workflow/ops route set as including:
+2. treat the currently confirmed stdio resource set as:
+   - `workspace://{workspace_id}/resume`
+   - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+3. treat the currently confirmed HTTP workflow/ops route set as including:
    - `workflow_resume`
    - `workflow_closed_projection_failures`
    - `projection_failures_ignore`
    - `projection_failures_resolve`
    - optional debug routes
-3. treat the next unresolved public-surface question as:
-   - whether resource support is actually implemented
-4. treat resource wiring as unconfirmed and likely missing until direct implementation evidence is found
+4. treat the next unresolved public-surface questions as:
+   - whether acceptance evidence is complete enough for `v0.1.0` closeout
+   - whether documentation now fully reflects the implemented stdio resource surface
 5. compare all of the above against:
    - `docs/imple_plan_0.1.0.md`
    - `README.md`
    - `docs/mcp-api.md`
 
-Then convert the result directly into implementation tasks rather than continuing documentation-first work in the abstract.
+Then convert the result directly into closeout documentation and evidence tasks rather than continuing implementation-gap speculation.

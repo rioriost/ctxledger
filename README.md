@@ -200,7 +200,7 @@ Typical intent:
 
 Typical payload shapes:
 
-```/dev/null/json#L1-24
+```/dev/null/json#L1-28
 {
   "runtime": [
     {
@@ -212,7 +212,8 @@ Typical payload shapes:
         "workflow_resume",
         "workflow_closed_projection_failures"
       ],
-      "tools": []
+      "tools": [],
+      "resources": []
     },
     {
       "transport": "stdio",
@@ -222,6 +223,10 @@ Typical payload shapes:
         "memory_remember_episode",
         "memory_search",
         "workflow_resume"
+      ],
+      "resources": [
+        "workspace://{workspace_id}/resume",
+        "workspace://{workspace_id}/workflow/{workflow_instance_id}"
       ]
     }
   ]
@@ -255,6 +260,24 @@ Typical payload shapes:
         "memory_remember_episode",
         "memory_search",
         "workflow_resume"
+      ]
+    }
+  ]
+}
+```
+
+Representative stdio resource visibility is now:
+
+```/dev/null/json#L1-12
+{
+  "runtime": [
+    {
+      "transport": "stdio",
+      "routes": [],
+      "tools": [],
+      "resources": [
+        "workspace://{workspace_id}/resume",
+        "workspace://{workspace_id}/workflow/{workflow_instance_id}"
       ]
     }
   ]
