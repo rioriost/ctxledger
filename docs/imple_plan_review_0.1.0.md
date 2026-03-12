@@ -322,11 +322,30 @@ A follow-up audit of visible service-layer implementation and server-side tool-h
   - `workflow_checkpoint`
   - `workflow_complete`
 
+A further public-surface audit now shows that stdio MCP tool argument discoverability is also implemented:
+
+- `tools/list` returns non-empty `inputSchema` payloads for visible stdio tools
+- `workspace_register` now exposes required fields:
+  - `repo_url`
+  - `canonical_path`
+  - `default_branch`
+- `workspace_register` also exposes optional fields:
+  - `workspace_id`
+  - `metadata`
+- the same schema publication pattern is now wired for:
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_resume`
+  - `workflow_complete`
+  - projection failure tools
+  - memory stub tools
+
 This sharpens the current assessment:
 
 - the previously missing workflow MCP operations are now exposed in the visible stdio runtime wiring
+- the previously missing MCP tool argument discoverability gap is now also closed
 - the main remaining workflow-surface issue is no longer missing exposure for those four tools
-- the remaining plan misalignment is concentrated in naming consistency around resume, plus unresolved resource support
+- the remaining plan misalignment is concentrated in resource follow-through, acceptance closeout, and final documentation polish rather than in missing workflow tool publication
 
 The previously observed naming mismatch has now been resolved:
 
@@ -336,6 +355,9 @@ The previously observed naming mismatch has now been resolved:
 ### Why this matters
 The original workflow MCP exposure gap is now closed without leaving a split public name for the resume operation.
 
+In addition, MCP clients no longer need to infer required arguments from validation failures alone.  
+The visible stdio MCP surface now publishes concrete tool schemas, which makes `workspace_register` and the other core workflow tools discoverable in a machine-readable way.
+
 ### Status
 **Confirmed aligned**
 
@@ -343,6 +365,14 @@ The original workflow MCP exposure gap is now closed without leaving a split pub
 Keep documentation, tests, and changelog entries consistent with the canonical public name:
 
 - `workflow_resume`
+
+Also keep public documentation aligned with the now-implemented schema-discovery surface so that:
+
+- README examples
+- MCP API reference text
+- any future runtime audit notes
+
+continue to describe `tools/list` / `inputSchema` behavior accurately.
 
 ---
 

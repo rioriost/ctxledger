@@ -1,30 +1,55 @@
 今回の変更
-#### expose MCP tool input schemas so clients can discover correct arguments for stdio tools
+#### document MCP tool schema discovery after stdio schema exposure fix
 
-直前の確認で、`workspace_register` などの MCP ツールは**実装上は正しい引数を要求している**一方、`tools/list` で返す `inputSchema` が空だったため、MCP クライアントが事前に正しい引数を知れない状態になっていました。
+直前の実装で、stdio MCP runtime が `tools/list` から各ツールの `inputSchema` を返せるようになり、MCP クライアントが `workspace_register` などの正しい引数を事前に発見できるようになった。  
+今回はその実装に合わせて、README と MCP API documentation を更新し、**schema discoverability が public docs 上でも明確になる状態**まで進めた。
 
 今回の方針:
-- stdio MCP runtime で **各ツールの入力 schema を明示的に保持・公開**する
-- `tools/list` が空 schema ではなく、実際の引数仕様を返すようにする
-- `workspace_register` だけでなく、現在公開している workflow / projection failure / memory tools まで含めて schema を揃える
-- 追加した schema 公開が壊れていないことを tests で確認する
+- `README.md` に、stdio MCP clients が `tools/list` で tool arguments を discover できることを明記する
+- `workspace_register` の required / optional fields を README 上でも明示する
+- `docs/mcp-api.md` の tool catalog を、計画ベースの曖昧な入力説明から、**現実装の stdio `inputSchema` ベース**の説明へ寄せる
+- stale になっていた optional field 記述、特に `workspace_name` のような現実装にない要素を除去・整理する
+- docs 更新後も tests が壊れていないことを確認する
 
 ---
 
-### 今回の実装変更
-#### 1. `ctxledger/src/ctxledger/server.py`
-主な変更内容:
-- `McpToolSchema` dataclass を追加
-- `StdioRuntimeAdapter` に
-  - tool schema 保持
-  - `tool_schema(tool_name)` 参照
-  - handler 登録時の schema 登録
-  を追加
-- `tools/list` が各ツールの `inputSchema` を返すように更新
-- schema serialization helper を追加
-- 各 stdio tool に対応する schema 定義を追加
+### 今回の docs 更新
+#### 1. `ctxledger/README.md`
+主な更新内容:
+- MCP Surface の workflow tools セクションに、
+  - stdio MCP clients は `tools/list` で `inputSchema` を取得できる
+  - `workspace_register` の required / optional fields
+  を追記した
+- HTTP debug endpoints は runtime visibility 用であり、
+  stdio MCP の引数 discoverability については **`tools/list` が primary source** であることを明記した
 
-追加した主な schema:
+具体的に反映した点:
+- required:
+  - `repo_url`
+  - `canonical_path`
+  - `default_branch`
+- optional:
+  - `workspace_id`
+  - `metadata`
+
+これにより README だけ読んでも、
+- `workspace_register` は何を要求するのか
+- クライアントはどこから機械可読にそれを得るのか
+がすぐ分かるようになった。
+
+---
+
+#### 2. `ctxledger/docs/mcp-api.md`
+主な更新内容:
+- `workspace_register`
+- `workflow_start`
+- `workflow_checkpoint`
+- `workflow_resume`
+- `workflow_complete`
+
+について、Expected Inputs を **実装済み stdio MCP `inputSchema` ベース**で書き直した
+
+主な修正:
 - `workspace_register`
   - required:
     - `repo_url`
@@ -33,13 +58,12 @@
   - optional:
     - `workspace_id`
     - `metadata`
-- `workflow_resume`
-  - required:
-    - `workflow_instance_id`
 - `workflow_start`
   - required:
     - `workspace_id`
     - `ticket_id`
+  - optional:
+    - `metadata`
 - `workflow_checkpoint`
   - required:
     - `workflow_instance_id`
@@ -50,6 +74,10 @@
     - `checkpoint_json`
     - `verify_status`
     - `verify_report`
+- `workflow_resume`
+  - required:
+    - `workflow_instance_id`
+  - current stdio schema では optional arguments は expose していないことを明記
 - `workflow_complete`
   - required:
     - `workflow_instance_id`
@@ -60,116 +88,106 @@
     - `verify_status`
     - `verify_report`
     - `failure_reason`
-- `projection_failures_ignore`
-- `projection_failures_resolve`
-  - required:
-    - `workspace_id`
-    - `workflow_instance_id`
-  - optional:
-    - `projection_type`
-- memory stub tools:
-  - `memory_remember_episode`
-  - `memory_search`
-  - `memory_get_context`
 
-これにより、stdio MCP クライアントは `tools/list` の結果から:
-- required fields
-- optional fields
-- UUID / enum / boolean / integer などの型情報
-
-を事前に把握できるようになった。
+特に重要な整理:
+- `workspace_register` の optional future field として記載されていた `workspace_name` を除去
+- docs 上の「将来案」と「現実装の public contract」を混ぜないように修正
+- tool catalog が、実装上の public surface とより一致するようになった
 
 ---
 
-### 今回の根本改善
-修正前の問題:
-- `tools/list` は各ツールに対して
-  - `type: object`
-  - `properties: {}`
-  しか返していなかった
-- そのためクライアントは
-  - `workspace_register` の存在は見える
-  - でも `repo_url` / `canonical_path` / `default_branch` を知らない
-  という状態だった
+### 今回の意味合い
+前回の実装変更で、
+- サーバは `tools/list` から実際の `inputSchema` を返せる
+ようになっていた。
 
-修正後:
-- `tools/list` が、各ツールの実引数仕様を返す
-- その結果、MCP クライアントは正しいフォーム生成・入力補助・事前検証を行える
+今回の docs 更新で、
+- 実装
+- tests
+- public docs
 
-今回の意味合い:
-- これは単なる docs 補強ではなく、**MCP server/client interoperability の修正**
-- これで `workspace_register` のようなツールは、エラーメッセージ頼みではなく **機械可読な schema で discoverable** になった
+の3つが揃って、`workspace_register` のようなツールについて
+**「コードを読まないと正しい引数が分からない」状態ではなくなった**。
 
----
+つまり今は:
+- MCP クライアントは `tools/list` から機械可読に知れる
+- 人間は README / `docs/mcp-api.md` からも知れる
+- tests でその公開面が確認されている
 
-### 追加したテスト
-#### 2. `ctxledger/tests/test_server.py`
-今回追加・更新した主な確認:
-- `build_stdio_runtime_adapter()` が tool schema を保持していること
-- `runtime.tool_schema("workspace_register")` から required fields を取得できること
-- `runtime.tool_schema("memory_get_context")` から boolean fields を取得できること
-- `StdioRpcServer.handle_request()` の `tools/list` が
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_complete`
-  - `memory_get_context`
-  などに対して期待通りの `inputSchema` を返すこと
-
-これにより、
-- runtime 内部保持
-- MCP `tools/list` 公開面
-の両方がテストでカバーされた。
+という状態になった。
 
 ---
 
 ### テスト結果
-実行した確認:
+docs 更新後に確認したこと:
 - `pytest -q tests/test_server.py`
 
 結果:
 - `153 passed`
 
-前回 handoff 時点では `152 passed` だったため、
-今回の schema exposure 対応と追加テスト込みで `153 passed` に増えた。
+前回の schema exposure 実装後と同じく、
+docs 更新によって runtime behavior や tests は壊れていない。
+
+---
+
+### コミット
+今回の docs 更新は commit 済み。
+
+今回の relevant commit:
+- `07a80c6 Expose MCP tool input schemas`
+- `115e2c5 Document MCP tool schema discovery`
 
 ---
 
 ### 変更ファイル
-今回変更したファイル:
-- `ctxledger/src/ctxledger/server.py`
-- `ctxledger/tests/test_server.py`
+今回の docs 更新で変更したファイル:
+- `ctxledger/README.md`
+- `ctxledger/docs/mcp-api.md`
 - `ctxledger/last_session.md`
 
 ---
 
 ### 現在の評価
-この時点で、以前の main open issue だった
-- MCP クライアントが `workspace_register` の正しい引数を知れない
-という問題については、**stdio MCP surface として修正済み**と見てよい。
+この時点で、`workspace_register` を代表例とする
+**MCP tool argument discoverability** については、かなり整ったと見てよい。
 
-現状の理解:
-- 実装上の required fields は以前から正しかった
-- 欠けていたのは schema exposure
-- 今回それを runtime に実装し、tests で確認した
+現在の整理:
+- 実装:
+  - stdio `tools/list` が `inputSchema` を返す
+- tests:
+  - `tools/list` / runtime schema exposure を確認済み
+- docs:
+  - README と MCP API reference が current behavior に追随済み
 
-つまり `workspace_register` の問題は、
-**ツール本体の validation 不足ではなく、tool schema publication 不足だった**
-という整理で確定できる。
+これにより、
+- クライアントは実行前に正しい引数を把握できる
+- ドキュメント読者も current contract を把握できる
+- 以前のような「空 schema のせいで runtime error から推測するしかない」状態は解消された
 
 ---
 
 ### 次に自然な作業
 次に自然なのは以下。
-1. `README.md` / `docs/mcp-api.md` に
-   - stdio `tools/list` が input schema を返すこと
-   - `workspace_register` の required / optional fields
-   を明記する
-2. 必要なら debug/introspection docs に、tool schema discoverability の観点を追記する
-3. repo housekeeping として、この変更を descriptive message で commit する
+1. 必要なら `docs/imple_plan_review_0.1.0.md` にも
+   - tool schema discoverability gap は解消済み
+   - `workspace_register` argument discovery は fixed
+   を追記する
+2. もし client-side validation / UX をさらに強めるなら、
+   - schema examples
+   - representative `tools/list` response example
+   を `docs/mcp-api.md` に追加する
+3. その次は再び feature work に戻り、
+   - memory subsystem expansion
+   - richer resource surfaces
+   - stronger end-to-end deployment evidence
+   のいずれかに進める
 
 ### 要約
-- stdio MCP runtime に tool input schema 公開を実装
-- `tools/list` が空 schema ではなく、実引数仕様を返すように修正
-- `workspace_register` を含む公開 stdio tools に schema を付与
-- `tests/test_server.py` に schema exposure の確認を追加
-- `pytest -q tests/test_server.py` は `153 passed`
+- README に stdio `tools/list` による tool argument discovery を追記
+- `workspace_register` の required / optional fields を README に明記
+- `docs/mcp-api.md` の tool input documentation を current stdio `inputSchema` ベースに更新
+- stale だった `workspace_name` などの記述を整理
+- `pytest -q tests/test_server.py` は引き続き `153 passed`
+- relevant commits:
+  - `07a80c6 Expose MCP tool input schemas`
+  - `115e2c5 Document MCP tool schema discovery`
