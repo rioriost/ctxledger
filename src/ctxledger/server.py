@@ -354,14 +354,14 @@ class CtxLedgerServer:
         self,
         workspace_id: UUID,
     ) -> McpResourceResponse:
-        return extracted_build_workspace_resume_resource_response(self, workspace_id)
+        return build_workspace_resume_resource_response(self, workspace_id)
 
     def build_workflow_detail_resource_response(
         self,
         workspace_id: UUID,
         workflow_instance_id: UUID,
     ) -> McpResourceResponse:
-        return extracted_build_workflow_detail_resource_response(
+        return build_workflow_detail_resource_response(
             self,
             workspace_id,
             workflow_instance_id,
@@ -551,6 +551,25 @@ def build_runtime_tools_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
     return extracted_build_runtime_tools_response(server)
+
+
+def build_workspace_resume_resource_response(
+    server: CtxLedgerServer,
+    workspace_id: UUID,
+) -> McpResourceResponse:
+    return extracted_build_workspace_resume_resource_response(server, workspace_id)
+
+
+def build_workflow_detail_resource_response(
+    server: CtxLedgerServer,
+    workspace_id: UUID,
+    workflow_instance_id: UUID,
+) -> McpResourceResponse:
+    return extracted_build_workflow_detail_resource_response(
+        server,
+        workspace_id,
+        workflow_instance_id,
+    )
 
 
 def _parse_required_uuid_argument(

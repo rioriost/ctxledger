@@ -1,61 +1,63 @@
-Patch 2 の続きとして、今回は **thinner public server wrapper delegation** を進め、`server.py` に残っていた public wrapper 群の一部を、instance method 経由ではなく canonical helper module へより直接 delegate する形に整理しました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers / HTTP runtime registration wiring cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup / health-readiness helper extraction を土台にして、**server facade boundary と adapter/wrapper ownership の整理** をさらに一歩進めています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
+Patch 2 の続きとして、今回は **resource response surface alignment** を進め、`server.py` に残っていた resource response まわりの dual surface を、response-related helper と同じ方針で少し揃えました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers / HTTP runtime registration wiring cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup / health-readiness helper extraction / thinner public server wrapper delegation を土台にして、**resource response の method surface と top-level wrapper surface を canonical helper 直 delegate 方針に寄せる** 整理を実施しています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
 
 今回の実装でやったこと:
 
-- `ctxledger/src/ctxledger/server.py` を更新して public wrapper 関数の一部が canonical helper module を直接呼ぶ形に変更
+- `ctxledger/src/ctxledger/server.py` を更新して resource response-related surface を canonical helper 直 delegate 方針へ揃えた
+- `CtxLedgerServer.build_workspace_resume_resource_response(...)`
+- `CtxLedgerServer.build_workflow_detail_resource_response(...)`
+  が top-level wrapper を経由して canonical helper に揃う形へ整理
+- top-level に
+  - `build_workspace_resume_resource_response(...)`
+  - `build_workflow_detail_resource_response(...)`
+  を明示的に置く形へ整理
 - 回帰確認として `tests/test_server.py` と `tests/test_mcp_modules.py` を再実行
 - 最終的に green を維持
 
 ## 1. `ctxledger/src/ctxledger/server.py`
-今回の中心です。public surface 維持のために残している top-level wrapper 群について、`CtxLedgerServer` instance method を一段挟むだけの経路を減らし、canonical module へより直接 delegate する形に整理しました。
+今回の中心です。resource response まわりも、前回整理した response helper surface と同じ考え方へ揃えました。
 
 変更したこと:
-- `build_workflow_resume_response(...)` が `server.build_workflow_resume_response(...)` 経由ではなく `runtime/server_responses.py` の canonical helper を直接呼ぶ形に変更
-- `build_closed_projection_failures_response(...)` も同様に変更
-- `build_projection_failures_ignore_response(...)` も同様に変更
-- `build_projection_failures_resolve_response(...)` も同様に変更
-- `build_runtime_introspection_response(...)` も同様に変更
-- `build_runtime_routes_response(...)` も同様に変更
-- `build_runtime_tools_response(...)` も同様に変更
-- `build_http_runtime_adapter(...)` も local import wrapper ではなく、module-level に import した canonical helper へ直接 delegate する形に変更
+- `CtxLedgerServer.build_workspace_resume_resource_response(...)` が top-level wrapper を経由する形に変更
+- `CtxLedgerServer.build_workflow_detail_resource_response(...)` も同様に変更
+- top-level free-function wrapper として
+  - `build_workspace_resume_resource_response(...)`
+  - `build_workflow_detail_resource_response(...)`
+  を明示追加
+- top-level wrapper は canonical helper module
+  - `runtime/server_responses.py`
+  の extracted helper を直接呼ぶ形にした
 
 維持しているもの:
-- `ctxledger.server.build_workflow_resume_response`
-- `ctxledger.server.build_closed_projection_failures_response`
-- `ctxledger.server.build_projection_failures_ignore_response`
-- `ctxledger.server.build_projection_failures_resolve_response`
-- `ctxledger.server.build_runtime_introspection_response`
-- `ctxledger.server.build_runtime_routes_response`
-- `ctxledger.server.build_runtime_tools_response`
-- `ctxledger.server.build_http_runtime_adapter`
-
-の import / call surface
+- `CtxLedgerServer.build_workspace_resume_resource_response(...)`
+- `CtxLedgerServer.build_workflow_detail_resource_response(...)`
+- resource response payload shape
+- workspace resume resource response shape
+- workflow detail resource response shape
+- 404 / 400 / 503 の既存 error shape
+- public import surface
 
 ポイント:
-- public symbol はそのまま残しつつ、中継の段数だけを少し減らせました
-- `server.py` wrapper は「compatibility export」として残しながら、実体ロジックの所有をさらに薄くできました
-- top-level public facade と canonical helper 群の境界が少しだけ明確になりました
+- response-related surface と resource response surface の考え方を揃えられました
+- `server.py` の instance method / top-level wrapper / canonical helper の役割分担が少し一貫しました
+- top-level wrapper と method のどちらも public surface として維持しつつ、canonical implementation は helper module 側に寄せています
 
-## 2. `CtxLedgerServer` instance methods との関係
-今回の整理は、instance method 自体を削除するものではありません。
+## 2. resource response surface の考え方
+今回の整理で、resource response についても以下の方針で見てよいです。
 
-現状:
-- `CtxLedgerServer.build_workflow_resume_response(...)`
-- `CtxLedgerServer.build_closed_projection_failures_response(...)`
-- `CtxLedgerServer.build_projection_failures_ignore_response(...)`
-- `CtxLedgerServer.build_projection_failures_resolve_response(...)`
-- `CtxLedgerServer.build_runtime_introspection_response(...)`
-- `CtxLedgerServer.build_runtime_routes_response(...)`
-- `CtxLedgerServer.build_runtime_tools_response(...)`
+### canonical implementation
+- `ctxledger/src/ctxledger/runtime/server_responses.py`
 
-は引き続き残っています
+### public but non-canonical surfaces
+- `ctxledger.server.build_workspace_resume_resource_response(...)`
+- `ctxledger.server.build_workflow_detail_resource_response(...)`
+- `CtxLedgerServer.build_workspace_resume_resource_response(...)`
+- `CtxLedgerServer.build_workflow_detail_resource_response(...)`
 
-ポイント:
-- method surface を壊さないことを優先して維持しています
-- 一方で top-level free function wrapper 側は canonical helper に直接寄せたので、
-  `server.py` 内の wrapper → method → helper
-  という一段冗長な経路を少し減らせました
-- これは final cleanup へ向けた小さな前進です
+考え方:
+- canonical implementation は helper module
+- `server.py` の top-level free-function は compatibility / facade wrapper
+- `CtxLedgerServer` method も application-facing thin wrapper
+- method ↔ wrapper の相互参照を避けつつ、surface の並び方を response-related helpers と揃える
 
 ## 挙動面での現状
 今回の変更も extraction / canonicalization / boundary cleanup 中心で、機能追加ではなく責務整理を優先しています。
@@ -84,10 +86,10 @@ Patch 2 の続きとして、今回は **thinner public server wrapper delegatio
 - readiness status payload shape
 
 今回新しく進んだこと:
-- public server wrapper の一部が instance method 経由よりも canonical helper へ直接寄る形に進んだ
-- `server.py` の facade / compatibility shell 化をさらに少し進められた
-- adapter/wrapper ownership の整理を一歩進められた
-- canonical helper module を使う経路がより明確になった
+- resource response surface も response-related helper surface と同じ delegate 方針へ揃えられた
+- `server.py` の facade / compatibility shell 化を少し進められた
+- resource response に関する dual surface の ownership が少し明確になった
+- canonical helper module を中心にした整理方針がより一貫した
 
 まだ残っているもの:
 - `server.py` には concrete `HttpRuntimeAdapter` class 実装そのものが残っている
@@ -111,7 +113,7 @@ Patch 2 の続きとして、今回は **thinner public server wrapper delegatio
 
 補足:
 - 今回の変更後、focused regression は green です
-- wrapper delegation cleanup 中心の変更で、behavioral regression は見えていません
+- resource response surface alignment 中心の変更で、behavioral regression は見えていません
 
 ## コミット
 このセッション時点では、まだコミットは切っていません。
@@ -119,21 +121,21 @@ Patch 2 の続きとして、今回は **thinner public server wrapper delegatio
 次の人は `.rules` に従って、作業ループ完了時に descriptive message で `git commit` してください。
 
 コミット候補メッセージ例:
-- `Thin public server wrapper delegation`
-- `Directly delegate public server wrappers`
+- `Align resource response public surfaces`
+- `Thin resource response wrapper delegation`
 
 ## 注意
 - この session では `last_session.md` 更新までを意図しています
 - ワークツリー上には別件の変更が存在する可能性があります
-- 今回の変更は thinner public server wrapper delegation が中心で、behavioral rewrite ではありません
+- 今回の変更は resource response surface alignment が中心で、behavioral rewrite ではありません
 
 ## 実装の評価
-今回の整理はかなり小さいですが、`server.py` を facade に寄せるうえで意味があります。
+今回の整理は小さめですが、surface の一貫性を高めるうえで意味があります。
 
 進んだこと:
-- public wrapper の中継経路を少し短くできた
-- `server.py` が helper 実装の所有者である必要をさらに薄くできた
-- public import surface を保ったまま dependency boundary を改善できた
+- resource response surface を response-related helper と同じ考え方で揃えられた
+- `server.py` が resource helper 実装の所有者である必要をさらに薄くできた
+- public import / method surface を保ったまま dependency boundary を改善できた
 - 既存 test expectation を保ったまま安全に前進できた
 
 まだ未着手に近いこと:
@@ -187,19 +189,21 @@ Patch 2 の続きとして、今回は **thinner public server wrapper delegatio
 23. concrete HTTP adapter dependency cleanup が入っている
 24. stdio introspection concrete dependency cleanup が入っている
 25. health/readiness helper extraction が入っている
-26. 今回、thinner public server wrapper delegation が入った
-27. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
-28. `docs/specification.md` は引き続き触らない
-29. まだ compliance claim はしない
-30. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
+26. thinner public server wrapper delegation が入っている
+27. 今回、resource response surface alignment が入った
+28. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
+29. `docs/specification.md` は引き続き触らない
+30. まだ compliance claim はしない
+31. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
 
 注意点:
-- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation / server response building / server construction wiring / database health helper / shared bootstrap error / shared runtime response types / shared runtime serializers / HTTP runtime wrapper dependency cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup / health-readiness helper extraction / thinner public server wrapper delegation の本体は外へ出始めた
+- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation / server response building / server construction wiring / resource response building / database health helper / shared bootstrap error / shared runtime response types / shared runtime serializers / HTTP runtime wrapper dependency cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup / health-readiness helper extraction / thinner public server wrapper delegation / resource response surface alignment の本体は外へ出始めた
 - `create_runtime(...)` は public surface 維持のため `server.py` に wrapper として残っている
 - `_print_runtime_summary(...)` も test/import 互換のため `server.py` に wrapper として残してある
 - `build_http_runtime_adapter(...)` も public surface 維持のため `server.py` に wrapper を残してある
 - HTTP handler 群も public surface 維持のため `server.py` には wrapper が残っている
 - response builder 群と `create_server(...)` / `build_workflow_service_factory(...)` も public surface 維持のため `server.py` に wrapper が残っている
+- resource response surface も helper canonical / wrapper public の方針で整理が進んだ
 - `runtime/http_runtime.py` は HTTP runtime の registration wiring を持つ
 - `runtime/http_handlers.py` は HTTP handler implementation の canonical module
 - `runtime/server_responses.py` は server response building の canonical module
@@ -235,8 +239,8 @@ Patch 2 の続きとして、今回は **thinner public server wrapper delegatio
 - MCP HTTP bridge implementation
 - server response building
 - server construction wiring
-- database health helper
 - resource response building
+- database health helper
 - shared bootstrap error
 - shared runtime response/status dataclasses
 - shared runtime serializers
@@ -247,6 +251,7 @@ Patch 2 の続きとして、今回は **thinner public server wrapper delegatio
 - stdio introspection concrete dependency cleanup
 - health/readiness status helpers
 - thinner public server wrapper delegation
+- resource response surface alignment
 
 ### まだ `server.py` に残るもの
 - application-facing server surface 全般
