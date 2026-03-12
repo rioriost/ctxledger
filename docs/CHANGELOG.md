@@ -84,6 +84,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `runtime_routes`
   - `runtime_tools`
   - `workflow_resume`
+  - `workflow_closed_projection_failures`
 - `/debug/*` routes now follow the same bearer-auth boundary as other protected HTTP endpoints when HTTP auth is enabled
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` now removes `/debug/*` from HTTP route registration entirely rather than relying on handler-level fallback behavior
 - documentation updated in:

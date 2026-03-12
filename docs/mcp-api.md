@@ -718,7 +718,7 @@ Return liveness-oriented process status.
     "runtime": [
       {
         "transport": "http",
-        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume"],
+        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume", "workflow_closed_projection_failures"],
         "tools": []
       }
     ]
@@ -768,7 +768,7 @@ Return dependency-aware service readiness.
     "runtime": [
       {
         "transport": "http",
-        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume"],
+        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume", "workflow_closed_projection_failures"],
         "tools": []
       }
     ],
@@ -797,7 +797,8 @@ Expose both registered HTTP routes and registered MCP tools for each active tran
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
-        "workflow_resume"
+        "workflow_resume",
+        "workflow_closed_projection_failures"
       ],
       "tools": []
     }
@@ -826,7 +827,8 @@ Filter runtime introspection down to route registrations.
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
-        "workflow_resume"
+        "workflow_resume",
+        "workflow_closed_projection_failures"
       ]
     }
   ]
