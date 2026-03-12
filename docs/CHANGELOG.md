@@ -71,6 +71,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - including clearer operator-handling semantics for `ignored` versus `resolved` closure
   - including representative operator action surface design for explicit `ignored` / `resolved` lifecycle mutation
   - including HTTP action request examples for auth-enabled and auth-disabled operation
+  - including representative `404 not_found` response examples for invalid HTTP action route path shapes
   - including operational cautions and deployment guidance for HTTP projection failure action routes
 - test coverage for:
   - repeated projection failures incrementing `retry_count`
@@ -153,7 +154,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `projection_failures_resolve`
   - HTTP docs now describe query-parameter request shape using `workspace_id`, `workflow_instance_id`, and optional `projection_type`
   - HTTP docs now include representative request examples for both auth-enabled and auth-disabled operation
-  - HTTP docs now include representative success response and validation error examples
+  - HTTP docs now include representative success response, validation error, and invalid-path `404 not_found` response examples
   - security and deployment docs now describe operator-only handling expectations for these mutation routes
   - action responses preserve history and report `updated_failure_count`
 - HTTP projection failure action route coverage now verifies:
