@@ -1,37 +1,101 @@
-Patch 2 の続きとして、`server.py` に残っていた transport orchestration の一部をさらに外出ししました。今回のセッションでは、runtime introspection と runtime orchestration helper の抽出を土台にして、さらに HTTP runtime builder と composite runtime adapter の分離まで進めています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
+Patch 2 の続きとして、`server.py` に残っていた transport orchestration / HTTP transport まわりの責務をさらに外出ししました。今回のセッションでは、前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime の分離を土台にして、HTTP handler 実装本体の抽出まで進めています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
 
 今回の実装でやったこと:
 
-- `ctxledger/src/ctxledger/runtime/composite.py` を新設
-- `ctxledger/src/ctxledger/runtime/http_runtime.py` を新設
-- 既存の `ctxledger/src/ctxledger/runtime/introspection.py` / `ctxledger/src/ctxledger/runtime/orchestration.py` と連携する形で責務分離を拡張
-- `ctxledger/src/ctxledger/server.py` を更新して、HTTP runtime builder と composite runtime を新 helper module 経由に変更
+- `ctxledger/src/ctxledger/runtime/http_handlers.py` を新設
+- `ctxledger/src/ctxledger/server.py` を更新して、HTTP handler 実装本体を新 helper module 経由に変更
+- `ctxledger/src/ctxledger/runtime/http_runtime.py` は新しい HTTP handler helper を利用する形を維持
+- `ctxledger/src/ctxledger/runtime/orchestration.py` / `ctxledger/src/ctxledger/runtime/composite.py` / `ctxledger/src/ctxledger/runtime/introspection.py` と組み合う形で責務分離を拡張
 - 抽出後の回帰を確認して `tests/test_server.py` と `tests/test_mcp_modules.py` を再実行
 - 最終的に green を維持
 
-## 1. `ctxledger/src/ctxledger/runtime/composite.py`
-`CompositeRuntimeAdapter` を `server.py` から外出しするため、専用 module を追加しました。
+## 1. `ctxledger/src/ctxledger/runtime/http_handlers.py`
+今回の中心です。`server.py` に残っていた HTTP handler 実装本体を外出しするため、専用 helper module を追加しました。
 
 追加したもの:
-- `ServerRuntime`
-- `CompositeRuntimeAdapter`
+- `extract_bearer_token(...)`
+- `build_http_auth_error_response(...)`
+- `require_http_bearer_auth(...)`
+- `parse_required_uuid_argument(...)`
+- `parse_optional_projection_type_argument(...)`
+- `parse_workflow_resume_request_path(...)`
+- `parse_closed_projection_failures_request_path(...)`
+- `build_workflow_resume_http_handler(...)`
+- `build_closed_projection_failures_http_handler(...)`
+- `build_projection_failures_ignore_http_handler(...)`
+- `build_projection_failures_resolve_http_handler(...)`
+- `build_runtime_introspection_http_handler(...)`
+- `build_runtime_routes_http_handler(...)`
+- `build_runtime_tools_http_handler(...)`
+- `build_mcp_http_handler(...)`
 
 ポイント:
-- 複数 transport runtime をまとめる lifecycle boundary を `server.py` から切り離しました
-- `start()` 時の partial startup rollback
-- `stop()` 時の reverse-order shutdown
-- shutdown failure 時の logging
-  といった振る舞いはそのまま維持しています
-- `collect_runtime_introspection(...)` 側からは、これまで通り `CompositeRuntimeAdapter` として扱える状態を維持しています
-- `server.py` は composite lifecycle 実装本体を持たず、利用側に近づきました
+- 認証 helper
+  - bearer token 抽出
+  - auth error response 生成
+  - auth validation
+  を `server.py` から分離しました
+- HTTP route path parsing
+  - workflow resume
+  - closed projection failures
+  を `server.py` から分離しました
+- projection failure 系 endpoint の query argument parsing / validation をここへ移しました
+- debug endpoint
+  - `/debug/runtime`
+  - `/debug/routes`
+  - `/debug/tools`
+  の handler 実装本体もここへ移しました
+- MCP over HTTP bridge の `build_mcp_http_handler(...)` もここへ移しました
+- Streamable HTTP scaffold と RPC helper を使う構造自体は維持しています
+- `server.py` 側 canonical response type を壊さないため、必要な response class / helper は function 内 import で参照しています
+- 循環 import を抑えるため、型参照は `TYPE_CHECKING` と function 内 import を併用しています
 
-## 2. `ctxledger/src/ctxledger/runtime/http_runtime.py`
-`build_http_runtime_adapter(...)` を `server.py` から切り出すため、HTTP runtime builder 用 helper module を追加しました。
+注意:
+- helper module 側から `server.py` の response class や builder function を参照する箇所があるため、依存はゼロではありません
+- ただし、HTTP handler の実装本体を `server.py` 直下に置き続けるよりは責務境界がかなり見えやすくなりました
 
-追加したもの:
-- `build_http_runtime_adapter(...)`
+## 2. `ctxledger/src/ctxledger/server.py`
+今回のもうひとつの中心変更です。`server.py` はさらに薄くなりました。
 
-この helper が構成するもの:
+変更したこと:
+- `build_workflow_resume_http_handler(...)` を wrapper 化
+- `build_closed_projection_failures_http_handler(...)` を wrapper 化
+- `build_projection_failures_ignore_http_handler(...)` を wrapper 化
+- `build_projection_failures_resolve_http_handler(...)` を wrapper 化
+- `build_runtime_introspection_http_handler(...)` を wrapper 化
+- `build_runtime_routes_http_handler(...)` を wrapper 化
+- `build_runtime_tools_http_handler(...)` を wrapper 化
+- `build_mcp_http_handler(...)` を wrapper 化
+- `_extract_bearer_token(...)` / `_http_auth_error_response(...)` / `_require_http_bearer_auth(...)` も extracted helper 経由に変更
+- `_parse_required_uuid_argument(...)` / `_parse_optional_projection_type_argument(...)` も extracted helper 経由に変更
+- `parse_workflow_resume_request_path(...)` / `parse_closed_projection_failures_request_path(...)` も extracted helper 経由に変更
+
+結果として `server.py` に残る中心責務:
+- application-facing server surface
+- health / readiness
+- workflow / projection failure response building
+- resource response building
+- runtime/server construction entrypoint
+- public compatibility wrapper 群
+
+外れたもの:
+- HTTP auth helper 実装本体
+- HTTP path / query parsing helper 実装本体
+- debug HTTP handler 実装本体
+- workflow resume HTTP handler 実装本体
+- projection failure 系 HTTP handler 実装本体
+- MCP HTTP bridge 実装本体
+
+互換性面の配慮:
+- 既存 test / import surface を壊さないように、`server.py` 側に public wrapper を残しています
+- 直接 import されうる関数名は極力維持しています
+- `build_http_runtime_adapter(...)` / `create_runtime(...)` / `_print_runtime_summary(...)` の wrapper 方針も継続しています
+
+## 3. `ctxledger/src/ctxledger/runtime/http_runtime.py`
+大きな構造変更はありませんが、HTTP runtime builder が新しい handler helper module と組み合う形になっています。
+
+現在の責務:
+- `HttpRuntimeAdapter` を構築する
 - `mcp_rpc`
 - `runtime_introspection`
 - `runtime_routes`
@@ -40,41 +104,45 @@ Patch 2 の続きとして、`server.py` に残っていた transport orchestrat
 - `workflow_closed_projection_failures`
 - `projection_failures_ignore`
 - `projection_failures_resolve`
+  の route registration wiring を担う
 
 ポイント:
-- HTTP runtime の route registration wiring を `server.py` から分離しました
-- 内部では
-  - `build_mcp_http_handler(...)`
-  - debug HTTP handlers
-  - workflow / projection failure handlers
-  を組み合わせるだけの builder に寄せています
-- MCP over HTTP でも、引き続き stdio-style MCP runtime adapter を内部利用する構成を維持しています
-- debug endpoint 有効/無効判定もここへ移りました
+- route registration wiring はここ
+- handler 実装本体は `runtime/http_handlers.py`
+- runtime selection / CLI entrypoint orchestration は `runtime/orchestration.py`
+  という役割分担が前回より明確になりました
 
-注意:
-- route handler そのものの実装本体はまだ `server.py` にあります
-- 今回は builder extraction までで、HTTP handler 全体の完全分離ではありません
+## 4. `ctxledger/src/ctxledger/runtime/orchestration.py`
+今回の session では大きなロジック変更はありませんが、前回までに外出しした runtime orchestration の中心として引き続き使われています。
 
-## 3. `ctxledger/src/ctxledger/runtime/orchestration.py`
-前回追加した orchestration helper を、今回の HTTP/composite 抽出に合わせて更新しました。
-
-変更したこと:
-- `CompositeRuntimeAdapter` を `runtime/composite.py` から使うように変更
-- HTTP runtime 作成時に `runtime/http_runtime.py` の `build_http_runtime_adapter(...)` を使うように変更
-- composite / HTTP-only / stdio-only の runtime selection を引き続きこの module が担う構成を維持
-- `run_server(...)`
+維持しているもの:
+- `build_stdio_runtime_adapter(...)`
+- `create_runtime(...)`
 - `apply_overrides(...)`
 - `install_signal_handlers(...)`
 - `print_runtime_summary(...)`
-  の責務は継続
+- `run_server(...)`
 
 ポイント:
-- transport orchestration helper と HTTP runtime builder helper の境界が少し明確になりました
-- `create_runtime(...)` は orchestration の中心として残しつつ、個別 transport の構築責務を外へ寄せています
-- `server is None` の HTTP-only ケースでは、引き続き `HttpRuntimeAdapter(settings)` を返して既存 test expectation を維持しています
+- transport selection の中心はここ
+- HTTP runtime 作成は `runtime/http_runtime.py`
+- composite lifecycle は `runtime/composite.py`
+- introspection 正規化は `runtime/introspection.py`
+  という分割がより明確になっています
 
-## 4. `ctxledger/src/ctxledger/runtime/introspection.py`
-この session では大きなロジック変更はありませんが、`CompositeRuntimeAdapter` が新 module へ移ったあとも、runtime introspection の責務はこの module に維持されています。
+## 5. `ctxledger/src/ctxledger/runtime/composite.py`
+今回の session では大きな変更はありません。
+
+維持しているもの:
+- `ServerRuntime`
+- `CompositeRuntimeAdapter`
+
+ポイント:
+- 複数 transport runtime を束ねる canonical lifecycle 実装として引き続きここにあります
+- `server.py` が composite lifecycle 実装本体を持たない構造は維持されています
+
+## 6. `ctxledger/src/ctxledger/runtime/introspection.py`
+今回の session では大きな変更はありません。
 
 維持しているもの:
 - `RuntimeIntrospection`
@@ -83,35 +151,11 @@ Patch 2 の続きとして、`server.py` に残っていた transport orchestrat
 - `serialize_runtime_introspection_collection(...)`
 
 ポイント:
-- `CompositeRuntimeAdapter` / `HttpRuntimeAdapter` / `StdioRuntimeAdapter` を横断して正規化する役割は引き続きここ
-- `server.py` が introspection の実装本体を抱えない方向は維持されています
-
-## 5. `ctxledger/src/ctxledger/server.py`
-今回の中心変更のひとつです。`server.py` はさらに薄くなりました。
-
-変更したこと:
-- `CompositeRuntimeAdapter` の実装本体を削除し、`runtime/composite.py` から import する形に変更
-- `build_http_runtime_adapter(...)` の実装本体を削除し、`runtime/http_runtime.py` への wrapper に変更
-- 既存の `create_runtime(...)` wrapper は維持しつつ、実体は `runtime/orchestration.py` 側へ委譲
-- `_print_runtime_summary(...)` は引き続き test/import 互換のため private wrapper として残置
-- public export surface は大きく壊さないよう維持
-
-今回の結果として `server.py` に残る中心責務:
-- application-facing server surface
-- health / readiness
-- workflow / projection failure response building
-- HTTP route handler 実装本体
-- MCP HTTP bridge function
-- server construction entrypoint
-
-外れたもの:
-- composite runtime lifecycle 実装本体
-- HTTP runtime route registration wiring 本体
-- runtime introspection 実装本体
-- transport override / signal / run entrypoint orchestration 本体
+- stdio / http / composite を横断して正規化する役割は引き続きここです
+- `server.py` は introspection 実装本体の利用者である状態を維持しています
 
 ## 挙動面での現状
-今回の変更も extraction 中心で、挙動変更より責務整理を優先しています。
+今回の変更も extraction 中心で、機能追加よりも責務整理を優先しています。
 
 維持しているもの:
 - `initialize` over HTTP
@@ -127,18 +171,26 @@ Patch 2 の続きとして、`server.py` に残っていた transport orchestrat
 - `create_runtime(settings)` の既存 test expectation
 - composite runtime introspection の既存 shape
 - HTTP route registration の既存 shape
+- debug endpoint の既存 shape
 
 今回新しく進んだこと:
-- `CompositeRuntimeAdapter` の authority を `runtime/composite.py` に分離
-- HTTP runtime route registration wiring を `runtime/http_runtime.py` に分離
-- `server.py` から transport-specific builder 実装をさらに削減
-- transport orchestration の helper 群と individual transport builder 群の境界を少し改善
+- HTTP auth helper の authority を `runtime/http_handlers.py` に分離
+- workflow / projection failure / debug / MCP HTTP handler 実装本体を `runtime/http_handlers.py` に分離
+- `server.py` は HTTP transport 実装の「公開面と wrapper」にさらに近づいた
+- transport helper 群の責務分割が
+  - introspection
+  - orchestration
+  - composite lifecycle
+  - HTTP runtime builder
+  - HTTP handler implementation
+  の単位で見えやすくなった
 
 まだ残っているもの:
-- `server.py` はまだ HTTP route handler 実装の中心
-- `build_mcp_http_handler(...)` と各 HTTP route handler はまだ `server.py`
-- health/readiness/debug HTTP surface と runtime wiring の境界はまだ完全分離ではない
-- stdio 削除前提の最終 dependency cleanup は未完
+- `server.py` はまだ workflow/projection response building の中心
+- `server.py` は still application-facing server surface の中心
+- helper module は `server.py` の canonical response classes / builders に依存している
+- `create_server(...)` と runtime wiring boundary の最終整理は未完
+- stdio 削除前提の final dependency cleanup は未完
 - compliance claim はまだ不可
 
 ## テスト
@@ -153,11 +205,9 @@ Patch 2 の続きとして、`server.py` に残っていた transport orchestrat
 - `pytest -q tests/test_server.py tests/test_mcp_modules.py`
 
 補足:
-- 一度 `runtime/http_runtime.py` の relative import を誤って
-  - top-level package を越える import
-  - `ctxledger.orchestration` を探しに行く import
-  の問題が出ましたが修正済みです
-- 最終的に **180 passed** に戻しています
+- `runtime/http_handlers.py` 抽出後も **180 passed** を維持しています
+- 今回は import path の誤りや wrapper 再帰のような事故を避けるため、`server.py` 側 import 名に alias を付けて wrapper との衝突を避けています
+- 最終状態は green です
 
 ## コミット
 このセッション時点では、まだコミットは切っていません。
@@ -165,55 +215,51 @@ Patch 2 の続きとして、`server.py` に残っていた transport orchestrat
 次の人は `.rules` に従って、作業ループ完了時に descriptive message で `git commit` してください。
 
 コミット候補メッセージ例:
-- `Extract HTTP runtime builder helpers`
-- `Move composite runtime adapter out of server`
+- `Extract HTTP handler implementations`
+- `Move HTTP auth and route handlers out of server`
 
 ## 注意
 - この session では `last_session.md` 更新まで実施していますが、git commit は未実施です
 - ワークツリー上には別件の変更が存在する可能性があります
-- 今回の変更は HTTP/composite extraction が中心で、full transport rewrite ではありません
+- 今回の変更は HTTP handler extraction が中心で、full transport rewrite ではありません
 
 ## 実装の評価
-今回の抽出は、前回の orchestration helper split の自然な続きとして良い前進です。
+今回の抽出は、前回の HTTP runtime builder extraction の自然な続きとして良い前進です。
 
 進んだこと:
-- `server.py` から composite runtime lifecycle 実装本体を外出し
-- `server.py` から HTTP runtime route registration wiring を外出し
-- runtime helper 群の責務分割が
-  - introspection
-  - orchestration
-  - composite lifecycle
-  - HTTP runtime builder
-  の単位で見えやすくなった
+- `server.py` から HTTP handler 実装本体を大きく外出しできた
+- `server.py` から auth helper / path parser / debug handler / MCP HTTP bridge 実装本体も外出しできた
+- runtime helper 群の責務分割がかなり見やすくなった
 - 将来 `server.py` を
   - health/readiness
   - workflow-facing server surface
-  - HTTP handler 実装
+  - resource/response building
+  - public compatibility shell
   にさらに寄せやすくなった
 - 既存 test expectation を保ったまま、小さく安全に前進できた
 
 まだ未着手に近いこと:
-- HTTP route handler 実装本体の外出し
-- `build_mcp_http_handler(...)` の配置見直し
+- `server.py` に残る workflow/projection response building の整理
 - `create_server(...)` と runtime builder boundary の整理
-- debug HTTP endpoint 実装の dedicated helper 化
-- stdio removal path を前提にした final dependency cleanup
+- HTTP helper module から `server.py` canonical class への依存の整理
+- stdio removal path を前提にした dependency cleanup
 - transport-specific startup orchestration のさらなる isolation
+- richer MCP transport semantics の本実装
 
 ## 次にやること
 次は以下のどれかが自然です。
 
 候補:
-1. HTTP route handler 実装群を `server.py` から外出しする
-2. `build_mcp_http_handler(...)` を HTTP transport module 側へ寄せる
-3. `create_server(...)` と runtime wiring の責務をさらに整理する
-4. debug runtime/routes/tools HTTP endpoint 実装を専用 helper に寄せる
-5. stdio removal path を意識して transport-specific code をさらに隔離する
+1. `create_server(...)` と runtime wiring の責務をさらに整理する
+2. workflow/projection response builder を `server.py` から外出しする
+3. HTTP helper module が `server.py` canonical class に依存している箇所を整理する
+4. stdio removal path を意識して transport-specific code をさらに隔離する
+5. `server.py` を application-facing server surface と bootstrap shell により近づける
 
 特に安全そうなのは:
-- debug HTTP handlers の抽出
-- `build_mcp_http_handler(...)` の抽出
-- `create_server(...)` と runtime construction の境界整理
+- workflow/projection response builder の抽出
+- `create_server(...)` / `create_runtime(...)` boundary の整理
+- HTTP helper module と `server.py` 間の canonical type dependency の整理
 
 ## 次の引き継ぎ先向けメモ
 次に入る人は以下を前提にしてよいです。
@@ -227,19 +273,22 @@ Patch 2 の続きとして、`server.py` に残っていた transport orchestrat
 7. stdio runtime construction split は入っている
 8. runtime introspection helper split も入っている
 9. transport orchestration helper split も入っている
-10. 今回、HTTP runtime builder extraction が入った
-11. 今回、composite runtime adapter extraction が入った
-12. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
-13. `docs/specification.md` は引き続き触らない
-14. まだ compliance claim はしない
-15. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
+10. HTTP runtime builder extraction が入っている
+11. composite runtime adapter extraction が入っている
+12. 今回、HTTP handler implementation extraction が入った
+13. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
+14. `docs/specification.md` は引き続き触らない
+15. まだ compliance claim はしない
+16. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
 
 注意点:
-- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder の本体は外へ出始めた
+- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation の本体は外へ出始めた
 - `create_runtime(...)` は public surface 維持のため `server.py` に wrapper として残っている
 - `_print_runtime_summary(...)` も test/import 互換のため `server.py` に wrapper として残してある
 - `build_http_runtime_adapter(...)` も public surface 維持のため `server.py` に wrapper を残してある
+- HTTP handler 群も public surface 維持のため `server.py` には wrapper が残っている
 - `runtime/http_runtime.py` は HTTP runtime の registration wiring を持つ
+- `runtime/http_handlers.py` は HTTP handler implementation の canonical module
 - `runtime/composite.py` は composite lifecycle の canonical 実装
 - `runtime/orchestration.py` は runtime selection / run entrypoint orchestration の中心
 - `runtime/introspection.py` は stdio/http/composite を横断して正規化する責務を持つ
@@ -259,32 +308,35 @@ Patch 2 の続きとして、`server.py` に残っていた transport orchestrat
 - transport override / signal / summary / run entrypoint helper
 - composite runtime lifecycle
 - HTTP runtime route registration wiring
+- HTTP auth helper
+- HTTP path/query parsing helper
+- HTTP handler implementation
+- MCP HTTP bridge implementation
 
 ### まだ `server.py` に残るもの
-- `build_mcp_http_handler(...)`
-- debug / workflow / projection failure の HTTP handler 実装本体
+- workflow/projection/resource response building
 - `create_server(...)` の中心 wiring
-- health/readiness/debug HTTP surface
+- health/readiness/debug HTTP surface の公開面
 - application-facing server surface 全般
+- public compatibility wrapper 群
 
 ## 次に自然な一手
-ここまで来たので、次は **HTTP handler 実装本体の抽出** が一番きれいです。
+ここまで来たので、次は **workflow/projection response building と server construction wiring の整理** が一番きれいです。
 
 たとえば:
-- `build_mcp_http_handler(...)`
-- `build_runtime_introspection_http_handler(...)`
-- `build_runtime_routes_http_handler(...)`
-- `build_runtime_tools_http_handler(...)`
-- `build_workflow_resume_http_handler(...)`
-- projection failure 系 HTTP handlers
+- `build_workflow_resume_response(...)`
+- `build_closed_projection_failures_response(...)`
+- `build_projection_failures_ignore_response(...)`
+- `build_projection_failures_resolve_response(...)`
+- `create_server(...)`
 
-を dedicated HTTP helper module に寄せる段階です。
+を dedicated helper / builder module に寄せる段階です。
 
 これをやると、`server.py` はかなり
 - health/readiness
-- workflow-facing server surface
+- workflow-facing public surface
 - bootstrap shell
-- server object の公開面
+- compatibility export surface
 
 に近づきます。
 
