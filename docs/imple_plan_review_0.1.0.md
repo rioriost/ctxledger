@@ -320,6 +320,19 @@ A concrete runtime audit of `src/ctxledger/server.py` shows:
   - `memory_search`
   - `memory_get_context`
 
+A follow-up audit of visible service-layer implementation and server-side tool-handler definitions shows:
+
+- workflow service methods do exist for:
+  - `register_workspace`
+  - `start_workflow`
+  - `create_checkpoint`
+  - `complete_workflow`
+- but no corresponding visible MCP tool-handler definitions or stdio registrations were confirmed for:
+  - `workspace_register`
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_complete`
+
 In the inspected stdio runtime registration area, there is no visible registration for:
 
 - `workspace_register`
@@ -529,11 +542,21 @@ Concrete runtime audit result:
   - `memory_remember_episode`
   - `memory_search`
   - `memory_get_context`
+- confirmed visible workflow service methods:
+  - `register_workspace`
+  - `start_workflow`
+  - `create_checkpoint`
+  - `complete_workflow`
 - not visibly registered as stdio tools in the inspected runtime wiring:
   - `workspace_register`
   - `workflow_start`
   - `workflow_checkpoint`
   - `workflow_complete`
+
+Interpretation:
+- the missing plan-required workflow operations appear to exist at the service layer
+- but they are still not confirmed as public MCP tools in the inspected runtime wiring
+- this makes the remaining gap look more like MCP exposure/wiring work than missing domain implementation
 
 Next step:
 - confirm whether these workflow tools are registered elsewhere
@@ -639,6 +662,7 @@ Current concrete audit findings sharpen that question:
 - `workflow_resume` is visible as an HTTP route
 - `resume_workflow` is visible as a stdio tool
 - `workspace_register`, `workflow_start`, `workflow_checkpoint`, and `workflow_complete` are not visibly registered in the inspected stdio runtime wiring
+- corresponding workflow service methods for those missing operations are visible, so the current gap appears to be MCP surface exposure rather than missing workflow-domain behavior
 - no resource registration or `workspace://...` resolver wiring was visibly confirmed in the inspected implementation
 
 That is the key blocker to declaring the `v0.1.0` implementation plan complete.
