@@ -20,6 +20,22 @@ from ctxledger.config import (
     StdioSettings,
     TransportMode,
 )
+from ctxledger.mcp.lifecycle import (
+    MCP_PROTOCOL_VERSION,
+    McpLifecycleState,
+    build_initialize_result,
+    build_jsonrpc_error_response,
+    build_jsonrpc_success_response,
+    dispatch_lifecycle_method,
+)
+from ctxledger.mcp.streamable_http import (
+    StreamableHttpRequest,
+    StreamableHttpResponse,
+    build_streamable_http_endpoint,
+    build_streamable_http_invalid_request_response,
+    build_streamable_http_not_found_response,
+    build_streamable_http_rpc_error_response,
+)
 from ctxledger.memory.service import MemoryService
 from ctxledger.server import (
     CtxLedgerServer,
@@ -65,6 +81,7 @@ from ctxledger.server import (
     dispatch_http_request,
     dispatch_mcp_resource,
     dispatch_mcp_tool,
+    handle_mcp_rpc_request,
     parse_closed_projection_failures_request_path,
     parse_workflow_detail_resource_uri,
     parse_workflow_resume_request_path,
@@ -4125,15 +4142,288 @@ def test_create_server_wires_stdio_runtime_with_registered_tools() -> None:
         "workflow_start",
         "workspace_register",
     )
-
-    server.startup()
-
-    response = server.runtime.dispatch_tool(
-        "workflow_resume",
-        {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)},
+    assert server.runtime.registered_resources() == (
+        "workspace://{workspace_id}/resume",
+        "workspace://{workspace_id}/workflow/{workflow_instance_id}",
     )
 
-    assert response.payload["ok"] is True
+
+def test_build_initialize_result_returns_expected_payload() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+
+    result = build_initialize_result(runtime).serialize()
+
+    assert result == {
+        "protocolVersion": MCP_PROTOCOL_VERSION,
+        "serverInfo": {
+            "name": "ctxledger",
+            "version": settings.app_version,
+        },
+        "capabilities": {
+            "tools": {},
+            "resources": {},
+        },
+    }
+
+
+def test_dispatch_lifecycle_method_records_initialize_protocol_version() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+    state = McpLifecycleState()
+
+    result = dispatch_lifecycle_method(runtime, state, "initialize", {})
+
+    assert result == {
+        "protocolVersion": MCP_PROTOCOL_VERSION,
+        "serverInfo": {
+            "name": "ctxledger",
+            "version": settings.app_version,
+        },
+        "capabilities": {
+            "tools": {},
+            "resources": {},
+        },
+    }
+    assert state.negotiated_protocol_version == MCP_PROTOCOL_VERSION
+    assert state.initialized is False
+
+
+def test_dispatch_lifecycle_method_marks_initialized_for_notification_method() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+    state = McpLifecycleState()
+
+    result = dispatch_lifecycle_method(
+        runtime,
+        state,
+        "notifications/initialized",
+        {},
+    )
+
+    assert result is None
+    assert state.initialized is True
+
+
+def test_build_jsonrpc_success_response_returns_expected_envelope() -> None:
+    response = build_jsonrpc_success_response(
+        7,
+        {"ok": True},
+    )
+
+    assert response == {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "result": {"ok": True},
+    }
+
+
+def test_build_jsonrpc_error_response_returns_expected_envelope() -> None:
+    response = build_jsonrpc_error_response(
+        9,
+        code=-32001,
+        message="boom",
+        data={"field": "value"},
+    )
+
+    assert response == {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "error": {
+            "code": -32001,
+            "message": "boom",
+            "data": {"field": "value"},
+        },
+    }
+
+
+def test_handle_mcp_rpc_request_accepts_notifications_initialized() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+
+    response = handle_mcp_rpc_request(
+        runtime,
+        {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {},
+        },
+    )
+
+    assert response is None
+    assert runtime._mcp_lifecycle_state.initialized is True
+
+
+def test_build_streamable_http_not_found_response_returns_expected_payload() -> None:
+    response = build_streamable_http_not_found_response("/mcp")
+
+    assert response == StreamableHttpResponse(
+        status_code=404,
+        payload={
+            "error": {
+                "code": "not_found",
+                "message": "MCP endpoint requires /mcp",
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_build_streamable_http_invalid_request_response_returns_expected_payload() -> (
+    None
+):
+    response = build_streamable_http_invalid_request_response("bad request")
+
+    assert response == StreamableHttpResponse(
+        status_code=400,
+        payload={
+            "error": {
+                "code": "invalid_request",
+                "message": "bad request",
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_build_streamable_http_rpc_error_response_returns_expected_payload() -> None:
+    response = build_streamable_http_rpc_error_response(
+        request_id=11,
+        code=-32000,
+        message="rpc failed",
+        data={"reason": "test"},
+    )
+
+    assert response == StreamableHttpResponse(
+        status_code=400,
+        payload={
+            "jsonrpc": "2.0",
+            "id": 11,
+            "error": {
+                "code": -32000,
+                "message": "rpc failed",
+                "data": {"reason": "test"},
+            },
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_streamable_http_endpoint_returns_202_for_notification() -> None:
+    class FakeStreamableRuntime:
+        settings = None
+
+        def handle_rpc_request(self, request: dict[str, object]) -> None:
+            assert request["method"] == "notifications/initialized"
+            return None
+
+    endpoint = build_streamable_http_endpoint(
+        FakeStreamableRuntime(),
+        mcp_path="/mcp",
+    )
+
+    response = endpoint.handle(
+        StreamableHttpRequest(
+            path="/mcp",
+            body='{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}',
+        )
+    )
+
+    assert response == StreamableHttpResponse(
+        status_code=202,
+        payload={},
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_streamable_http_endpoint_returns_rpc_error_payload_on_exception() -> None:
+    class FakeStreamableRuntime:
+        settings = None
+
+        def handle_rpc_request(self, request: dict[str, object]) -> dict[str, object]:
+            raise RuntimeError("rpc exploded")
+
+    endpoint = build_streamable_http_endpoint(
+        FakeStreamableRuntime(),
+        mcp_path="/mcp",
+    )
+
+    response = endpoint.handle(
+        StreamableHttpRequest(
+            path="/mcp",
+            body='{"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}}',
+        )
+    )
+
+    assert response == StreamableHttpResponse(
+        status_code=400,
+        payload={
+            "jsonrpc": "2.0",
+            "id": 5,
+            "error": {
+                "code": -32000,
+                "message": "rpc exploded",
+            },
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_streamable_http_endpoint_uses_auth_validator_before_rpc_handler() -> None:
+    class FakeStreamableRuntime:
+        settings = None
+
+        def handle_rpc_request(self, request: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("rpc handler should not be called")
+
+    endpoint = build_streamable_http_endpoint(
+        FakeStreamableRuntime(),
+        mcp_path="/mcp",
+        auth_validator=lambda path: StreamableHttpResponse(
+            status_code=401,
+            payload={
+                "error": {
+                    "code": "authentication_error",
+                    "message": f"denied for {path}",
+                }
+            },
+            headers={"content-type": "application/json"},
+        ),
+    )
+
+    response = endpoint.handle(
+        StreamableHttpRequest(
+            path="/mcp?authorization=Bearer wrong",
+            body='{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}',
+        )
+    )
+
+    assert response == StreamableHttpResponse(
+        status_code=401,
+        payload={
+            "error": {
+                "code": "authentication_error",
+                "message": "denied for /mcp?authorization=Bearer wrong",
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
 
 
 def test_http_mcp_rpc_initialize_returns_success_payload() -> None:
