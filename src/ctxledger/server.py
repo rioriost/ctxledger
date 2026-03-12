@@ -140,6 +140,12 @@ from .mcp.resource_handlers import (
     parse_workspace_resume_resource_uri,
 )
 from .mcp.rpc import handle_mcp_rpc_request
+from .mcp.stdio import (
+    StdioRpcServer,
+    StdioRuntimeAdapter,
+    dispatch_mcp_resource,
+    dispatch_mcp_tool,
+)
 from .mcp.streamable_http import (
     StreamableHttpRequest,
     StreamableHttpResponse,
@@ -174,49 +180,6 @@ from .mcp.tool_schemas import (
     McpToolSchema,
     serialize_mcp_tool_schema,
 )
-
-
-@dataclass(slots=True)
-class StdioRpcServer:
-    runtime: "StdioRuntimeAdapter"
-
-    def handle_request(self, req: dict[str, Any]) -> dict[str, Any] | None:
-        return handle_mcp_rpc_request(self.runtime, req)
-
-    def run(self) -> None:
-        for line in sys.stdin:
-            raw_line = line.strip()
-            if not raw_line:
-                continue
-
-            req: dict[str, Any] | None = None
-            req_id: Any = None
-            try:
-                parsed = json.loads(raw_line)
-                if not isinstance(parsed, dict):
-                    raise ValueError("Request must be a JSON object")
-                req = parsed
-                req_id = req.get("id")
-                response = self.handle_request(req)
-                if response is not None:
-                    sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
-                    sys.stdout.flush()
-            except SystemExit:
-                raise
-            except Exception as exc:
-                if req_id is not None:
-                    error_response = {
-                        "jsonrpc": "2.0",
-                        "id": req_id,
-                        "error": {
-                            "code": -32000,
-                            "message": str(exc),
-                        },
-                    }
-                    sys.stdout.write(
-                        json.dumps(error_response, ensure_ascii=False) + "\n"
-                    )
-                    sys.stdout.flush()
 
 
 @dataclass(slots=True)
@@ -413,95 +376,6 @@ class HttpRuntimeAdapter:
                 "host": self.settings.http.host,
                 "port": self.settings.http.port,
                 "registered_routes": list(self.registered_routes()),
-            },
-        )
-        self._started = False
-
-
-class StdioRuntimeAdapter:
-    """
-    Placeholder stdio runtime adapter.
-
-    This class establishes the lifecycle and logging contract for the future
-    MCP stdio implementation.
-    """
-
-    def __init__(
-        self,
-        settings: AppSettings,
-        tool_handlers: dict[str, McpToolHandler] | None = None,
-        resource_handlers: dict[str, McpResourceHandler] | None = None,
-        tool_schemas: dict[str, McpToolSchema] | None = None,
-    ) -> None:
-        self.settings = settings
-        self._started = False
-        self._tool_handlers: dict[str, McpToolHandler] = tool_handlers or {}
-        self._resource_handlers: dict[str, McpResourceHandler] = resource_handlers or {}
-        self._tool_schemas: dict[str, McpToolSchema] = tool_schemas or {}
-        self._mcp_lifecycle_state = McpLifecycleState()
-
-    def register_tool_handler(
-        self,
-        tool_name: str,
-        handler: McpToolHandler,
-        schema: McpToolSchema | None = None,
-    ) -> None:
-        self._tool_handlers[tool_name] = handler
-        if schema is not None:
-            self._tool_schemas[tool_name] = schema
-
-    def register_resource_handler(
-        self,
-        resource_pattern: str,
-        handler: McpResourceHandler,
-    ) -> None:
-        self._resource_handlers[resource_pattern] = handler
-
-    def registered_tools(self) -> tuple[str, ...]:
-        return tuple(sorted(self._tool_handlers.keys()))
-
-    def registered_resources(self) -> tuple[str, ...]:
-        return tuple(sorted(self._resource_handlers.keys()))
-
-    def tool_schema(self, tool_name: str) -> McpToolSchema:
-        return self._tool_schemas.get(tool_name, DEFAULT_EMPTY_MCP_TOOL_SCHEMA)
-
-    def introspect(self) -> RuntimeIntrospection:
-        return RuntimeIntrospection(
-            transport="stdio",
-            tools=self.registered_tools(),
-            resources=self.registered_resources(),
-        )
-
-    def dispatch_tool(
-        self, tool_name: str, arguments: dict[str, Any]
-    ) -> McpToolResponse:
-        return dispatch_mcp_tool(self, tool_name, arguments).response
-
-    def dispatch_resource(self, uri: str) -> McpResourceResponse:
-        return dispatch_mcp_resource(self, uri).response
-
-    def start(self) -> None:
-        logger.info(
-            "stdio runtime adapter starting",
-            extra={
-                "transport": "stdio",
-                "registered_tools": list(self.registered_tools()),
-                "registered_resources": list(self.registered_resources()),
-            },
-        )
-        self._started = True
-
-    def stop(self) -> None:
-        if not self._started:
-            return
-
-        logger.info(
-            "stdio runtime adapter stopping",
-            extra={
-                "transport": "stdio",
-                "registered_tools": list(self.registered_tools()),
-                "registered_resources": list(self.registered_resources()),
             },
         )
         self._started = False
@@ -1395,85 +1269,6 @@ def dispatch_http_request(
     )
 
 
-def dispatch_mcp_tool(
-    runtime: StdioRuntimeAdapter,
-    tool_name: str,
-    arguments: dict[str, Any],
-) -> RuntimeDispatchResult:
-    handler = runtime._tool_handlers.get(tool_name)
-    if handler is None:
-        response = McpToolResponse(
-            payload={
-                "error": {
-                    "code": "tool_not_found",
-                    "message": f"no MCP tool handler is registered for tool '{tool_name}'",
-                }
-            }
-        )
-        return RuntimeDispatchResult(
-            transport="stdio",
-            target=tool_name,
-            status="tool_not_found",
-            response=response,
-        )
-
-    response = handler(arguments)
-    error_payload = response.payload.get("error")
-    return RuntimeDispatchResult(
-        transport="stdio",
-        target=tool_name,
-        status="error" if error_payload is not None else "ok",
-        response=response,
-    )
-
-
-def dispatch_mcp_resource(
-    runtime: StdioRuntimeAdapter,
-    uri: str,
-) -> RuntimeDispatchResult:
-    for resource_pattern, handler in runtime._resource_handlers.items():
-        if resource_pattern == "workspace://{workspace_id}/resume":
-            if parse_workspace_resume_resource_uri(uri) is not None:
-                response = handler(uri)
-                status = "ok" if response.status_code < 400 else "error"
-                return RuntimeDispatchResult(
-                    transport="stdio",
-                    target=uri,
-                    status=status,
-                    response=response,
-                )
-        elif (
-            resource_pattern
-            == "workspace://{workspace_id}/workflow/{workflow_instance_id}"
-        ):
-            if parse_workflow_detail_resource_uri(uri) is not None:
-                response = handler(uri)
-                status = "ok" if response.status_code < 400 else "error"
-                return RuntimeDispatchResult(
-                    transport="stdio",
-                    target=uri,
-                    status=status,
-                    response=response,
-                )
-
-    response = McpResourceResponse(
-        status_code=404,
-        payload={
-            "error": {
-                "code": "resource_not_found",
-                "message": f"no MCP resource handler is registered for resource '{uri}'",
-            }
-        },
-        headers={"content-type": "application/json"},
-    )
-    return RuntimeDispatchResult(
-        transport="stdio",
-        target=uri,
-        status="resource_not_found",
-        response=response,
-    )
-
-
 def build_workflow_resume_response(
     server: CtxLedgerServer,
     workflow_instance_id: UUID,
@@ -2017,7 +1812,15 @@ def collect_runtime_introspection(
         return (runtime.introspect(),)
 
     if isinstance(runtime, StdioRuntimeAdapter):
-        return (runtime.introspect(),)
+        introspection = runtime.introspect()
+        return (
+            RuntimeIntrospection(
+                transport=introspection.transport,
+                routes=tuple(getattr(introspection, "routes", ())),
+                tools=tuple(introspection.tools),
+                resources=tuple(introspection.resources),
+            ),
+        )
 
     return ()
 
@@ -2310,6 +2113,7 @@ __all__ = [
     "RuntimeIntrospectionResponse",
     "ServerBootstrapError",
     "ServerRuntime",
+    "StdioRpcServer",
     "StdioRuntimeAdapter",
     "WorkflowResumeResponse",
     "WorkflowServiceFactory",
