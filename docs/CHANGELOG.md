@@ -87,6 +87,8 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `runtime_tools`
   - `workflow_resume`
   - `workflow_closed_projection_failures`
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
 - `/debug/*` routes now follow the same bearer-auth boundary as other protected HTTP endpoints when HTTP auth is enabled
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` now removes `/debug/*` from HTTP route registration entirely rather than relying on handler-level fallback behavior
 - documentation updated in:
@@ -131,10 +133,11 @@ The project currently follows a lightweight, human-maintained changelog style.
 - operator-driven closure semantics are now documented more explicitly:
   - `resolved` indicates successful reconciliation or equivalent recovery evidence
   - `ignored` indicates visibility/handling closure without claiming successful projection repair
-- representative operator action surfaces are now documented for future concrete API design:
+- operator action surfaces are now documented as implemented across both MCP and HTTP route surfaces:
   - `projection_failures_ignore`
   - `projection_failures_resolve`
-  - selector scope may include `workspace_id`, `workflow_instance_id`, and optional `projection_type`
-  - action responses should preserve history and report `updated_failure_count`
+  - HTTP docs now describe query-parameter request shape using `workspace_id`, `workflow_instance_id`, and optional `projection_type`
+  - HTTP docs now include representative request, success response, and validation error examples
+  - action responses preserve history and report `updated_failure_count`
 
 ---

@@ -143,6 +143,18 @@ Implemented request shape for these HTTP action routes:
   - `projection_type` (optional)
   - `authorization` (when HTTP auth is enabled)
 
+Representative HTTP request examples:
+
+```/dev/null/http#L1-2
+GET /projection_failures_ignore?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222&projection_type=resume_json
+Authorization: Bearer example-token
+```
+
+```/dev/null/http#L1-2
+GET /projection_failures_resolve?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222
+Authorization: Bearer example-token
+```
+
 Representative design constraints for such action surfaces include:
 
 - they mutate canonical projection failure lifecycle state, not projection file contents directly
@@ -564,6 +576,32 @@ Implemented HTTP action behavior also includes:
   - `400` / `invalid_request`
   - `500` / `server_error`
 - reuse of the existing HTTP bearer-auth error contract for `401` responses when auth is enabled
+
+Representative HTTP success response example:
+
+```/dev/null/json#L1-7
+{
+  "workspace_id": "11111111-1111-1111-1111-111111111111",
+  "workflow_instance_id": "22222222-2222-2222-2222-222222222222",
+  "projection_type": "resume_json",
+  "updated_failure_count": 1,
+  "status": "ignored"
+}
+```
+
+Representative HTTP validation error example:
+
+```/dev/null/json#L1-9
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "workflow_instance_id must be a valid UUID",
+    "details": {
+      "field": "workflow_instance_id"
+    }
+  }
+}
+```
 
 Design note:
 

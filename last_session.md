@@ -1,129 +1,108 @@
 今回の変更
 #### `ctxledger/docs/mcp-api.md`
-projection failure lifecycle の **HTTP action endpoint 実装済み状態** を、MCP API ドキュメントへ反映しました。
+projection failure lifecycle の HTTP action surface について、**具体的な request / response example** を docs に追加しました。
 
 今回の方針:
-- 既存 docs の責務分離を崩さず、MCP tool surface と HTTP route surface の両方を明示
-- すでに実装済みの server/runtime/test の状態に合わせて、future wording を implemented wording へ更新
-- HTTP action surface の request / response / error / runtime registration を docs 上で追跡できるように整理
+- すでに実装済みの HTTP route surface を、利用者がそのまま読んで使える粒度まで具体化
+- 既存 docs の責務分離を維持しつつ、action route の入力方式と representative payload を明文化
+- server 実装に合わせて、query parameter contract と representative error shape を docs に反映
 
 ---
 
-### ドキュメントで反映した主な内容
-#### 1. HTTP operator action surface を「実装済み」として明記
-`docs/mcp-api.md` の projection failure lifecycle 説明で、以前は future 扱いだった内容を実装済みの記述に更新しました。
+### `docs/mcp-api.md` で追加・更新した内容
+#### 1. HTTP action request example を追加
+projection failure lifecycle の HTTP action route について、representative request example を追加しました。
 
-追加・明記した route / surface:
+追加した example 対象:
 - `projection_failures_ignore`
 - `projection_failures_resolve`
 
-明記したポイント:
-- concrete server surface として存在すること
-- MCP tool に加えて HTTP route surface もあること
-- canonical projection failure lifecycle state を更新するための action であること
+example で表現した内容:
+- path ベースの HTTP contract
+- query parameter での selector 指定
+- bearer token を付ける representative 形
+
+代表 query parameters:
+- `workspace_id`
+- `workflow_instance_id`
+- `projection_type` (optional)
 
 ---
 
-#### 2. HTTP action route の入力 contract を docs に追加
-HTTP action surface の request shape を docs に明記しました。
+#### 2. HTTP success response example を追加
+action route の representative success payload を docs に追加しました。
 
-反映した内容:
-- 既存の HTTP handler contract は `path: str` のまま維持
-- selector は query parameter から取得
-- representative query parameters:
-  - `workspace_id`
-  - `workflow_instance_id`
-  - `projection_type` (optional)
-  - `authorization` (auth enabled 時)
-
-これにより、今回の server 実装が
-- handler signature を壊していない
-- query-string parse で action を実現している
-ことが docs から読める状態になりました。
-
----
-
-#### 3. operator action semantics を HTTP も含めて整理
-projection failure lifecycle の mutation-side docs を更新し、MCP tool だけでなく HTTP action route も含む形に整理しました。
-
-反映した主な内容:
-- `projection_failures_ignore`
-  - matching open failures を `ignored` で close
-- `projection_failures_resolve`
-  - matching open failures を `resolved` で close
-- failure history は削除せず保持
-- `ignored` と `resolved` の意味論を区別
-- `projection_type` による optional scope があること
-
-response の代表 shape として引き続き:
+example に含めた主な fields:
 - `workspace_id`
 - `workflow_instance_id`
 - `projection_type`
 - `updated_failure_count`
 - `status`
 
-を docs に残しています。
+代表 example では:
+- `status = "ignored"`
+- `projection_type = "resume_json"`
+
+を示しています。
 
 ---
 
-#### 4. HTTP action error behavior を docs に追加
-HTTP route surface 側の representative error behavior を docs に追記しました。
+#### 3. HTTP validation error example を追加
+validation failure 時の representative error payload を docs に追加しました。
 
-反映した内容:
-- validation failure
-  - `400`
-  - `error.code = "invalid_request"`
-- workflow service 未初期化
-  - `503`
-  - `error.code = "server_not_ready"`
-- service exception mapping
-  - `404` / `not_found`
+example で表現した内容:
+- `error.code = "invalid_request"`
+- invalid UUID に対する message
+- `details.field` による field 指定
+
+これにより docs 上で、
+- success 時にどの shape が返るか
+- validation failure 時にどの shape が返るか
+を確認できる状態になりました。
+
+---
+
+#### 4. 既存の HTTP action contract 記述との整合を維持
+今回の example 追加は、すでに docs へ反映済みだった以下の内容と整合する形で行っています。
+
+整合対象:
+- HTTP action routes
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
+- query parameter contract
+- `projection_type` optional validation
+- HTTP error handling
   - `400` / `invalid_request`
+  - `503` / `server_not_ready`
+  - `404` / `not_found`
   - `500` / `server_error`
-- auth failure
-  - 既存 bearer-auth surface に従う `401`
+  - `401` auth error contract
 
 ---
 
-#### 5. debug / health / readiness docs の registered route 例を更新
-HTTP runtime の registered routes に action endpoints が入ることを docs の example payload に反映しました。
+#### `ctxledger/docs/CHANGELOG.md`
+Unreleased changelog も更新し、今回の docs 具体化を反映しました。
 
-更新した example 箇所:
-- `health()`
-- `readiness()`
-- `/debug/runtime`
-- `/debug/routes`
-
-HTTP route list の example は少なくとも次を含む状態へ更新:
-- `runtime_introspection`
-- `runtime_routes`
-- `runtime_tools`
-- `workflow_resume`
-- `workflow_closed_projection_failures`
-- `projection_failures_ignore`
-- `projection_failures_resolve`
-
-stdio tool list の example は引き続き少なくとも次を含みます:
-- `resume_workflow`
-- `projection_failures_ignore`
-- `projection_failures_resolve`
-- `memory_remember_episode`
-- `memory_search`
-- `memory_get_context`
-
----
-
-#### 6. `v0.1.0` contract summary を更新
-`Implemented Optional Surface` に、HTTP route surface としての projection failure actions も明記しました。
-
-追加した summary:
-- HTTP route surface for `projection_failures_ignore`
-- HTTP route surface for `projection_failures_resolve`
+反映した主な内容:
+- HTTP runtime adapter registration の route list に
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
+  を追加
+- projection failure lifecycle の operator action docs について、
+  future design 扱いではなく
+  **implemented MCP / HTTP route surface**
+  として記述
+- `docs/mcp-api.md` に以下を追加したことをメモ
+  - query-parameter request shape
+  - representative request examples
+  - representative success response example
+  - representative validation error example
 
 ---
 
 ### 今回変更したファイル
 - `ctxledger/docs/mcp-api.md`
+- `ctxledger/docs/CHANGELOG.md`
 - `ctxledger/last_session.md`
 
 ---
@@ -131,6 +110,7 @@ stdio tool list の example は引き続き少なくとも次を含みます:
 ### 確認結果
 今回確認できている範囲:
 - `ctxledger/docs/mcp-api.md`: diagnostics 問題なし
+- `ctxledger/docs/CHANGELOG.md`: diagnostics 問題なし
 
 前回までに確認済みの状態:
 - `ctxledger/src/ctxledger/server.py`: diagnostics 問題なし
@@ -143,14 +123,14 @@ stdio tool list の example は引き続き少なくとも次を含みます:
 ---
 
 ### git commit
-- 今回の docs 更新については、まだ git commit 未実施
+- 今回の docs example / changelog 更新については、まだ git commit 未実施
 
 ---
 
 ### 補足
 - `.gitignore` は引き続き変更対象に含めない前提
-- 今回の handoff は docs 反映後の状態に更新
-- この session では `last_session.md` を docs 更新内容へリフレッシュ
+- この handoff は docs example 追加と changelog 更新まで含む状態に更新
+- 実装コード自体の変更は今回行っていない
 
 ---
 
@@ -171,13 +151,15 @@ projection failure lifecycle の public surface は、少なくとも以下が d
 
 #### docs
 - `docs/mcp-api.md` に HTTP action surface 実装済み状態を反映済み
+- HTTP request / success response / validation error example を追加済み
+- `docs/CHANGELOG.md` に docs / route registration 反映を追加済み
 
 ---
 
 ### 次に自然な作業
 次に自然なのは以下です。
 
-1. 今回の docs 更新を descriptive message で git commit する
-2. 必要なら `docs/CHANGELOG.md` に docs / API surface の補足を追記する
+1. 今回の docs example / changelog 更新を descriptive message で git commit する
+2. 必要なら `docs/mcp-api.md` に auth disabled 時の request example も追加する
 3. integration / service 層で HTTP-oriented coverage を広げる
-4. 実際の HTTP route contract 例をさらに具体的な request example 付きで docs に追加する
+4. deployment / security docs に action endpoints の運用上の注意を補足する
