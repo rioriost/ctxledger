@@ -59,6 +59,49 @@ Examples:
 - `workflow_checkpoint`
 - `workflow_complete`
 
+For stdio MCP clients, tool argument discovery is implemented through `tools/list`, which now returns concrete `inputSchema` payloads for the visible tool surface.
+
+Representative `tools/list` response fragment:
+
+```/dev/null/json#L1-33
+{
+  "tools": [
+    {
+      "name": "workspace_register",
+      "description": "workspace_register tool",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo_url": { "type": "string", "minLength": 1 },
+          "canonical_path": { "type": "string", "minLength": 1 },
+          "default_branch": { "type": "string", "minLength": 1 },
+          "workspace_id": { "type": "string", "format": "uuid" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["repo_url", "canonical_path", "default_branch"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "workflow_start",
+      "description": "workflow_start tool",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspace_id": { "type": "string", "format": "uuid" },
+          "ticket_id": { "type": "string", "minLength": 1 },
+          "metadata": { "type": "object" }
+        },
+        "required": ["workspace_id", "ticket_id"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
+```
+
+This matters because MCP clients can now discover required arguments before calling tools such as `workspace_register`, instead of inferring them only from validation failures.
+
 Future examples:
 
 - `workflow_retry`
@@ -1537,6 +1580,30 @@ Memory APIs may exist in documented stub form until the corresponding subsystems
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
 
+### Acceptance Evidence Note for Tool Schema Discoverability
+
+In the current repository state, tool schema discoverability should be treated as part of the practical public-surface evidence for stdio MCP interoperability.
+
+Representative evidence includes:
+
+- stdio `tools/list` returns non-empty `inputSchema` payloads
+- `workspace_register` exposes required fields:
+  - `repo_url`
+  - `canonical_path`
+  - `default_branch`
+- `workspace_register` exposes optional fields:
+  - `workspace_id`
+  - `metadata`
+- the same schema-publication pattern is also applied to:
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_resume`
+  - `workflow_complete`
+  - projection failure tools
+  - memory stub tools
+
+This means `workspace_register` argument discovery is no longer dependent on runtime validation errors alone and should be counted as visible acceptance evidence for MCP server/client compatibility.
+
 ### Core Expectations
 A compliant `v0.1.0` implementation should ensure:
 
@@ -1546,3 +1613,4 @@ A compliant `v0.1.0` implementation should ensure:
 - composite resume assembly
 - normalized MCP-visible errors
 - projection-aware but projection-independent reads
+- machine-readable stdio MCP tool argument discovery through `tools/list`
