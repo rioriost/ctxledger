@@ -391,6 +391,12 @@ In `v0.1.0`, the representative resolution path is:
 - successful projection reconciliation for the same projection type
 - closure of matching open projection failure records in canonical storage
 
+Representative operational meaning:
+
+- `resolved` should be used when the system has evidence of successful reconciliation, not merely because an operator wants the warning to disappear
+- closing a failure as `resolved` records that the issue is no longer open due to recovery or equivalent successful closure semantics
+- `resolved_at` should record when the failure stopped being open
+
 ### `ignored`
 
 A projection failure becomes `ignored` when the system or operator decides that the failure should no longer be treated as an active unresolved issue.
@@ -403,6 +409,13 @@ Ignoring means:
 
 Ignoring is not equivalent to successful projection recovery.  
 It is a lifecycle transition for issue visibility and operational handling.
+
+Representative operator-handling semantics:
+
+- `ignored` should be used when an operator or higher-level workflow policy intentionally suppresses the failure as an active unresolved issue without claiming that the projection was successfully repaired
+- this is appropriate for cases such as known-noncritical projection outputs, temporary operator acceptance, or policy-driven suppression of a projection write problem
+- `ignored` should preserve historical failure details so later readers can distinguish operator closure from successful reconciliation
+- `resolved_at` should still be recorded for ignored failures because the failure is no longer open, but lifecycle `status` must remain the source of truth for whether closure happened by recovery or by operator decision
 
 ## 13.2 Projection Failure Visibility Rules
 
@@ -431,6 +444,7 @@ Representative read-side surfaces include:
 
 - closed failure history attached to the resume result
 - warning details containing closed failure entries
+- dedicated closed failure history HTTP read surfaces where implemented
 - failure metadata including:
   - `projection_type`
   - `target_path`
@@ -442,6 +456,12 @@ Representative read-side surfaces include:
   - `open_failure_count`
   - `retry_count`
   - `status`
+
+Representative operator-facing interpretation:
+
+- closed failure history should remain inspectable after an operator ignores open failures
+- readers should be able to distinguish `ignored` from `resolved` without inferring from timestamps alone
+- operator action that closes an open failure should change unresolved warning behavior, but it should not erase diagnostic history
 
 ## 13.3 Repeated Failure and Retry Metadata
 

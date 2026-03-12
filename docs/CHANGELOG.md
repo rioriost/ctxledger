@@ -66,6 +66,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `README.md`
   - `docs/mcp-api.md`
   - `docs/specification.md`
+  - including clearer operator-handling semantics for `ignored` versus `resolved` closure
 - test coverage for:
   - repeated projection failures incrementing `retry_count`
   - ignored projection failures disappearing from open failure warnings
@@ -126,5 +127,8 @@ The project currently follows a lightweight, human-maintained changelog style.
 - a projection may remain in `failed` status even when `open_failure_count == 0`
 - ignored projection failures remain in canonical history but are no longer surfaced as `open projection failure` warnings
 - resolved and ignored closed failures are both retained in history, but are distinguished by lifecycle status and warning code
+- operator-driven closure semantics are now documented more explicitly:
+  - `resolved` indicates successful reconciliation or equivalent recovery evidence
+  - `ignored` indicates visibility/handling closure without claiming successful projection repair
 
 ---

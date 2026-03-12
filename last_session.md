@@ -1,138 +1,91 @@
 今回の変更
-#### deployment / security docs cleanup
-closed projection failure history を含む HTTP surface の concrete contract 整理の流れで、deployment / security docs 側の debug surface 説明も揃えました。
+#### `ctxledger/docs/workflow-model.md`
+projection failure lifecycle の operator semantics を明確化する追記を行いました。
 
-主な対象:
-- `ctxledger/docs/deployment.md`
-- `ctxledger/docs/SECURITY.md`
-
----
-
-#### `ctxledger/docs/deployment.md`
-`/debug/*` の exposure policy 説明に、runtime/debug surfaces から見える representative HTTP route names を追記しました。
-
-追加・整理した主な内容:
-- current debug surfaces
-  - `/debug/runtime`
-  - `/debug/routes`
-  - `/debug/tools`
-- representative HTTP route names exposed by these debug surfaces
-  - `runtime_introspection`
-  - `runtime_routes`
-  - `runtime_tools`
-  - `workflow_resume`
-  - `workflow_closed_projection_failures`
-- `/debug/*` payloads が reveal しうる registered HTTP routes の具体例
-  - `runtime_introspection`
-  - `runtime_routes`
-  - `runtime_tools`
-  - `workflow_resume`
-  - `workflow_closed_projection_failures`
-
-意図:
-- deployment doc 上でも、runtime/debug examples や server 実装と同じ route vocabulary を使う
-- `/debug/*` が operationally sensitive である理由を、抽象論だけでなく concrete route 名でも説明する
+主な更新内容:
+- `resolved` の operational meaning を追記
+  - `resolved` は successful reconciliation や同等の成功的 closure を意味する
+  - operator が warning を消したいだけの場合とは区別する
+  - `resolved_at` は failure が open でなくなった時刻を表す
+- `ignored` の operator-handling semantics を追記
+  - operator または上位 policy による suppression として扱う
+  - successful projection recovery とは別物であることを明記
+  - known-noncritical projection や temporary acceptance の例を補足
+  - `resolved_at` があっても、closure reason の truth は `status` にあることを明記
+- projection failure visibility rules に、read-side surface と operator-facing interpretation を補足
+  - closed failure history は operator ignore 後も inspect 可能であるべき
+  - `ignored` と `resolved` は timestamp ではなく lifecycle `status` で区別すべき
+  - operator action は unresolved warning を消しても diagnostic history を消さない
+- read-side surface の例に、dedicated closed failure history HTTP surface を追加
+  - implemented な場合の例として扱う
 
 ---
 
-#### `ctxledger/docs/SECURITY.md`
-security doc 側にも同様に、`/debug/*` が expose しうる representative HTTP route names を追記しました。
+#### 今回 docs で明確になったこと
+projection failure lifecycle の意味づけは少なくとも次のように整理された状態です。
 
-追加・整理した主な内容:
-- representative HTTP route names exposed by debug surfaces
-  - `runtime_introspection`
-  - `runtime_routes`
-  - `runtime_tools`
-  - `workflow_resume`
-  - `workflow_closed_projection_failures`
-- registered HTTP routes の具体例として
-  - `runtime_introspection`
-  - `runtime_routes`
-  - `runtime_tools`
-  - `workflow_resume`
-  - `workflow_closed_projection_failures`
-  を明記
+- `open`
+  - projection write failure がまだ active unresolved issue
+- `resolved`
+  - successful reconciliation など、成功的 closure によって open でなくなった
+- `ignored`
+  - operator / policy により active unresolved issue として扱わないことにした
+  - recovery 成功を意味しない
 
-意図:
-- security doc 上でも、`/debug/*` の observability exposure を具体的に理解できるようにする
-- route 名の記述を README / MCP API / deployment / security の間で揃える
+特に重要な整理:
+- `resolved_at` は `resolved` と `ignored` の両方で closure time を持ちうる
+- closure reason の判別は `resolved_at` ではなく `status` を見る
+- operator ignore 後も closed history は残り続ける
+- warning visibility は変わっても canonical diagnostic history は消えない
 
 ---
 
-#### docs 全体の現在の整合
-少なくとも次の docs は、新しい dedicated HTTP surface と runtime/debug route naming に追従している状態です。
+#### docs 全体との関係
+この更新により、少なくとも次の docs 群と整合しやすい形になっています。
 
-- `ctxledger/README.md`
-- `ctxledger/docs/mcp-api.md`
 - `ctxledger/docs/architecture.md`
+- `ctxledger/docs/mcp-api.md`
 - `ctxledger/docs/specification.md`
-- `ctxledger/docs/deployment.md`
-- `ctxledger/docs/SECURITY.md`
-- `ctxledger/docs/CHANGELOG.md`
+- `ctxledger/docs/workflow-model.md`
 
-主な整合ポイント:
-- dedicated endpoint path
+関連する既存の concrete surface:
+- dedicated closed failure history endpoint
   - `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
-- representative payload
-  - `workflow_instance_id`
-  - `closed_projection_failures`
-- closed failure record fields
-  - `projection_type`
-  - `target_path`
-  - `attempt_id`
-  - `error_code`
-  - `error_message`
-  - `occurred_at`
-  - `resolved_at`
-  - `open_failure_count`
-  - `retry_count`
-  - `status`
-- runtime/debug examples や exposure docs における route 名
+- runtime/debug route naming
   - `workflow_closed_projection_failures`
 
 ---
 
 ### 現在の状態
-closed projection failure history の dedicated HTTP read surface については、少なくとも次の観点で一通り揃っている想定です。
+closed projection failure history と projection failure lifecycle については、少なくとも以下の観点でだいぶ揃っています。
 
 - server 実装
 - route registration
+- tests
 - README
 - MCP API docs
 - architecture docs
 - specification docs
-- deployment docs
-- security docs
+- workflow model docs
+- deployment / security docs
 - changelog
-- tests
-- diagnostics
 
-特に、history 専用 surface は次で読める前提で docs / 実装 / tests が揃っています。
-
-- `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
-
-また、runtime/debug surfaces 上の route 名は次で揃っています。
-
-- `runtime_introspection`
-- `runtime_routes`
-- `runtime_tools`
-- `workflow_resume`
-- `workflow_closed_projection_failures`
+特に、operator が failure を `ignored` として閉じた場合の意味が、workflow model docs 上で以前より明確になりました。
 
 ---
 
 ### 補足
 - `.gitignore` は保守対象外として扱う前提
-- この handoff でも `.gitignore` は作業対象に含めない
+- handoff でも `.gitignore` は作業対象に含めない
 
 ---
 
 ### 次に自然な作業
-次に自然なのは、別の surface や未完了機能に進むことです。例えば:
+次に自然なのは、未完了の surface や action を前に進めることです。例えば:
 
-1. 他の HTTP surface の concrete contract を docs と実装で横並び確認
-2. projection failure lifecycle の operator action surface 設計
+1. projection failure lifecycle の operator action surface を concrete API として設計する
+2. 他の HTTP surface の contract を docs と実装で横並び確認する
 3. workflow / memory 系の未完成 surface 実装へ進む
 4. deployment / security / debug endpoint 周辺の残りの表現統一を続ける
 
-この closed projection failure history の dedicated HTTP surface については、いったん完了扱いで次の作業へ進める状態です。
+この時点では、projection failure lifecycle の read-side と operator semantics の docs はかなり整理された状態です。
