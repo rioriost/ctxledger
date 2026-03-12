@@ -169,6 +169,32 @@ GET /projection_failures_ignore?workspace_id=11111111-1111-1111-1111-11111111111
 GET /projection_failures_resolve?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222
 ```
 
+Representative `404 not_found` response examples for invalid path shapes:
+
+```/dev/null/http#L1-6
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{
+  "error": {
+    "code": "not_found",
+    "message": "projection failure ignore endpoint requires /projection_failures_ignore"
+  }
+}
+```
+
+```/dev/null/http#L1-6
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{
+  "error": {
+    "code": "not_found",
+    "message": "projection failure resolve endpoint requires /projection_failures_resolve"
+  }
+}
+```
+
 Representative design constraints for such action surfaces include:
 
 - they mutate canonical projection failure lifecycle state, not projection file contents directly
@@ -590,6 +616,7 @@ Implemented HTTP action behavior also includes:
 
 - query-string argument parsing from the incoming request path
 - `400` with `error.code = "invalid_request"` for request validation failures
+- `404` with `error.code = "not_found"` for unexpected route path shapes
 - `503` with `error.code = "server_not_ready"` when the workflow service is not initialized
 - normalized service exception mapping to representative HTTP errors:
   - `404` / `not_found`
@@ -606,6 +633,17 @@ Representative HTTP success response example:
   "projection_type": "resume_json",
   "updated_failure_count": 1,
   "status": "ignored"
+}
+```
+
+Representative HTTP `404 not_found` response example for an invalid action path:
+
+```/dev/null/json#L1-6
+{
+  "error": {
+    "code": "not_found",
+    "message": "projection failure ignore endpoint requires /projection_failures_ignore"
+  }
 }
 ```
 
