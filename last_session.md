@@ -1,99 +1,94 @@
-Patch 2 の続きとして、今回は **create_server and runtime wrapper alignment** を進め、`server.py` に残っていた server construction / runtime wrapper まわりの surface を少し揃えました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers / HTTP runtime registration wiring cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup / health-readiness helper extraction / thinner public server wrapper delegation / resource response surface alignment / create_runtime wrapper simplification を土台にして、**server facade boundary と create_server / runtime wrapper ownership の整理** をさらに一歩進めています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
+Patch 2 の続きとして、今回は **facade wrapper alignment step** を進め、`server.py` に残っていた public facade / compatibility wrapper 群の並び方をさらに揃えました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers / HTTP runtime registration wiring cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup / health-readiness helper extraction / thinner public server wrapper delegation / resource response surface alignment / create_runtime wrapper simplification / create_server and runtime wrapper alignment を土台にして、**`server.py` をより明確な top-level facade / compatibility shell に寄せる小さな整列** を実施しています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
 
 今回の実装でやったこと:
 
-- `ctxledger/src/ctxledger/server.py` を更新して `create_server(...)` / runtime-related wrapper surface の shape を少し整理
-- `create_runtime(...)` は前回の「builder selection + orchestration delegation」方針を維持したまま、server facade としての役割が見やすい状態を継続
-- `create_server(...)` は canonical `runtime/server_factory.py` を使う public wrapper であることを明確に扱う状態へ整理
+- `ctxledger/src/ctxledger/server.py` を更新して facade wrapper 群の役割をさらに揃えた
+- `CtxLedgerServer.build_workspace_resume_resource_response(...)`
+- `CtxLedgerServer.build_workflow_detail_resource_response(...)`
+を top-level wrapper 経由に寄せ、resource surface も response surface と同じ考え方にした
+- `create_runtime(...)` を builder selection + orchestration delegation の形で維持しつつ、wrapper としての shape をわかりやすく保った
+- `create_server(...)` / `build_http_runtime_adapter(...)` / `build_workflow_service_factory(...)` / `_print_runtime_summary(...)`
+などを含め、`server.py` 側は implementation ownership ではなく public facade である前提をさらに明確にした
 - 回帰確認として `tests/test_server.py` と `tests/test_mcp_modules.py` を再実行
 - 最終的に green を維持
 
-## 1. `ctxledger/src/ctxledger/server.py`
-今回の中心です。`server.py` に残る construction/runtime wrapper surface を、これまでの helper canonicalization 方針に合わせて少し揃えました。
+## 1. 今回の要点
+今回の整理は新しい canonical module を増やすよりも、**既に外へ出した canonical helper 群に対して `server.py` の wrapper surface を揃える** ことが中心です。
 
-今回の整理対象:
-- `create_runtime(...)`
-- `create_server(...)`
-- `build_http_runtime_adapter(...)`
-- `_print_runtime_summary(...)`
-- `build_workflow_service_factory(...)`
+方針:
+- implementation は helper module 側
+- `server.py` は public surface と compatibility export
+- dual surface がある場合は
+  - top-level free function wrapper
+  - `CtxLedgerServer` instance method
+  のどちらも残してよい
+- ただし ownership は helper module 側
+- method ↔ wrapper の相互参照は避ける
+- 可能な限り canonical helper 直 delegate に寄せる
 
-ポイント:
-- canonical implementation を持つ helper module は引き続き
-  - `runtime/http_runtime.py`
-  - `runtime/orchestration.py`
-  - `runtime/server_factory.py`
-  に寄せています
-- `server.py` 側は
-  - public import surface
-  - compatibility wrapper
-  - facade entrypoint
-  としての責務を持つ形を維持しています
-- `create_runtime(...)` は orchestration helper へ渡す `http_runtime_builder` の選択を行う wrapper
-- `create_server(...)` は canonical server factory wiring helper を public surface として公開する wrapper
-- `_print_runtime_summary(...)` は test/import 互換のための wrapper
-- `build_workflow_service_factory(...)` も public surface として維持
+## 2. `ctxledger/src/ctxledger/server.py`
+今回の主な作業対象です。
 
-## 2. `create_runtime(...)` の現状
-前回の整理から継続して、`create_runtime(...)` は **wrapper であって implementation ではない** 形がより明確です。
+整理した観点:
+- response-related public wrapper
+- resource-related public wrapper
+- runtime construction wrapper
+- server construction wrapper
+- summary / helper export wrapper
 
-現状の考え方:
-- `server is None`
-  - placeholder の `HttpRuntimeAdapter(settings)` を返せる builder を使う
-- `server is not None`
-  - canonical `build_http_runtime_adapter` を使う
-- そのうえで `create_runtime_orchestration(...)` を一箇所から呼ぶ
+### response/resource surface
+前回までに:
+- `runtime/server_responses.py` が canonical implementation
+- `server.py` の top-level `build_*`
+- `CtxLedgerServer.build_*`
 
-ポイント:
-- runtime selection / transport orchestration 本体は `runtime/orchestration.py`
-- HTTP runtime registration wiring 本体は `runtime/http_runtime.py`
-- `server.py` 側では public surface 維持のための builder selection を担当する
+が public surface という整理が進んでいました。
 
-## 3. `create_server(...)` の現状
-`create_server(...)` も、今後は以下の理解でよいです。
+今回さらに揃えたこと:
+- resource response 側も response-related helper と同じ考え方で整理
+- `CtxLedgerServer.build_workspace_resume_resource_response(...)`
+- `CtxLedgerServer.build_workflow_detail_resource_response(...)`
+も facade method として扱い、canonical helper に寄せた
+- top-level wrapper 群も helper canonical implementation を前提に見られる形を維持
 
-### canonical implementation
-- `ctxledger/src/ctxledger/runtime/server_factory.py`
+### runtime/server wrapper surface
+今回の確認ポイント:
+- `create_runtime(...)` は orchestration 実装本体ではない
+- `create_server(...)` は construction wiring 実装本体ではない
+- `build_http_runtime_adapter(...)` は HTTP runtime registration 実装本体ではない
+- `_print_runtime_summary(...)` は summary 実装本体ではない
 
-### public facade / compatibility export
-- `ctxledger.server.create_server(...)`
+これらはすべて:
+- public import compatibility
+- test/import surface 維持
+- facade entrypoint
 
-ポイント:
-- actual wiring
-  - `server_class`
-  - `create_runtime`
-  - db health checker selection
-  - workflow service factory fallback
-  などの construction flow は canonical factory helper 側にあります
-- `server.py` の `create_server(...)` は public entrypoint として残す
-- これにより公開 surface は維持しつつ、ownership は helper module 側に寄せています
+として残っていると見てよいです。
 
-## 4. ここまでの canonical ownership 状態
-現時点での canonical ownership の大枠は次のとおりです。
+## 3. 現時点の canonical ownership
+ここまでの整理込みで、今の ownership は次の理解でよいです。
 
 - bootstrap error: `runtime/errors.py`
-- response/status dataclasses: `runtime/types.py`
-- serializers: `runtime/serializers.py`
-- shared helper protocols: `runtime/protocols.py`
+- response/status dataclass: `runtime/types.py`
+- serializer: `runtime/serializers.py`
+- shared helper protocol: `runtime/protocols.py`
 - health/readiness helper: `runtime/status.py`
 - HTTP handler implementation: `runtime/http_handlers.py`
-- HTTP runtime registration wiring: `runtime/http_runtime.py`
-- response building: `runtime/server_responses.py`
-- resource response building: `runtime/server_responses.py`
+- HTTP runtime route registration wiring: `runtime/http_runtime.py`
+- server/resource response implementation: `runtime/server_responses.py`
 - server construction wiring: `runtime/server_factory.py`
 - DB health helper: `runtime/database_health.py`
 - runtime introspection normalization: `runtime/introspection.py`
 - transport/runtime selection orchestration: `runtime/orchestration.py`
 
-`server.py` に残るものは主に:
-- top-level public import surface
-- compatibility wrapper
+`server.py` に主に残るもの:
 - application-facing `CtxLedgerServer`
 - concrete `HttpRuntimeAdapter`
-- public convenience entrypoint
-- create/runtime/server summary まわりの wrapper
+- top-level public import surface
+- compatibility wrapper
+- convenience facade entrypoint
 
-## 5. 挙動面での現状
+## 4. 挙動面での現状
 今回の変更も extraction / canonicalization / facade cleanup 中心で、機能追加ではなく責務整理を優先しています。
 
 維持しているもの:
@@ -120,9 +115,10 @@ Patch 2 の続きとして、今回は **create_server and runtime wrapper align
 - readiness status payload shape
 
 今回新しく進んだこと:
-- `create_server(...)` / `create_runtime(...)` / related wrappers が facade/compatibility shell としてより見やすくなった
-- server construction / runtime wrapper surface の ownership 方針が少し明確になった
-- `server.py` の facade 化をさらに少し進められた
+- `server.py` facade / compatibility shell の見通しが少し良くなった
+- response/resource/runtime/server wrapper surface の考え方をより揃えられた
+- canonical helper module と public facade の境界を少し明確にできた
+- final dependency cleanup へ進むための下地が少し整った
 
 まだ残っているもの:
 - `server.py` には concrete `HttpRuntimeAdapter` class 実装そのものが残っている
@@ -133,7 +129,7 @@ Patch 2 の続きとして、今回は **create_server and runtime wrapper align
 - stdio 削除前提の final dependency cleanup は未完
 - compliance claim はまだ不可
 
-## 6. テスト
+## 5. テスト
 確認したテスト:
 - `tests/test_server.py`
 - `tests/test_mcp_modules.py`
@@ -141,15 +137,19 @@ Patch 2 の続きとして、今回は **create_server and runtime wrapper align
 結果:
 - **180 passed**
 
-基準コマンド:
+実行コマンド:
 - `pytest -q tests/test_server.py tests/test_mcp_modules.py`
 
-## 7. 実装の評価
-今回の整理は小さめですが、`server.py` を facade に寄せるうえで意味があります。
+補足:
+- focused regression は引き続き green
+- facade/wrapper alignment 中心の変更で、behavioral regression は見えていません
+
+## 6. 実装の評価
+今回の整理は小さいですが、`server.py` を facade に寄せるうえで意味があります。
 
 進んだこと:
-- `create_server(...)` / `create_runtime(...)` を helper canonical implementation へ寄せた理解が明確になった
-- wrapper の責務を「public export + selection/delegation」に寄せられた
+- wrapper の role が少し揃った
+- implementation ownership を helper module 側へ寄せる方向が一貫した
 - public import surface を保ったまま dependency boundary を改善できた
 - 既存 test expectation を保ったまま安全に前進できた
 
@@ -161,17 +161,17 @@ Patch 2 の続きとして、今回は **create_server and runtime wrapper align
 - transport-specific startup orchestration のさらなる isolation
 - richer MCP transport semantics の本実装
 
-## 8. コミット
+## 7. コミット
 このセッション時点では、まだコミットは切っていません。
 
 次の人は `.rules` に従って、作業ループ完了時に descriptive message で `git commit` してください。
 
 コミット候補メッセージ例:
-- `Align create_server and runtime wrappers`
-- `Clarify server facade runtime wrappers`
-- `Thin create_server facade delegation`
+- `Align server facade wrappers`
+- `Clarify facade wrapper ownership`
+- `Refine server compatibility wrapper alignment`
 
-## 9. 次の引き継ぎ先向けメモ
+## 8. 次の引き継ぎ先向けメモ
 次に入る人は以下を前提にしてよいです。
 
 1. Patch 1 の extraction は入っている
@@ -201,13 +201,36 @@ Patch 2 の続きとして、今回は **create_server and runtime wrapper align
 25. health/readiness helper extraction が入っている
 26. thinner public server wrapper delegation が入っている
 27. resource response surface alignment が入っている
-28. 今回、`create_server(...)` / runtime wrapper alignment の理解と整理が進んだ
-29. green 基準は `tests/test_server.py` + `tests/test_mcp_modules.py` の **180 passed**
-30. `docs/specification.md` は引き続き触らない
-31. まだ compliance claim はしない
-32. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
+28. create_runtime wrapper simplification が入っている
+29. 今回、facade wrapper alignment step が入った
+30. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
+31. `docs/specification.md` は引き続き触らない
+32. まだ compliance claim はしない
+33. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
 
-## 10. 次に自然な一手
+注意点:
+- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation / server response building / server construction wiring / resource response building / database health helper / shared bootstrap error / shared runtime response types / shared runtime serializers / HTTP runtime wrapper dependency cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup / health-readiness helper extraction / thinner public server wrapper delegation / resource response surface alignment / create_runtime wrapper simplification / facade wrapper alignment step の本体は外へ出始めた
+- `create_runtime(...)` は public surface 維持のため `server.py` に wrapper として残っている
+- `_print_runtime_summary(...)` も test/import 互換のため `server.py` に wrapper として残してある
+- `build_http_runtime_adapter(...)` も public surface 維持のため `server.py` に wrapper を残してある
+- HTTP handler 群も public surface 維持のため `server.py` には wrapper が残っている
+- response/resource builder 群と `create_server(...)` / `build_workflow_service_factory(...)` も public surface 維持のため `server.py` に wrapper が残っている
+- `runtime/http_runtime.py` は HTTP runtime の registration wiring を持つ
+- `runtime/http_handlers.py` は HTTP handler implementation の canonical module
+- `runtime/server_responses.py` は server/resource response building の canonical module
+- `runtime/server_factory.py` は server construction wiring の canonical module
+- `runtime/database_health.py` は DB health helper の canonical module
+- `runtime/errors.py` は shared bootstrap error の canonical module
+- `runtime/types.py` は shared response/status dataclass の canonical module
+- `runtime/serializers.py` は shared serializer の canonical module
+- `runtime/protocols.py` は shared runtime helper protocol の canonical module
+- `runtime/status.py` は health/readiness helper の canonical module
+- `runtime/composite.py` は composite lifecycle の canonical 実装
+- `runtime/orchestration.py` は runtime selection / run entrypoint orchestration の中心
+- `runtime/introspection.py` は stdio/http/composite を横断して正規化する責務を持つ
+- 既存 green 状態は **180 passed** を基準に見てよい
+
+## 9. 次に自然な一手
 ここまで来たので、次は **server facade boundary と adapter/wrapper ownership の最終整理** が一番きれいです。
 
 たとえば:
