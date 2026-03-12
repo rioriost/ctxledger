@@ -37,10 +37,9 @@ However, when evaluated strictly against the `v0.1.0` implementation plan, there
 
 The most important remaining gaps are:
 
-1. **Required MCP tool surface does not fully match the plan**
-2. **Required MCP resource surface is not confirmed as implemented**
-3. **Plan/docs naming and implementation naming are inconsistent in at least one core workflow tool**
-4. **Some acceptance criteria appear only partially evidenced by the current public runtime surface**
+1. **Required MCP resource surface is not confirmed as implemented**
+2. **Plan/docs naming and implementation naming are inconsistent in at least one core workflow tool**
+3. **Some acceptance criteria appear only partially evidenced by the current public runtime surface**
 
 ---
 
@@ -62,7 +61,6 @@ The most important remaining gaps are:
 - acceptance-criteria traceability
 
 ### Likely incomplete or unverified
-- required MCP tool names and registrations
 - required MCP resources
 - resource-level test evidence
 - full plan-to-runtime contract alignment
@@ -289,7 +287,7 @@ Create a short acceptance-check matrix showing for each criterion:
 
 ## 6. Gaps / Likely Unresolved Items
 
-## 6.1 Required MCP tools are not all visible in runtime registration
+## 6.1 Required MCP tool surface is now mostly implemented, but naming remains inconsistent
 
 ### Plan requirement
 Required MCP tools in `v0.1.0`:
@@ -301,7 +299,7 @@ Required MCP tools in `v0.1.0`:
 - `workflow_complete`
 
 ### Current visible evidence
-A concrete runtime audit of `src/ctxledger/server.py` shows:
+A concrete runtime audit of `src/ctxledger/server.py` now shows:
 
 - HTTP handler registrations include:
   - `workflow_resume`
@@ -314,67 +312,63 @@ A concrete runtime audit of `src/ctxledger/server.py` shows:
     - `runtime_tools`
 - stdio tool registrations include:
   - `resume_workflow`
+  - `workspace_register`
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_complete`
   - `projection_failures_ignore`
   - `projection_failures_resolve`
   - `memory_remember_episode`
   - `memory_search`
   - `memory_get_context`
 
-  A follow-up audit of visible service-layer implementation and server-side tool-handler definitions shows:
+A follow-up audit of visible service-layer implementation and server-side tool-handler definitions shows:
 
-  - workflow service methods do exist for:
-    - `register_workspace`
-    - `start_workflow`
-    - `create_checkpoint`
-    - `complete_workflow`
-  - but no corresponding visible MCP tool-handler definitions or stdio registrations were confirmed for:
-    - `workspace_register`
-    - `workflow_start`
-    - `workflow_checkpoint`
-    - `workflow_complete`
+- workflow service methods do exist for:
+  - `register_workspace`
+  - `start_workflow`
+  - `create_checkpoint`
+  - `complete_workflow`
+- corresponding visible MCP tool-handler definitions are also present for:
+  - `workspace_register`
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_complete`
 
-  This sharpens the current assessment:
+This sharpens the current assessment:
 
-  - the underlying workflow operations appear to exist in the service/domain layer
-  - the remaining gap appears to be MCP exposure and runtime wiring
-  - current plan misalignment is therefore more about public-surface completeness than about missing workflow-domain behavior
+- the previously missing workflow MCP operations are now exposed in the visible stdio runtime wiring
+- the main remaining workflow-surface issue is no longer missing exposure for those four tools
+- the remaining plan misalignment is concentrated in naming consistency around resume, plus unresolved resource support
 
-  In the inspected stdio runtime registration area, there is no visible registration for:
-
-- `workspace_register`
-- `workflow_start`
-- `workflow_checkpoint`
-- `workflow_complete`
-
-There is also a naming mismatch between:
+There is still a naming mismatch between:
 
 - HTTP route: `workflow_resume`
 - stdio tool: `resume_workflow`
 
 ### Why this matters
-This is a core plan requirement.  
-Even if service-layer methods exist, the implementation plan defines MCP as the public interface.
-
-If these workflow operations are not actually bound as MCP tools, then `v0.1.0` is not fully aligned with the plan.
+The original workflow MCP exposure gap has been substantially closed, but the public surface still presents two different names for the resume operation.
 
 ### Status
-**Gap / likely unresolved**
+**Partially aligned / naming still unresolved**
 
 ### Task
-Implement or confirm MCP tool exposure for:
-
-- `workspace_register`
-- `workflow_start`
-- `workflow_checkpoint`
-- `workflow_complete`
-
-Also confirm the correct public name for resume:
+Keep the newly added workflow MCP tools in place and resolve the remaining naming decision for resume:
 
 - `workflow_resume`
 - or `resume_workflow`
 
+Then align:
+
+- implementation
+- tests
+- README
+- `docs/mcp-api.md`
+- `docs/imple_plan_0.1.0.md` if needed
+- changelog
+
 ### Suggested priority
-**Highest**
+**High**
 
 ---
 
@@ -538,11 +532,15 @@ Create a definitive matrix of:
 
 ## 7.1 Highest-Priority Tasks
 
-### Task A — Confirm and fix required MCP workflow tool exposure
+### Task A — Reconcile the workflow MCP surface after core tool exposure work
 Concrete runtime audit result:
 
 - confirmed visible stdio tools:
   - `resume_workflow`
+  - `workspace_register`
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_complete`
   - `projection_failures_ignore`
   - `projection_failures_resolve`
   - `memory_remember_episode`
@@ -553,26 +551,20 @@ Concrete runtime audit result:
   - `start_workflow`
   - `create_checkpoint`
   - `complete_workflow`
-- no corresponding visible MCP tool-handler definitions were confirmed for:
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_checkpoint`
-  - `workflow_complete`
-- not visibly registered as stdio tools in the inspected runtime wiring:
+- confirmed visible MCP tool-handler definitions for:
   - `workspace_register`
   - `workflow_start`
   - `workflow_checkpoint`
   - `workflow_complete`
 
 Interpretation:
-- the missing plan-required workflow operations appear to exist at the service layer
-- but they are still not confirmed as public MCP tools in the inspected runtime wiring
-- no visible tool-handler implementation was confirmed for those workflow operations in the inspected server surface
-- this makes the remaining gap look more like MCP exposure/wiring work than missing domain implementation
+- the previously missing plan-required workflow MCP tools now appear to be exposed
+- the remaining workflow-surface gap is no longer basic MCP exposure for those four tools
+- the remaining work is now centered on naming consistency and broader public-surface reconciliation
 
 Next step:
-- confirm whether these workflow tools are registered elsewhere
-- if not, implement MCP exposure and tests
+- keep the new MCP workflow tools as part of the baseline
+- shift focus from “missing workflow tool exposure” to “surface alignment and naming cleanup”
 
 ### Task B — Resolve `workflow_resume` vs `resume_workflow`
 Concrete runtime audit result:
@@ -673,10 +665,9 @@ Current concrete audit findings sharpen that question:
 
 - `workflow_resume` is visible as an HTTP route
 - `resume_workflow` is visible as a stdio tool
-- `workspace_register`, `workflow_start`, `workflow_checkpoint`, and `workflow_complete` are not visibly registered in the inspected stdio runtime wiring
-- corresponding workflow service methods for those missing operations are visible
-- no corresponding visible MCP tool-handler definitions were confirmed for those operations in the inspected server implementation
-- the current gap therefore appears to be MCP surface exposure rather than missing workflow-domain behavior
+- `workspace_register`, `workflow_start`, `workflow_checkpoint`, and `workflow_complete` are now visibly registered in the inspected stdio runtime wiring
+- corresponding workflow service methods and visible MCP tool-handler definitions for those operations are present
+- the previous workflow-tool exposure gap has therefore narrowed to naming/surface alignment rather than missing workflow-domain behavior
 - no resource registration or `workspace://...` resolver wiring was visibly confirmed in the inspected implementation
 
 That is the key blocker to declaring the `v0.1.0` implementation plan complete.
@@ -689,7 +680,6 @@ The current repository is not a minimal skeleton anymore; it contains substantia
 
 But relative to `docs/imple_plan_0.1.0.md`, the following still need resolution:
 
-- required MCP workflow tool exposure
 - required MCP resource exposure
 - `workflow_resume` vs `resume_workflow` naming consistency
 - explicit public-surface alignment across implementation, tests, and docs
@@ -704,6 +694,10 @@ Start from the concrete audit findings already established:
 
 1. treat the currently confirmed stdio tool set as:
    - `resume_workflow`
+   - `workspace_register`
+   - `workflow_start`
+   - `workflow_checkpoint`
+   - `workflow_complete`
    - `projection_failures_ignore`
    - `projection_failures_resolve`
    - `memory_remember_episode`
@@ -715,11 +709,9 @@ Start from the concrete audit findings already established:
    - `projection_failures_ignore`
    - `projection_failures_resolve`
    - optional debug routes
-3. treat the following as the first unresolved workflow-tool candidates:
-   - `workspace_register`
-   - `workflow_start`
-   - `workflow_checkpoint`
-   - `workflow_complete`
+3. treat the next unresolved public-surface questions as:
+   - whether `workflow_resume` or `resume_workflow` is the canonical public resume name
+   - whether resource support is actually implemented
 4. treat resource wiring as unconfirmed and likely missing until direct implementation evidence is found
 5. compare all of the above against:
    - `docs/imple_plan_0.1.0.md`

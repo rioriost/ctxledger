@@ -48,7 +48,11 @@ from ctxledger.server import (
     build_runtime_introspection_http_handler,
     build_runtime_introspection_response,
     build_stdio_runtime_adapter,
+    build_workflow_checkpoint_tool_handler,
+    build_workflow_complete_tool_handler,
     build_workflow_resume_http_handler,
+    build_workflow_start_tool_handler,
+    build_workspace_register_tool_handler,
     collect_runtime_introspection,
     create_runtime,
     create_server,
@@ -61,11 +65,15 @@ from ctxledger.server import (
     serialize_workflow_resume,
 )
 from ctxledger.workflow.service import (
+    CompleteWorkflowInput,
+    CreateCheckpointInput,
     ProjectionArtifactType,
     ProjectionInfo,
     ProjectionStatus,
+    RegisterWorkspaceInput,
     ResumableStatus,
     ResumeIssue,
+    StartWorkflowInput,
     VerifyReport,
     VerifyStatus,
     WorkflowAttempt,
@@ -114,6 +122,14 @@ class FakeRuntime:
 class FakeWorkflowService:
     resume_result: WorkflowResume
     resume_calls: list[object] | None = None
+    register_workspace_result: Workspace | None = None
+    register_workspace_calls: list[object] | None = None
+    start_workflow_result: object | None = None
+    start_workflow_calls: list[object] | None = None
+    create_checkpoint_result: object | None = None
+    create_checkpoint_calls: list[object] | None = None
+    complete_workflow_result: object | None = None
+    complete_workflow_calls: list[object] | None = None
     ignore_result: int = 0
     resolve_result: int = 0
     ignore_calls: list[object] | None = None
@@ -122,6 +138,14 @@ class FakeWorkflowService:
     def __post_init__(self) -> None:
         if self.resume_calls is None:
             self.resume_calls = []
+        if self.register_workspace_calls is None:
+            self.register_workspace_calls = []
+        if self.start_workflow_calls is None:
+            self.start_workflow_calls = []
+        if self.create_checkpoint_calls is None:
+            self.create_checkpoint_calls = []
+        if self.complete_workflow_calls is None:
+            self.complete_workflow_calls = []
         if self.ignore_calls is None:
             self.ignore_calls = []
         if self.resolve_calls is None:
@@ -131,6 +155,30 @@ class FakeWorkflowService:
         assert self.resume_calls is not None
         self.resume_calls.append(data)
         return self.resume_result
+
+    def register_workspace(self, data: object) -> Workspace:
+        assert self.register_workspace_calls is not None
+        assert self.register_workspace_result is not None
+        self.register_workspace_calls.append(data)
+        return self.register_workspace_result
+
+    def start_workflow(self, data: object) -> object:
+        assert self.start_workflow_calls is not None
+        assert self.start_workflow_result is not None
+        self.start_workflow_calls.append(data)
+        return self.start_workflow_result
+
+    def create_checkpoint(self, data: object) -> object:
+        assert self.create_checkpoint_calls is not None
+        assert self.create_checkpoint_result is not None
+        self.create_checkpoint_calls.append(data)
+        return self.create_checkpoint_result
+
+    def complete_workflow(self, data: object) -> object:
+        assert self.complete_workflow_calls is not None
+        assert self.complete_workflow_result is not None
+        self.complete_workflow_calls.append(data)
+        return self.complete_workflow_result
 
     def ignore_resume_projection_failures(
         self,
@@ -2597,6 +2645,484 @@ def test_build_resume_workflow_tool_handler_returns_server_not_ready_error() -> 
     }
 
 
+def test_build_workspace_register_tool_handler_returns_success_payload() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    registered_workspace = replace(
+        resume.workspace,
+        repo_url="https://example.com/registered.git",
+        canonical_path="/tmp/registered",
+        default_branch="main",
+        metadata={"team": "platform"},
+    )
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        register_workspace_result=registered_workspace,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_workspace_register_tool_handler(server)
+
+    server.startup()
+
+    response = handler(
+        {
+            "repo_url": registered_workspace.repo_url,
+            "canonical_path": registered_workspace.canonical_path,
+            "default_branch": registered_workspace.default_branch,
+            "metadata": {"team": "platform"},
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workspace_id": str(registered_workspace.workspace_id),
+            "repo_url": registered_workspace.repo_url,
+            "canonical_path": registered_workspace.canonical_path,
+            "default_branch": registered_workspace.default_branch,
+            "metadata": registered_workspace.metadata,
+            "created_at": registered_workspace.created_at.isoformat(),
+            "updated_at": registered_workspace.updated_at.isoformat(),
+        },
+    }
+    assert fake_workflow_service.register_workspace_calls == [
+        RegisterWorkspaceInput(
+            workspace_id=None,
+            repo_url=registered_workspace.repo_url,
+            canonical_path=registered_workspace.canonical_path,
+            default_branch=registered_workspace.default_branch,
+            metadata={"team": "platform"},
+        )
+    ]
+
+
+def test_build_workspace_register_tool_handler_returns_invalid_request_for_missing_repo_url() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workspace_register_tool_handler(server)
+
+    response = handler(
+        {
+            "canonical_path": "/tmp/repo",
+            "default_branch": "main",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "repo_url must be a non-empty string",
+            "details": {"field": "repo_url"},
+        },
+    }
+
+
+def test_build_workspace_register_tool_handler_returns_server_not_ready_error() -> None:
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workspace_register_tool_handler(server)
+
+    response = handler(
+        {
+            "repo_url": "https://example.com/repo.git",
+            "canonical_path": "/tmp/repo",
+            "default_branch": "main",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+            "details": {},
+        },
+    }
+
+
+def test_build_workflow_start_tool_handler_returns_success_payload() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        start_workflow_result=type(
+            "WorkflowStartResultStub",
+            (),
+            {
+                "workflow_instance": resume.workflow_instance,
+                "attempt": resume.attempt,
+            },
+        )(),
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_workflow_start_tool_handler(server)
+
+    server.startup()
+
+    response = handler(
+        {
+            "workspace_id": str(resume.workspace.workspace_id),
+            "ticket_id": resume.workflow_instance.ticket_id,
+            "metadata": {"priority": "high"},
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "attempt_id": str(resume.attempt.attempt_id),
+            "workspace_id": str(resume.workflow_instance.workspace_id),
+            "ticket_id": resume.workflow_instance.ticket_id,
+            "workflow_status": resume.workflow_instance.status.value,
+            "attempt_status": resume.attempt.status.value,
+            "created_at": resume.workflow_instance.created_at.isoformat(),
+        },
+    }
+    assert fake_workflow_service.start_workflow_calls == [
+        StartWorkflowInput(
+            workspace_id=resume.workspace.workspace_id,
+            ticket_id=resume.workflow_instance.ticket_id,
+            metadata={"priority": "high"},
+        )
+    ]
+
+
+def test_build_workflow_start_tool_handler_returns_invalid_request_for_bad_workspace_id() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_start_tool_handler(server)
+
+    response = handler(
+        {
+            "workspace_id": "not-a-uuid",
+            "ticket_id": "SRV-123",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workspace_id must be a valid UUID",
+            "details": {"field": "workspace_id"},
+        },
+    }
+
+
+def test_build_workflow_start_tool_handler_returns_server_not_ready_error() -> None:
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_start_tool_handler(server)
+
+    response = handler(
+        {
+            "workspace_id": str(uuid4()),
+            "ticket_id": "SRV-123",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+            "details": {},
+        },
+    }
+
+
+def test_build_workflow_checkpoint_tool_handler_returns_success_payload() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        create_checkpoint_result=type(
+            "WorkflowCheckpointResultStub",
+            (),
+            {
+                "checkpoint": resume.latest_checkpoint,
+                "workflow_instance": resume.workflow_instance,
+                "attempt": resume.attempt,
+                "verify_report": resume.latest_verify_report,
+            },
+        )(),
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_workflow_checkpoint_tool_handler(server)
+
+    server.startup()
+
+    response = handler(
+        {
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "attempt_id": str(resume.attempt.attempt_id),
+            "step_name": resume.latest_checkpoint.step_name,
+            "summary": resume.latest_checkpoint.summary,
+            "checkpoint_json": resume.latest_checkpoint.checkpoint_json,
+            "verify_status": resume.latest_verify_report.status.value,
+            "verify_report": resume.latest_verify_report.report_json,
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "checkpoint_id": str(resume.latest_checkpoint.checkpoint_id),
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "attempt_id": str(resume.attempt.attempt_id),
+            "step_name": resume.latest_checkpoint.step_name,
+            "created_at": resume.latest_checkpoint.created_at.isoformat(),
+            "latest_verify_status": resume.latest_verify_report.status.value,
+        },
+    }
+    assert fake_workflow_service.create_checkpoint_calls == [
+        CreateCheckpointInput(
+            workflow_instance_id=resume.workflow_instance.workflow_instance_id,
+            attempt_id=resume.attempt.attempt_id,
+            step_name=resume.latest_checkpoint.step_name,
+            summary=resume.latest_checkpoint.summary,
+            checkpoint_json=resume.latest_checkpoint.checkpoint_json,
+            verify_status=resume.latest_verify_report.status,
+            verify_report=resume.latest_verify_report.report_json,
+        )
+    ]
+
+
+def test_build_workflow_checkpoint_tool_handler_returns_invalid_request_for_missing_step_name() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_checkpoint_tool_handler(server)
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "attempt_id": str(uuid4()),
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "step_name must be a non-empty string",
+            "details": {"field": "step_name"},
+        },
+    }
+
+
+def test_build_workflow_checkpoint_tool_handler_returns_server_not_ready_error() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_checkpoint_tool_handler(server)
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "attempt_id": str(uuid4()),
+            "step_name": "implement_server_api",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+            "details": {},
+        },
+    }
+
+
+def test_build_workflow_complete_tool_handler_returns_success_payload() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    finished_attempt = replace(
+        resume.attempt,
+        status=WorkflowAttemptStatus.SUCCEEDED,
+        finished_at=datetime(2024, 1, 8, tzinfo=UTC),
+    )
+    completed_workflow = replace(
+        resume.workflow_instance,
+        status=WorkflowInstanceStatus.COMPLETED,
+        updated_at=datetime(2024, 1, 8, tzinfo=UTC),
+    )
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        complete_workflow_result=type(
+            "WorkflowCompleteResultStub",
+            (),
+            {
+                "workflow_instance": completed_workflow,
+                "attempt": finished_attempt,
+                "verify_report": resume.latest_verify_report,
+            },
+        )(),
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_workflow_complete_tool_handler(server)
+
+    server.startup()
+
+    response = handler(
+        {
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "attempt_id": str(resume.attempt.attempt_id),
+            "workflow_status": WorkflowInstanceStatus.COMPLETED.value,
+            "summary": "Completed successfully",
+            "verify_status": VerifyStatus.PASSED.value,
+            "verify_report": {"checks": ["pytest"], "status": "passed"},
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workflow_instance_id": str(completed_workflow.workflow_instance_id),
+            "attempt_id": str(finished_attempt.attempt_id),
+            "workflow_status": completed_workflow.status.value,
+            "attempt_status": finished_attempt.status.value,
+            "finished_at": finished_attempt.finished_at.isoformat(),
+            "latest_verify_status": resume.latest_verify_report.status.value,
+        },
+    }
+    assert fake_workflow_service.complete_workflow_calls == [
+        CompleteWorkflowInput(
+            workflow_instance_id=resume.workflow_instance.workflow_instance_id,
+            attempt_id=resume.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Completed successfully",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+            failure_reason=None,
+        )
+    ]
+
+
+def test_build_workflow_complete_tool_handler_returns_invalid_request_for_bad_status() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_complete_tool_handler(server)
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "attempt_id": str(uuid4()),
+            "workflow_status": "not-a-real-status",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_status must be a supported workflow status",
+            "details": {
+                "field": "workflow_status",
+                "allowed_values": ["running", "completed", "failed", "cancelled"],
+            },
+        },
+    }
+
+
+def test_build_workflow_complete_tool_handler_returns_server_not_ready_error() -> None:
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_complete_tool_handler(server)
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "attempt_id": str(uuid4()),
+            "workflow_status": WorkflowInstanceStatus.COMPLETED.value,
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+            "details": {},
+        },
+    }
+
+
 def test_build_projection_failures_ignore_tool_handler_returns_success_payload() -> (
     None
 ):
@@ -3017,7 +3543,7 @@ def test_stdio_runtime_adapter_dispatches_registered_tool_handler() -> None:
     assert runtime.registered_tools() == ("resume_workflow",)
 
 
-def test_build_stdio_runtime_adapter_registers_projection_failure_lifecycle_tools() -> (
+def test_build_stdio_runtime_adapter_registers_core_workflow_and_projection_failure_tools() -> (
     None
 ):
     settings = make_settings(
@@ -3040,6 +3566,10 @@ def test_build_stdio_runtime_adapter_registers_projection_failure_lifecycle_tool
         "projection_failures_ignore",
         "projection_failures_resolve",
         "resume_workflow",
+        "workflow_checkpoint",
+        "workflow_complete",
+        "workflow_start",
+        "workspace_register",
     )
 
 
@@ -3180,6 +3710,10 @@ def test_build_stdio_runtime_adapter_registers_expected_tools() -> None:
         "projection_failures_ignore",
         "projection_failures_resolve",
         "resume_workflow",
+        "workflow_checkpoint",
+        "workflow_complete",
+        "workflow_start",
+        "workspace_register",
     )
 
     server.startup()
@@ -3215,6 +3749,10 @@ def test_create_server_wires_stdio_runtime_with_registered_tools() -> None:
         "projection_failures_ignore",
         "projection_failures_resolve",
         "resume_workflow",
+        "workflow_checkpoint",
+        "workflow_complete",
+        "workflow_start",
+        "workspace_register",
     )
 
     server.startup()
@@ -3532,6 +4070,10 @@ def test_collect_runtime_introspection_returns_both_transports_for_composite_run
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "resume_workflow",
+                "workflow_checkpoint",
+                "workflow_complete",
+                "workflow_start",
+                "workspace_register",
             ),
         ),
     )
@@ -3663,6 +4205,10 @@ def test_build_runtime_introspection_response_returns_http_payload_for_composite
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "resume_workflow",
+                    "workflow_checkpoint",
+                    "workflow_complete",
+                    "workflow_start",
+                    "workspace_register",
                 ],
             },
         ]
@@ -3875,6 +4421,10 @@ def test_health_includes_runtime_summary_details_for_composite_runtime() -> None
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "resume_workflow",
+                "workflow_checkpoint",
+                "workflow_complete",
+                "workflow_start",
+                "workspace_register",
             ],
         },
     ]
@@ -3951,6 +4501,10 @@ def test_readiness_includes_runtime_summary_details_for_composite_runtime() -> N
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "resume_workflow",
+                "workflow_checkpoint",
+                "workflow_complete",
+                "workflow_start",
+                "workspace_register",
             ],
         },
     ]
@@ -4071,6 +4625,10 @@ def test_startup_logs_runtime_introspection_metadata_for_composite_runtime(
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "resume_workflow",
+                "workflow_checkpoint",
+                "workflow_complete",
+                "workflow_start",
+                "workspace_register",
             ],
         },
     ]
@@ -4221,6 +4779,10 @@ def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "resume_workflow",
+                    "workflow_checkpoint",
+                    "workflow_complete",
+                    "workflow_start",
+                    "workspace_register",
                 ],
             }
         ]
@@ -4346,7 +4908,8 @@ def test_print_runtime_summary_includes_composite_runtime_introspection(
         "'tools': []}, {'transport': 'stdio', 'routes': [], 'tools': "
         "['memory_get_context', 'memory_remember_episode', 'memory_search', "
         "'projection_failures_ignore', 'projection_failures_resolve', "
-        "'resume_workflow']}]" in captured.err
+        "'resume_workflow', 'workflow_checkpoint', 'workflow_complete', "
+        "'workflow_start', 'workspace_register']}]" in captured.err
     )
     assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
     assert "stdio_transport=enabled" in captured.err
@@ -4418,6 +4981,10 @@ def test_http_runtime_adapter_dispatches_registered_debug_tools_handler() -> Non
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "resume_workflow",
+                    "workflow_checkpoint",
+                    "workflow_complete",
+                    "workflow_start",
+                    "workspace_register",
                 ],
             }
         ]
