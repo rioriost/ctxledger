@@ -67,6 +67,11 @@ Wording and deployment doc progress まで進めました。
     “minimal path proven, broader scope still under evaluation”
     であることを反映
 
+- `ctxledger/docs/specification.md`
+  - **編集してはいけないファイル** と判明
+  - 一度変更してしまったが、ユーザー指示によりロールバックする方針
+  - 今後は `specification.md` を絶対に編集しない
+
 ## テスト状態
 
 関連する回帰確認として、少なくとも以下は通過済み前提です。
@@ -91,14 +96,15 @@ Wording and deployment doc progress まで進めました。
   はまだ追加判断が必要
 - stdio は repository 内にはまだ残っているが、
   release acceptance の主証拠ではない
+- `docs/specification.md` は **不変ルール対象** として扱う
 
 ## 次にやるべきこと
 
 次の自然な候補は 2 つです。
 
-### 1. `docs/specification.md` の wording を同じトーンに揃える
+### 1. `docs/specification.md` を除く残り docs の整合を詰める
 特に確認したい点:
-- `MCP 2025-03-26` をどの強さで主張しているか
+- `MCP 2025-03-26` をどの強さで主張するか
 - Streamable HTTP を必須扱いしていないか
 - current evidence とズレた表現が残っていないか
 
@@ -115,12 +121,12 @@ Wording and deployment doc progress まで進めました。
 
 ## 次の引き継ぎ先向けメモ
 
-次に入る人は、まず `docs/specification.md` を見るのがよいです。
+次に入る人は、まず `docs/specification.md` には触らないこと。
 
 今の中心課題はもう
 - endpoint existence
 ではなく
-- **spec wording と acceptance boundary の整合**
+- **acceptance boundary の整合**
 です。
 
 特に判断ポイント:
