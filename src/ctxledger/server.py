@@ -12,14 +12,7 @@ from uuid import UUID
 
 from .config import AppSettings, TransportMode, get_settings
 from .db.postgres import PostgresConfig, build_postgres_uow_factory
-from .memory.service import (
-    GetMemoryContextRequest,
-    MemoryService,
-    MemoryServiceError,
-    RememberEpisodeRequest,
-    SearchMemoryRequest,
-    StubResponse,
-)
+from .memory.service import MemoryService, StubResponse
 from .workflow.service import (
     CompleteWorkflowInput,
     CreateCheckpointInput,
@@ -115,14 +108,6 @@ class McpToolResponse:
     payload: dict[str, Any]
 
 
-@dataclass(slots=True, frozen=True)
-class McpToolSchema:
-    type: str
-    properties: dict[str, Any]
-    required: tuple[str, ...] = ()
-    additional_properties: bool = False
-
-
 @dataclass(slots=True)
 class RuntimeDispatchResult:
     transport: str
@@ -131,102 +116,162 @@ class RuntimeDispatchResult:
     response: WorkflowResumeResponse | McpToolResponse | McpResourceResponse
 
 
+class McpRuntimeProtocol(Protocol):
+    settings: AppSettings
+
+    def registered_tools(self) -> tuple[str, ...]: ...
+    def registered_resources(self) -> tuple[str, ...]: ...
+    def tool_schema(self, tool_name: str) -> McpToolSchema: ...
+    def dispatch_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> McpToolResponse: ...
+    def dispatch_resource(self, uri: str) -> McpResourceResponse: ...
+
+
+from .mcp.resource_handlers import (
+    build_workflow_detail_resource_handler,
+    build_workflow_detail_resource_response,
+    build_workspace_resume_resource_handler,
+    build_workspace_resume_resource_response,
+    parse_workflow_detail_resource_uri,
+    parse_workspace_resume_resource_uri,
+)
+from .mcp.tool_handlers import (
+    build_mcp_error_response,
+    build_mcp_success_response,
+    build_memory_get_context_tool_handler,
+    build_memory_remember_episode_tool_handler,
+    build_memory_search_tool_handler,
+    build_projection_failures_ignore_tool_handler,
+    build_projection_failures_resolve_tool_handler,
+    build_resume_workflow_tool_handler,
+    build_workflow_checkpoint_tool_handler,
+    build_workflow_complete_tool_handler,
+    build_workflow_start_tool_handler,
+    build_workspace_register_tool_handler,
+)
+from .mcp.tool_schemas import (
+    DEFAULT_EMPTY_MCP_TOOL_SCHEMA,
+    MEMORY_GET_CONTEXT_TOOL_SCHEMA,
+    MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
+    MEMORY_SEARCH_TOOL_SCHEMA,
+    PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA,
+    PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA,
+    WORKFLOW_CHECKPOINT_TOOL_SCHEMA,
+    WORKFLOW_COMPLETE_TOOL_SCHEMA,
+    WORKFLOW_RESUME_TOOL_SCHEMA,
+    WORKFLOW_START_TOOL_SCHEMA,
+    WORKSPACE_REGISTER_TOOL_SCHEMA,
+    McpToolSchema,
+    serialize_mcp_tool_schema,
+)
+
+
+def handle_mcp_rpc_request(
+    runtime: McpRuntimeProtocol,
+    req: dict[str, Any],
+) -> dict[str, Any] | None:
+    method = req.get("method")
+    params = req.get("params") or {}
+    req_id = req.get("id")
+
+    if method == "initialize":
+        result = {
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {
+                "name": "ctxledger",
+                "version": runtime.settings.app_version,
+            },
+            "capabilities": {
+                "tools": {},
+                "resources": {},
+            },
+        }
+    elif method == "initialized":
+        result = None
+    elif method == "ping":
+        result = {}
+    elif method == "shutdown":
+        result = None
+    elif method == "exit":
+        raise SystemExit(0)
+    elif method == "tools/list":
+        result = {
+            "tools": [
+                {
+                    "name": tool_name,
+                    "description": f"{tool_name} tool",
+                    "inputSchema": serialize_mcp_tool_schema(
+                        runtime.tool_schema(tool_name)
+                    ),
+                }
+                for tool_name in runtime.registered_tools()
+            ]
+        }
+    elif method == "tools/call":
+        name = params.get("name")
+        arguments = params.get("arguments") or {}
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("tools/call requires 'name' (string)")
+        if not isinstance(arguments, dict):
+            raise ValueError("tools/call requires 'arguments' (object)")
+
+        response = runtime.dispatch_tool(name.strip(), arguments)
+        result = {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(response.payload, ensure_ascii=False),
+                }
+            ]
+        }
+    elif method == "resources/list":
+        result = {
+            "resources": [
+                {
+                    "uri": resource_uri,
+                    "name": resource_uri,
+                    "description": f"{resource_uri} resource",
+                }
+                for resource_uri in runtime.registered_resources()
+            ]
+        }
+    elif method == "resources/read":
+        uri = params.get("uri")
+        if not isinstance(uri, str) or not uri.strip():
+            raise ValueError("resources/read requires 'uri' (string)")
+
+        response = runtime.dispatch_resource(uri.strip())
+        result = {
+            "contents": [
+                {
+                    "uri": uri.strip(),
+                    "mimeType": "application/json",
+                    "text": json.dumps(response.payload, ensure_ascii=False),
+                }
+            ]
+        }
+    else:
+        raise ValueError(f"Unknown method: {method}")
+
+    if req_id is None:
+        return None
+
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "result": result,
+    }
+
+
 @dataclass(slots=True)
 class StdioRpcServer:
     runtime: "StdioRuntimeAdapter"
 
     def handle_request(self, req: dict[str, Any]) -> dict[str, Any] | None:
-        method = req.get("method")
-        params = req.get("params") or {}
-        req_id = req.get("id")
-
-        if method == "initialize":
-            result = {
-                "protocolVersion": "2024-11-05",
-                "serverInfo": {
-                    "name": "ctxledger",
-                    "version": self.runtime.settings.app_version,
-                },
-                "capabilities": {
-                    "tools": {},
-                    "resources": {},
-                },
-            }
-        elif method == "initialized":
-            result = None
-        elif method == "ping":
-            result = {}
-        elif method == "shutdown":
-            result = None
-        elif method == "exit":
-            raise SystemExit(0)
-        elif method == "tools/list":
-            result = {
-                "tools": [
-                    {
-                        "name": tool_name,
-                        "description": f"{tool_name} tool",
-                        "inputSchema": serialize_mcp_tool_schema(
-                            self.runtime.tool_schema(tool_name)
-                        ),
-                    }
-                    for tool_name in self.runtime.registered_tools()
-                ]
-            }
-        elif method == "tools/call":
-            name = params.get("name")
-            arguments = params.get("arguments") or {}
-            if not isinstance(name, str) or not name.strip():
-                raise ValueError("tools/call requires 'name' (string)")
-            if not isinstance(arguments, dict):
-                raise ValueError("tools/call requires 'arguments' (object)")
-
-            response = self.runtime.dispatch_tool(name.strip(), arguments)
-            result = {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": json.dumps(response.payload, ensure_ascii=False),
-                    }
-                ]
-            }
-        elif method == "resources/list":
-            result = {
-                "resources": [
-                    {
-                        "uri": resource_uri,
-                        "name": resource_uri,
-                        "description": f"{resource_uri} resource",
-                    }
-                    for resource_uri in self.runtime.registered_resources()
-                ]
-            }
-        elif method == "resources/read":
-            uri = params.get("uri")
-            if not isinstance(uri, str) or not uri.strip():
-                raise ValueError("resources/read requires 'uri' (string)")
-
-            response = self.runtime.dispatch_resource(uri.strip())
-            result = {
-                "contents": [
-                    {
-                        "uri": uri.strip(),
-                        "mimeType": "application/json",
-                        "text": json.dumps(response.payload, ensure_ascii=False),
-                    }
-                ]
-            }
-        else:
-            raise ValueError(f"Unknown method: {method}")
-
-        if req_id is None:
-            return None
-
-        return {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "result": result,
-        }
+        return handle_mcp_rpc_request(self.runtime, req)
 
     def run(self) -> None:
         for line in sys.stdin:
@@ -275,6 +320,14 @@ class RuntimeIntrospection:
 WorkflowHttpHandler = Any
 McpToolHandler = Any
 McpResourceHandler = Any
+McpHttpHandler = Any
+
+
+@dataclass(slots=True)
+class McpHttpResponse:
+    status_code: int
+    payload: dict[str, Any]
+    headers: dict[str, str]
 
 
 class ServerBootstrapError(RuntimeError):
@@ -417,8 +470,13 @@ class HttpRuntimeAdapter:
             routes=self.registered_routes(),
         )
 
-    def dispatch(self, route_name: str, path: str) -> WorkflowResumeResponse:
-        return dispatch_http_request(self, route_name, path).response
+    def dispatch(
+        self,
+        route_name: str,
+        path: str,
+        body: str | None = None,
+    ) -> WorkflowResumeResponse | McpHttpResponse:
+        return dispatch_http_request(self, route_name, path, body).response
 
     def start(self) -> None:
         logger.info(
@@ -1330,337 +1388,6 @@ def serialize_runtime_introspection(
     }
 
 
-DEFAULT_EMPTY_MCP_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={},
-)
-
-
-def serialize_mcp_tool_schema(schema: McpToolSchema) -> dict[str, Any]:
-    serialized: dict[str, Any] = {
-        "type": schema.type,
-        "properties": dict(schema.properties),
-        "additionalProperties": schema.additional_properties,
-    }
-    if schema.required:
-        serialized["required"] = list(schema.required)
-    return serialized
-
-
-WORKSPACE_REGISTER_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "repo_url": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Repository URL for the workspace.",
-        },
-        "canonical_path": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Canonical local filesystem path for the workspace checkout.",
-        },
-        "default_branch": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Default branch name for the workspace repository.",
-        },
-        "workspace_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Existing workspace identity for explicit update operations.",
-        },
-        "metadata": {
-            "type": "object",
-            "description": "Optional workspace metadata.",
-            "additionalProperties": True,
-        },
-    },
-    required=("repo_url", "canonical_path", "default_branch"),
-)
-
-WORKFLOW_RESUME_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "workflow_instance_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workflow instance to resume.",
-        }
-    },
-    required=("workflow_instance_id",),
-)
-
-WORKFLOW_START_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "workspace_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workspace identity for the workflow.",
-        },
-        "ticket_id": {
-            "type": "string",
-            "minLength": 1,
-            "description": "External ticket or work item identifier.",
-        },
-        "metadata": {
-            "type": "object",
-            "description": "Optional workflow metadata.",
-            "additionalProperties": True,
-        },
-    },
-    required=("workspace_id", "ticket_id"),
-)
-
-WORKFLOW_CHECKPOINT_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "workflow_instance_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workflow instance identity.",
-        },
-        "attempt_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workflow attempt identity.",
-        },
-        "step_name": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Logical step name for the checkpoint.",
-        },
-        "summary": {
-            "type": "string",
-            "description": "Optional human-readable checkpoint summary.",
-        },
-        "checkpoint_json": {
-            "type": "object",
-            "description": "Optional structured checkpoint payload.",
-            "additionalProperties": True,
-        },
-        "verify_status": {
-            "type": "string",
-            "enum": [status.value for status in VerifyStatus],
-            "description": "Optional verification status recorded with the checkpoint.",
-        },
-        "verify_report": {
-            "type": "object",
-            "description": "Optional structured verification report.",
-            "additionalProperties": True,
-        },
-    },
-    required=("workflow_instance_id", "attempt_id", "step_name"),
-)
-
-WORKFLOW_COMPLETE_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "workflow_instance_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workflow instance identity.",
-        },
-        "attempt_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workflow attempt identity.",
-        },
-        "workflow_status": {
-            "type": "string",
-            "enum": [status.value for status in WorkflowInstanceStatus],
-            "description": "Terminal workflow status.",
-        },
-        "summary": {
-            "type": "string",
-            "description": "Optional final summary.",
-        },
-        "verify_status": {
-            "type": "string",
-            "enum": [status.value for status in VerifyStatus],
-            "description": "Optional final verification status.",
-        },
-        "verify_report": {
-            "type": "object",
-            "description": "Optional structured final verification report.",
-            "additionalProperties": True,
-        },
-        "failure_reason": {
-            "type": "string",
-            "description": "Optional failure reason for unsuccessful completion.",
-        },
-    },
-    required=("workflow_instance_id", "attempt_id", "workflow_status"),
-)
-
-PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "workspace_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workspace identity for the projection failures.",
-        },
-        "workflow_instance_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workflow instance identity for the projection failures.",
-        },
-        "projection_type": {
-            "type": "string",
-            "enum": [
-                projection_type.value for projection_type in ProjectionArtifactType
-            ],
-            "description": "Optional projection type filter.",
-        },
-    },
-    required=("workspace_id", "workflow_instance_id"),
-)
-
-PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "workspace_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workspace identity for the projection failures.",
-        },
-        "workflow_instance_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workflow instance identity for the projection failures.",
-        },
-        "projection_type": {
-            "type": "string",
-            "enum": [
-                projection_type.value for projection_type in ProjectionArtifactType
-            ],
-            "description": "Optional projection type filter.",
-        },
-    },
-    required=("workspace_id", "workflow_instance_id"),
-)
-
-MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "workflow_instance_id": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Workflow instance identifier associated with the episode.",
-        },
-        "summary": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Episode summary text.",
-        },
-        "attempt_id": {
-            "type": "string",
-            "description": "Optional workflow attempt identifier.",
-        },
-        "metadata": {
-            "type": "object",
-            "description": "Optional episode metadata.",
-            "additionalProperties": True,
-        },
-    },
-    required=("workflow_instance_id", "summary"),
-)
-
-MEMORY_SEARCH_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "query": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Search query text.",
-        },
-        "workspace_id": {
-            "type": "string",
-            "description": "Optional workspace identifier to constrain results.",
-        },
-        "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "Maximum number of results to return.",
-        },
-        "filters": {
-            "type": "object",
-            "description": "Optional structured filters.",
-            "additionalProperties": True,
-        },
-    },
-    required=("query",),
-)
-
-MEMORY_GET_CONTEXT_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "query": {
-            "type": "string",
-            "description": "Optional context query text.",
-        },
-        "workspace_id": {
-            "type": "string",
-            "description": "Optional workspace identifier.",
-        },
-        "workflow_instance_id": {
-            "type": "string",
-            "description": "Optional workflow instance identifier.",
-        },
-        "ticket_id": {
-            "type": "string",
-            "description": "Optional ticket identifier.",
-        },
-        "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "Maximum number of context items to return.",
-        },
-        "include_episodes": {
-            "type": "boolean",
-            "description": "Whether to include episodes in the response.",
-        },
-        "include_memory_items": {
-            "type": "boolean",
-            "description": "Whether to include memory items in the response.",
-        },
-        "include_summaries": {
-            "type": "boolean",
-            "description": "Whether to include summaries in the response.",
-        },
-    },
-)
-
-
-def build_mcp_success_response(result: dict[str, Any]) -> McpToolResponse:
-    return McpToolResponse(
-        payload={
-            "ok": True,
-            "result": result,
-        }
-    )
-
-
-def build_mcp_error_response(
-    *,
-    code: str,
-    message: str,
-    details: dict[str, Any] | None = None,
-) -> McpToolResponse:
-    return McpToolResponse(
-        payload={
-            "ok": False,
-            "error": {
-                "code": code,
-                "message": message,
-                "details": details or {},
-            },
-        }
-    )
-
-
 def _extract_bearer_token(path: str) -> str | None:
     normalized_path = path.strip()
     if not normalized_path:
@@ -1724,6 +1451,7 @@ def dispatch_http_request(
     runtime: HttpRuntimeAdapter,
     route_name: str,
     path: str,
+    body: str | None = None,
 ) -> RuntimeDispatchResult:
     handler = runtime._handlers.get(route_name)
     if handler is None:
@@ -1744,7 +1472,10 @@ def dispatch_http_request(
             response=response,
         )
 
-    response = handler(path)
+    if route_name == "mcp_rpc":
+        response = handler(path, body)
+    else:
+        response = handler(path)
     return RuntimeDispatchResult(
         transport="http",
         target=route_name,
@@ -1839,25 +1570,6 @@ def build_workflow_resume_response(
     return server.build_workflow_resume_response(workflow_instance_id)
 
 
-def build_workspace_resume_resource_response(
-    server: CtxLedgerServer,
-    workspace_id: UUID,
-) -> McpResourceResponse:
-    return server.build_workspace_resume_resource_response(workspace_id)
-
-
-def build_workflow_detail_resource_response(
-    server: CtxLedgerServer,
-    *,
-    workspace_id: UUID,
-    workflow_instance_id: UUID,
-) -> McpResourceResponse:
-    return server.build_workflow_detail_resource_response(
-        workspace_id,
-        workflow_instance_id,
-    )
-
-
 def build_closed_projection_failures_response(
     server: CtxLedgerServer,
     workflow_instance_id: UUID,
@@ -1911,44 +1623,55 @@ def build_runtime_tools_response(
     return server.build_runtime_tools_response()
 
 
-def parse_workspace_resume_resource_uri(uri: str) -> UUID | None:
-    normalized_uri = uri.strip()
-    if not normalized_uri:
-        return None
-
-    prefix = "workspace://"
-    if not normalized_uri.startswith(prefix):
-        return None
-
-    remainder = normalized_uri[len(prefix) :]
-    parts = remainder.split("/")
-    if len(parts) != 2 or parts[1] != "resume":
-        return None
+def _parse_required_uuid_argument(
+    arguments: dict[str, Any],
+    field_name: str,
+) -> UUID | McpToolResponse:
+    raw_value = arguments.get(field_name)
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return build_mcp_error_response(
+            code="invalid_request",
+            message=f"{field_name} must be a non-empty string",
+            details={"field": field_name},
+        )
 
     try:
-        return UUID(parts[0])
+        return UUID(raw_value)
     except ValueError:
-        return None
+        return build_mcp_error_response(
+            code="invalid_request",
+            message=f"{field_name} must be a valid UUID",
+            details={"field": field_name},
+        )
 
 
-def parse_workflow_detail_resource_uri(uri: str) -> tuple[UUID, UUID] | None:
-    normalized_uri = uri.strip()
-    if not normalized_uri:
+def _parse_optional_projection_type_argument(
+    arguments: dict[str, Any],
+) -> ProjectionArtifactType | None | McpToolResponse:
+    raw_value = arguments.get("projection_type")
+    if raw_value is None:
         return None
-
-    prefix = "workspace://"
-    if not normalized_uri.startswith(prefix):
-        return None
-
-    remainder = normalized_uri[len(prefix) :]
-    parts = remainder.split("/")
-    if len(parts) != 3 or parts[1] != "workflow":
-        return None
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return build_mcp_error_response(
+            code="invalid_request",
+            message="projection_type must be a non-empty string when provided",
+            details={"field": "projection_type"},
+        )
 
     try:
-        return UUID(parts[0]), UUID(parts[2])
+        return ProjectionArtifactType(raw_value.strip())
     except ValueError:
-        return None
+        allowed_values = [
+            projection_type.value for projection_type in ProjectionArtifactType
+        ]
+        return build_mcp_error_response(
+            code="invalid_request",
+            message="projection_type must be a supported projection artifact type",
+            details={
+                "field": "projection_type",
+                "allowed_values": allowed_values,
+            },
+        )
 
 
 def parse_workflow_resume_request_path(path: str) -> UUID | None:
@@ -2278,859 +2001,119 @@ def build_runtime_tools_http_handler(
     return _handler
 
 
-def _parse_required_uuid_argument(
-    arguments: dict[str, Any],
-    field_name: str,
-) -> UUID | McpToolResponse:
-    raw_value = arguments.get(field_name)
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        return build_mcp_error_response(
-            code="invalid_request",
-            message=f"{field_name} must be a non-empty string",
-            details={"field": field_name},
-        )
-
-    try:
-        return UUID(raw_value)
-    except ValueError:
-        return build_mcp_error_response(
-            code="invalid_request",
-            message=f"{field_name} must be a valid UUID",
-            details={"field": field_name},
-        )
-
-
-def _parse_optional_projection_type_argument(
-    arguments: dict[str, Any],
-) -> ProjectionArtifactType | None | McpToolResponse:
-    raw_value = arguments.get("projection_type")
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        return build_mcp_error_response(
-            code="invalid_request",
-            message="projection_type must be a non-empty string when provided",
-            details={"field": "projection_type"},
-        )
-
-    try:
-        return ProjectionArtifactType(raw_value.strip())
-    except ValueError:
-        allowed_values = [
-            projection_type.value for projection_type in ProjectionArtifactType
-        ]
-        return build_mcp_error_response(
-            code="invalid_request",
-            message="projection_type must be a supported projection artifact type",
-            details={
-                "field": "projection_type",
-                "allowed_values": allowed_values,
-            },
-        )
-
-
-def _parse_required_string_argument(
-    arguments: dict[str, Any],
-    field_name: str,
-) -> str | McpToolResponse:
-    raw_value = arguments.get(field_name)
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        return build_mcp_error_response(
-            code="invalid_request",
-            message=f"{field_name} must be a non-empty string",
-            details={"field": field_name},
-        )
-    return raw_value.strip()
-
-
-def _parse_optional_string_argument(
-    arguments: dict[str, Any],
-    field_name: str,
-) -> str | None | McpToolResponse:
-    raw_value = arguments.get(field_name)
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, str):
-        return build_mcp_error_response(
-            code="invalid_request",
-            message=f"{field_name} must be a string when provided",
-            details={"field": field_name},
-        )
-    return raw_value
-
-
-def _parse_optional_dict_argument(
-    arguments: dict[str, Any],
-    field_name: str,
-) -> dict[str, Any] | McpToolResponse:
-    raw_value = arguments.get(field_name)
-    if raw_value is None:
-        return {}
-    if not isinstance(raw_value, dict):
-        return build_mcp_error_response(
-            code="invalid_request",
-            message=f"{field_name} must be an object when provided",
-            details={"field": field_name},
-        )
-    return dict(raw_value)
-
-
-def _parse_optional_verify_status_argument(
-    arguments: dict[str, Any],
-) -> VerifyStatus | None | McpToolResponse:
-    raw_value = arguments.get("verify_status")
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        return build_mcp_error_response(
-            code="invalid_request",
-            message="verify_status must be a non-empty string when provided",
-            details={"field": "verify_status"},
-        )
-    try:
-        return VerifyStatus(raw_value.strip())
-    except ValueError:
-        return build_mcp_error_response(
-            code="invalid_request",
-            message="verify_status must be a supported verification status",
-            details={
-                "field": "verify_status",
-                "allowed_values": [status.value for status in VerifyStatus],
-            },
-        )
-
-
-def _parse_required_workflow_status_argument(
-    arguments: dict[str, Any],
-) -> WorkflowInstanceStatus | McpToolResponse:
-    raw_value = arguments.get("workflow_status")
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        return build_mcp_error_response(
-            code="invalid_request",
-            message="workflow_status must be a non-empty string",
-            details={"field": "workflow_status"},
-        )
-    try:
-        return WorkflowInstanceStatus(raw_value.strip())
-    except ValueError:
-        return build_mcp_error_response(
-            code="invalid_request",
-            message="workflow_status must be a supported workflow status",
-            details={
-                "field": "workflow_status",
-                "allowed_values": [status.value for status in WorkflowInstanceStatus],
-            },
-        )
-
-
-def _map_workflow_error_to_mcp_response(
-    exc: Exception,
-    *,
-    default_message: str,
-) -> McpToolResponse:
-    if isinstance(exc, WorkflowError):
-        code = exc.code
-        if code in {
-            "validation_error",
-            "authentication_error",
-            "active_workflow_exists",
-            "workspace_registration_conflict",
-            "invalid_state_transition",
-            "workflow_attempt_mismatch",
-        }:
-            mapped_code = "invalid_request"
-        elif code in {
-            "workspace_not_found",
-            "workflow_not_found",
-            "attempt_not_found",
-            "not_found",
-        }:
-            mapped_code = "not_found"
-        else:
-            mapped_code = "server_error"
-        return build_mcp_error_response(
-            code=mapped_code,
-            message=str(exc) or default_message,
-            details=getattr(exc, "details", {}),
-        )
-
-    message = str(exc) or default_message
-    lowered = message.lower()
-    if "not found" in lowered:
-        code = "not_found"
-    elif "invalid" in lowered or "mismatch" in lowered or "already" in lowered:
-        code = "invalid_request"
-    else:
-        code = "server_error"
-
-    return build_mcp_error_response(
-        code=code,
-        message=message,
-        details={},
-    )
-
-
-def build_resume_workflow_tool_handler(
+def build_mcp_http_handler(
+    runtime: McpRuntimeProtocol,
     server: CtxLedgerServer,
 ):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        workflow_instance_id = _parse_required_uuid_argument(
-            arguments,
-            "workflow_instance_id",
-        )
-        if isinstance(workflow_instance_id, McpToolResponse):
-            return workflow_instance_id
-
-        response = build_workflow_resume_response(server, workflow_instance_id)
-        if response.status_code != 200:
-            error = response.payload.get("error", {})
-            return build_mcp_error_response(
-                code=str(error.get("code", "server_error")),
-                message=str(error.get("message", "failed to resume workflow")),
-                details={},
+    def _handler(path: str, body: str | None = None) -> McpHttpResponse:
+        auth_error = _require_http_bearer_auth(server, path)
+        if auth_error is not None:
+            return McpHttpResponse(
+                status_code=auth_error.status_code,
+                payload=auth_error.payload,
+                headers=auth_error.headers,
             )
 
-        return build_mcp_success_response(response.payload)
-
-    return _handler
-
-
-def build_workspace_resume_resource_handler(
-    server: CtxLedgerServer,
-):
-    def _handler(uri: str) -> McpResourceResponse:
-        workspace_id = parse_workspace_resume_resource_uri(uri)
-        if workspace_id is None:
-            return McpResourceResponse(
+        normalized_path = path.strip()
+        path_without_query = normalized_path.split("?", 1)[0].strip("/")
+        expected_path = server.settings.http.path.strip("/")
+        if path_without_query != expected_path:
+            return McpHttpResponse(
                 status_code=404,
                 payload={
                     "error": {
                         "code": "not_found",
-                        "message": (
-                            "workspace resume resource requires "
-                            "workspace://{workspace_id}/resume"
-                        ),
+                        "message": f"MCP endpoint requires {server.settings.http.path}",
                     }
                 },
                 headers={"content-type": "application/json"},
             )
 
-        return build_workspace_resume_resource_response(server, workspace_id)
-
-    return _handler
-
-
-def build_workflow_detail_resource_handler(
-    server: CtxLedgerServer,
-):
-    def _handler(uri: str) -> McpResourceResponse:
-        parsed = parse_workflow_detail_resource_uri(uri)
-        if parsed is None:
-            return McpResourceResponse(
-                status_code=404,
+        if body is None or not body.strip():
+            return McpHttpResponse(
+                status_code=400,
                 payload={
                     "error": {
-                        "code": "not_found",
-                        "message": (
-                            "workflow detail resource requires "
-                            "workspace://{workspace_id}/workflow/{workflow_instance_id}"
-                        ),
+                        "code": "invalid_request",
+                        "message": "HTTP MCP endpoint requires a JSON-RPC request body",
                     }
                 },
                 headers={"content-type": "application/json"},
             )
 
-        workspace_id, workflow_instance_id = parsed
-        return build_workflow_detail_resource_response(
-            server,
-            workspace_id=workspace_id,
-            workflow_instance_id=workflow_instance_id,
-        )
-
-    return _handler
-
-
-def build_workspace_register_tool_handler(
-    server: CtxLedgerServer,
-):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        repo_url = _parse_required_string_argument(arguments, "repo_url")
-        if isinstance(repo_url, McpToolResponse):
-            return repo_url
-
-        canonical_path = _parse_required_string_argument(arguments, "canonical_path")
-        if isinstance(canonical_path, McpToolResponse):
-            return canonical_path
-
-        default_branch = _parse_required_string_argument(arguments, "default_branch")
-        if isinstance(default_branch, McpToolResponse):
-            return default_branch
-
-        raw_workspace_id = arguments.get("workspace_id")
-        workspace_id: UUID | None
-        if raw_workspace_id is None:
-            workspace_id = None
-        elif not isinstance(raw_workspace_id, str) or not raw_workspace_id.strip():
-            return build_mcp_error_response(
-                code="invalid_request",
-                message="workspace_id must be a non-empty string when provided",
-                details={"field": "workspace_id"},
-            )
-        else:
-            try:
-                workspace_id = UUID(raw_workspace_id)
-            except ValueError:
-                return build_mcp_error_response(
-                    code="invalid_request",
-                    message="workspace_id must be a valid UUID",
-                    details={"field": "workspace_id"},
-                )
-
-        metadata = _parse_optional_dict_argument(arguments, "metadata")
-        if isinstance(metadata, McpToolResponse):
-            return metadata
-
-        if server.workflow_service is None:
-            return build_mcp_error_response(
-                code="server_not_ready",
-                message="workflow service is not initialized",
-                details={},
-            )
-
         try:
-            workspace = server.workflow_service.register_workspace(
-                RegisterWorkspaceInput(
-                    workspace_id=workspace_id,
-                    repo_url=repo_url,
-                    canonical_path=canonical_path,
-                    default_branch=default_branch,
-                    metadata=metadata,
-                )
+            parsed = json.loads(body)
+        except json.JSONDecodeError as exc:
+            return McpHttpResponse(
+                status_code=400,
+                payload={
+                    "error": {
+                        "code": "invalid_request",
+                        "message": f"request body must be valid JSON: {exc.msg}",
+                    }
+                },
+                headers={"content-type": "application/json"},
             )
+
+        if not isinstance(parsed, dict):
+            return McpHttpResponse(
+                status_code=400,
+                payload={
+                    "error": {
+                        "code": "invalid_request",
+                        "message": "request body must be a JSON object",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        req_id = parsed.get("id")
+        try:
+            response = handle_mcp_rpc_request(runtime, parsed)
+        except SystemExit:
+            raise
         except Exception as exc:
-            return _map_workflow_error_to_mcp_response(
-                exc,
-                default_message="failed to register workspace",
-            )
-
-        return build_mcp_success_response(
-            {
-                "workspace_id": str(workspace.workspace_id),
-                "repo_url": workspace.repo_url,
-                "canonical_path": workspace.canonical_path,
-                "default_branch": workspace.default_branch,
-                "metadata": workspace.metadata,
-                "created_at": workspace.created_at.isoformat(),
-                "updated_at": workspace.updated_at.isoformat(),
+            error_payload = {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": -32000,
+                    "message": str(exc),
+                },
             }
+            return McpHttpResponse(
+                status_code=400,
+                payload=error_payload,
+                headers={"content-type": "application/json"},
+            )
+
+        if response is None:
+            return McpHttpResponse(
+                status_code=202,
+                payload={},
+                headers={"content-type": "application/json"},
+            )
+
+        return McpHttpResponse(
+            status_code=200,
+            payload=response,
+            headers={"content-type": "application/json"},
         )
-
-    return _handler
-
-
-def build_workflow_start_tool_handler(
-    server: CtxLedgerServer,
-):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        workspace_id = _parse_required_uuid_argument(arguments, "workspace_id")
-        if isinstance(workspace_id, McpToolResponse):
-            return workspace_id
-
-        ticket_id = _parse_required_string_argument(arguments, "ticket_id")
-        if isinstance(ticket_id, McpToolResponse):
-            return ticket_id
-
-        metadata = _parse_optional_dict_argument(arguments, "metadata")
-        if isinstance(metadata, McpToolResponse):
-            return metadata
-
-        if server.workflow_service is None:
-            return build_mcp_error_response(
-                code="server_not_ready",
-                message="workflow service is not initialized",
-                details={},
-            )
-
-        try:
-            result = server.workflow_service.start_workflow(
-                StartWorkflowInput(
-                    workspace_id=workspace_id,
-                    ticket_id=ticket_id,
-                    metadata=metadata,
-                )
-            )
-        except Exception as exc:
-            return _map_workflow_error_to_mcp_response(
-                exc,
-                default_message="failed to start workflow",
-            )
-
-        return build_mcp_success_response(
-            {
-                "workflow_instance_id": str(
-                    result.workflow_instance.workflow_instance_id
-                ),
-                "attempt_id": str(result.attempt.attempt_id),
-                "workspace_id": str(result.workflow_instance.workspace_id),
-                "ticket_id": result.workflow_instance.ticket_id,
-                "workflow_status": result.workflow_instance.status.value,
-                "attempt_status": result.attempt.status.value,
-                "created_at": result.workflow_instance.created_at.isoformat(),
-            }
-        )
-
-    return _handler
-
-
-def build_workflow_checkpoint_tool_handler(
-    server: CtxLedgerServer,
-):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        workflow_instance_id = _parse_required_uuid_argument(
-            arguments,
-            "workflow_instance_id",
-        )
-        if isinstance(workflow_instance_id, McpToolResponse):
-            return workflow_instance_id
-
-        attempt_id = _parse_required_uuid_argument(arguments, "attempt_id")
-        if isinstance(attempt_id, McpToolResponse):
-            return attempt_id
-
-        step_name = _parse_required_string_argument(arguments, "step_name")
-        if isinstance(step_name, McpToolResponse):
-            return step_name
-
-        summary = _parse_optional_string_argument(arguments, "summary")
-        if isinstance(summary, McpToolResponse):
-            return summary
-
-        checkpoint_json = _parse_optional_dict_argument(arguments, "checkpoint_json")
-        if isinstance(checkpoint_json, McpToolResponse):
-            return checkpoint_json
-
-        verify_status = _parse_optional_verify_status_argument(arguments)
-        if isinstance(verify_status, McpToolResponse):
-            return verify_status
-
-        raw_verify_report = arguments.get("verify_report")
-        if raw_verify_report is None:
-            verify_report = None
-        elif isinstance(raw_verify_report, dict):
-            verify_report = dict(raw_verify_report)
-        else:
-            return build_mcp_error_response(
-                code="invalid_request",
-                message="verify_report must be an object when provided",
-                details={"field": "verify_report"},
-            )
-
-        if server.workflow_service is None:
-            return build_mcp_error_response(
-                code="server_not_ready",
-                message="workflow service is not initialized",
-                details={},
-            )
-
-        try:
-            result = server.workflow_service.create_checkpoint(
-                CreateCheckpointInput(
-                    workflow_instance_id=workflow_instance_id,
-                    attempt_id=attempt_id,
-                    step_name=step_name,
-                    summary=summary,
-                    checkpoint_json=checkpoint_json,
-                    verify_status=verify_status,
-                    verify_report=verify_report,
-                )
-            )
-        except Exception as exc:
-            return _map_workflow_error_to_mcp_response(
-                exc,
-                default_message="failed to create checkpoint",
-            )
-
-        return build_mcp_success_response(
-            {
-                "checkpoint_id": str(result.checkpoint.checkpoint_id),
-                "workflow_instance_id": str(
-                    result.workflow_instance.workflow_instance_id
-                ),
-                "attempt_id": str(result.attempt.attempt_id),
-                "step_name": result.checkpoint.step_name,
-                "created_at": result.checkpoint.created_at.isoformat(),
-                "latest_verify_status": (
-                    result.verify_report.status.value
-                    if result.verify_report is not None
-                    else (
-                        result.attempt.verify_status.value
-                        if result.attempt.verify_status is not None
-                        else None
-                    )
-                ),
-            }
-        )
-
-    return _handler
-
-
-def build_workflow_complete_tool_handler(
-    server: CtxLedgerServer,
-):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        workflow_instance_id = _parse_required_uuid_argument(
-            arguments,
-            "workflow_instance_id",
-        )
-        if isinstance(workflow_instance_id, McpToolResponse):
-            return workflow_instance_id
-
-        attempt_id = _parse_required_uuid_argument(arguments, "attempt_id")
-        if isinstance(attempt_id, McpToolResponse):
-            return attempt_id
-
-        workflow_status = _parse_required_workflow_status_argument(arguments)
-        if isinstance(workflow_status, McpToolResponse):
-            return workflow_status
-
-        summary = _parse_optional_string_argument(arguments, "summary")
-        if isinstance(summary, McpToolResponse):
-            return summary
-
-        verify_status = _parse_optional_verify_status_argument(arguments)
-        if isinstance(verify_status, McpToolResponse):
-            return verify_status
-
-        raw_verify_report = arguments.get("verify_report")
-        if raw_verify_report is None:
-            verify_report = None
-        elif isinstance(raw_verify_report, dict):
-            verify_report = dict(raw_verify_report)
-        else:
-            return build_mcp_error_response(
-                code="invalid_request",
-                message="verify_report must be an object when provided",
-                details={"field": "verify_report"},
-            )
-
-        failure_reason = _parse_optional_string_argument(arguments, "failure_reason")
-        if isinstance(failure_reason, McpToolResponse):
-            return failure_reason
-
-        if server.workflow_service is None:
-            return build_mcp_error_response(
-                code="server_not_ready",
-                message="workflow service is not initialized",
-                details={},
-            )
-
-        try:
-            result = server.workflow_service.complete_workflow(
-                CompleteWorkflowInput(
-                    workflow_instance_id=workflow_instance_id,
-                    attempt_id=attempt_id,
-                    workflow_status=workflow_status,
-                    summary=summary,
-                    verify_status=verify_status,
-                    verify_report=verify_report,
-                    failure_reason=failure_reason,
-                )
-            )
-        except Exception as exc:
-            return _map_workflow_error_to_mcp_response(
-                exc,
-                default_message="failed to complete workflow",
-            )
-
-        return build_mcp_success_response(
-            {
-                "workflow_instance_id": str(
-                    result.workflow_instance.workflow_instance_id
-                ),
-                "attempt_id": str(result.attempt.attempt_id),
-                "workflow_status": result.workflow_instance.status.value,
-                "attempt_status": result.attempt.status.value,
-                "finished_at": (
-                    result.attempt.finished_at.isoformat()
-                    if result.attempt.finished_at is not None
-                    else None
-                ),
-                "latest_verify_status": (
-                    result.verify_report.status.value
-                    if result.verify_report is not None
-                    else (
-                        result.attempt.verify_status.value
-                        if result.attempt.verify_status is not None
-                        else None
-                    )
-                ),
-            }
-        )
-
-    return _handler
-
-
-def build_projection_failures_ignore_tool_handler(
-    server: CtxLedgerServer,
-):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        workspace_id = _parse_required_uuid_argument(arguments, "workspace_id")
-        if isinstance(workspace_id, McpToolResponse):
-            return workspace_id
-
-        workflow_instance_id = _parse_required_uuid_argument(
-            arguments,
-            "workflow_instance_id",
-        )
-        if isinstance(workflow_instance_id, McpToolResponse):
-            return workflow_instance_id
-
-        projection_type = _parse_optional_projection_type_argument(arguments)
-        if isinstance(projection_type, McpToolResponse):
-            return projection_type
-
-        if server.workflow_service is None:
-            return build_mcp_error_response(
-                code="server_not_ready",
-                message="workflow service is not initialized",
-                details={},
-            )
-
-        try:
-            updated_failure_count = (
-                server.workflow_service.ignore_resume_projection_failures(
-                    workspace_id=workspace_id,
-                    workflow_instance_id=workflow_instance_id,
-                    projection_type=projection_type,
-                )
-            )
-        except Exception as exc:
-            message = str(exc) or "failed to ignore projection failures"
-            lowered = message.lower()
-            if "not found" in lowered:
-                code = "not_found"
-            elif "does not belong to workspace" in lowered or "mismatch" in lowered:
-                code = "invalid_request"
-            else:
-                code = "server_error"
-            return build_mcp_error_response(
-                code=code,
-                message=message,
-                details={},
-            )
-
-        return build_mcp_success_response(
-            {
-                "workspace_id": str(workspace_id),
-                "workflow_instance_id": str(workflow_instance_id),
-                "projection_type": (
-                    projection_type.value if projection_type is not None else None
-                ),
-                "updated_failure_count": updated_failure_count,
-                "status": "ignored",
-            }
-        )
-
-    return _handler
-
-
-def build_projection_failures_resolve_tool_handler(
-    server: CtxLedgerServer,
-):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        workspace_id = _parse_required_uuid_argument(arguments, "workspace_id")
-        if isinstance(workspace_id, McpToolResponse):
-            return workspace_id
-
-        workflow_instance_id = _parse_required_uuid_argument(
-            arguments,
-            "workflow_instance_id",
-        )
-        if isinstance(workflow_instance_id, McpToolResponse):
-            return workflow_instance_id
-
-        projection_type = _parse_optional_projection_type_argument(arguments)
-        if isinstance(projection_type, McpToolResponse):
-            return projection_type
-
-        if server.workflow_service is None:
-            return build_mcp_error_response(
-                code="server_not_ready",
-                message="workflow service is not initialized",
-                details={},
-            )
-
-        try:
-            updated_failure_count = (
-                server.workflow_service.resolve_resume_projection_failures(
-                    workspace_id=workspace_id,
-                    workflow_instance_id=workflow_instance_id,
-                    projection_type=projection_type,
-                )
-            )
-        except Exception as exc:
-            message = str(exc) or "failed to resolve projection failures"
-            lowered = message.lower()
-            if "not found" in lowered:
-                code = "not_found"
-            elif "does not belong to workspace" in lowered or "mismatch" in lowered:
-                code = "invalid_request"
-            else:
-                code = "server_error"
-            return build_mcp_error_response(
-                code=code,
-                message=message,
-                details={},
-            )
-
-        return build_mcp_success_response(
-            {
-                "workspace_id": str(workspace_id),
-                "workflow_instance_id": str(workflow_instance_id),
-                "projection_type": (
-                    projection_type.value if projection_type is not None else None
-                ),
-                "updated_failure_count": updated_failure_count,
-                "status": "resolved",
-            }
-        )
-
-    return _handler
-
-
-def build_memory_remember_episode_tool_handler(
-    memory_service: MemoryService,
-):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        try:
-            response = memory_service.remember_episode(
-                RememberEpisodeRequest(
-                    workflow_instance_id=str(arguments.get("workflow_instance_id", "")),
-                    summary=str(arguments.get("summary", "")),
-                    attempt_id=(
-                        str(arguments["attempt_id"])
-                        if arguments.get("attempt_id") is not None
-                        else None
-                    ),
-                    metadata=(
-                        arguments["metadata"]
-                        if isinstance(arguments.get("metadata"), dict)
-                        else {}
-                    ),
-                )
-            )
-            return build_mcp_success_response(serialize_stub_response(response))
-        except MemoryServiceError as exc:
-            return build_mcp_error_response(
-                code=exc.code.value,
-                message=exc.message,
-                details=exc.details,
-            )
-
-    return _handler
-
-
-def build_memory_search_tool_handler(
-    memory_service: MemoryService,
-):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        try:
-            response = memory_service.search(
-                SearchMemoryRequest(
-                    query=str(arguments.get("query", "")),
-                    workspace_id=(
-                        str(arguments["workspace_id"])
-                        if arguments.get("workspace_id") is not None
-                        else None
-                    ),
-                    limit=(
-                        arguments["limit"]
-                        if isinstance(arguments.get("limit"), int)
-                        else 10
-                    ),
-                    filters=(
-                        arguments["filters"]
-                        if isinstance(arguments.get("filters"), dict)
-                        else {}
-                    ),
-                )
-            )
-            return build_mcp_success_response(serialize_stub_response(response))
-        except MemoryServiceError as exc:
-            return build_mcp_error_response(
-                code=exc.code.value,
-                message=exc.message,
-                details=exc.details,
-            )
-
-    return _handler
-
-
-def build_memory_get_context_tool_handler(
-    memory_service: MemoryService,
-):
-    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
-        try:
-            response = memory_service.get_context(
-                GetMemoryContextRequest(
-                    query=(
-                        str(arguments["query"])
-                        if arguments.get("query") is not None
-                        else None
-                    ),
-                    workspace_id=(
-                        str(arguments["workspace_id"])
-                        if arguments.get("workspace_id") is not None
-                        else None
-                    ),
-                    workflow_instance_id=(
-                        str(arguments["workflow_instance_id"])
-                        if arguments.get("workflow_instance_id") is not None
-                        else None
-                    ),
-                    ticket_id=(
-                        str(arguments["ticket_id"])
-                        if arguments.get("ticket_id") is not None
-                        else None
-                    ),
-                    limit=(
-                        arguments["limit"]
-                        if isinstance(arguments.get("limit"), int)
-                        else 10
-                    ),
-                    include_episodes=(
-                        arguments["include_episodes"]
-                        if isinstance(arguments.get("include_episodes"), bool)
-                        else True
-                    ),
-                    include_memory_items=(
-                        arguments["include_memory_items"]
-                        if isinstance(arguments.get("include_memory_items"), bool)
-                        else True
-                    ),
-                    include_summaries=(
-                        arguments["include_summaries"]
-                        if isinstance(arguments.get("include_summaries"), bool)
-                        else True
-                    ),
-                )
-            )
-            return build_mcp_success_response(serialize_stub_response(response))
-        except MemoryServiceError as exc:
-            return build_mcp_error_response(
-                code=exc.code.value,
-                message=exc.message,
-                details=exc.details,
-            )
 
     return _handler
 
 
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
     runtime = HttpRuntimeAdapter(server.settings)
+    mcp_runtime = build_stdio_runtime_adapter(server)
     debug_settings = getattr(server.settings, "debug", None)
     debug_http_endpoints_enabled = (
         True if debug_settings is None else getattr(debug_settings, "enabled", True)
+    )
+
+    runtime.register_handler(
+        "mcp_rpc",
+        build_mcp_http_handler(mcp_runtime, server),
     )
 
     if debug_http_endpoints_enabled:

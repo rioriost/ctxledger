@@ -1,141 +1,162 @@
-Wording and deployment doc progress まで進めました。
+Patch 1 implementation progress まで進めました。
 
-更新した内容:
+今回の実装でやったこと:
 
-- `ctxledger/README.md`
-  - `v0.1.0` の public messaging を HTTP-first に修正
-  - 「MCP 2025-03-26 compatibility」を広く断定する表現を避けて、
-    現時点で repository 上で証明されている
-    **minimal HTTP MCP surface at `/mcp`**
-    という表現に変更
-  - `/mcp` での確認済み最小 path:
-    - `initialize`
-    - `tools/list`
-    - `tools/call`
-    を明記
-  - debug endpoints は MCP protocol surface そのものではないことを明記
-  - runtime payload examples に `mcp_rpc` を反映
+- `ctxledger/src/ctxledger/mcp/` パッケージを新設
+- 以下の新規ファイルを追加:
+  - `ctxledger/src/ctxledger/mcp/__init__.py`
+  - `ctxledger/src/ctxledger/mcp/tool_schemas.py`
+  - `ctxledger/src/ctxledger/mcp/tool_handlers.py`
+  - `ctxledger/src/ctxledger/mcp/resource_handlers.py`
 
-- `ctxledger/docs/mcp-api.md`
-  - docs 冒頭を、現在の evidence に合わせて修正
-  - `v0.1.0` で現在証明済みなのは
-    **HTTP `/mcp` の minimal MCP path**
-    だと明記
-  - `tools/list` / `inputSchema` discoverability を、
-    stdio 限定ではなく public MCP evidence として書き換え
-  - HTTP `/mcp` と
-    - workflow-specific HTTP routes
-    - operator/action routes
-    - debug routes
-    を明確に分離
-  - 新しく
-    **Primary HTTP MCP Path**
-    セクションを追加
-  - stdio は supporting/development surface として位置づけ直し
+## 1. `ctxledger/src/ctxledger/mcp/tool_schemas.py`
+`server.py` から、低リスクで再利用価値の高い MCP schema 群を抽出しました。
 
-- `ctxledger/docs/architecture.md`
-  - primary interface を
-    - `HTTP-first MCP at /mcp`
-    - `stdio as supporting/development surface`
-    に変更
-  - transport adapter の説明も同様に整理
-  - `v0.1.0` acceptance surface として、
-    `/mcp` の minimal HTTP MCP path
-    (`initialize` / `tools/list` / `tools/call`)
-    を明記
-  - broader protocol-scope claims は別判断だと整理
+移したもの:
+- `McpToolSchema`
+- `DEFAULT_EMPTY_MCP_TOOL_SCHEMA`
+- `serialize_mcp_tool_schema(...)`
+- `WORKSPACE_REGISTER_TOOL_SCHEMA`
+- `WORKFLOW_RESUME_TOOL_SCHEMA`
+- `WORKFLOW_START_TOOL_SCHEMA`
+- `WORKFLOW_CHECKPOINT_TOOL_SCHEMA`
+- `WORKFLOW_COMPLETE_TOOL_SCHEMA`
+- `PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA`
+- `PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA`
+- `MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA`
+- `MEMORY_SEARCH_TOOL_SCHEMA`
+- `MEMORY_GET_CONTEXT_TOOL_SCHEMA`
 
-- `ctxledger/docs/deployment.md`
-  - runtime modes を現実に合わせて修正
-  - primary runtime mode を
-    **HTTP MCP at `/mcp`**
-    と明示
-  - `v0.1.0` deployment posture として
-    `CTXLEDGER_TRANSPORT=http`
-    を中心に再整理
-  - `CTXLEDGER_ENABLE_STDIO` は primary release posture ではないことを明記
-  - deployment recommendation を
-    `/mcp` を canonical MCP endpoint とする方向に修正
+これは Patch 1 plan で想定していた
+「stable MCP assets の切り出し」
+に対応しています。
 
-- `ctxledger/docs/CHANGELOG.md`
-  - Notes に
-    **minimal HTTP MCP path at `/mcp` is now evidenced**
-    を追記
-  - closeout framing が
-    “endpoint missing”
-    ではなく
-    “minimal path proven, broader scope still under evaluation”
-    であることを反映
+## 2. `ctxledger/src/ctxledger/mcp/tool_handlers.py`
+`server.py` から、transport-neutral に近い tool handler builder 群を抽出しました。
 
-- `ctxledger/docs/specification.md`
-  - **編集してはいけないファイル** と判明
-  - 一度変更してしまったが、ユーザー指示によりロールバックする方針
-  - 今後は `specification.md` を絶対に編集しない
+移したもの:
+- `build_mcp_success_response(...)`
+- `build_mcp_error_response(...)`
+- `_parse_required_uuid_argument(...)`
+- `_parse_optional_projection_type_argument(...)`
+- `_parse_required_string_argument(...)`
+- `_parse_optional_string_argument(...)`
+- `_parse_optional_dict_argument(...)`
+- `_parse_optional_verify_status_argument(...)`
+- `_parse_required_workflow_status_argument(...)`
+- `_map_workflow_error_to_mcp_response(...)`
+
+および以下の handler builder:
+- `build_resume_workflow_tool_handler(...)`
+- `build_workspace_register_tool_handler(...)`
+- `build_workflow_start_tool_handler(...)`
+- `build_workflow_checkpoint_tool_handler(...)`
+- `build_workflow_complete_tool_handler(...)`
+- `build_projection_failures_ignore_tool_handler(...)`
+- `build_projection_failures_resolve_tool_handler(...)`
+- `build_memory_remember_episode_tool_handler(...)`
+- `build_memory_search_tool_handler(...)`
+- `build_memory_get_context_tool_handler(...)`
+
+注意点:
+- `server.py` 側の auxiliary HTTP routes がまだ `_parse_required_uuid_argument(...)` /
+  `_parse_optional_projection_type_argument(...)` を使っていたため、
+  その2つは `server.py` 側にも残してあります。
+- つまり完全移行ではなく、Patch 1 の安全な抽出に留めています。
+
+## 3. `ctxledger/src/ctxledger/mcp/resource_handlers.py`
+resource まわりの parser / handler / thin wrapper を抽出しました。
+
+移したもの:
+- `parse_workspace_resume_resource_uri(...)`
+- `parse_workflow_detail_resource_uri(...)`
+- `build_workspace_resume_resource_response(...)`
+- `build_workflow_detail_resource_response(...)`
+- `build_workspace_resume_resource_handler(...)`
+- `build_workflow_detail_resource_handler(...)`
+
+実装中に 1 点注意:
+- invalid resource URI 用の not_found response 構築で不自然な式が入ってしまったため、
+  修正済みです。
+- 現在は helper 経由で正しく `McpResourceResponse` を返す形になっています。
+
+## 4. `ctxledger/src/ctxledger/server.py`
+`server.py` 側は以下の方針で修正しました。
+
+- 新設した `mcp/` モジュールから import する形に変更
+- schema 定義の重複を削除
+- tool handler builder 群の重複を削除
+- resource parser / handler の重複を削除
+- ただし以下はまだ `server.py` に残置:
+  - custom `/mcp` transport path (`build_mcp_http_handler(...)`)
+  - `handle_mcp_rpc_request(...)`
+  - `HttpRuntimeAdapter`
+  - `StdioRpcServer`
+  - `StdioRuntimeAdapter`
+  - auxiliary HTTP routes
+  - startup / readiness / bootstrap
+  - `_parse_required_uuid_argument(...)`
+  - `_parse_optional_projection_type_argument(...)`
+    （aux HTTP routes のために当面残置）
+- `MemoryService` import を一度落として test failure が出たため、復帰済み
 
 ## テスト状態
-
-関連する回帰確認として、少なくとも以下は通過済み前提です。
-
-- `tests/test_server.py`
-- `tests/test_cli.py`
-- `tests/test_config.py`
+Patch 1 の目的は「挙動を変えずに抽出する」ことだったので、
+まず `tests/test_server.py` を確認しました。
 
 結果:
-- **198 passed**
+- **163 passed**
+
+途中で出た問題:
+- auxiliary HTTP routes から `_parse_required_uuid_argument` が見えなくなって NameError
+- `build_stdio_runtime_adapter(...)` で `MemoryService` import が欠けて NameError
+
+どちらも修正済みで、現時点では `tests/test_server.py` は green です。
 
 ## 現在の整理
+ここまでで Patch 1 のゴールは概ね達成です。
 
-ここまでで、docs のトーンはかなり揃ってきました。
+達成できたこと:
+- `server.py` から stable MCP assets の一部抽出
+- 新しい `ctxledger.mcp` package の土台作成
+- 既存挙動を維持したまま責務分離を少し前進
+- 次の patch で lifecycle / transport scaffold を入れる下地づくり
 
-- `v0.1.0` は **HTTP-first**
-- `/mcp` の **minimal HTTP MCP path** は証明済み
-- ただし、
-  - `resources/list` / `resources/read`
-  - broader protocol compatibility wording
-  - strict `2025-03-26` claim
-  はまだ追加判断が必要
-- stdio は repository 内にはまだ残っているが、
-  release acceptance の主証拠ではない
-- `docs/specification.md` は **不変ルール対象** として扱う
+まだ残っているもの:
+- custom `/mcp` transport はそのまま
+- lifecycle authority はまだ `server.py` 側に強く残っている
+- stdio / HTTP の transport coupling もまだ強い
+- result mapping も local envelope 依存のまま
 
-## 次にやるべきこと
+## 次にやること
+次は plan 通りなら **Patch 2** です。
 
-次の自然な候補は 2 つです。
+対象:
+- `ctxledger/src/ctxledger/mcp/lifecycle.py`
+- `ctxledger/src/ctxledger/mcp/streamable_http.py`
 
-### 1. `docs/specification.md` を除く残り docs の整合を詰める
-特に確認したい点:
-- `MCP 2025-03-26` をどの強さで主張するか
-- Streamable HTTP を必須扱いしていないか
-- current evidence とズレた表現が残っていないか
+そこでやること:
+- `initialize`
+- `protocolVersion`
+- `notifications/initialized`
+- `/mcp` を generic route ではなく MCP endpoint として扱う scaffold
 
-### 2. HTTP MCP acceptance evidence をさらに厚くする
-候補:
-- HTTP で `workspace_register`
-- HTTP で `workflow_start`
-- HTTP で `workflow_checkpoint`
-- HTTP で `workflow_resume`
-- HTTP で `workflow_complete`
-- 必要なら HTTP で `resources/list` / `resources/read`
-
-の直接テスト追加
+を入れて、
+`server.py` から protocol authority を動かし始めることです。
 
 ## 次の引き継ぎ先向けメモ
+次に入る人は以下を前提にしてよいです。
 
-次に入る人は、まず `docs/specification.md` には触らないこと。
+1. Patch 1 の extraction は入っている
+2. `tests/test_server.py` は 163 passed
+3. `docs/specification.md` は絶対に触らない
+4. まだ custom `/mcp` transport は生きているので、
+   compliance claim は一切してはいけない
+5. 次の主作業は Patch 2:
+   - lifecycle scaffold
+   - Streamable HTTP scaffold
 
-今の中心課題はもう
-- endpoint existence
-ではなく
-- **acceptance boundary の整合**
-です。
-
-特に判断ポイント:
-1. `minimal usable remote MCP server` という closeoutで十分か
-2. `MCP 2025-03-26 compatible` をそのまま維持するか
-3. HTTP resource coverage を `v0.1.0` 必須にするか
-4. stdio を release scope から本当に削るなら、
-   config / CLI / tests / docs をどこまで落とすか
-
-少なくとも、README / mcp-api / architecture / deployment / changelog は
-「`/mcp` の minimal HTTP MCP path は証明済み」
-という前提に更新済みです。
+特に注意:
+- `server.py` から helper を全部一気に消すと auxiliary HTTP routes が壊れやすい
+- Patch 2 では「authority を移す」ことが主目的で、
+  full transport rewrite を一気にやろうとしない方が安全
