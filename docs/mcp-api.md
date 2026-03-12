@@ -478,7 +478,7 @@ Projection failure lifecycle handling may also require explicit mutation surface
 
 Representative action surfaces may be modeled as MCP tools because they perform canonical state mutation.
 
-Representative future tool examples:
+Implemented MCP tools:
 
 - `projection_failures_ignore`
 - `projection_failures_resolve`
@@ -502,18 +502,29 @@ Representative selector fields for either tool may include:
 - `workflow_instance_id`
 - `projection_type`
 
-Representative response contents may include:
+Representative response contents include:
 
 - `workspace_id`
 - `workflow_instance_id`
-- `projection_type` (when scoped)
+- `projection_type`
 - `updated_failure_count`
 - `status`
 
-Representative response status values may include:
+Implemented response status values:
 
 - `ignored`
 - `resolved`
+
+Implemented validation and error handling include:
+
+- required UUID validation for `workspace_id`
+- required UUID validation for `workflow_instance_id`
+- optional `projection_type` validation
+- `server_not_ready` when the workflow service is not initialized
+- normalized MCP error mapping for representative service failures:
+  - `not_found`
+  - `invalid_request`
+  - `server_error`
 
 Representative error cases include:
 
@@ -929,6 +940,8 @@ Filter runtime introspection down to tool registrations.
         "memory_get_context",
         "memory_remember_episode",
         "memory_search",
+        "projection_failures_ignore",
+        "projection_failures_resolve",
         "resume_workflow"
       ]
     }
@@ -1332,7 +1345,13 @@ Memory APIs may exist in documented stub form until the corresponding subsystems
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
+### Implemented Optional Surface
+
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+
 ### Allowed Stub Surface
+
 - `memory_remember_episode`
 - `memory_search`
 - `memory_get_context`
