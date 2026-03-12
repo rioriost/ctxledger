@@ -265,9 +265,22 @@ Operational guidance for these routes:
   - `/projection_failures_ignore`
   - `/projection_failures_resolve`
 - treat requests using the wrong path shape as invalid route targets that should resolve to `404 not_found` rather than as alternate entry points for the same action
+- configure reverse proxies and gateways with exact path matching for these action routes so that unexpected alternate paths do not become accepted mutation entry points
+- keep request logging for these routes enabled at the proxy or gateway boundary so operator-triggered lifecycle closures remain observable during incident review
 - treat query parameters such as `workspace_id`, `workflow_instance_id`, and optional `projection_type` as operational identifiers that may reveal internal workflow metadata in logs or access traces
 - avoid using these routes as general client-facing APIs; they are intended for explicit lifecycle handling of projection failures
 - remember that `ignored` closes visibility of an open failure without claiming successful projection repair, while `resolved` should be used only when reconciliation or equivalent recovery evidence exists
+
+Representative reverse-proxy expectations:
+
+- match `projection_failures_ignore` only on `/projection_failures_ignore`
+- match `projection_failures_resolve` only on `/projection_failures_resolve`
+- apply the same auth, TLS, and trusted-network policy used for other protected operator endpoints
+- preserve enough request logging to identify:
+  - which action route was called
+  - whether auth succeeded or failed
+  - which workflow-scoping identifiers were present
+  - the response status returned to the caller
 
 For the broader security posture around bearer authentication, secret handling, and `/debug/*` exposure, see `SECURITY.md`.
 

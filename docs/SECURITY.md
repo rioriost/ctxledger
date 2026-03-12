@@ -187,6 +187,16 @@ Operational cautions:
 6. reserve `projection_failures_resolve` for cases where successful reconciliation or equivalent recovery evidence exists
 7. preserve normal operational logging around the use of these routes so that manual lifecycle closure actions remain observable during incident review
 8. document and monitor the exact path shapes in reverse proxies, gateway policy, and access control rules so that unexpected alternate paths do not accidentally become accepted operator conventions
+9. keep reverse proxy or gateway policy aligned with the exact implemented action paths so that only the intended route shapes are forwarded to the application
+10. retain enough request/response observability for these routes to support incident review, operator accountability, and post-hoc reconstruction of manual lifecycle closure activity
+
+Representative observability guidance includes:
+
+- log which exact action path was requested
+- log whether bearer authentication succeeded or failed
+- log the HTTP response status returned for the action request
+- treat `workspace_id`, `workflow_instance_id`, and optional `projection_type` as sensitive operational identifiers that may appear in access logs
+- prefer structured logs or proxy fields that make operator-triggered closure events easy to correlate during incident review
 
 Representative operational risks include:
 
@@ -194,6 +204,8 @@ Representative operational risks include:
 - asserting successful recovery semantics too early by marking failures as `resolved`
 - allowing broad callers to mutate workflow-related operational state without sufficient operator intent
 - confusing projection artifact state with failure lifecycle state
+- allowing alternate proxy path conventions to drift away from the implemented application contract
+- losing enough request context that manual closure activity becomes difficult to audit during later investigation
 
 Recommended production posture:
 
