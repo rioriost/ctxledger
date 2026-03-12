@@ -23,6 +23,7 @@ from ctxledger.memory.service import MemoryService
 from ctxledger.server import (
     CtxLedgerServer,
     HttpRuntimeAdapter,
+    McpResourceResponse,
     McpToolResponse,
     ProjectionFailureActionResponse,
     ProjectionFailureHistoryResponse,
@@ -50,16 +51,21 @@ from ctxledger.server import (
     build_stdio_runtime_adapter,
     build_workflow_checkpoint_tool_handler,
     build_workflow_complete_tool_handler,
+    build_workflow_detail_resource_handler,
     build_workflow_resume_http_handler,
     build_workflow_start_tool_handler,
     build_workspace_register_tool_handler,
+    build_workspace_resume_resource_handler,
     collect_runtime_introspection,
     create_runtime,
     create_server,
     dispatch_http_request,
+    dispatch_mcp_resource,
     dispatch_mcp_tool,
     parse_closed_projection_failures_request_path,
+    parse_workflow_detail_resource_uri,
     parse_workflow_resume_request_path,
+    parse_workspace_resume_resource_uri,
     serialize_runtime_introspection,
     serialize_runtime_introspection_collection,
     serialize_workflow_resume,
@@ -3976,6 +3982,324 @@ def test_stdio_runtime_adapter_introspect_returns_registered_tools() -> None:
     assert introspection.tools == ("workflow_resume",)
 
 
+def test_stdio_runtime_adapter_introspect_returns_registered_resources() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+    runtime.register_resource_handler(
+        "workspace://{workspace_id}/resume",
+        lambda uri: McpResourceResponse(
+            status_code=200,
+            payload={"uri": uri},
+            headers={"content-type": "application/json"},
+        ),
+    )
+    runtime.register_resource_handler(
+        "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+        lambda uri: McpResourceResponse(
+            status_code=200,
+            payload={"uri": uri},
+            headers={"content-type": "application/json"},
+        ),
+    )
+
+    introspection = runtime.introspect()
+
+    assert introspection.transport == "stdio"
+    assert introspection.routes == ()
+    assert introspection.tools == ()
+    assert introspection.resources == (
+        "workspace://{workspace_id}/resume",
+        "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+    )
+
+
+def test_parse_workspace_resume_resource_uri_returns_workspace_id_for_valid_uri() -> (
+    None
+):
+    workspace_id = uuid4()
+
+    assert (
+        parse_workspace_resume_resource_uri(f"workspace://{workspace_id}/resume")
+        == workspace_id
+    )
+
+
+def test_parse_workspace_resume_resource_uri_returns_none_for_invalid_uri() -> None:
+    assert parse_workspace_resume_resource_uri("") is None
+    assert parse_workspace_resume_resource_uri("workspace://not-a-uuid/resume") is None
+    assert parse_workspace_resume_resource_uri("workspace://abc/workflow") is None
+    assert parse_workspace_resume_resource_uri("memory://episode/123") is None
+
+
+def test_parse_workflow_detail_resource_uri_returns_ids_for_valid_uri() -> None:
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    assert parse_workflow_detail_resource_uri(
+        f"workspace://{workspace_id}/workflow/{workflow_instance_id}"
+    ) == (workspace_id, workflow_instance_id)
+
+
+def test_parse_workflow_detail_resource_uri_returns_none_for_invalid_uri() -> None:
+    workspace_id = uuid4()
+
+    assert parse_workflow_detail_resource_uri("") is None
+    assert (
+        parse_workflow_detail_resource_uri(
+            f"workspace://{workspace_id}/workflow/not-a-uuid"
+        )
+        is None
+    )
+    assert (
+        parse_workflow_detail_resource_uri(f"workspace://not-a-uuid/workflow/{uuid4()}")
+        is None
+    )
+    assert parse_workflow_detail_resource_uri("workspace://abc/resume") is None
+
+
+def test_build_workspace_resume_resource_handler_returns_success_payload() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_workspace_resume_resource_handler(server)
+
+    server.startup()
+
+    response = handler(f"workspace://{resume.workspace.workspace_id}/resume")
+
+    assert isinstance(response, McpResourceResponse)
+    assert response.status_code == 200
+    assert response.payload == {
+        "uri": f"workspace://{resume.workspace.workspace_id}/resume",
+        "resource": serialize_workflow_resume(resume),
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workspace_resume_resource_handler_returns_not_found_for_invalid_uri() -> (
+    None
+):
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workspace_resume_resource_handler(server)
+
+    response = handler("workspace://not-a-uuid/resume")
+
+    assert isinstance(response, McpResourceResponse)
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "workspace resume resource requires workspace://{workspace_id}/resume",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workspace_resume_resource_handler_returns_server_not_ready_error() -> (
+    None
+):
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workspace_resume_resource_handler(server)
+
+    response = handler(f"workspace://{uuid4()}/resume")
+
+    assert isinstance(response, McpResourceResponse)
+    assert response.status_code == 503
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_detail_resource_handler_returns_success_payload() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_workflow_detail_resource_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            f"workspace://{resume.workspace.workspace_id}/workflow/"
+            f"{resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, McpResourceResponse)
+    assert response.status_code == 200
+    assert response.payload == {
+        "uri": (
+            f"workspace://{resume.workspace.workspace_id}/workflow/"
+            f"{resume.workflow_instance.workflow_instance_id}"
+        ),
+        "resource": serialize_workflow_resume(resume),
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_detail_resource_handler_returns_not_found_for_invalid_uri() -> (
+    None
+):
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_detail_resource_handler(server)
+
+    response = handler("workspace://not-a-uuid/workflow/not-a-uuid")
+
+    assert isinstance(response, McpResourceResponse)
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": (
+                "workflow detail resource requires "
+                "workspace://{workspace_id}/workflow/{workflow_instance_id}"
+            ),
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_detail_resource_handler_returns_server_not_ready_error() -> (
+    None
+):
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_workflow_detail_resource_handler(server)
+
+    response = handler(f"workspace://{uuid4()}/workflow/{uuid4()}")
+
+    assert isinstance(response, McpResourceResponse)
+    assert response.status_code == 503
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_dispatch_mcp_resource_returns_dispatch_result_for_success() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_stdio_runtime_adapter(server)
+
+    server.startup()
+
+    uri = f"workspace://{resume.workspace.workspace_id}/resume"
+    result = dispatch_mcp_resource(runtime, uri)
+
+    assert isinstance(result, RuntimeDispatchResult)
+    assert result.transport == "stdio"
+    assert result.target == uri
+    assert result.status == "ok"
+    assert isinstance(result.response, McpResourceResponse)
+    assert result.response.status_code == 200
+    assert result.response.payload == {
+        "uri": uri,
+        "resource": serialize_workflow_resume(resume),
+    }
+
+
+def test_dispatch_mcp_resource_returns_resource_not_found_result() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    runtime = StdioRuntimeAdapter(settings)
+    uri = f"workspace://{uuid4()}/resume"
+
+    result = dispatch_mcp_resource(runtime, uri)
+
+    assert isinstance(result, RuntimeDispatchResult)
+    assert result.transport == "stdio"
+    assert result.target == uri
+    assert result.status == "resource_not_found"
+    assert isinstance(result.response, McpResourceResponse)
+    assert result.response.status_code == 404
+    assert result.response.payload == {
+        "error": {
+            "code": "resource_not_found",
+            "message": f"no MCP resource handler is registered for resource '{uri}'",
+        }
+    }
+
+
 def test_collect_runtime_introspection_returns_empty_tuple_for_none() -> None:
     assert collect_runtime_introspection(None) == ()
 
@@ -4014,6 +4338,14 @@ def test_collect_runtime_introspection_returns_stdio_runtime_introspection() -> 
         "workflow_resume",
         lambda arguments: McpToolResponse(payload={"ok": True, "result": arguments}),
     )
+    runtime.register_resource_handler(
+        "workspace://{workspace_id}/resume",
+        lambda uri: McpResourceResponse(
+            status_code=200,
+            payload={"uri": uri},
+            headers={"content-type": "application/json"},
+        ),
+    )
 
     introspections = collect_runtime_introspection(runtime)
 
@@ -4022,6 +4354,7 @@ def test_collect_runtime_introspection_returns_stdio_runtime_introspection() -> 
             transport="stdio",
             routes=(),
             tools=("workflow_resume",),
+            resources=("workspace://{workspace_id}/resume",),
         ),
     )
 
@@ -4058,6 +4391,7 @@ def test_collect_runtime_introspection_returns_both_transports_for_composite_run
                 "workflow_resume",
             ),
             tools=(),
+            resources=(),
         ),
         RuntimeIntrospection(
             transport="stdio",
@@ -4073,6 +4407,10 @@ def test_collect_runtime_introspection_returns_both_transports_for_composite_run
                 "workflow_resume",
                 "workflow_start",
                 "workspace_register",
+            ),
+            resources=(
+                "workspace://{workspace_id}/resume",
+                "workspace://{workspace_id}/workflow/{workflow_instance_id}",
             ),
         ),
     )
@@ -4091,6 +4429,7 @@ def test_serialize_runtime_introspection_returns_json_ready_payload() -> None:
         "transport": "http",
         "routes": ["workflow_resume"],
         "tools": [],
+        "resources": [],
     }
 
 
@@ -4102,11 +4441,13 @@ def test_serialize_runtime_introspection_collection_returns_json_ready_payloads(
             transport="http",
             routes=("workflow_resume",),
             tools=(),
+            resources=(),
         ),
         RuntimeIntrospection(
             transport="stdio",
             routes=(),
             tools=("workflow_resume",),
+            resources=("workspace://{workspace_id}/resume",),
         ),
     )
 
@@ -4117,11 +4458,13 @@ def test_serialize_runtime_introspection_collection_returns_json_ready_payloads(
             "transport": "http",
             "routes": ["workflow_resume"],
             "tools": [],
+            "resources": [],
         },
         {
             "transport": "stdio",
             "routes": [],
             "tools": ["workflow_resume"],
+            "resources": ["workspace://{workspace_id}/resume"],
         },
     ]
 
@@ -4155,6 +4498,7 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
                     "workflow_resume",
                 ],
                 "tools": [],
+                "resources": [],
             }
         ]
     }
@@ -4193,6 +4537,7 @@ def test_build_runtime_introspection_response_returns_http_payload_for_composite
                     "workflow_resume",
                 ],
                 "tools": [],
+                "resources": [],
             },
             {
                 "transport": "stdio",
@@ -4208,6 +4553,10 @@ def test_build_runtime_introspection_response_returns_http_payload_for_composite
                     "workflow_resume",
                     "workflow_start",
                     "workspace_register",
+                ],
+                "resources": [
+                    "workspace://{workspace_id}/resume",
+                    "workspace://{workspace_id}/workflow/{workflow_instance_id}",
                 ],
             },
         ]
@@ -4260,6 +4609,7 @@ def test_build_runtime_introspection_http_handler_returns_success_response() -> 
                     "workflow_resume",
                 ],
                 "tools": [],
+                "resources": [],
             }
         ]
     }
@@ -4346,6 +4696,7 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
                     "workflow_resume",
                 ],
                 "tools": [],
+                "resources": [],
             }
         ]
     }
@@ -4376,6 +4727,7 @@ def test_health_includes_runtime_summary_details_for_http_runtime() -> None:
                 "workflow_resume",
             ],
             "tools": [],
+            "resources": [],
         }
     ]
 
@@ -4409,6 +4761,7 @@ def test_health_includes_runtime_summary_details_for_composite_runtime() -> None
                 "workflow_resume",
             ],
             "tools": [],
+            "resources": [],
         },
         {
             "transport": "stdio",
@@ -4424,6 +4777,10 @@ def test_health_includes_runtime_summary_details_for_composite_runtime() -> None
                 "workflow_resume",
                 "workflow_start",
                 "workspace_register",
+            ],
+            "resources": [
+                "workspace://{workspace_id}/resume",
+                "workspace://{workspace_id}/workflow/{workflow_instance_id}",
             ],
         },
     ]
@@ -4455,6 +4812,7 @@ def test_readiness_includes_runtime_summary_details_for_http_runtime() -> None:
                 "workflow_resume",
             ],
             "tools": [],
+            "resources": [],
         }
     ]
 
@@ -4489,6 +4847,7 @@ def test_readiness_includes_runtime_summary_details_for_composite_runtime() -> N
                 "workflow_resume",
             ],
             "tools": [],
+            "resources": [],
         },
         {
             "transport": "stdio",
@@ -4504,6 +4863,10 @@ def test_readiness_includes_runtime_summary_details_for_composite_runtime() -> N
                 "workflow_resume",
                 "workflow_start",
                 "workspace_register",
+            ],
+            "resources": [
+                "workspace://{workspace_id}/resume",
+                "workspace://{workspace_id}/workflow/{workflow_instance_id}",
             ],
         },
     ]
@@ -4557,6 +4920,7 @@ def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
                 "workflow_resume",
             ],
             "tools": [],
+            "resources": [],
         }
     ]
 
@@ -4613,6 +4977,7 @@ def test_startup_logs_runtime_introspection_metadata_for_composite_runtime(
                 "workflow_resume",
             ],
             "tools": [],
+            "resources": [],
         },
         {
             "transport": "stdio",
@@ -4628,6 +4993,10 @@ def test_startup_logs_runtime_introspection_metadata_for_composite_runtime(
                 "workflow_resume",
                 "workflow_start",
                 "workspace_register",
+            ],
+            "resources": [
+                "workspace://{workspace_id}/resume",
+                "workspace://{workspace_id}/workflow/{workflow_instance_id}",
             ],
         },
     ]
@@ -4873,7 +5242,7 @@ def test_print_runtime_summary_includes_http_runtime_introspection(
         "runtime=[{'transport': 'http', 'routes': ['projection_failures_ignore', "
         "'projection_failures_resolve', 'runtime_introspection', 'runtime_routes', "
         "'runtime_tools', 'workflow_closed_projection_failures', 'workflow_resume'], "
-        "'tools': []}]" in captured.err
+        "'tools': [], 'resources': []}]" in captured.err
     )
     assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
 
@@ -4904,11 +5273,14 @@ def test_print_runtime_summary_includes_composite_runtime_introspection(
         "runtime=[{'transport': 'http', 'routes': ['projection_failures_ignore', "
         "'projection_failures_resolve', 'runtime_introspection', 'runtime_routes', "
         "'runtime_tools', 'workflow_closed_projection_failures', 'workflow_resume'], "
-        "'tools': []}, {'transport': 'stdio', 'routes': [], 'tools': "
-        "['memory_get_context', 'memory_remember_episode', 'memory_search', "
+        "'tools': [], 'resources': []}, {'transport': 'stdio', 'routes': [], "
+        "'tools': ['memory_get_context', 'memory_remember_episode', 'memory_search', "
         "'projection_failures_ignore', 'projection_failures_resolve', "
         "'workflow_checkpoint', 'workflow_complete', 'workflow_resume', "
-        "'workflow_start', 'workspace_register']}]" in captured.err
+        "'workflow_start', 'workspace_register'], 'resources': "
+        "['workspace://{workspace_id}/resume', "
+        "'workspace://{workspace_id}/workflow/{workflow_instance_id}']}]"
+        in captured.err
     )
     assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
     assert "stdio_transport=enabled" in captured.err

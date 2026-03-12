@@ -103,6 +103,13 @@ class RuntimeIntrospectionResponse:
 
 
 @dataclass(slots=True)
+class McpResourceResponse:
+    status_code: int
+    payload: dict[str, Any]
+    headers: dict[str, str]
+
+
+@dataclass(slots=True)
 class McpToolResponse:
     payload: dict[str, Any]
 
@@ -112,7 +119,7 @@ class RuntimeDispatchResult:
     transport: str
     target: str
     status: str
-    response: WorkflowResumeResponse | McpToolResponse
+    response: WorkflowResumeResponse | McpToolResponse | McpResourceResponse
 
 
 @dataclass(slots=True)
@@ -120,10 +127,12 @@ class RuntimeIntrospection:
     transport: str
     routes: tuple[str, ...] = ()
     tools: tuple[str, ...] = ()
+    resources: tuple[str, ...] = ()
 
 
 WorkflowHttpHandler = Any
 McpToolHandler = Any
+McpResourceHandler = Any
 
 
 class ServerBootstrapError(RuntimeError):
@@ -311,21 +320,34 @@ class StdioRuntimeAdapter:
         self,
         settings: AppSettings,
         tool_handlers: dict[str, McpToolHandler] | None = None,
+        resource_handlers: dict[str, McpResourceHandler] | None = None,
     ) -> None:
         self.settings = settings
         self._started = False
         self._tool_handlers: dict[str, McpToolHandler] = tool_handlers or {}
+        self._resource_handlers: dict[str, McpResourceHandler] = resource_handlers or {}
 
     def register_tool_handler(self, tool_name: str, handler: McpToolHandler) -> None:
         self._tool_handlers[tool_name] = handler
 
+    def register_resource_handler(
+        self,
+        resource_pattern: str,
+        handler: McpResourceHandler,
+    ) -> None:
+        self._resource_handlers[resource_pattern] = handler
+
     def registered_tools(self) -> tuple[str, ...]:
         return tuple(sorted(self._tool_handlers.keys()))
+
+    def registered_resources(self) -> tuple[str, ...]:
+        return tuple(sorted(self._resource_handlers.keys()))
 
     def introspect(self) -> RuntimeIntrospection:
         return RuntimeIntrospection(
             transport="stdio",
             tools=self.registered_tools(),
+            resources=self.registered_resources(),
         )
 
     def dispatch_tool(
@@ -333,12 +355,16 @@ class StdioRuntimeAdapter:
     ) -> McpToolResponse:
         return dispatch_mcp_tool(self, tool_name, arguments).response
 
+    def dispatch_resource(self, uri: str) -> McpResourceResponse:
+        return dispatch_mcp_resource(self, uri).response
+
     def start(self) -> None:
         logger.info(
             "stdio runtime adapter starting",
             extra={
                 "transport": "stdio",
                 "registered_tools": list(self.registered_tools()),
+                "registered_resources": list(self.registered_resources()),
             },
         )
         self._started = True
@@ -352,6 +378,7 @@ class StdioRuntimeAdapter:
             extra={
                 "transport": "stdio",
                 "registered_tools": list(self.registered_tools()),
+                "registered_resources": list(self.registered_resources()),
             },
         )
         self._started = False
@@ -647,6 +674,188 @@ class CtxLedgerServer:
                     for introspection in introspections
                     if introspection.tools
                 ],
+            },
+            headers={"content-type": "application/json"},
+        )
+
+    def build_workspace_resume_resource_response(
+        self,
+        workspace_id: UUID,
+    ) -> McpResourceResponse:
+        if self.workflow_service is None:
+            return McpResourceResponse(
+                status_code=503,
+                payload={
+                    "error": {
+                        "code": "server_not_ready",
+                        "message": "workflow service is not initialized",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        if hasattr(self.workflow_service, "_uow_factory"):
+            with self.workflow_service._uow_factory() as uow:
+                workspace = uow.workspaces.get_by_id(workspace_id)
+                if workspace is None:
+                    return McpResourceResponse(
+                        status_code=404,
+                        payload={
+                            "error": {
+                                "code": "not_found",
+                                "message": f"workspace '{workspace_id}' was not found",
+                            }
+                        },
+                        headers={"content-type": "application/json"},
+                    )
+
+                running_workflow = uow.workflow_instances.get_running_by_workspace_id(
+                    workspace_id
+                )
+                selected_workflow = running_workflow
+                if selected_workflow is None:
+                    selected_workflow = (
+                        uow.workflow_instances.get_latest_by_workspace_id(workspace_id)
+                    )
+
+            if selected_workflow is None:
+                return McpResourceResponse(
+                    status_code=404,
+                    payload={
+                        "error": {
+                            "code": "not_found",
+                            "message": (
+                                f"no workflow is available for workspace '{workspace_id}'"
+                            ),
+                        }
+                    },
+                    headers={"content-type": "application/json"},
+                )
+
+            workflow_response = self.build_workflow_resume_response(
+                selected_workflow.workflow_instance_id
+            )
+        else:
+            workflow_response = self.build_workflow_resume_response(
+                getattr(self.workflow_service.resume_result.workspace, "workspace_id")
+            )
+            if workflow_response.status_code == 200:
+                response_workspace_id = workflow_response.payload.get(
+                    "workspace", {}
+                ).get("workspace_id")
+                if response_workspace_id != str(workspace_id):
+                    return McpResourceResponse(
+                        status_code=404,
+                        payload={
+                            "error": {
+                                "code": "not_found",
+                                "message": f"workspace '{workspace_id}' was not found",
+                            }
+                        },
+                        headers={"content-type": "application/json"},
+                    )
+        if workflow_response.status_code != 200:
+            return McpResourceResponse(
+                status_code=workflow_response.status_code,
+                payload=workflow_response.payload,
+                headers=workflow_response.headers,
+            )
+
+        return McpResourceResponse(
+            status_code=200,
+            payload={
+                "uri": f"workspace://{workspace_id}/resume",
+                "resource": workflow_response.payload,
+            },
+            headers={"content-type": "application/json"},
+        )
+
+    def build_workflow_detail_resource_response(
+        self,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+    ) -> McpResourceResponse:
+        if self.workflow_service is None:
+            return McpResourceResponse(
+                status_code=503,
+                payload={
+                    "error": {
+                        "code": "server_not_ready",
+                        "message": "workflow service is not initialized",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        if hasattr(self.workflow_service, "_uow_factory"):
+            with self.workflow_service._uow_factory() as uow:
+                workflow = uow.workflow_instances.get_by_id(workflow_instance_id)
+                if workflow is None:
+                    return McpResourceResponse(
+                        status_code=404,
+                        payload={
+                            "error": {
+                                "code": "not_found",
+                                "message": (
+                                    f"workflow '{workflow_instance_id}' was not found"
+                                ),
+                            }
+                        },
+                        headers={"content-type": "application/json"},
+                    )
+                if workflow.workspace_id != workspace_id:
+                    return McpResourceResponse(
+                        status_code=400,
+                        payload={
+                            "error": {
+                                "code": "invalid_request",
+                                "message": (
+                                    "workflow instance does not belong to workspace"
+                                ),
+                            }
+                        },
+                        headers={"content-type": "application/json"},
+                    )
+        else:
+            resume = self.workflow_service.resume_result
+            if resume.workflow_instance.workflow_instance_id != workflow_instance_id:
+                return McpResourceResponse(
+                    status_code=404,
+                    payload={
+                        "error": {
+                            "code": "not_found",
+                            "message": (
+                                f"workflow '{workflow_instance_id}' was not found"
+                            ),
+                        }
+                    },
+                    headers={"content-type": "application/json"},
+                )
+            if resume.workflow_instance.workspace_id != workspace_id:
+                return McpResourceResponse(
+                    status_code=400,
+                    payload={
+                        "error": {
+                            "code": "invalid_request",
+                            "message": "workflow instance does not belong to workspace",
+                        }
+                    },
+                    headers={"content-type": "application/json"},
+                )
+
+        workflow_response = self.build_workflow_resume_response(workflow_instance_id)
+        if workflow_response.status_code != 200:
+            return McpResourceResponse(
+                status_code=workflow_response.status_code,
+                payload=workflow_response.payload,
+                headers=workflow_response.headers,
+            )
+
+        return McpResourceResponse(
+            status_code=200,
+            payload={
+                "uri": f"workspace://{workspace_id}/workflow/{workflow_instance_id}",
+                "resource": workflow_response.payload,
             },
             headers={"content-type": "application/json"},
         )
@@ -963,6 +1172,7 @@ def serialize_runtime_introspection(
         "transport": introspection.transport,
         "routes": list(introspection.routes),
         "tools": list(introspection.tools),
+        "resources": list(introspection.resources),
     }
 
 
@@ -1117,11 +1327,77 @@ def dispatch_mcp_tool(
     )
 
 
+def dispatch_mcp_resource(
+    runtime: StdioRuntimeAdapter,
+    uri: str,
+) -> RuntimeDispatchResult:
+    for resource_pattern, handler in runtime._resource_handlers.items():
+        if resource_pattern == "workspace://{workspace_id}/resume":
+            if parse_workspace_resume_resource_uri(uri) is not None:
+                response = handler(uri)
+                status = "ok" if response.status_code < 400 else "error"
+                return RuntimeDispatchResult(
+                    transport="stdio",
+                    target=uri,
+                    status=status,
+                    response=response,
+                )
+        elif (
+            resource_pattern
+            == "workspace://{workspace_id}/workflow/{workflow_instance_id}"
+        ):
+            if parse_workflow_detail_resource_uri(uri) is not None:
+                response = handler(uri)
+                status = "ok" if response.status_code < 400 else "error"
+                return RuntimeDispatchResult(
+                    transport="stdio",
+                    target=uri,
+                    status=status,
+                    response=response,
+                )
+
+    response = McpResourceResponse(
+        status_code=404,
+        payload={
+            "error": {
+                "code": "resource_not_found",
+                "message": f"no MCP resource handler is registered for resource '{uri}'",
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
+    return RuntimeDispatchResult(
+        transport="stdio",
+        target=uri,
+        status="resource_not_found",
+        response=response,
+    )
+
+
 def build_workflow_resume_response(
     server: CtxLedgerServer,
     workflow_instance_id: UUID,
 ) -> WorkflowResumeResponse:
     return server.build_workflow_resume_response(workflow_instance_id)
+
+
+def build_workspace_resume_resource_response(
+    server: CtxLedgerServer,
+    workspace_id: UUID,
+) -> McpResourceResponse:
+    return server.build_workspace_resume_resource_response(workspace_id)
+
+
+def build_workflow_detail_resource_response(
+    server: CtxLedgerServer,
+    *,
+    workspace_id: UUID,
+    workflow_instance_id: UUID,
+) -> McpResourceResponse:
+    return server.build_workflow_detail_resource_response(
+        workspace_id,
+        workflow_instance_id,
+    )
 
 
 def build_closed_projection_failures_response(
@@ -1175,6 +1451,46 @@ def build_runtime_tools_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
     return server.build_runtime_tools_response()
+
+
+def parse_workspace_resume_resource_uri(uri: str) -> UUID | None:
+    normalized_uri = uri.strip()
+    if not normalized_uri:
+        return None
+
+    prefix = "workspace://"
+    if not normalized_uri.startswith(prefix):
+        return None
+
+    remainder = normalized_uri[len(prefix) :]
+    parts = remainder.split("/")
+    if len(parts) != 2 or parts[1] != "resume":
+        return None
+
+    try:
+        return UUID(parts[0])
+    except ValueError:
+        return None
+
+
+def parse_workflow_detail_resource_uri(uri: str) -> tuple[UUID, UUID] | None:
+    normalized_uri = uri.strip()
+    if not normalized_uri:
+        return None
+
+    prefix = "workspace://"
+    if not normalized_uri.startswith(prefix):
+        return None
+
+    remainder = normalized_uri[len(prefix) :]
+    parts = remainder.split("/")
+    if len(parts) != 3 or parts[1] != "workflow":
+        return None
+
+    try:
+        return UUID(parts[0]), UUID(parts[2])
+    except ValueError:
+        return None
 
 
 def parse_workflow_resume_request_path(path: str) -> UUID | None:
@@ -1717,6 +2033,61 @@ def build_resume_workflow_tool_handler(
             )
 
         return build_mcp_success_response(response.payload)
+
+    return _handler
+
+
+def build_workspace_resume_resource_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(uri: str) -> McpResourceResponse:
+        workspace_id = parse_workspace_resume_resource_uri(uri)
+        if workspace_id is None:
+            return McpResourceResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": (
+                            "workspace resume resource requires "
+                            "workspace://{workspace_id}/resume"
+                        ),
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return build_workspace_resume_resource_response(server, workspace_id)
+
+    return _handler
+
+
+def build_workflow_detail_resource_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(uri: str) -> McpResourceResponse:
+        parsed = parse_workflow_detail_resource_uri(uri)
+        if parsed is None:
+            return McpResourceResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": (
+                            "workflow detail resource requires "
+                            "workspace://{workspace_id}/workflow/{workflow_instance_id}"
+                        ),
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        workspace_id, workflow_instance_id = parsed
+        return build_workflow_detail_resource_response(
+            server,
+            workspace_id=workspace_id,
+            workflow_instance_id=workflow_instance_id,
+        )
 
     return _handler
 
@@ -2370,6 +2741,14 @@ def serialize_runtime_introspection_collection(
 def build_stdio_runtime_adapter(server: CtxLedgerServer) -> StdioRuntimeAdapter:
     runtime = StdioRuntimeAdapter(server.settings)
     memory_service = MemoryService()
+    runtime.register_resource_handler(
+        "workspace://{workspace_id}/resume",
+        build_workspace_resume_resource_handler(server),
+    )
+    runtime.register_resource_handler(
+        "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+        build_workflow_detail_resource_handler(server),
+    )
     runtime.register_tool_handler(
         "workflow_resume",
         build_resume_workflow_tool_handler(server),
@@ -2638,6 +3017,10 @@ __all__ = [
     "build_projection_failures_ignore_tool_handler",
     "build_projection_failures_resolve_tool_handler",
     "build_resume_workflow_tool_handler",
+    "build_workspace_resume_resource_handler",
+    "build_workspace_resume_resource_response",
+    "build_workflow_detail_resource_handler",
+    "build_workflow_detail_resource_response",
     "build_workspace_register_tool_handler",
     "build_workflow_checkpoint_tool_handler",
     "build_workflow_complete_tool_handler",
@@ -2650,8 +3033,11 @@ __all__ = [
     "create_runtime",
     "create_server",
     "dispatch_http_request",
+    "dispatch_mcp_resource",
     "dispatch_mcp_tool",
     "parse_closed_projection_failures_request_path",
+    "parse_workspace_resume_resource_uri",
+    "parse_workflow_detail_resource_uri",
     "parse_workflow_resume_request_path",
     "run_server",
     "serialize_closed_projection_failures_history",
