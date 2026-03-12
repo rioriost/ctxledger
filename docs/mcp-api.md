@@ -269,17 +269,16 @@ Tool
 - reject ambiguous path or repository URL conflicts
 
 ### Expected Inputs
-Recommended fields:
+Implemented stdio MCP `inputSchema` fields:
 
-- `workspace_id` (optional for explicit update semantics)
-- `repo_url`
-- `canonical_path`
-- `default_branch`
+Required:
+- `repo_url` (`string`)
+- `canonical_path` (`string`)
+- `default_branch` (`string`)
 
-Optional future fields:
-
-- `metadata`
-- `workspace_name`
+Optional:
+- `workspace_id` (`string`, UUID format, for explicit update semantics)
+- `metadata` (`object`)
 
 ### Canonical Persistence
 Writes to:
@@ -322,16 +321,14 @@ Tool
 - create initial attempt
 
 ### Expected Inputs
-Recommended fields:
+Implemented stdio MCP `inputSchema` fields:
 
-- `workspace_id`
-- `ticket_id`
+Required:
+- `workspace_id` (`string`, UUID format)
+- `ticket_id` (`string`)
 
-Optional future fields:
-
-- `metadata`
-- `operator_notes`
-- `initial_context`
+Optional:
+- `metadata` (`object`)
 
 ### Canonical Persistence
 Writes to:
@@ -377,19 +374,18 @@ Tool
 - optionally trigger repository projection regeneration after commit
 
 ### Expected Inputs
-Recommended fields:
+Implemented stdio MCP `inputSchema` fields:
 
-- `workflow_instance_id`
-- `attempt_id`
-- `step_name`
-- `summary`
-- `checkpoint_json`
+Required:
+- `workflow_instance_id` (`string`, UUID format)
+- `attempt_id` (`string`, UUID format)
+- `step_name` (`string`)
 
-Optional fields:
-
-- `verify_status`
-- `verify_report`
-- `artifacts`
+Optional:
+- `summary` (`string`)
+- `checkpoint_json` (`object`)
+- `verify_status` (`string`, enum: `pending | passed | failed | skipped`)
+- `verify_report` (`object`)
 
 ### Canonical Persistence
 Writes to:
@@ -441,15 +437,12 @@ Tool with read semantics
 - return composite resume view
 
 ### Expected Inputs
-Recommended fields:
+Implemented stdio MCP `inputSchema` fields:
 
-- `workflow_instance_id`
+Required:
+- `workflow_instance_id` (`string`, UUID format)
 
-Optional fields:
-
-- `workspace_id`
-- `include_projection_status`
-- `include_verify_report`
+Current stdio MCP schema does not expose additional optional arguments for this tool.
 
 ### Canonical Persistence
 Read-only operation on:
@@ -765,17 +758,18 @@ It may also:
 - attach failure or cancellation context
 
 ### Expected Inputs
-Recommended fields:
+Implemented stdio MCP `inputSchema` fields:
 
-- `workflow_instance_id`
-- `attempt_id`
-- `workflow_status`
+Required:
+- `workflow_instance_id` (`string`, UUID format)
+- `attempt_id` (`string`, UUID format)
+- `workflow_status` (`string`, enum: `running | completed | failed | cancelled`)
 
-Optional fields:
-
-- `summary`
-- `verify_status`
-- `verify_report`
+Optional:
+- `summary` (`string`)
+- `verify_status` (`string`, enum: `pending | passed | failed | skipped`)
+- `verify_report` (`object`)
+- `failure_reason` (`string`)
 - `failure_summary`
 - `cancellation_reason`
 

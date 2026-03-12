@@ -150,6 +150,20 @@ Typical top-level structure:
 - `workflow_resume`
 - `workflow_complete`
 
+For stdio MCP clients, tool argument discovery is available through `tools/list`, and each tool exposes a concrete `inputSchema`.
+
+For example, `workspace_register` exposes:
+
+- required:
+  - `repo_url`
+  - `canonical_path`
+  - `default_branch`
+- optional:
+  - `workspace_id`
+  - `metadata`
+
+This allows MCP clients to discover valid arguments before calling the tool instead of relying on runtime validation errors.
+
 ### Memory tools
 - `memory_remember_episode`
 - `memory_search`
@@ -197,6 +211,8 @@ Typical intent:
 - `/debug/runtime` returns transport-level route/tool summary
 - `/debug/routes` returns HTTP route registrations only
 - `/debug/tools` returns MCP tool registrations only
+
+For stdio MCP usage, the primary machine-readable source of tool argument requirements is `tools/list`, not the HTTP debug endpoints above.
 
 Typical payload shapes:
 
