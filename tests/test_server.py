@@ -24,6 +24,8 @@ from ctxledger.server import (
     CtxLedgerServer,
     HttpRuntimeAdapter,
     McpToolResponse,
+    ProjectionFailureActionResponse,
+    ProjectionFailureHistoryResponse,
     ReadinessStatus,
     RuntimeDispatchResult,
     RuntimeIntrospection,
@@ -38,7 +40,9 @@ from ctxledger.server import (
     build_memory_get_context_tool_handler,
     build_memory_remember_episode_tool_handler,
     build_memory_search_tool_handler,
+    build_projection_failures_ignore_http_handler,
     build_projection_failures_ignore_tool_handler,
+    build_projection_failures_resolve_http_handler,
     build_projection_failures_resolve_tool_handler,
     build_resume_workflow_tool_handler,
     build_runtime_introspection_http_handler,
@@ -786,7 +790,7 @@ def test_build_closed_projection_failures_response_returns_success_payload() -> 
         resume.workflow_instance.workflow_instance_id,
     )
 
-    assert isinstance(response, WorkflowResumeResponse)
+    assert isinstance(response, ProjectionFailureHistoryResponse)
     assert response.status_code == 200
     assert response.headers == {"content-type": "application/json"}
     assert response.payload == {
@@ -820,7 +824,7 @@ def test_build_closed_projection_failures_response_returns_503_when_workflow_ser
 
     response = build_closed_projection_failures_response(server, uuid4())
 
-    assert isinstance(response, WorkflowResumeResponse)
+    assert isinstance(response, ProjectionFailureHistoryResponse)
     assert response.status_code == 503
     assert response.payload == {
         "error": {
@@ -1004,7 +1008,7 @@ def test_build_closed_projection_failures_http_handler_returns_success_response(
         f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}/closed-projection-failures"
     )
 
-    assert isinstance(response, WorkflowResumeResponse)
+    assert isinstance(response, ProjectionFailureHistoryResponse)
     assert response.status_code == 200
     assert response.headers == {"content-type": "application/json"}
     assert response.payload == {
@@ -1039,7 +1043,7 @@ def test_build_closed_projection_failures_http_handler_returns_not_found_for_inv
 
     response = handler("/workflow-resume/not-a-uuid/closed-projection-failures")
 
-    assert isinstance(response, WorkflowResumeResponse)
+    assert isinstance(response, ProjectionFailureHistoryResponse)
     assert response.status_code == 404
     assert response.payload == {
         "error": {
@@ -1063,7 +1067,7 @@ def test_build_closed_projection_failures_http_handler_returns_503_when_server_i
 
     response = handler(f"/workflow-resume/{uuid4()}/closed-projection-failures")
 
-    assert isinstance(response, WorkflowResumeResponse)
+    assert isinstance(response, ProjectionFailureHistoryResponse)
     assert response.status_code == 503
     assert response.payload == {
         "error": {
@@ -1134,6 +1138,8 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
 
     assert isinstance(runtime, HttpRuntimeAdapter)
     assert runtime.registered_routes() == (
+        "projection_failures_ignore",
+        "projection_failures_resolve",
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
@@ -1235,6 +1241,8 @@ def test_http_workflow_resume_route_requires_bearer_token_when_auth_is_enabled()
 
     assert isinstance(runtime, HttpRuntimeAdapter)
     assert runtime.registered_routes() == (
+        "projection_failures_ignore",
+        "projection_failures_resolve",
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
@@ -1396,9 +1404,12 @@ def test_http_debug_routes_require_bearer_token_when_auth_is_enabled() -> None:
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert server.runtime.registered_routes() == (
+        "projection_failures_ignore",
+        "projection_failures_resolve",
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
+        "workflow_closed_projection_failures",
         "workflow_resume",
     )
 
@@ -1478,9 +1489,12 @@ def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert server.runtime.registered_routes() == (
+        "projection_failures_ignore",
+        "projection_failures_resolve",
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
+        "workflow_closed_projection_failures",
         "workflow_resume",
     )
 
@@ -1690,7 +1704,7 @@ def test_build_projection_failures_ignore_tool_handler_returns_invalid_request_f
             "message": "projection_type must be a supported projection artifact type",
             "details": {
                 "field": "projection_type",
-                "allowed_values": ["resume_json", "resume_markdown"],
+                "allowed_values": ["resume_json", "resume_md"],
             },
         },
     }
@@ -2108,6 +2122,8 @@ def test_build_stdio_runtime_adapter_registers_expected_tools() -> None:
         "memory_get_context",
         "memory_remember_episode",
         "memory_search",
+        "projection_failures_ignore",
+        "projection_failures_resolve",
         "resume_workflow",
     )
 
@@ -2141,6 +2157,8 @@ def test_create_server_wires_stdio_runtime_with_registered_tools() -> None:
         "memory_get_context",
         "memory_remember_episode",
         "memory_search",
+        "projection_failures_ignore",
+        "projection_failures_resolve",
         "resume_workflow",
     )
 
@@ -2439,9 +2457,12 @@ def test_collect_runtime_introspection_returns_both_transports_for_composite_run
         RuntimeIntrospection(
             transport="http",
             routes=(
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
+                "workflow_closed_projection_failures",
                 "workflow_resume",
             ),
             tools=(),
@@ -2453,6 +2474,8 @@ def test_collect_runtime_introspection_returns_both_transports_for_composite_run
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "resume_workflow",
             ),
         ),
@@ -2527,9 +2550,12 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
             {
                 "transport": "http",
                 "routes": [
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
+                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
                 "tools": [],
@@ -2562,9 +2588,12 @@ def test_build_runtime_introspection_response_returns_http_payload_for_composite
             {
                 "transport": "http",
                 "routes": [
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
+                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
                 "tools": [],
@@ -2576,6 +2605,8 @@ def test_build_runtime_introspection_response_returns_http_payload_for_composite
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "resume_workflow",
                 ],
             },
@@ -2620,9 +2651,12 @@ def test_build_runtime_introspection_http_handler_returns_success_response() -> 
             {
                 "transport": "http",
                 "routes": [
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
+                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
                 "tools": [],
@@ -2671,7 +2705,12 @@ def test_build_http_runtime_adapter_omits_runtime_introspection_route_when_debug
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert "runtime_introspection" not in server.runtime._handlers
-    assert server.runtime.registered_routes() == ("workflow_resume",)
+    assert server.runtime.registered_routes() == (
+        "projection_failures_ignore",
+        "projection_failures_resolve",
+        "workflow_closed_projection_failures",
+        "workflow_resume",
+    )
 
 
 def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handler() -> (
@@ -2698,9 +2737,12 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
             {
                 "transport": "http",
                 "routes": [
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
+                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
                 "tools": [],
@@ -2725,9 +2767,12 @@ def test_health_includes_runtime_summary_details_for_http_runtime() -> None:
         {
             "transport": "http",
             "routes": [
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
+                "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
             "tools": [],
@@ -2755,9 +2800,12 @@ def test_health_includes_runtime_summary_details_for_composite_runtime() -> None
         {
             "transport": "http",
             "routes": [
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
+                "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
             "tools": [],
@@ -2769,6 +2817,8 @@ def test_health_includes_runtime_summary_details_for_composite_runtime() -> None
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "resume_workflow",
             ],
         },
@@ -2792,9 +2842,12 @@ def test_readiness_includes_runtime_summary_details_for_http_runtime() -> None:
         {
             "transport": "http",
             "routes": [
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
+                "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
             "tools": [],
@@ -2823,9 +2876,12 @@ def test_readiness_includes_runtime_summary_details_for_composite_runtime() -> N
         {
             "transport": "http",
             "routes": [
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
+                "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
             "tools": [],
@@ -2837,6 +2893,8 @@ def test_readiness_includes_runtime_summary_details_for_composite_runtime() -> N
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "resume_workflow",
             ],
         },
@@ -2882,9 +2940,12 @@ def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
         {
             "transport": "http",
             "routes": [
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
+                "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
             "tools": [],
@@ -2935,9 +2996,12 @@ def test_startup_logs_runtime_introspection_metadata_for_composite_runtime(
         {
             "transport": "http",
             "routes": [
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
+                "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
             "tools": [],
@@ -2949,6 +3013,8 @@ def test_startup_logs_runtime_introspection_metadata_for_composite_runtime(
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
+                "projection_failures_ignore",
+                "projection_failures_resolve",
                 "resume_workflow",
             ],
         },
@@ -2974,9 +3040,12 @@ def test_build_debug_routes_http_handler_returns_runtime_routes_only() -> None:
             {
                 "transport": "http",
                 "routes": [
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
+                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
             }
@@ -3009,9 +3078,12 @@ def test_build_debug_routes_http_handler_returns_both_transports_with_empty_stdi
             {
                 "transport": "http",
                 "routes": [
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
+                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
             }
@@ -3057,7 +3129,12 @@ def test_build_http_runtime_adapter_omits_runtime_routes_handler_when_debug_endp
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert "runtime_routes" not in server.runtime._handlers
-    assert server.runtime.registered_routes() == ("workflow_resume",)
+    assert server.runtime.registered_routes() == (
+        "projection_failures_ignore",
+        "projection_failures_resolve",
+        "workflow_closed_projection_failures",
+        "workflow_resume",
+    )
 
 
 def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
@@ -3086,6 +3163,8 @@ def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "resume_workflow",
                 ],
             }
@@ -3148,7 +3227,12 @@ def test_build_http_runtime_adapter_omits_runtime_tools_handler_when_debug_endpo
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert "runtime_tools" not in server.runtime._handlers
-    assert server.runtime.registered_routes() == ("workflow_resume",)
+    assert server.runtime.registered_routes() == (
+        "projection_failures_ignore",
+        "projection_failures_resolve",
+        "workflow_closed_projection_failures",
+        "workflow_resume",
+    )
 
 
 def test_print_runtime_summary_includes_http_runtime_introspection(
@@ -3170,9 +3254,10 @@ def test_print_runtime_summary_includes_http_runtime_introspection(
     assert "health=ok" in captured.err
     assert "readiness=ready" in captured.err
     assert (
-        "runtime=[{'transport': 'http', 'routes': ['runtime_introspection', "
-        "'runtime_routes', 'runtime_tools', 'workflow_resume'], 'tools': []}]"
-        in captured.err
+        "runtime=[{'transport': 'http', 'routes': ['projection_failures_ignore', "
+        "'projection_failures_resolve', 'runtime_introspection', 'runtime_routes', "
+        "'runtime_tools', 'workflow_closed_projection_failures', 'workflow_resume'], "
+        "'tools': []}]" in captured.err
     )
     assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
 
@@ -3200,11 +3285,13 @@ def test_print_runtime_summary_includes_composite_runtime_introspection(
     assert "health=ok" in captured.err
     assert "readiness=ready" in captured.err
     assert (
-        "runtime=[{'transport': 'http', 'routes': ['runtime_introspection', "
-        "'runtime_routes', 'runtime_tools', 'workflow_resume'], 'tools': []}, "
-        "{'transport': 'stdio', 'routes': [], 'tools': ['memory_get_context', "
-        "'memory_remember_episode', 'memory_search', 'resume_workflow']}]"
-        in captured.err
+        "runtime=[{'transport': 'http', 'routes': ['projection_failures_ignore', "
+        "'projection_failures_resolve', 'runtime_introspection', 'runtime_routes', "
+        "'runtime_tools', 'workflow_closed_projection_failures', 'workflow_resume'], "
+        "'tools': []}, {'transport': 'stdio', 'routes': [], 'tools': "
+        "['memory_get_context', 'memory_remember_episode', 'memory_search', "
+        "'projection_failures_ignore', 'projection_failures_resolve', "
+        "'resume_workflow']}]" in captured.err
     )
     assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
     assert "stdio_transport=enabled" in captured.err
@@ -3231,9 +3318,12 @@ def test_http_runtime_adapter_dispatches_registered_debug_routes_handler() -> No
             {
                 "transport": "http",
                 "routes": [
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
+                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
             }
@@ -3270,6 +3360,8 @@ def test_http_runtime_adapter_dispatches_registered_debug_tools_handler() -> Non
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
                     "resume_workflow",
                 ],
             }

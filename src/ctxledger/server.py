@@ -19,8 +19,12 @@ from .memory.service import (
     SearchMemoryRequest,
     StubResponse,
 )
-from .workflow.projection import ProjectionArtifactType
-from .workflow.service import ResumeWorkflowInput, WorkflowResume, WorkflowService
+from .workflow.service import (
+    ProjectionArtifactType,
+    ResumeWorkflowInput,
+    WorkflowResume,
+    WorkflowService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +76,13 @@ class WorkflowResumeResponse:
 
 @dataclass(slots=True)
 class ProjectionFailureHistoryResponse:
+    status_code: int
+    payload: dict[str, Any]
+    headers: dict[str, str]
+
+
+@dataclass(slots=True)
+class ProjectionFailureActionResponse:
     status_code: int
     payload: dict[str, Any]
     headers: dict[str, str]
@@ -458,6 +469,134 @@ class CtxLedgerServer:
                 workflow_instance_id,
                 getattr(resume, "closed_projection_failures", ()),
             ),
+            headers={"content-type": "application/json"},
+        )
+
+    def build_projection_failures_ignore_response(
+        self,
+        *,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
+    ) -> ProjectionFailureActionResponse:
+        if self.workflow_service is None:
+            return ProjectionFailureActionResponse(
+                status_code=503,
+                payload={
+                    "error": {
+                        "code": "server_not_ready",
+                        "message": "workflow service is not initialized",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        try:
+            updated_failure_count = (
+                self.workflow_service.ignore_resume_projection_failures(
+                    workspace_id=workspace_id,
+                    workflow_instance_id=workflow_instance_id,
+                    projection_type=projection_type,
+                )
+            )
+        except Exception as exc:
+            message = str(exc) or "failed to ignore projection failures"
+            lowered = message.lower()
+            if "not found" in lowered:
+                status_code = 404
+                code = "not_found"
+            elif "does not belong to workspace" in lowered or "mismatch" in lowered:
+                status_code = 400
+                code = "invalid_request"
+            else:
+                status_code = 500
+                code = "server_error"
+            return ProjectionFailureActionResponse(
+                status_code=status_code,
+                payload={
+                    "error": {
+                        "code": code,
+                        "message": message,
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return ProjectionFailureActionResponse(
+            status_code=200,
+            payload={
+                "workspace_id": str(workspace_id),
+                "workflow_instance_id": str(workflow_instance_id),
+                "projection_type": (
+                    projection_type.value if projection_type is not None else None
+                ),
+                "updated_failure_count": updated_failure_count,
+                "status": "ignored",
+            },
+            headers={"content-type": "application/json"},
+        )
+
+    def build_projection_failures_resolve_response(
+        self,
+        *,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
+    ) -> ProjectionFailureActionResponse:
+        if self.workflow_service is None:
+            return ProjectionFailureActionResponse(
+                status_code=503,
+                payload={
+                    "error": {
+                        "code": "server_not_ready",
+                        "message": "workflow service is not initialized",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        try:
+            updated_failure_count = (
+                self.workflow_service.resolve_resume_projection_failures(
+                    workspace_id=workspace_id,
+                    workflow_instance_id=workflow_instance_id,
+                    projection_type=projection_type,
+                )
+            )
+        except Exception as exc:
+            message = str(exc) or "failed to resolve projection failures"
+            lowered = message.lower()
+            if "not found" in lowered:
+                status_code = 404
+                code = "not_found"
+            elif "does not belong to workspace" in lowered or "mismatch" in lowered:
+                status_code = 400
+                code = "invalid_request"
+            else:
+                status_code = 500
+                code = "server_error"
+            return ProjectionFailureActionResponse(
+                status_code=status_code,
+                payload={
+                    "error": {
+                        "code": code,
+                        "message": message,
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return ProjectionFailureActionResponse(
+            status_code=200,
+            payload={
+                "workspace_id": str(workspace_id),
+                "workflow_instance_id": str(workflow_instance_id),
+                "projection_type": (
+                    projection_type.value if projection_type is not None else None
+                ),
+                "updated_failure_count": updated_failure_count,
+                "status": "resolved",
+            },
             headers={"content-type": "application/json"},
         )
 
@@ -985,6 +1124,34 @@ def build_closed_projection_failures_response(
     return server.build_closed_projection_failures_response(workflow_instance_id)
 
 
+def build_projection_failures_ignore_response(
+    server: CtxLedgerServer,
+    *,
+    workspace_id: UUID,
+    workflow_instance_id: UUID,
+    projection_type: ProjectionArtifactType | None = None,
+) -> ProjectionFailureActionResponse:
+    return server.build_projection_failures_ignore_response(
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        projection_type=projection_type,
+    )
+
+
+def build_projection_failures_resolve_response(
+    server: CtxLedgerServer,
+    *,
+    workspace_id: UUID,
+    workflow_instance_id: UUID,
+    projection_type: ProjectionArtifactType | None = None,
+) -> ProjectionFailureActionResponse:
+    return server.build_projection_failures_resolve_response(
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        projection_type=projection_type,
+    )
+
+
 def build_runtime_introspection_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
@@ -1099,6 +1266,114 @@ def build_closed_projection_failures_http_handler(
             )
 
         return build_closed_projection_failures_response(server, workflow_instance_id)
+
+    return _handler
+
+
+def build_projection_failures_ignore_http_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(path: str) -> ProjectionFailureActionResponse:
+        auth_error = _require_http_bearer_auth(server, path)
+        if auth_error is not None:
+            return ProjectionFailureActionResponse(
+                status_code=auth_error.status_code,
+                payload=auth_error.payload,
+                headers=auth_error.headers,
+            )
+
+        parsed = urlparse(path)
+        arguments = {
+            key: values[0] for key, values in parse_qs(parsed.query).items() if values
+        }
+
+        workspace_id = _parse_required_uuid_argument(arguments, "workspace_id")
+        if isinstance(workspace_id, McpToolResponse):
+            return ProjectionFailureActionResponse(
+                status_code=400,
+                payload={"error": workspace_id.payload["error"]},
+                headers={"content-type": "application/json"},
+            )
+
+        workflow_instance_id = _parse_required_uuid_argument(
+            arguments,
+            "workflow_instance_id",
+        )
+        if isinstance(workflow_instance_id, McpToolResponse):
+            return ProjectionFailureActionResponse(
+                status_code=400,
+                payload={"error": workflow_instance_id.payload["error"]},
+                headers={"content-type": "application/json"},
+            )
+
+        projection_type = _parse_optional_projection_type_argument(arguments)
+        if isinstance(projection_type, McpToolResponse):
+            return ProjectionFailureActionResponse(
+                status_code=400,
+                payload={"error": projection_type.payload["error"]},
+                headers={"content-type": "application/json"},
+            )
+
+        return build_projection_failures_ignore_response(
+            server,
+            workspace_id=workspace_id,
+            workflow_instance_id=workflow_instance_id,
+            projection_type=projection_type,
+        )
+
+    return _handler
+
+
+def build_projection_failures_resolve_http_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(path: str) -> ProjectionFailureActionResponse:
+        auth_error = _require_http_bearer_auth(server, path)
+        if auth_error is not None:
+            return ProjectionFailureActionResponse(
+                status_code=auth_error.status_code,
+                payload=auth_error.payload,
+                headers=auth_error.headers,
+            )
+
+        parsed = urlparse(path)
+        arguments = {
+            key: values[0] for key, values in parse_qs(parsed.query).items() if values
+        }
+
+        workspace_id = _parse_required_uuid_argument(arguments, "workspace_id")
+        if isinstance(workspace_id, McpToolResponse):
+            return ProjectionFailureActionResponse(
+                status_code=400,
+                payload={"error": workspace_id.payload["error"]},
+                headers={"content-type": "application/json"},
+            )
+
+        workflow_instance_id = _parse_required_uuid_argument(
+            arguments,
+            "workflow_instance_id",
+        )
+        if isinstance(workflow_instance_id, McpToolResponse):
+            return ProjectionFailureActionResponse(
+                status_code=400,
+                payload={"error": workflow_instance_id.payload["error"]},
+                headers={"content-type": "application/json"},
+            )
+
+        projection_type = _parse_optional_projection_type_argument(arguments)
+        if isinstance(projection_type, McpToolResponse):
+            return ProjectionFailureActionResponse(
+                status_code=400,
+                payload={"error": projection_type.payload["error"]},
+                headers={"content-type": "application/json"},
+            )
+
+        return build_projection_failures_resolve_response(
+            server,
+            workspace_id=workspace_id,
+            workflow_instance_id=workflow_instance_id,
+            projection_type=projection_type,
+        )
 
     return _handler
 
@@ -1557,6 +1832,14 @@ def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
         "workflow_closed_projection_failures",
         build_closed_projection_failures_http_handler(server),
     )
+    runtime.register_handler(
+        "projection_failures_ignore",
+        build_projection_failures_ignore_http_handler(server),
+    )
+    runtime.register_handler(
+        "projection_failures_resolve",
+        build_projection_failures_resolve_http_handler(server),
+    )
     return runtime
 
 
@@ -1829,6 +2112,10 @@ __all__ = [
     "build_http_runtime_adapter",
     "build_mcp_error_response",
     "build_mcp_success_response",
+    "build_projection_failures_ignore_http_handler",
+    "build_projection_failures_ignore_response",
+    "build_projection_failures_resolve_http_handler",
+    "build_projection_failures_resolve_response",
     "build_memory_get_context_tool_handler",
     "build_runtime_introspection_http_handler",
     "build_runtime_introspection_response",
