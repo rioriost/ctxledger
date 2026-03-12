@@ -1127,6 +1127,41 @@ def test_build_projection_failures_ignore_http_handler_returns_success_response(
     ]
 
 
+def test_build_projection_failures_ignore_http_handler_returns_not_found_for_invalid_path() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_ignore_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/not_projection_failures_ignore"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "projection failure ignore endpoint requires /projection_failures_ignore",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
 def test_build_projection_failures_ignore_http_handler_returns_invalid_request_for_bad_projection_type() -> (
     None
 ):
@@ -1383,6 +1418,41 @@ def test_build_projection_failures_resolve_http_handler_returns_success_response
             "projection_type": None,
         }
     ]
+
+
+def test_build_projection_failures_resolve_http_handler_returns_not_found_for_invalid_path() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_resolve_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/not_projection_failures_resolve"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "projection failure resolve endpoint requires /projection_failures_resolve",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
 
 
 def test_build_projection_failures_resolve_http_handler_returns_invalid_request_for_bad_workflow_id() -> (

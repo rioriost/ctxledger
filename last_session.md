@@ -1,119 +1,105 @@
 今回の変更
-#### `ctxledger/tests/test_server.py`
-projection failure lifecycle の HTTP action surface について、**HTTP action handler の edge case / service error mapping coverage** を追加しました。
+#### `ctxledger/src/ctxledger/server.py`
+projection failure lifecycle の HTTP action handler に、**route path-shape validation** を追加しました。
 
 今回の方針:
-- 既存の handler-level HTTP tests に揃えて、route dispatch 経由だけでなく handler 直呼びでも contract を固定する
-- validation / success だけでなく、service exception mapping の `404` / `400` / `500` への分岐も test で明示的に担保する
-- projection failure lifecycle の public HTTP mutation surface について、docs / runtime registration / tests の整合をさらに強める
+- 既存の `workflow_resume` / `closed_projection_failures` handler が持っている path contract に揃えて、mutation-side HTTP action handler でも path 本体を明示的に検証する
+- route dispatch 経由だけでなく handler 直呼びでも、想定外 path を `404 not_found` に固定する
+- public HTTP mutation surface の contract を、docs / runtime registration / handler behavior / tests でより対称に保つ
 
 ---
 
-### `tests/test_server.py` で追加・更新した内容
-#### 1. HTTP action handler の success coverage を追加
-追加した handler-level success coverage:
+### `src/ctxledger/server.py` で変更した内容
+#### 1. ignore action handler に path validation を追加
+対象:
 - `build_projection_failures_ignore_http_handler(...)`
+
+追加した内容:
+- `urlparse(path)` の `parsed.path` を使って path 部分を評価
+- normalized path が `projection_failures_ignore` でない場合は `404` を返すように変更
+
+返す contract:
+- `status_code = 404`
+- `error.code = "not_found"`
+- `error.message = "projection failure ignore endpoint requires /projection_failures_ignore"`
+
+これにより、query string が妥当でも path が想定外なら success / validation へ進まず、path-level contract が先に固定されるようになりました。
+
+---
+
+#### 2. resolve action handler に path validation を追加
+対象:
 - `build_projection_failures_resolve_http_handler(...)`
 
+追加した内容:
+- `urlparse(path)` の `parsed.path` を使って path 部分を評価
+- normalized path が `projection_failures_resolve` でない場合は `404` を返すように変更
+
+返す contract:
+- `status_code = 404`
+- `error.code = "not_found"`
+- `error.message = "projection failure resolve endpoint requires /projection_failures_resolve"`
+
+これで mutation-side の両 action handler が、read-side handler と同様に path shape を明示的に要求するようになりました。
+
+---
+
+### `tests/test_server.py` で追加した内容
+#### 1. ignore handler の invalid path coverage を追加
+追加した test:
+- `test_build_projection_failures_ignore_http_handler_returns_not_found_for_invalid_path()`
+
 確認した内容:
-- query string から
-  - `workspace_id`
-  - `workflow_instance_id`
-  - `projection_type`
-  が正しく parse されること
-- response payload が expected shape を返すこと
-- `FakeWorkflowService` に expected arguments が渡されること
+- handler に `/not_projection_failures_ignore?...` を直接渡した場合に `404` を返すこと
+- payload が expected `not_found` contract になること
+- `content-type` header が維持されること
 
 代表 assertion:
-- `workspace_id`
-- `workflow_instance_id`
-- `projection_type`
-- `updated_failure_count`
-- `status`
+- `status_code == 404`
+- `error.code == "not_found"`
+- `projection failure ignore endpoint requires /projection_failures_ignore`
 
 ---
 
-#### 2. HTTP action handler の validation edge case coverage を追加
-追加した主な validation edge case:
-- ignore handler
-  - invalid `projection_type`
-  - missing `workspace_id`
-- resolve handler
-  - invalid `workflow_instance_id`
-  - invalid `projection_type`
+#### 2. resolve handler の invalid path coverage を追加
+追加した test:
+- `test_build_projection_failures_resolve_http_handler_returns_not_found_for_invalid_path()`
 
 確認した内容:
-- validation failure が `400` に map されること
-- error payload が expected validation contract を返すこと
-- allowed values が implementation と一致すること
+- handler に `/not_projection_failures_resolve?...` を直接渡した場合に `404` を返すこと
+- payload が expected `not_found` contract になること
+- `content-type` header が維持されること
 
 代表 assertion:
-- `error.code = "invalid_request"`
-- `workspace_id must be a non-empty string`
-- `workflow_instance_id must be a valid UUID`
-- `projection_type must be a supported projection artifact type`
-- allowed values:
-  - `resume_json`
-  - `resume_md`
+- `status_code == 404`
+- `error.code == "not_found"`
+- `projection failure resolve endpoint requires /projection_failures_resolve`
 
 ---
 
-#### 3. HTTP action handler の service error mapping coverage を追加
-今回の追加で一番大きいのは、service exception mapping を handler-level で固定した点です。
+### 今回の変更で固定された contract
+今回の追加により、projection failure lifecycle の HTTP mutation handler は少なくとも以下を handler-level で明示的に固定しています。
 
-追加した主な観点:
-- ignore handler
-  - service raises `"workflow not found"` -> `404` / `not_found`
-  - service raises `"workflow instance does not belong to workspace"` -> `400` / `invalid_request`
-  - service raises generic runtime error -> `500` / `server_error`
-- resolve handler
-  - service raises `"workflow not found"` -> `404` / `not_found`
-  - service raises `"workflow instance does not belong to workspace"` -> `400` / `invalid_request`
-  - service raises generic runtime error -> `500` / `server_error`
-
-確認した内容:
-- HTTP status code mapping が expected どおりであること
-- error payload の `code` / `message` が expected どおりであること
-- generic unmapped error が `server_error` に落ちること
-
----
-
-#### 4. 既存 coverage と合わせた現在の HTTP action test 範囲
-これまでの coverage と今回の追加で、少なくとも以下を tests で確認済みです。
-
-##### route dispatch level
-- bearer-auth enforcement
+#### ignore
 - success payload
-- validation failure
-- server-not-ready
+- invalid path -> `404 not_found`
+- validation failure -> `400 invalid_request`
+- service not found -> `404 not_found`
+- workspace mismatch -> `400 invalid_request`
+- unmapped service error -> `500 server_error`
 
-##### handler level
+#### resolve
 - success payload
-- validation edge cases
-- service exception mapping
-  - `404` / `not_found`
-  - `400` / `invalid_request`
-  - `500` / `server_error`
-
-##### tool level
-- success payload
-- validation failure
-- server-not-ready
-
-この結果、projection failure lifecycle の mutation-side public surface は、
-- stdio / MCP tool surface
-- HTTP runtime route dispatch surface
-- HTTP handler surface
-の各層でかなり明示的に固定された状態です。
+- invalid path -> `404 not_found`
+- validation failure -> `400 invalid_request`
+- service not found -> `404 not_found`
+- workspace mismatch -> `400 invalid_request`
+- unmapped service error -> `500 server_error`
 
 ---
 
-#### `ctxledger/last_session.md`
-今回の handoff 内容に更新しました。
-
----
-
-### 今回変更したファイル
+### 変更したファイル
+- `ctxledger/src/ctxledger/server.py`
 - `ctxledger/tests/test_server.py`
 - `ctxledger/last_session.md`
 
@@ -121,29 +107,26 @@ projection failure lifecycle の HTTP action surface について、**HTTP actio
 
 ### 確認結果
 今回確認できている範囲:
+- `ctxledger/src/ctxledger/server.py`: diagnostics 問題なし
 - `ctxledger/tests/test_server.py`: diagnostics 問題なし
 - `pytest -q tests/test_server.py`
-  - `123 passed`
-
-前回までに確認済みの状態:
-- `ctxledger/src/ctxledger/server.py`: diagnostics 問題なし
-- `ctxledger/docs/mcp-api.md`: diagnostics 問題なし
-- `ctxledger/docs/SECURITY.md`: diagnostics 問題なし
-- `ctxledger/docs/deployment.md`: diagnostics 問題なし
-- `ctxledger/docs/CHANGELOG.md`: diagnostics 問題なし
+  - `125 passed`
 
 ---
 
-### git commit
-- 今回の HTTP action handler edge case coverage 追加については、まだ git commit 未実施
+### git 状態メモ
+- 直前の既存 HEAD は `0fdfd0a Expand HTTP projection failure handler tests`
+- その時点で前回 handoff に書かれていた `tests/test_server.py` / `last_session.md` の更新はすでに commit 済みだった
+- 今回の path validation 追加については、この handoff 更新時点では **まだ git commit 未実施**
+- `.gitignore` は引き続き変更対象に含めない前提
 
 ---
 
 ### 補足
-- `.gitignore` は引き続き変更対象に含めない前提
-- この handoff は HTTP action handler edge case coverage 追加まで含む状態に更新
-- 今回の作業でも production code 自体の変更は行っていない
-- public HTTP mutation contract の behavior を tests でさらに厳密に固定した
+- 今回は production code に変更あり
+- 追加したのは route dispatch の登録変更ではなく、HTTP action handler 自体の path-shape validation
+- そのため runtime registration や docs の route 名と、handler-level contract の厳密さがさらに揃った
+- `workflow_resume` / `closed_projection_failures` と mutation-side action routes の対称性が増した
 
 ---
 
@@ -162,6 +145,12 @@ projection failure lifecycle の public surface は、少なくとも以下が d
 - `projection_failures_ignore`
 - `projection_failures_resolve`
 
+#### mutation-side (HTTP handler contract)
+- valid path shape required for:
+  - `/projection_failures_ignore`
+  - `/projection_failures_resolve`
+- invalid path shape returns `404 not_found`
+
 #### docs
 - `docs/mcp-api.md`
   - auth enabled / disabled request example を反映済み
@@ -176,14 +165,15 @@ projection failure lifecycle の public surface は、少なくとも以下が d
 #### tests
 - `tests/test_server.py`
   - HTTP action route の auth / validation / success / server-not-ready を coverage 済み
-  - HTTP action handler の validation edge cases / service error mapping を coverage 済み
+  - HTTP action handler の success / validation edge cases / service error mapping を coverage 済み
+  - HTTP action handler の invalid path -> `404 not_found` を coverage 済み
 
 ---
 
 ### 次に自然な作業
 次に自然なのは以下です。
 
-1. 今回の handler edge case test 追加を descriptive message で git commit する
-2. integration / service 層で HTTP-oriented coverage をさらに広げる
-3. action routes の operational logging guidance を docs でもう少し具体化する
-4. 必要なら HTTP action route の path-shape validation を production code に追加するか検討する
+1. 今回の HTTP action path-shape validation 追加を descriptive message で git commit する
+2. HTTP runtime dispatch level でも invalid path behavior をさらに明示化するか検討する
+3. `docs/mcp-api.md` か deployment/security docs に、action routes が strict path shape を要求することを明文化する
+4. action route の operational logging guidance を docs でさらに具体化する

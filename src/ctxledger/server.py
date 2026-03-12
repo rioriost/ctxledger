@@ -1283,6 +1283,19 @@ def build_projection_failures_ignore_http_handler(
             )
 
         parsed = urlparse(path)
+        normalized_path = parsed.path.strip("/")
+        if normalized_path != "projection_failures_ignore":
+            return ProjectionFailureActionResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": "projection failure ignore endpoint requires /projection_failures_ignore",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
         arguments = {
             key: values[0] for key, values in parse_qs(parsed.query).items() if values
         }
@@ -1337,6 +1350,19 @@ def build_projection_failures_resolve_http_handler(
             )
 
         parsed = urlparse(path)
+        normalized_path = parsed.path.strip("/")
+        if normalized_path != "projection_failures_resolve":
+            return ProjectionFailureActionResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": "projection failure resolve endpoint requires /projection_failures_resolve",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
         arguments = {
             key: values[0] for key, values in parse_qs(parsed.query).items() if values
         }
