@@ -301,18 +301,36 @@ Required MCP tools in `v0.1.0`:
 - `workflow_complete`
 
 ### Current visible evidence
-In the inspected runtime registration area, the stdio tool surface includes:
+A concrete runtime audit of `src/ctxledger/server.py` shows:
 
-- `resume_workflow`
-- projection failure tools
-- memory tools
+- HTTP handler registrations include:
+  - `workflow_resume`
+  - `workflow_closed_projection_failures`
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
+  - optional debug handlers:
+    - `runtime_introspection`
+    - `runtime_routes`
+    - `runtime_tools`
+- stdio tool registrations include:
+  - `resume_workflow`
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
+  - `memory_remember_episode`
+  - `memory_search`
+  - `memory_get_context`
 
-But there is no visible registration for:
+In the inspected stdio runtime registration area, there is no visible registration for:
 
 - `workspace_register`
 - `workflow_start`
 - `workflow_checkpoint`
 - `workflow_complete`
+
+There is also a naming mismatch between:
+
+- HTTP route: `workflow_resume`
+- stdio tool: `resume_workflow`
 
 ### Why this matters
 This is a core plan requirement.  
@@ -356,7 +374,12 @@ These resources are documented in:
 - `README.md`
 - `docs/mcp-api.md`
 
-But current implementation evidence reviewed so far does not show resource registration or resource resolution wiring.
+However, a concrete grep-based implementation audit of the currently visible Python sources did not reveal evidence for:
+
+- resource handler registration
+- resource resolver layer
+- `workspace://...` runtime wiring
+- `memory://...` runtime wiring
 
 No direct implementation evidence has yet been confirmed for:
 
@@ -497,25 +520,46 @@ Create a definitive matrix of:
 ## 7.1 Highest-Priority Tasks
 
 ### Task A — Confirm and fix required MCP workflow tool exposure
-Verify whether the following are actually registered and callable as MCP tools:
+Concrete runtime audit result:
 
-- `workspace_register`
-- `workflow_start`
-- `workflow_checkpoint`
-- `workflow_complete`
+- confirmed visible stdio tools:
+  - `resume_workflow`
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
+  - `memory_remember_episode`
+  - `memory_search`
+  - `memory_get_context`
+- not visibly registered as stdio tools in the inspected runtime wiring:
+  - `workspace_register`
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_complete`
 
-If not, implement registration and tests.
+Next step:
+- confirm whether these workflow tools are registered elsewhere
+- if not, implement MCP exposure and tests
 
 ### Task B — Resolve `workflow_resume` vs `resume_workflow`
-Pick the canonical public tool name and align all layers.
+Concrete runtime audit result:
+
+- confirmed visible HTTP route: `workflow_resume`
+- confirmed visible stdio tool: `resume_workflow`
+
+Next step:
+- pick the canonical public name
+- align all layers
 
 ### Task C — Confirm and implement required MCP resources
-Verify implementation of:
+Concrete implementation audit result:
 
-- `workspace://{workspace_id}/resume`
-- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+- no visible resource registration or resolver wiring was found in the inspected Python implementation
+- no visible `workspace://...` or `memory://...` runtime wiring was found
 
-If missing, implement them.
+Next step:
+- confirm whether resource support exists outside the inspected surface
+- if not, implement required MCP resources:
+  - `workspace://{workspace_id}/resume`
+  - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
 ---
 
@@ -590,6 +634,13 @@ The central question is now:
 
 **Does the repository actually expose the plan-required MCP tools and resources, or has the implementation drifted into a different public surface that needs formal reconciliation?**
 
+Current concrete audit findings sharpen that question:
+
+- `workflow_resume` is visible as an HTTP route
+- `resume_workflow` is visible as a stdio tool
+- `workspace_register`, `workflow_start`, `workflow_checkpoint`, and `workflow_complete` are not visibly registered in the inspected stdio runtime wiring
+- no resource registration or `workspace://...` resolver wiring was visibly confirmed in the inspected implementation
+
 That is the key blocker to declaring the `v0.1.0` implementation plan complete.
 
 ---
@@ -611,11 +662,28 @@ Until those are resolved or formally reconciled, `v0.1.0` should be treated as *
 
 ## 11. Recommended Next Action
 
-Start with a focused MCP surface audit:
+Start from the concrete audit findings already established:
 
-1. enumerate actual registered MCP tools
-2. enumerate actual resource registrations
-3. compare them against:
+1. treat the currently confirmed stdio tool set as:
+   - `resume_workflow`
+   - `projection_failures_ignore`
+   - `projection_failures_resolve`
+   - `memory_remember_episode`
+   - `memory_search`
+   - `memory_get_context`
+2. treat the currently confirmed HTTP workflow/ops route set as including:
+   - `workflow_resume`
+   - `workflow_closed_projection_failures`
+   - `projection_failures_ignore`
+   - `projection_failures_resolve`
+   - optional debug routes
+3. treat the following as the first unresolved workflow-tool candidates:
+   - `workspace_register`
+   - `workflow_start`
+   - `workflow_checkpoint`
+   - `workflow_complete`
+4. treat resource wiring as unconfirmed and likely missing until direct implementation evidence is found
+5. compare all of the above against:
    - `docs/imple_plan_0.1.0.md`
    - `README.md`
    - `docs/mcp-api.md`

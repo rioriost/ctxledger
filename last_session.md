@@ -1,91 +1,89 @@
 今回の変更
-#### add implementation-plan review inventory for `v0.1.0`
-`docs/imple_plan_0.1.0.md` と現在の repository state を比較し、未解決タスク・未確認事項・整合性ギャップを棚卸しした review ドキュメントを追加しました。
+#### refresh session handoff with concrete MCP runtime audit findings
+`docs/imple_plan_0.1.0.md` と現在の repository state の比較にもとづき、**MCP runtime surface の具体的な監査結果**を整理し、review document に反映しました。
 
 今回の方針:
-- 既存の docs / tests / implementation の成熟度は高い一方、`v0.1.0` 実装計画に対して「どこが揃っていて、どこがまだ未解決か」を後続作業向けに明示する
-- 特に MCP public surface について、implementation plan / README / visible runtime wiring のズレを整理する
-- 後続の作業ループで、そのまま実装タスクに落とし込める形の inventory を `docs/` に保存する
+- 抽象的な「未確認」ではなく、現時点で見えている runtime wiring を具体的に棚卸しする
+- `v0.1.0` implementation plan に対して、何が実際に露出していて、何が未確認/未整合なのかを後続作業向けに明確化する
+- 次の work loop がそのまま実装監査や surface 整合タスクに入れるようにする
 
 ---
 
-### 追加したファイル
-- `ctxledger/docs/imple_plan_review_0.1.0.md`
+### 今回更新した review の主眼
+#### 1. `server.py` ベースの concrete runtime audit を明記
+review ドキュメント上で、少なくとも以下を concrete finding として整理した。
+
+##### confirmed visible HTTP handlers
+- `workflow_resume`
+- `workflow_closed_projection_failures`
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+- optional debug handlers:
+  - `runtime_introspection`
+  - `runtime_routes`
+  - `runtime_tools`
+
+##### confirmed visible stdio tools
+- `resume_workflow`
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+- `memory_remember_episode`
+- `memory_search`
+- `memory_get_context`
 
 ---
 
-### `ctxledger/docs/imple_plan_review_0.1.0.md` の内容
-#### 1. review の目的と使い方を明記
-追加した内容:
-- `docs/imple_plan_0.1.0.md` に対する plan-alignment review であること
-- handoff / 実行ガイド / checkpoint として使うこと
-- 主な比較対象:
-  - `docs/imple_plan_0.1.0.md`
-  - `README.md`
-  - `src/ctxledger/server.py`
-  - tests / operational docs
+#### 2. plan-required workflow tools の未整合候補を具体化
+`docs/imple_plan_0.1.0.md` / `README.md` では required workflow tools として:
+
+- `workspace_register`
+- `workflow_start`
+- `workflow_checkpoint`
+- `workflow_resume`
+- `workflow_complete`
+
+が期待されている一方、visible stdio runtime wiring では少なくとも次が見えていない、という整理にした。
+
+##### not visibly registered as stdio tools in inspected runtime wiring
+- `workspace_register`
+- `workflow_start`
+- `workflow_checkpoint`
+- `workflow_complete`
+
+これにより、「未解決タスク」がより具体的な runtime audit finding に変わった。
 
 ---
 
-#### 2. 現在状態を `Confirmed aligned` / `Partially aligned` / `Gap` で分類
-整理した観点:
-- 確認済みで揃っている領域
-- 一部揃っているが検証や整合が必要な領域
-- plan に対して未解決の可能性が高い領域
+#### 3. `workflow_resume` vs `resume_workflow` mismatch を concrete finding 化
+review 内で naming mismatch を抽象論ではなく、以下の concrete difference として整理した。
 
-主な `Confirmed aligned`:
-- PostgreSQL schema / persistence baseline
-- workflow service core
-- Docker-based local deployment
-- memory subsystem stub posture
-- docs deliverables
-- test layer presence
+- HTTP route: `workflow_resume`
+- stdio tool: `resume_workflow`
 
-主な `Partially aligned`:
-- MCP workflow surface exists, but naming mismatch may exist
-- acceptance criteria likely satisfied internally, but public-surface evidence is incomplete
-
-主な `Gap / likely unresolved`:
-- required MCP workflow tool exposure
-- required MCP resources
-- `workflow_resume` vs `resume_workflow` naming mismatch
-- resource-related tests
-- public MCP interface audit
+これにより、後続作業では:
+- canonical public name を決める
+- runtime / docs / tests / plan を整合させる
+という判断に直行できるようにした。
 
 ---
 
-#### 3. 高優先の未解決タスクを inventory 化
-最重要として整理したタスク:
-- Task A — required MCP workflow tools の露出確認・不足分の実装
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_checkpoint`
-  - `workflow_complete`
-- Task B — `workflow_resume` vs `resume_workflow` の canonical public name 決定と全層整合
-- Task C — required MCP resources の実装確認 / 未実装なら実装
-  - `workspace://{workspace_id}/resume`
-  - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+#### 4. resource wiring 未確認を grep-based finding として明記
+required resources:
 
-高優先の次段:
-- resource tests の追加/確認
-- public surface matrix の作成
-- README と実 runtime surface の整合
+- `workspace://{workspace_id}/resume`
+- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-中優先:
-- acceptance criteria evidence table
-- 必要なら `docs/imple_plan_0.1.0.md` 自体の revision
+について、review 上で少なくとも以下の concrete audit result を残した。
 
----
+##### no visible implementation evidence found
+- resource handler registration
+- resource resolver layer
+- `workspace://...` runtime wiring
+- `memory://...` runtime wiring
 
-#### 4. 推奨実行順を明記
-`docs/imple_plan_review_0.1.0.md` に記載した recommended next sequence:
-1. actual MCP tool registration の audit
-2. tool naming mismatch の解消
-3. MCP resources の audit / 実装
-4. resource tests の追加
-5. docs と actual public surface の整合
-6. acceptance / surface matrix 作成
-7. その後に `v0.1.0` aligned と判断
+これにより、「resource は未確認」という曖昧な表現ではなく、
+「現在見えている Python implementation からは wiring evidence が確認できていない」
+という形に整理した。
 
 ---
 
@@ -95,79 +93,76 @@
 
 ---
 
-### review で特に重要と判断した現時点の open questions
-#### 1. required MCP workflow tools が runtime に実際に露出しているか
-implementation plan / README では:
+### review ドキュメント上で今回さらに明確になった open questions
+#### 1. required workflow tools は本当に MCP tool として露出しているか
+現時点の concrete audit では、stdio tools として明示的に見えるのは:
+
+- `resume_workflow`
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+- memory stub tools
+
+であり、plan-required workflow tools のうち以下は visible registration 未確認:
+
 - `workspace_register`
 - `workflow_start`
 - `workflow_checkpoint`
-- `workflow_resume`
 - `workflow_complete`
 
-が required workflow tools だが、visible runtime registration としては少なくとも:
+#### 2. required resources は実装済みか
+docs には存在するが、current visible implementation からは:
+- registration
+- resolver
+- runtime wiring
+の evidence が見えていない。
+
+#### 3. canonical public name はどちらか
+- `workflow_resume`
 - `resume_workflow`
-- projection failure tools
-- memory stub tools
 
-が見えており、plan-required 5 tools の露出状況は未整合または未確認。
-
-#### 2. required MCP resources が実装されているか
-plan / README / API docs には:
-- `workspace://{workspace_id}/resume`
-- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-
-が required resource として書かれているが、visible implementation evidence は今回 review 時点では未確認。
-
-#### 3. `workflow_resume` と `resume_workflow` の naming mismatch
-これは cosmetic ではなく:
-- client expectation
-- docs correctness
-- acceptance criteria traceability
-- MCP public surface clarity
-に直結するため、高優先の unresolved item と整理した。
+これは docs / client expectation / acceptance criteria / runtime surface をまたぐ high-priority issue として整理した。
 
 ---
 
 ### 現在の整合状態
-projection failure action route まわりの docs / tests / implementation はかなり揃っている一方で、`v0.1.0` implementation plan に対する全体評価では少なくとも以下の整理ができました。
-
 #### 強く揃っている領域
 - workflow service core
-- postgres persistence baseline
-- docker compose deployment
-- memory stub behavior
-- docs breadth
-- test suite existence
+- PostgreSQL persistence baseline
+- Docker-based local deployment
+- memory stub posture
+- projection failure lifecycle docs/tests/ops guidance
+- broad documentation coverage
+- broad test presence
 
-#### 未解決の可能性が高い領域
-- plan-required MCP tools の公開 surface
-- plan-required MCP resources
-- runtime naming consistency
-- public surface audit
+#### 具体監査で未解決が強くなった領域
+- required MCP workflow tool exposure
+- required MCP resource exposure
+- public naming consistency
+- MCP public surface audit
 
 ---
 
 ### git 状態メモ
-- 今回追加した review artifact:
+- review artifact:
   - `docs/imple_plan_review_0.1.0.md`
-- この handoff 更新時点では、今回の review artifact 追加について **まだ git commit 未実施**
-- `.gitignore` は引き続き開発上必要な差分として存在しうるが、成果物に含めない前提
+- この handoff 更新時点では、今回の concrete audit findings 反映について **まだ git commit 未実施**
+- `.gitignore` は引き続き開発上必要な差分として存在しうるが、成果物には含めない前提
 
 ---
 
 ### 補足
 - 今回は production code の変更なし
 - 追加 test なし
-- planning / inventory docs の追加が中心
-- この review document は「実装完了判定」ではなく、「次にどこを掘るべきか」の整理に使う想定
-- 特に次の work loop は docs 追加よりも、MCP public surface の実装監査に寄せるのが自然
+- review doc / handoff の更新のみ
+- ただし内容は抽象的な inventory から一歩進み、`server.py` ベースの runtime audit result を review に織り込んだ形
+- 次の作業は docs 追加よりも、MCP public surface の実装監査または不足分の実装に進むのが自然
 
 ---
 
 ### 次に自然な作業
 次に自然なのは以下です。
 
-1. `docs/imple_plan_review_0.1.0.md` を descriptive message で git commit する
-2. actual MCP tool registration を監査して、plan-required workflow tools の露出有無を確定する
-3. MCP resource registration / resolver 実装の有無を監査する
-4. 監査結果をもとに、public surface matrix または acceptance evidence table を追加する
+1. `docs/imple_plan_review_0.1.0.md` の concrete audit findings 反映を descriptive message で git commit する
+2. `workspace_register` / `workflow_start` / `workflow_checkpoint` / `workflow_complete` の MCP tool exposure 有無をさらに掘る
+3. resource registration / resolver の実装有無を確定する
+4. 監査結果を public surface matrix に落とす
