@@ -13,7 +13,8 @@ from ..mcp.streamable_http import (
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from ..server import CtxLedgerServer, McpRuntimeProtocol, ProjectionArtifactType
+    from ..workflow.service import ProjectionArtifactType
+    from .protocols import HttpHandlerFactoryServer, McpRuntimeProtocol
     from .types import (
         McpHttpResponse,
         McpToolResponse,
@@ -65,7 +66,7 @@ def build_http_auth_error_response(message: str) -> WorkflowResumeResponse:
 
 
 def require_http_bearer_auth(
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
     path: str,
 ) -> WorkflowResumeResponse | None:
     if not server.settings.auth.is_enabled:
@@ -193,7 +194,7 @@ def parse_closed_projection_failures_request_path(path: str):
 
 
 def build_workflow_resume_http_handler(
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
 ):
     from .server_responses import build_workflow_resume_response
     from .types import WorkflowResumeResponse
@@ -225,7 +226,7 @@ def build_workflow_resume_http_handler(
 
 
 def build_closed_projection_failures_http_handler(
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
 ):
     from .server_responses import build_closed_projection_failures_response
     from .types import ProjectionFailureHistoryResponse
@@ -262,7 +263,7 @@ def build_closed_projection_failures_http_handler(
 
 
 def build_projection_failures_ignore_http_handler(
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
 ):
     from .server_responses import build_projection_failures_ignore_response
     from .types import McpToolResponse, ProjectionFailureActionResponse
@@ -335,7 +336,7 @@ def build_projection_failures_ignore_http_handler(
 
 
 def build_projection_failures_resolve_http_handler(
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
 ):
     from .server_responses import build_projection_failures_resolve_response
     from .types import McpToolResponse, ProjectionFailureActionResponse
@@ -408,7 +409,7 @@ def build_projection_failures_resolve_http_handler(
 
 
 def build_runtime_introspection_http_handler(
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
 ):
     from .server_responses import build_runtime_introspection_response
     from .types import RuntimeIntrospectionResponse
@@ -444,7 +445,7 @@ def build_runtime_introspection_http_handler(
 
 
 def build_runtime_routes_http_handler(
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
 ):
     from .server_responses import build_runtime_routes_response
     from .types import RuntimeIntrospectionResponse
@@ -478,7 +479,7 @@ def build_runtime_routes_http_handler(
 
 
 def build_runtime_tools_http_handler(
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
 ):
     from .server_responses import build_runtime_tools_response
     from .types import RuntimeIntrospectionResponse
@@ -513,7 +514,7 @@ def build_runtime_tools_http_handler(
 
 def build_mcp_http_handler(
     runtime: McpRuntimeProtocol,
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
 ):
     from .types import McpHttpResponse
 

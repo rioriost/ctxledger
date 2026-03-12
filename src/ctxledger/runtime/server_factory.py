@@ -4,15 +4,15 @@ from typing import TYPE_CHECKING
 
 from ..config import AppSettings
 from ..db.postgres import PostgresConfig, build_postgres_uow_factory
+from ..runtime.protocols import (
+    DatabaseHealthChecker,
+    ServerRuntime,
+    WorkflowServiceFactory,
+)
 from ..workflow.service import WorkflowService
 
 if TYPE_CHECKING:
-    from ..server import (
-        CtxLedgerServer,
-        DatabaseHealthChecker,
-        ServerRuntime,
-        WorkflowServiceFactory,
-    )
+    from ..server import CtxLedgerServer
 
 
 def build_workflow_service_factory(

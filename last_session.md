@@ -1,30 +1,121 @@
-Patch 2 の続きとして、今回は **HTTP validation helper dependency cleanup** を進め、`runtime/http_handlers.py` に残っていた validation helper の `server.py` 経由依存をさらに整理しました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers / HTTP runtime registration wiring cleanup を土台にして、**HTTP validation path の direct canonical wiring** を進めています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
+Patch 2 の続きとして、今回は **shared runtime protocols extraction** を進め、`server.py` に残っていた protocol/type dependency の一部 ownership をさらに分離しました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers / HTTP runtime registration wiring cleanup / HTTP validation helper dependency cleanup を土台にして、**HTTP / runtime helper まわりの shared protocol extraction** を実施しています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
 
 今回の実装でやったこと:
 
-- `ctxledger/src/ctxledger/runtime/http_handlers.py` を更新して validation helper が `server.py` の `build_mcp_error_response(...)` wrapper ではなく canonical MCP tool handler module を直接使う形に変更
+- `ctxledger/src/ctxledger/runtime/protocols.py` を新設
+- `ctxledger/src/ctxledger/runtime/http_handlers.py` を更新して shared runtime protocols を使う形に変更
+- `ctxledger/src/ctxledger/runtime/http_runtime.py` を更新して shared runtime protocols を使う形に変更
+- `ctxledger/src/ctxledger/runtime/introspection.py` を更新して `ServerRuntime` protocol を shared runtime protocols から使う形に変更
+- `ctxledger/src/ctxledger/runtime/server_factory.py` を更新して shared runtime protocols を使う形に変更
+- `ctxledger/src/ctxledger/server.py` を更新して shared runtime protocols を re-export する形に変更
 - 回帰確認として `tests/test_server.py` と `tests/test_mcp_modules.py` を再実行
 - 最終的に green を維持
 
-## 1. `ctxledger/src/ctxledger/runtime/http_handlers.py`
-今回の中心です。HTTP request argument validation helper が、まだ `server.py` の MCP error helper wrapper を経由していたため、canonical module へ直接向ける形に変更しました。
+## 1. `ctxledger/src/ctxledger/runtime/protocols.py`
+今回の中心です。`server.py` に残っていた shared protocol 群を専用 module に抽出しました。
 
-変更したこと:
-- `parse_required_uuid_argument(...)` が `..server` ではなく `..mcp.tool_handlers` の `build_mcp_error_response(...)` を直接使う形に変更
-- `parse_optional_projection_type_argument(...)` も同様に変更
-
-維持しているもの:
-- UUID validation error shape
-- projection type validation error shape
-- `invalid_request` code
-- error payload の details shape
-- HTTP projection failure endpoints の 400 mapping
-- HTTP handler 全体の response shape
+追加したもの:
+- `DatabaseHealthChecker`
+- `ServerRuntime`
+- `WorkflowServiceFactory`
+- `McpRuntimeProtocol`
+- `HttpHandlerFactoryServer`
+- `WorkflowResponseBuilderServer`
 
 ポイント:
-- `runtime/http_handlers.py` から `server.py` の validation-related wrapper dependency を一段減らせました
-- validation error response の canonical source を、実際の所有者である MCP tool handler module 側に寄せられました
-- small change ですが dependency graph をきれいにする意味があります
+- helper module が `server.py` の protocol 定義そのものを依存しなくてよい形に寄せました
+- runtime/helper 間で共有される protocol の canonical source を `runtime/protocols.py` に移せました
+- HTTP helper / server factory / introspection helper などが shared protocol module を参照できるようになりました
+
+## 2. `ctxledger/src/ctxledger/runtime/http_handlers.py`
+HTTP handler helper では、shared runtime protocols を使う形へ変更しました。
+
+変更したこと:
+- `CtxLedgerServer` 直接参照の代わりに `HttpHandlerFactoryServer` を使う形へ変更
+- `McpRuntimeProtocol` も `server.py` ではなく `runtime/protocols.py` から参照する形へ変更
+- `ProjectionArtifactType` の type-only import を `workflow.service` 側へ寄せる形に変更
+
+維持しているもの:
+- HTTP auth error response shape
+- UUID / projection type validation error shape
+- invalid path 時の 404 response shape
+- projection failures ignore/resolve の validation/error behavior
+- runtime debug endpoint の response shape
+- workflow resume / closed projection failures の response shape
+- MCP over HTTP の response shape
+
+ポイント:
+- `runtime/http_handlers.py` から `server.py` の type/protocol dependency を一段減らせました
+- handler module は application-facing server class そのものよりも、必要な capability を持つ protocol に依存する形へ少し進みました
+- transport helper の boundary が少し整理されました
+
+## 3. `ctxledger/src/ctxledger/runtime/http_runtime.py`
+HTTP runtime wiring も shared protocol を使う形へ変更しました。
+
+変更したこと:
+- `CtxLedgerServer` ではなく `HttpHandlerFactoryServer` を受け取る形へ変更
+- `build_http_runtime_adapter(...)`
+- `register_http_runtime_handlers(...)`
+  ともに shared protocol ベースの型に寄せた
+
+維持しているもの:
+- route registration の既存 shape
+- debug endpoint registration の既存 shape
+- stdio runtime builder の利用構造
+- HTTP runtime adapter の生成 shape
+
+ポイント:
+- HTTP runtime wiring が top-level server concrete class への依存を少し減らせました
+- registration helper は「必要な設定と handler build capability を持つもの」に依存する形へ寄っています
+
+## 4. `ctxledger/src/ctxledger/runtime/introspection.py`
+introspection helper でも shared protocol を使う形へ変更しました。
+
+変更したこと:
+- local な `ServerRuntime` protocol 定義を削除
+- `runtime/protocols.py` の `ServerRuntime` を使う形に変更
+
+ポイント:
+- introspection helper 内の local protocol duplication を減らせました
+- shared runtime contract の source を一箇所へ寄せられました
+
+## 5. `ctxledger/src/ctxledger/runtime/server_factory.py`
+server factory helper でも shared protocol を使う形へ変更しました。
+
+変更したこと:
+- `DatabaseHealthChecker`
+- `ServerRuntime`
+- `WorkflowServiceFactory`
+
+の型参照を `server.py` からではなく `runtime/protocols.py` から使う形に変更
+
+ポイント:
+- construction wiring helper の type dependency を少し self-contained にできました
+- `server.py` を経由した protocol import が減っています
+
+## 6. `ctxledger/src/ctxledger/server.py`
+`server.py` 側では shared runtime protocols を import / re-export する形に変更しました。
+
+変更したこと:
+- in-file protocol 定義を削除
+- `runtime/protocols.py` から
+  - `DatabaseHealthChecker`
+  - `McpRuntimeProtocol`
+  - `ServerRuntime`
+  - `WorkflowServiceFactory`
+  を import する形に変更
+
+維持しているもの:
+- `ctxledger.server.DatabaseHealthChecker`
+- `ctxledger.server.McpRuntimeProtocol`
+- `ctxledger.server.ServerRuntime`
+- `ctxledger.server.WorkflowServiceFactory`
+
+の import surface
+
+ポイント:
+- public import surface は維持したまま、canonical ownership だけを `runtime/protocols.py` へ移せました
+- `server.py` は top-level facade / compatibility shell にさらに寄っています
 
 ## 挙動面での現状
 今回の変更も extraction / canonicalization 中心で、機能追加ではなく責務整理を優先しています。
@@ -51,14 +142,15 @@ Patch 2 の続きとして、今回は **HTTP validation helper dependency clean
 - bootstrap failure / startup failure の既存 shape
 
 今回新しく進んだこと:
-- HTTP validation helper が `server.py` wrapper を経由しない形に進んだ
-- `runtime/http_handlers.py` の validation/error dependency が canonical MCP helper 側に少し寄った
+- shared runtime protocol の canonical source を `runtime/protocols.py` に分離
+- HTTP helper / runtime helper / server factory が `server.py` の protocol 定義に依存する箇所を一部整理
 - `server.py` は top-level facade / compatibility export としてさらに薄くなった
+- helper module が concrete server class より capability-based protocol へ少し寄った
 
 まだ残っているもの:
-- `runtime/http_handlers.py` は型参照や protocol でまだ `server.py` に依存している
+- `runtime/http_handlers.py` / `runtime/http_runtime.py` / `runtime/introspection.py` は一部 concrete adapter class や top-level exports でまだ `server.py` に依存している
 - `server.py` には application-facing server surface がまだ多く残っている
-- helper module は一部 `server.py` の wrapper / protocol / adapter class に依存している
+- helper module は一部 `server.py` の wrapper / adapter class に依存している
 - readiness / health / DB/bootstrap helper 境界の最終整理は未完
 - canonical protocol/dataclass/serializer/helper 配置の最終最適化はまだ途中
 - stdio 削除前提の final dependency cleanup は未完
@@ -76,8 +168,8 @@ Patch 2 の続きとして、今回は **HTTP validation helper dependency clean
 - `pytest -q tests/test_server.py tests/test_mcp_modules.py`
 
 補足:
-- 今回の変更は小さく、focused regression のみ確認
-- 最終状態は green です
+- 今回の変更後、focused regression は green です
+- protocol extraction 中心の変更で、behavioral regression は見えていません
 
 ## コミット
 このセッション時点では、まだコミットは切っていません。
@@ -85,25 +177,26 @@ Patch 2 の続きとして、今回は **HTTP validation helper dependency clean
 次の人は `.rules` に従って、作業ループ完了時に descriptive message で `git commit` してください。
 
 コミット候補メッセージ例:
-- `Clean up HTTP validation helper dependencies`
-- `Directly wire HTTP validation error helpers`
+- `Extract shared runtime protocols`
+- `Canonicalize shared runtime helper protocols`
 
 ## 注意
 - この session では `last_session.md` 更新までを意図しています
 - ワークツリー上には別件の変更が存在する可能性があります
-- 今回の変更は HTTP validation helper dependency cleanup が中心で、behavioral rewrite ではありません
+- 今回の変更は shared runtime protocols extraction が中心で、behavioral rewrite ではありません
 
 ## 実装の評価
-今回の整理はかなり小さいですが、依存関係の見通しを良くするうえで意味があります。
+今回の整理は小さめですが、依存関係の見通しを良くするうえで意味があります。
 
 進んだこと:
-- HTTP validation helper が `server.py` wrapper に依存しない形に寄せられた
-- validation error helper の canonical source がより明確になった
-- `server.py` の facade 化を少しだけ前に進められた
+- runtime helper 間で共有される protocol の canonical source を `runtime/protocols.py` に寄せられた
+- HTTP helper / runtime wiring / server factory / introspection helper が shared protocol module を使う形に進んだ
+- `server.py` が protocol 定義の所有者である必要がさらに薄れた
+- public import surface を保ったまま dependency boundary を改善できた
 - 既存 test expectation を保ったまま安全に前進できた
 
 まだ未着手に近いこと:
-- helper module から `server.py` adapter/protocol への依存整理
+- helper module から `server.py` adapter class への依存整理
 - readiness / health / bootstrap boundary の整理
 - stdio removal path を前提にした dependency cleanup
 - transport-specific startup orchestration のさらなる isolation
@@ -113,7 +206,7 @@ Patch 2 の続きとして、今回は **HTTP validation helper dependency clean
 次は以下のどれかが自然です。
 
 候補:
-1. `runtime/http_handlers.py` の type/protocol dependency をさらに整理する
+1. `runtime/http_handlers.py` / `runtime/http_runtime.py` の concrete adapter dependency をさらに整理する
 2. readiness / health / DB/bootstrap boundary を整理する
 3. canonical protocol/dataclass/serializer/helper の配置をさらに見直す
 4. stdio removal path を意識して transport-specific code をさらに隔離する
@@ -147,14 +240,15 @@ Patch 2 の続きとして、今回は **HTTP validation helper dependency clean
 18. shared runtime types extraction が入っている
 19. shared runtime serializers extraction が入っている
 20. HTTP runtime wrapper dependency cleanup が入っている
-21. 今回、HTTP validation helper dependency cleanup が入った
-22. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
-23. `docs/specification.md` は引き続き触らない
-24. まだ compliance claim はしない
-25. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
+21. HTTP validation helper dependency cleanup が入っている
+22. 今回、shared runtime protocols extraction が入った
+23. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
+24. `docs/specification.md` は引き続き触らない
+25. まだ compliance claim はしない
+26. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
 
 注意点:
-- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation / server response building / server construction wiring / database health helper / shared bootstrap error / shared runtime response types / shared runtime serializers / HTTP runtime wrapper dependency cleanup / HTTP validation helper dependency cleanup の本体は外へ出始めた
+- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation / server response building / server construction wiring / database health helper / shared bootstrap error / shared runtime response types / shared runtime serializers / HTTP runtime wrapper dependency cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction の本体は外へ出始めた
 - `create_runtime(...)` は public surface 維持のため `server.py` に wrapper として残っている
 - `_print_runtime_summary(...)` も test/import 互換のため `server.py` に wrapper として残してある
 - `build_http_runtime_adapter(...)` も public surface 維持のため `server.py` に wrapper を残してある
@@ -168,6 +262,7 @@ Patch 2 の続きとして、今回は **HTTP validation helper dependency clean
 - `runtime/errors.py` は shared bootstrap error の canonical module
 - `runtime/types.py` は shared response/status dataclass の canonical module
 - `runtime/serializers.py` は shared serializer の canonical module
+- `runtime/protocols.py` は shared runtime helper protocol の canonical module
 - `runtime/composite.py` は composite lifecycle の canonical 実装
 - `runtime/orchestration.py` は runtime selection / run entrypoint orchestration の中心
 - `runtime/introspection.py` は stdio/http/composite を横断して正規化する責務を持つ
@@ -200,6 +295,7 @@ Patch 2 の続きとして、今回は **HTTP validation helper dependency clean
 - shared runtime serializers
 - HTTP runtime registration wiring cleanup
 - HTTP validation helper dependency cleanup
+- shared runtime helper protocols
 
 ### まだ `server.py` に残るもの
 - application-facing server surface 全般
@@ -208,13 +304,13 @@ Patch 2 の続きとして、今回は **HTTP validation helper dependency clean
 - helper 群の最終 dependency boundary 調整
 
 ## 次に自然な一手
-ここまで来たので、次は **HTTP type/protocol dependency と public surface boundary の整理** が一番きれいです。
+ここまで来たので、次は **HTTP concrete adapter dependency と public surface boundary の整理** が一番きれいです。
 
 たとえば:
-- `runtime/http_handlers.py` の type/protocol dependency
-- `server.py` に残る adapter/protocol/wrapper dependency
+- `runtime/http_runtime.py` の `HttpRuntimeAdapter` 具体型依存
+- `runtime/introspection.py` の concrete adapter detection
+- `server.py` に残る adapter/wrapper ownership
 - readiness / health helper の ownership
-- transport helper と top-level facade の境界
 
 を dedicated helper/core boundary に寄せる段階です。
 

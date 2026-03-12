@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from typing import Any, Protocol
+from typing import Any
 from uuid import UUID
 
 from .config import AppSettings
@@ -23,58 +23,6 @@ from .workflow.service import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-class SettingsProtocol(Protocol):
-    database_url: str | None
-    host: str
-    port: int
-    enable_http: bool
-    enable_stdio: bool
-    auth_bearer_token: str | None
-    log_level: str
-
-
-class DatabaseHealthChecker(Protocol):
-    def ping(self) -> None: ...
-    def schema_ready(self) -> bool: ...
-
-
-class ServerRuntime(Protocol):
-    def start(self) -> None: ...
-    def stop(self) -> None: ...
-
-
-class WorkflowServiceFactory(Protocol):
-    def __call__(self) -> WorkflowService: ...
-
-
-from .runtime.types import (
-    HealthStatus,
-    McpHttpResponse,
-    McpResourceResponse,
-    McpToolResponse,
-    ProjectionFailureActionResponse,
-    ProjectionFailureHistoryResponse,
-    ReadinessStatus,
-    RuntimeDispatchResult,
-    RuntimeIntrospectionResponse,
-    WorkflowResumeResponse,
-)
-
-
-class McpRuntimeProtocol(Protocol):
-    settings: AppSettings
-
-    def registered_tools(self) -> tuple[str, ...]: ...
-    def registered_resources(self) -> tuple[str, ...]: ...
-    def tool_schema(self, tool_name: str) -> McpToolSchema: ...
-    def dispatch_tool(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-    ) -> McpToolResponse: ...
-    def dispatch_resource(self, uri: str) -> McpResourceResponse: ...
 
 
 from .mcp.lifecycle import McpLifecycleState
@@ -176,6 +124,12 @@ from .runtime.orchestration import (
 from .runtime.orchestration import (
     create_runtime as create_runtime_orchestration,
 )
+from .runtime.protocols import (
+    DatabaseHealthChecker,
+    McpRuntimeProtocol,
+    ServerRuntime,
+    WorkflowServiceFactory,
+)
 from .runtime.serializers import (
     serialize_closed_projection_failures_history,
     serialize_runtime_introspection,
@@ -215,6 +169,18 @@ from .runtime.server_responses import (
 )
 from .runtime.server_responses import (
     build_workspace_resume_resource_response as extracted_build_workspace_resume_resource_response,
+)
+from .runtime.types import (
+    HealthStatus,
+    McpHttpResponse,
+    McpResourceResponse,
+    McpToolResponse,
+    ProjectionFailureActionResponse,
+    ProjectionFailureHistoryResponse,
+    ReadinessStatus,
+    RuntimeDispatchResult,
+    RuntimeIntrospectionResponse,
+    WorkflowResumeResponse,
 )
 
 WorkflowHttpHandler = Any

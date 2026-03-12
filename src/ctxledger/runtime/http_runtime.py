@@ -12,14 +12,15 @@ from .http_handlers import (
     build_runtime_tools_http_handler,
     build_workflow_resume_http_handler,
 )
+from .protocols import HttpHandlerFactoryServer
 
 if TYPE_CHECKING:
-    from ..server import CtxLedgerServer, HttpRuntimeAdapter
+    from ..server import HttpRuntimeAdapter
 
 
 def register_http_runtime_handlers(
     runtime: HttpRuntimeAdapter,
-    server: CtxLedgerServer,
+    server: HttpHandlerFactoryServer,
 ) -> HttpRuntimeAdapter:
     from .orchestration import build_stdio_runtime_adapter
 
@@ -67,7 +68,9 @@ def register_http_runtime_handlers(
     return runtime
 
 
-def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
+def build_http_runtime_adapter(
+    server: HttpHandlerFactoryServer,
+) -> HttpRuntimeAdapter:
     from ..server import HttpRuntimeAdapter
 
     runtime = HttpRuntimeAdapter(server.settings)
