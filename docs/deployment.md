@@ -308,12 +308,20 @@ location = /projection_failures_resolve {
 }
 ```
 
+Representative proxy access-log example:
+
+```/dev/null/log#L1-2
+2026-03-12T10:15:30Z proxy=nginx request_id=req_123 remote_addr=10.0.0.12 method=GET path=/projection_failures_ignore query="workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222&projection_type=resume_json" auth_result=success upstream_status=404 error_code=not_found
+2026-03-12T10:15:30Z proxy=nginx request_id=req_123 error_message="projection failure ignore endpoint requires /projection_failures_ignore" forwarded_host=ctxledger.internal operator_subject=ops-user-7
+```
+
 Representative implications of this example:
 
 - exact path matching avoids accidentally accepting alternate action paths such as prefixed or rewritten variants
 - operator-facing auth and TLS policy should be applied consistently to both action routes
 - access logging should preserve enough request/response visibility for later incident review
 - query parameters may contain operational identifiers, so log retention and access policy should reflect that sensitivity
+- proxy logs should make invalid-path `404 not_found` responses distinguishable from auth failures and validation-driven `400 invalid_request` responses
 
 For the broader security posture around bearer authentication, secret handling, and `/debug/*` exposure, see `SECURITY.md`.
 
