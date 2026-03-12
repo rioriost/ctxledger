@@ -160,6 +160,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - security docs now include a representative edge logging example for invalid-path and other operator-route outcomes
   - deployment docs now include a representative proxy access-log example for invalid-path and related operator-route outcomes
   - action responses preserve history and report `updated_failure_count`
+  - the aligned HTTP action route contract is now documented across implementation, tests, API docs, security guidance, deployment guidance, and changelog notes
 - HTTP projection failure action route coverage now verifies:
   - bearer-auth enforcement
   - invalid request mapping
