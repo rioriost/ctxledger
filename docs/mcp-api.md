@@ -120,7 +120,12 @@ Representative closed failure fields include:
 - `retry_count`
 - `status`
 
-A future concrete server surface may also expose operator action endpoints for projection failure lifecycle handling.
+Concrete server surfaces also expose operator action endpoints for projection failure lifecycle handling.
+
+Implemented HTTP operator action routes:
+
+- `projection_failures_ignore`
+- `projection_failures_resolve`
 
 Representative operator action intents include:
 
@@ -128,20 +133,30 @@ Representative operator action intents include:
 - mark matching open projection failures as `resolved`
 - scope the action to a single projection type or all workflow projection failures
 
+Implemented request shape for these HTTP action routes:
+
+- existing `path: str` HTTP handler contract is preserved
+- selector values are provided via query parameters
+- representative query parameters:
+  - `workspace_id`
+  - `workflow_instance_id`
+  - `projection_type` (optional)
+  - `authorization` (when HTTP auth is enabled)
+
 Representative design constraints for such action surfaces include:
 
-- they should mutate canonical projection failure lifecycle state, not projection file contents directly
-- they should preserve failure history rather than deleting records
-- they should distinguish operator visibility closure (`ignored`) from successful reconciliation (`resolved`)
-- they should remain separate from narrow read-only history endpoints such as `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+- they mutate canonical projection failure lifecycle state, not projection file contents directly
+- they preserve failure history rather than deleting records
+- they distinguish operator visibility closure (`ignored`) from successful reconciliation (`resolved`)
+- they remain separate from narrow read-only history endpoints such as `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
 
 This HTTP surface does not change the MCP responsibility split:
 
 - MCP Tools remain the primary command interface
 - MCP Resources remain the primary read-model interface
-- dedicated HTTP operational read surfaces may exist where a narrower concrete server contract is useful
+- dedicated HTTP operational surfaces may exist where a narrower concrete server contract is useful
 
-The endpoint should reuse the same underlying closed-failure read model as `workflow_resume` and other resume-oriented read surfaces.
+The implemented endpoints reuse the same projection failure lifecycle semantics as `workflow_resume` and other resume-oriented surfaces.
 
 ---
 
@@ -476,9 +491,14 @@ Representative retry behavior:
 
 Projection failure lifecycle handling may also require explicit mutation surfaces in addition to read-side resume access.
 
-Representative action surfaces may be modeled as MCP tools because they perform canonical state mutation.
+Representative action surfaces are modeled primarily as MCP tools because they perform canonical state mutation, and equivalent HTTP route surfaces are also implemented for operational integration use cases.
 
 Implemented MCP tools:
+
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+
+Implemented HTTP action routes:
 
 - `projection_failures_ignore`
 - `projection_failures_resolve`
@@ -533,6 +553,17 @@ Representative error cases include:
 - workflow/workspace mismatch
 - authentication failure
 - persistence failure
+
+Implemented HTTP action behavior also includes:
+
+- query-string argument parsing from the incoming request path
+- `400` with `error.code = "invalid_request"` for request validation failures
+- `503` with `error.code = "server_not_ready"` when the workflow service is not initialized
+- normalized service exception mapping to representative HTTP errors:
+  - `404` / `not_found`
+  - `400` / `invalid_request`
+  - `500` / `server_error`
+- reuse of the existing HTTP bearer-auth error contract for `401` responses when auth is enabled
 
 Design note:
 
@@ -802,7 +833,7 @@ Return liveness-oriented process status.
     "runtime": [
       {
         "transport": "http",
-        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume", "workflow_closed_projection_failures"],
+        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume", "workflow_closed_projection_failures", "projection_failures_ignore", "projection_failures_resolve"],
         "tools": []
       }
     ]
@@ -852,7 +883,7 @@ Return dependency-aware service readiness.
     "runtime": [
       {
         "transport": "http",
-        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume", "workflow_closed_projection_failures"],
+        "routes": ["runtime_introspection", "runtime_routes", "runtime_tools", "workflow_resume", "workflow_closed_projection_failures", "projection_failures_ignore", "projection_failures_resolve"],
         "tools": []
       }
     ],
@@ -882,7 +913,9 @@ Expose both registered HTTP routes and registered MCP tools for each active tran
         "runtime_routes",
         "runtime_tools",
         "workflow_resume",
-        "workflow_closed_projection_failures"
+        "workflow_closed_projection_failures",
+        "projection_failures_ignore",
+        "projection_failures_resolve"
       ],
       "tools": []
     }
@@ -912,7 +945,9 @@ Filter runtime introspection down to route registrations.
         "runtime_routes",
         "runtime_tools",
         "workflow_resume",
-        "workflow_closed_projection_failures"
+        "workflow_closed_projection_failures",
+        "projection_failures_ignore",
+        "projection_failures_resolve"
       ]
     }
   ]
@@ -1349,6 +1384,8 @@ Memory APIs may exist in documented stub form until the corresponding subsystems
 
 - `projection_failures_ignore`
 - `projection_failures_resolve`
+- HTTP route surface for `projection_failures_ignore`
+- HTTP route surface for `projection_failures_resolve`
 
 ### Allowed Stub Surface
 
