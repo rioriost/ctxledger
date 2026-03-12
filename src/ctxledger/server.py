@@ -130,12 +130,7 @@ class McpRuntimeProtocol(Protocol):
     def dispatch_resource(self, uri: str) -> McpResourceResponse: ...
 
 
-from .mcp.lifecycle import (
-    McpLifecycleState,
-    build_jsonrpc_error_response,
-    build_jsonrpc_success_response,
-    dispatch_lifecycle_method,
-)
+from .mcp.lifecycle import McpLifecycleState
 from .mcp.resource_handlers import (
     build_workflow_detail_resource_handler,
     build_workflow_detail_resource_response,
@@ -144,6 +139,7 @@ from .mcp.resource_handlers import (
     parse_workflow_detail_resource_uri,
     parse_workspace_resume_resource_uri,
 )
+from .mcp.rpc import handle_mcp_rpc_request
 from .mcp.streamable_http import (
     StreamableHttpRequest,
     StreamableHttpResponse,
@@ -178,105 +174,6 @@ from .mcp.tool_schemas import (
     McpToolSchema,
     serialize_mcp_tool_schema,
 )
-
-
-def handle_mcp_rpc_request(
-    runtime: McpRuntimeProtocol,
-    req: dict[str, Any],
-) -> dict[str, Any] | None:
-    method = req.get("method")
-    params = req.get("params") or {}
-    req_id = req.get("id")
-
-    lifecycle_state = getattr(runtime, "_mcp_lifecycle_state", None)
-    if lifecycle_state is None:
-        lifecycle_state = McpLifecycleState()
-        setattr(runtime, "_mcp_lifecycle_state", lifecycle_state)
-
-    lifecycle_result = dispatch_lifecycle_method(
-        runtime,
-        lifecycle_state,
-        method,
-        params if isinstance(params, dict) else None,
-    )
-    if method in {
-        "initialize",
-        "initialized",
-        "notifications/initialized",
-        "ping",
-        "shutdown",
-    }:
-        if req_id is None:
-            return None
-        if lifecycle_result is None:
-            return None
-        return build_jsonrpc_success_response(req_id, lifecycle_result)
-
-    if method == "exit":
-        raise SystemExit(0)
-    elif method == "tools/list":
-        result = {
-            "tools": [
-                {
-                    "name": tool_name,
-                    "description": f"{tool_name} tool",
-                    "inputSchema": serialize_mcp_tool_schema(
-                        runtime.tool_schema(tool_name)
-                    ),
-                }
-                for tool_name in runtime.registered_tools()
-            ]
-        }
-    elif method == "tools/call":
-        name = params.get("name")
-        arguments = params.get("arguments") or {}
-        if not isinstance(name, str) or not name.strip():
-            raise ValueError("tools/call requires 'name' (string)")
-        if not isinstance(arguments, dict):
-            raise ValueError("tools/call requires 'arguments' (object)")
-
-        response = runtime.dispatch_tool(name.strip(), arguments)
-        result = {
-            "content": [
-                {
-                    "type": "text",
-                    "text": json.dumps(response.payload, ensure_ascii=False),
-                }
-            ]
-        }
-    elif method == "resources/list":
-        result = {
-            "resources": [
-                {
-                    "uri": resource_uri,
-                    "name": resource_uri,
-                    "description": f"{resource_uri} resource",
-                }
-                for resource_uri in runtime.registered_resources()
-            ]
-        }
-    elif method == "resources/read":
-        uri = params.get("uri")
-        if not isinstance(uri, str) or not uri.strip():
-            raise ValueError("resources/read requires 'uri' (string)")
-
-        response = runtime.dispatch_resource(uri.strip())
-        result = {
-            "contents": [
-                {
-                    "uri": uri.strip(),
-                    "mimeType": "application/json",
-                    "text": json.dumps(response.payload, ensure_ascii=False),
-                }
-            ]
-        }
-    else:
-        raise ValueError(f"Unknown method: {method}")
-
-    if req_id is None:
-        return None
-
-    return build_jsonrpc_success_response(req_id, result)
 
 
 @dataclass(slots=True)
