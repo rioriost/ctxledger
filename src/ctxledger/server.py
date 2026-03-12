@@ -5,7 +5,6 @@ import logging
 import sys
 from dataclasses import dataclass
 from typing import Any, Protocol
-from urllib.parse import parse_qs, urlparse
 from uuid import UUID
 
 from .config import AppSettings
@@ -172,6 +171,11 @@ from .mcp.tool_schemas import (
     serialize_mcp_tool_schema,
 )
 from .runtime.composite import CompositeRuntimeAdapter
+from .runtime.database_health import (
+    DefaultDatabaseHealthChecker,
+    PostgresDatabaseHealthChecker,
+    build_database_health_checker,
+)
 from .runtime.http_handlers import (
     build_closed_projection_failures_http_handler as extracted_build_closed_projection_failures_http_handler,
 )
@@ -247,7 +251,13 @@ from .runtime.server_responses import (
     build_runtime_tools_response as extracted_build_runtime_tools_response,
 )
 from .runtime.server_responses import (
+    build_workflow_detail_resource_response as extracted_build_workflow_detail_resource_response,
+)
+from .runtime.server_responses import (
     build_workflow_resume_response as extracted_build_workflow_resume_response,
+)
+from .runtime.server_responses import (
+    build_workspace_resume_resource_response as extracted_build_workspace_resume_resource_response,
 )
 
 WorkflowHttpHandler = Any
@@ -265,113 +275,6 @@ class McpHttpResponse:
 
 class ServerBootstrapError(RuntimeError):
     pass
-
-
-class DefaultDatabaseHealthChecker:
-    """
-    Lightweight placeholder health checker.
-
-    This implementation intentionally avoids a hard dependency on a specific
-    PostgreSQL driver in the initial runtime bootstrap. It validates that a DB
-    URL is configured and treats schema readiness as a deploy-time guarantee.
-
-    When a PostgreSQL driver is available, use `build_database_health_checker()`
-    to get a real health checker instead of instantiating this class directly.
-    """
-
-    def __init__(self, database_url: str | None) -> None:
-        self._database_url = database_url
-
-    def ping(self) -> None:
-        if not self._database_url:
-            raise ServerBootstrapError("database_url is not configured")
-
-    def schema_ready(self) -> bool:
-        return bool(self._database_url)
-
-
-class PostgresDatabaseHealthChecker:
-    def __init__(self, database_url: str | None) -> None:
-        self._database_url = database_url
-
-    def _connect_timeout_seconds(self) -> int:
-        if not self._database_url:
-            return 5
-
-        parsed = urlparse(self._database_url)
-        query = parse_qs(parsed.query)
-        raw_timeout = query.get("connect_timeout", [None])[0]
-        if raw_timeout is None:
-            return 5
-
-        try:
-            timeout = int(raw_timeout)
-        except ValueError:
-            return 5
-
-        return timeout if timeout > 0 else 5
-
-    def _connect(self) -> Any:
-        if not self._database_url:
-            raise ServerBootstrapError("database_url is not configured")
-
-        try:
-            import psycopg
-        except ImportError as exc:
-            raise ServerBootstrapError(
-                "PostgreSQL health checker requires psycopg to be installed"
-            ) from exc
-
-        return psycopg.connect(
-            self._database_url,
-            connect_timeout=self._connect_timeout_seconds(),
-        )
-
-    def ping(self) -> None:
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-
-    def schema_ready(self) -> bool:
-        required_tables = (
-            "workspaces",
-            "workflow_instances",
-            "workflow_attempts",
-            "workflow_checkpoints",
-            "verify_reports",
-            "projection_states",
-        )
-
-        query = """
-        SELECT EXISTS (
-            SELECT 1
-            FROM information_schema.tables
-            WHERE table_schema = current_schema()
-              AND table_name = %s
-        )
-        """
-
-        with self._connect() as connection:
-            with connection.cursor() as cursor:
-                for table_name in required_tables:
-                    cursor.execute(query, (table_name,))
-                    row = cursor.fetchone()
-                    if row is None or row[0] is not True:
-                        return False
-
-        return True
-
-
-def build_database_health_checker(database_url: str | None) -> DatabaseHealthChecker:
-    if not database_url:
-        return DefaultDatabaseHealthChecker(database_url)
-
-    try:
-        import psycopg  # noqa: F401
-    except ImportError:
-        return DefaultDatabaseHealthChecker(database_url)
-
-    return PostgresDatabaseHealthChecker(database_url)
 
 
 class HttpRuntimeAdapter:
@@ -531,182 +434,17 @@ class CtxLedgerServer:
         self,
         workspace_id: UUID,
     ) -> McpResourceResponse:
-        if self.workflow_service is None:
-            return McpResourceResponse(
-                status_code=503,
-                payload={
-                    "error": {
-                        "code": "server_not_ready",
-                        "message": "workflow service is not initialized",
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
-
-        if hasattr(self.workflow_service, "_uow_factory"):
-            with self.workflow_service._uow_factory() as uow:
-                workspace = uow.workspaces.get_by_id(workspace_id)
-                if workspace is None:
-                    return McpResourceResponse(
-                        status_code=404,
-                        payload={
-                            "error": {
-                                "code": "not_found",
-                                "message": f"workspace '{workspace_id}' was not found",
-                            }
-                        },
-                        headers={"content-type": "application/json"},
-                    )
-
-                running_workflow = uow.workflow_instances.get_running_by_workspace_id(
-                    workspace_id
-                )
-                selected_workflow = running_workflow
-                if selected_workflow is None:
-                    selected_workflow = (
-                        uow.workflow_instances.get_latest_by_workspace_id(workspace_id)
-                    )
-
-            if selected_workflow is None:
-                return McpResourceResponse(
-                    status_code=404,
-                    payload={
-                        "error": {
-                            "code": "not_found",
-                            "message": (
-                                f"no workflow is available for workspace '{workspace_id}'"
-                            ),
-                        }
-                    },
-                    headers={"content-type": "application/json"},
-                )
-
-            workflow_response = self.build_workflow_resume_response(
-                selected_workflow.workflow_instance_id
-            )
-        else:
-            workflow_response = self.build_workflow_resume_response(
-                getattr(self.workflow_service.resume_result.workspace, "workspace_id")
-            )
-            if workflow_response.status_code == 200:
-                response_workspace_id = workflow_response.payload.get(
-                    "workspace", {}
-                ).get("workspace_id")
-                if response_workspace_id != str(workspace_id):
-                    return McpResourceResponse(
-                        status_code=404,
-                        payload={
-                            "error": {
-                                "code": "not_found",
-                                "message": f"workspace '{workspace_id}' was not found",
-                            }
-                        },
-                        headers={"content-type": "application/json"},
-                    )
-        if workflow_response.status_code != 200:
-            return McpResourceResponse(
-                status_code=workflow_response.status_code,
-                payload=workflow_response.payload,
-                headers=workflow_response.headers,
-            )
-
-        return McpResourceResponse(
-            status_code=200,
-            payload={
-                "uri": f"workspace://{workspace_id}/resume",
-                "resource": workflow_response.payload,
-            },
-            headers={"content-type": "application/json"},
-        )
+        return extracted_build_workspace_resume_resource_response(self, workspace_id)
 
     def build_workflow_detail_resource_response(
         self,
         workspace_id: UUID,
         workflow_instance_id: UUID,
     ) -> McpResourceResponse:
-        if self.workflow_service is None:
-            return McpResourceResponse(
-                status_code=503,
-                payload={
-                    "error": {
-                        "code": "server_not_ready",
-                        "message": "workflow service is not initialized",
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
-
-        if hasattr(self.workflow_service, "_uow_factory"):
-            with self.workflow_service._uow_factory() as uow:
-                workflow = uow.workflow_instances.get_by_id(workflow_instance_id)
-                if workflow is None:
-                    return McpResourceResponse(
-                        status_code=404,
-                        payload={
-                            "error": {
-                                "code": "not_found",
-                                "message": (
-                                    f"workflow '{workflow_instance_id}' was not found"
-                                ),
-                            }
-                        },
-                        headers={"content-type": "application/json"},
-                    )
-                if workflow.workspace_id != workspace_id:
-                    return McpResourceResponse(
-                        status_code=400,
-                        payload={
-                            "error": {
-                                "code": "invalid_request",
-                                "message": (
-                                    "workflow instance does not belong to workspace"
-                                ),
-                            }
-                        },
-                        headers={"content-type": "application/json"},
-                    )
-        else:
-            resume = self.workflow_service.resume_result
-            if resume.workflow_instance.workflow_instance_id != workflow_instance_id:
-                return McpResourceResponse(
-                    status_code=404,
-                    payload={
-                        "error": {
-                            "code": "not_found",
-                            "message": (
-                                f"workflow '{workflow_instance_id}' was not found"
-                            ),
-                        }
-                    },
-                    headers={"content-type": "application/json"},
-                )
-            if resume.workflow_instance.workspace_id != workspace_id:
-                return McpResourceResponse(
-                    status_code=400,
-                    payload={
-                        "error": {
-                            "code": "invalid_request",
-                            "message": "workflow instance does not belong to workspace",
-                        }
-                    },
-                    headers={"content-type": "application/json"},
-                )
-
-        workflow_response = self.build_workflow_resume_response(workflow_instance_id)
-        if workflow_response.status_code != 200:
-            return McpResourceResponse(
-                status_code=workflow_response.status_code,
-                payload=workflow_response.payload,
-                headers=workflow_response.headers,
-            )
-
-        return McpResourceResponse(
-            status_code=200,
-            payload={
-                "uri": f"workspace://{workspace_id}/workflow/{workflow_instance_id}",
-                "resource": workflow_response.payload,
-            },
-            headers={"content-type": "application/json"},
+        return extracted_build_workflow_detail_resource_response(
+            self,
+            workspace_id,
+            workflow_instance_id,
         )
 
     def validate_configuration(self) -> None:
