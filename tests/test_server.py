@@ -1078,6 +1078,524 @@ def test_build_closed_projection_failures_http_handler_returns_503_when_server_i
     assert response.headers == {"content-type": "application/json"}
 
 
+def test_build_projection_failures_ignore_http_handler_returns_success_response() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    workspace_id = resume.workspace.workspace_id
+    workflow_instance_id = resume.workflow_instance.workflow_instance_id
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        ignore_result=2,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_ignore_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={workspace_id}"
+            f"&workflow_instance_id={workflow_instance_id}"
+            "&projection_type=resume_json"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 200
+    assert response.payload == {
+        "workspace_id": str(workspace_id),
+        "workflow_instance_id": str(workflow_instance_id),
+        "projection_type": "resume_json",
+        "updated_failure_count": 2,
+        "status": "ignored",
+    }
+    assert response.headers == {"content-type": "application/json"}
+    assert fake_workflow_service.ignore_calls == [
+        {
+            "workspace_id": workspace_id,
+            "workflow_instance_id": workflow_instance_id,
+            "projection_type": ProjectionArtifactType.RESUME_JSON,
+        }
+    ]
+
+
+def test_build_projection_failures_ignore_http_handler_returns_invalid_request_for_bad_projection_type() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_ignore_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+            "&projection_type=not-a-real-projection"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 400
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "projection_type must be a supported projection artifact type",
+            "details": {
+                "field": "projection_type",
+                "allowed_values": ["resume_json", "resume_md"],
+            },
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_projection_failures_ignore_http_handler_returns_invalid_request_for_missing_workspace_id() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_ignore_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_ignore"
+            f"?workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 400
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "workspace_id must be a non-empty string",
+            "details": {"field": "workspace_id"},
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_projection_failures_ignore_http_handler_returns_not_found_for_service_not_found_error() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+
+    def raise_not_found(
+        *,
+        workspace_id: object,
+        workflow_instance_id: object,
+        projection_type: object = None,
+    ) -> int:
+        raise RuntimeError("workflow not found")
+
+    fake_workflow_service.ignore_resume_projection_failures = raise_not_found
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_ignore_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "workflow not found",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_projection_failures_ignore_http_handler_returns_invalid_request_for_workspace_mismatch_error() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+
+    def raise_workspace_mismatch(
+        *,
+        workspace_id: object,
+        workflow_instance_id: object,
+        projection_type: object = None,
+    ) -> int:
+        raise RuntimeError("workflow instance does not belong to workspace")
+
+    fake_workflow_service.ignore_resume_projection_failures = raise_workspace_mismatch
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_ignore_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 400
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow instance does not belong to workspace",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_projection_failures_ignore_http_handler_returns_server_error_for_unmapped_service_error() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+
+    def raise_generic_error(
+        *,
+        workspace_id: object,
+        workflow_instance_id: object,
+        projection_type: object = None,
+    ) -> int:
+        raise RuntimeError("projection storage exploded")
+
+    fake_workflow_service.ignore_resume_projection_failures = raise_generic_error
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_ignore_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 500
+    assert response.payload == {
+        "error": {
+            "code": "server_error",
+            "message": "projection storage exploded",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_projection_failures_resolve_http_handler_returns_success_response() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    workspace_id = resume.workspace.workspace_id
+    workflow_instance_id = resume.workflow_instance.workflow_instance_id
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        resolve_result=3,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_resolve_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={workspace_id}"
+            f"&workflow_instance_id={workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 200
+    assert response.payload == {
+        "workspace_id": str(workspace_id),
+        "workflow_instance_id": str(workflow_instance_id),
+        "projection_type": None,
+        "updated_failure_count": 3,
+        "status": "resolved",
+    }
+    assert response.headers == {"content-type": "application/json"}
+    assert fake_workflow_service.resolve_calls == [
+        {
+            "workspace_id": workspace_id,
+            "workflow_instance_id": workflow_instance_id,
+            "projection_type": None,
+        }
+    ]
+
+
+def test_build_projection_failures_resolve_http_handler_returns_invalid_request_for_bad_workflow_id() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_resolve_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            "&workflow_instance_id=not-a-uuid"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 400
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_instance_id must be a valid UUID",
+            "details": {"field": "workflow_instance_id"},
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_projection_failures_resolve_http_handler_returns_invalid_request_for_bad_projection_type() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_resolve_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+            "&projection_type=not-a-real-projection"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 400
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "projection_type must be a supported projection artifact type",
+            "details": {
+                "field": "projection_type",
+                "allowed_values": ["resume_json", "resume_md"],
+            },
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_projection_failures_resolve_http_handler_returns_not_found_for_service_not_found_error() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+
+    def raise_not_found(
+        *,
+        workspace_id: object,
+        workflow_instance_id: object,
+        projection_type: object = None,
+    ) -> int:
+        raise RuntimeError("workflow not found")
+
+    fake_workflow_service.resolve_resume_projection_failures = raise_not_found
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_resolve_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "workflow not found",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_projection_failures_resolve_http_handler_returns_invalid_request_for_workspace_mismatch_error() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+
+    def raise_workspace_mismatch(
+        *,
+        workspace_id: object,
+        workflow_instance_id: object,
+        projection_type: object = None,
+    ) -> int:
+        raise RuntimeError("workflow instance does not belong to workspace")
+
+    fake_workflow_service.resolve_resume_projection_failures = raise_workspace_mismatch
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_resolve_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 400
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow instance does not belong to workspace",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_projection_failures_resolve_http_handler_returns_server_error_for_unmapped_service_error() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+
+    def raise_generic_error(
+        *,
+        workspace_id: object,
+        workflow_instance_id: object,
+        projection_type: object = None,
+    ) -> int:
+        raise RuntimeError("projection storage exploded")
+
+    fake_workflow_service.resolve_resume_projection_failures = raise_generic_error
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_projection_failures_resolve_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+        )
+    )
+
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.status_code == 500
+    assert response.payload == {
+        "error": {
+            "code": "server_error",
+            "message": "projection storage exploded",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
 def test_http_runtime_adapter_dispatches_registered_workflow_resume_handler() -> None:
     settings = make_settings()
     resume = make_resume_fixture()
