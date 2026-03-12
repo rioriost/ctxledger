@@ -1,71 +1,63 @@
 今回の変更
-#### document logging-example updates in changelog for HTTP projection failure action routes
-projection failure lifecycle の HTTP action surface について、`docs/CHANGELOG.md` に **logging example 関連の docs 更新内容** を反映しました。
+#### add symmetric invalid-path `404 not_found` examples to MCP API action section for HTTP projection failure routes
+projection failure lifecycle の HTTP action surface について、`docs/mcp-api.md` の `workflow_resume` action section に **ignore / resolve 両方の invalid-path `404 not_found` examples** を対称に載せる形へ更新しました。
 
 今回の方針:
-- 直前に `docs/SECURITY.md` と `docs/deployment.md` に追加した logging examples を changelog にも反映して、docs 更新履歴を一貫して追えるようにする
-- strict path / invalid-path `404 not_found` / observability guidance の整合が、implementation / tests / API docs / security docs / deployment docs / changelog で辿れる状態を保つ
-- operator / proxy / gateway 観点での observability 強化がどこまで docs に反映されたかを changelog 上でも分かるようにする
+- すでに overview section では `projection_failures_ignore` / `projection_failures_resolve` の両方に invalid-path example があるため、`workflow_resume` 配下の action section でも同じ対称性を持たせる
+- strict path contract の説明が、overview と tool-specific section の両方で同じ粒度になるようにする
+- operator / proxy / integration client が、ignore と resolve の invalid-path behavior を同じ見え方で確認できるようにする
 
 ---
 
-### `ctxledger/docs/CHANGELOG.md` で更新した内容
-#### 1. `Added` セクションの documentation updates を拡張
-追加した内容:
-- projection failure action routes について、
-  - representative edge/proxy logging examples
-  が docs に含まれることを明記
-
-これで changelog 上の documentation updates には少なくとも:
-- auth-enabled / auth-disabled request examples
-- invalid-path `404 not_found` response examples
-- operator action semantics
-- security / deployment guidance
-- representative edge/proxy logging examples
-が並ぶ形になりました。
-
----
-
-#### 2. `Notes` セクションの operator action surface summary を拡張
+### `ctxledger/docs/mcp-api.md` で更新した内容
+#### 1. `workflow_resume` action section の invalid-path example を複数形に拡張
 更新した内容:
-- security docs now include a representative edge logging example for invalid-path and other operator-route outcomes
-- deployment docs now include a representative proxy access-log example for invalid-path and related operator-route outcomes
+- `Representative HTTP 404 not_found response example for an invalid action path`
+  から
+- `Representative HTTP 404 not_found response examples for invalid action paths`
+  へ変更
 
-これにより、changelog の notes からも:
-- `docs/SECURITY.md`
-  - representative edge logging example
-- `docs/deployment.md`
-  - representative proxy access-log example
-が追加済みであることを確認できるようになりました。
+これにより、section の見出し自体が:
+- 単一 example ではなく
+- ignore / resolve の両方を含む
+ことを明示する形になりました。
+
+---
+
+#### 2. resolve 側の invalid-path response example を追加
+追加した example:
+- `projection failure resolve endpoint requires /projection_failures_resolve`
+
+これで `workflow_resume` action section 内でも、invalid-path example は以下の対称構成になりました。
+
+- ignore:
+  - `projection failure ignore endpoint requires /projection_failures_ignore`
+- resolve:
+  - `projection failure resolve endpoint requires /projection_failures_resolve`
 
 ---
 
 ### 今回変更したファイル
-- `ctxledger/docs/CHANGELOG.md`
+- `ctxledger/docs/mcp-api.md`
 - `ctxledger/last_session.md`
 
 ---
 
-### docs / changelog 上で今回さらに明示化された contract / guidance
-#### mutation-side (HTTP action route observability)
-- invalid-path `404 not_found` handling の observability guidance が changelog 履歴にも反映された
-- edge logging example と proxy access-log example の追加が changelog からも追跡可能になった
-- operator action route の observability guidance が
-  - API docs
-  - security docs
-  - deployment docs
-  - changelog
- で整合した状態になった
+### docs 上で今回さらに明示化された contract
+#### mutation-side (HTTP runtime route surface)
+- `projection_failures_ignore`
+  - valid path: `/projection_failures_ignore`
+  - invalid path: `404 not_found`
+  - representative response example あり
+- `projection_failures_resolve`
+  - valid path: `/projection_failures_resolve`
+  - invalid path: `404 not_found`
+  - representative response example あり
 
-#### documentation history
-- `docs/mcp-api.md`
-  - invalid-path `404 not_found` response examples を反映済み
-- `docs/SECURITY.md`
-  - representative edge logging example を反映済み
-- `docs/deployment.md`
-  - representative proxy access-log example を反映済み
-- `docs/CHANGELOG.md`
-  - 上記 logging-example docs updates を反映済み
+#### `workflow_resume` action section
+- invalid-path handling examples が ignore / resolve 両方で対称になった
+- strict path requirement と invalid-path payload example を、section 単体でも両 route について確認できる
+- overview section と action section の docs 粒度が揃った
 
 ---
 
@@ -91,6 +83,7 @@ projection failure lifecycle の public / operational surface は、少なくと
   - validation error example
   - invalid-path `404 not_found` response examples
   - strict path requirement
+  - ignore / resolve 対称の invalid-path examples
   を反映済み
 - `docs/SECURITY.md`
   - strict path guidance
@@ -123,7 +116,8 @@ projection failure lifecycle の public / operational surface は、少なくと
   - `f029923 Update changelog for HTTP action 404 docs`
   - `73a41fd Add HTTP action logging guidance example`
   - `8b328a5 Add proxy log example for HTTP action routes`
-- この handoff 更新時点では、今回の `docs/CHANGELOG.md` 更新について **まだ git commit 未実施**
+  - `e4af2c9 Document HTTP action logging examples`
+- この handoff 更新時点では、今回の `docs/mcp-api.md` の対称 invalid-path example 追加について **まだ git commit 未実施**
 - `.gitignore` は引き続き未コミット差分として残っており、変更対象に含めない前提
 
 ---
@@ -131,14 +125,14 @@ projection failure lifecycle の public / operational surface は、少なくと
 ### 補足
 - 今回は production code の変更なし
 - 追加 test なし
-- changelog / handoff の更新のみ
-- changelog が response examples だけでなく logging examples の docs 拡張履歴も含むようになった
+- MCP API docs / handoff の更新のみ
+- `workflow_resume` action section 単体でも、ignore / resolve の invalid-path behavior が対称に読める状態になった
 
 ---
 
 ### 次に自然な作業
 次に自然なのは以下です。
 
-1. 今回の `docs/CHANGELOG.md` 更新を descriptive message で git commit する
-2. 必要なら `docs/mcp-api.md` の `workflow_resume` action section に resolve 側の invalid-path example も対称に追加する
-3. 必要なら projection failure action route の docs 追記をここで一段落として、関連 docs の current state を軽く棚卸しする
+1. 今回の `docs/mcp-api.md` 更新を descriptive message で git commit する
+2. 必要なら projection failure action route の docs 追記をここで一段落として、関連 docs / tests / implementation の current state を軽く棚卸しする
+3. 必要なら `docs/CHANGELOG.md` に今回の symmetry improvement も追記する

@@ -636,13 +636,22 @@ Representative HTTP success response example:
 }
 ```
 
-Representative HTTP `404 not_found` response example for an invalid action path:
+Representative HTTP `404 not_found` response examples for invalid action paths:
 
 ```/dev/null/json#L1-6
 {
   "error": {
     "code": "not_found",
     "message": "projection failure ignore endpoint requires /projection_failures_ignore"
+  }
+}
+```
+
+```/dev/null/json#L1-6
+{
+  "error": {
+    "code": "not_found",
+    "message": "projection failure resolve endpoint requires /projection_failures_resolve"
   }
 }
 ```
