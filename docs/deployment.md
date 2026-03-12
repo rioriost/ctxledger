@@ -205,6 +205,14 @@ Current debug surfaces include:
 - `/debug/routes`
 - `/debug/tools`
 
+Representative HTTP route names exposed by these debug surfaces may include:
+
+- `runtime_introspection`
+- `runtime_routes`
+- `runtime_tools`
+- `workflow_resume`
+- `workflow_closed_projection_failures`
+
 Deployment policy:
 
 1. debug endpoints are intended for operator visibility, not general client use
@@ -228,7 +236,12 @@ Current implementation behavior:
 The payloads returned by `/debug/*` may reveal details such as:
 
 - enabled transports
-- registered HTTP routes
+- registered HTTP routes such as:
+  - `runtime_introspection`
+  - `runtime_routes`
+  - `runtime_tools`
+  - `workflow_resume`
+  - `workflow_closed_projection_failures`
 - registered stdio tools
 - runtime wiring state
 

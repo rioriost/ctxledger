@@ -89,10 +89,23 @@ Current debug surfaces include:
 - `/debug/routes`
 - `/debug/tools`
 
+Representative HTTP route names exposed by these debug surfaces may include:
+
+- `runtime_introspection`
+- `runtime_routes`
+- `runtime_tools`
+- `workflow_resume`
+- `workflow_closed_projection_failures`
+
 These endpoints are useful for diagnostics, but they can reveal operational metadata such as:
 
 - enabled transports
-- registered HTTP routes
+- registered HTTP routes such as:
+  - `runtime_introspection`
+  - `runtime_routes`
+  - `runtime_tools`
+  - `workflow_resume`
+  - `workflow_closed_projection_failures`
 - registered stdio tools
 - runtime wiring state
 
