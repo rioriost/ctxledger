@@ -170,6 +170,13 @@ Current action routes include:
 
 These routes mutate canonical projection failure lifecycle state.  They do not merely return diagnostic metadata, and they should not be treated like low-risk read endpoints.
 
+They also require strict path shapes:
+
+- `projection_failures_ignore` requires `/projection_failures_ignore`
+- `projection_failures_resolve` requires `/projection_failures_resolve`
+
+Requests sent to unexpected path shapes should be treated as `404 not_found` rather than as valid action requests that only fail later during query validation.
+
 Operational cautions:
 
 1. treat these routes as state-changing operator actions, even though their current HTTP contract may be invoked through query-parameter-based requests
@@ -179,6 +186,7 @@ Operational cautions:
 5. do not treat `projection_failures_ignore` as a repair mechanism; it closes visibility of matching open failures without claiming successful projection recovery
 6. reserve `projection_failures_resolve` for cases where successful reconciliation or equivalent recovery evidence exists
 7. preserve normal operational logging around the use of these routes so that manual lifecycle closure actions remain observable during incident review
+8. document and monitor the exact path shapes in reverse proxies, gateway policy, and access control rules so that unexpected alternate paths do not accidentally become accepted operator conventions
 
 Representative operational risks include:
 

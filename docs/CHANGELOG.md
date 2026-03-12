@@ -81,6 +81,8 @@ The project currently follows a lightweight, human-maintained changelog style.
     - validation errors
     - server-not-ready behavior
     - success payloads for `projection_failures_ignore` and `projection_failures_resolve`
+    - handler-level service error mapping coverage
+    - handler-level invalid path coverage for strict action route path shapes
 
 ### Changed
 
@@ -110,6 +112,10 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `docker/docker-compose.yml`
 - projection failure warnings are now emitted only when a projection has open failures, rather than for every projection whose status is merely `failed`
 - closed projection failure history is now exposed separately from open failure reads
+- HTTP projection failure action handlers now require strict path shapes:
+  - `/projection_failures_ignore`
+  - `/projection_failures_resolve`
+  - unexpected action paths return `404 not_found`
 - resume surfaces now distinguish:
   - `open_projection_failure`
   - `ignored_projection_failure`

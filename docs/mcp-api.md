@@ -137,11 +137,15 @@ Implemented request shape for these HTTP action routes:
 
 - existing `path: str` HTTP handler contract is preserved
 - selector values are provided via query parameters
+- strict path shape is also required:
+  - `projection_failures_ignore` requires `/projection_failures_ignore`
+  - `projection_failures_resolve` requires `/projection_failures_resolve`
 - representative query parameters:
   - `workspace_id`
   - `workflow_instance_id`
   - `projection_type` (optional)
   - `authorization` (when HTTP auth is enabled)
+- requests using the wrong path shape should be treated as `404 not_found` rather than as valid action requests with only query validation
 
 Representative HTTP request examples when authentication is enabled:
 
@@ -524,6 +528,12 @@ Implemented HTTP action routes:
 
 - `projection_failures_ignore`
 - `projection_failures_resolve`
+
+Implemented path requirements:
+
+- `projection_failures_ignore` requires `/projection_failures_ignore`
+- `projection_failures_resolve` requires `/projection_failures_resolve`
+- unexpected path shapes should return `404 not_found`
 
 Representative intended behavior:
 

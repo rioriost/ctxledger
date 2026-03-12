@@ -261,6 +261,10 @@ Operational guidance for these routes:
 - protect them with the same bearer-auth boundary as other protected HTTP endpoints
 - expose them only to trusted operators or trusted automation
 - prefer TLS termination and reverse-proxy access control when the HTTP surface is network-accessible
+- require the strict implemented path shape for each action route:
+  - `/projection_failures_ignore`
+  - `/projection_failures_resolve`
+- treat requests using the wrong path shape as invalid route targets that should resolve to `404 not_found` rather than as alternate entry points for the same action
 - treat query parameters such as `workspace_id`, `workflow_instance_id`, and optional `projection_type` as operational identifiers that may reveal internal workflow metadata in logs or access traces
 - avoid using these routes as general client-facing APIs; they are intended for explicit lifecycle handling of projection failures
 - remember that `ignored` closes visibility of an open failure without claiming successful projection repair, while `resolved` should be used only when reconciliation or equivalent recovery evidence exists
