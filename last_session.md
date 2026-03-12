@@ -1,344 +1,250 @@
 今回の変更
-#### implement required workflow MCP resources on stdio runtime
-`v0.1.0` review 上で最大の残課題だった **required MCP resource surface** に対応し、stdio runtime に workflow resources を追加しました。
+#### close out v0.1.0 public surface review with resource docs and acceptance evidence
+直前まで進めていた `v0.1.0` closeout 作業として、**required workflow MCP resources の実装反映** と **acceptance evidence の整理** まで進めました。
 
 今回の方針:
-- public MCP surface に必要とされていた resource layer を、stdio runtime adapter に明示的に追加する
-- `workspace://{workspace_id}/resume`
-- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-  を resource handler / dispatch / introspection に接続する
-- 既存の `workflow_resume` tool / resume serialization / runtime debug surfaces と整合する payload shape を使う
-- fake workflow service を使う tests でも安定するように、resource response builder は
-  - real service (`_uow_factory` を持つ)
-  - test fake service (`resume_result` を持つ)
-  の両方に対応させる
+- すでに実装済みになった workflow tools / workflow resources / runtime introspection surface を docs に反映する
+- `README.md` / `docs/mcp-api.md` / `docs/imple_plan_review_0.1.0.md` を、現在の public surface に合わせて更新する
+- `v0.1.0` の完了判断をしやすくするため、acceptance criteria と実装・テスト・docs の対応を 1 枚で見られる evidence matrix を追加する
+- 直近の主要 gap だった
+  - workflow tool exposure
+  - resume naming mismatch
+  - required workflow resource missing
+  が埋まった前提で、残課題を **documentation/evidence closeout** に絞る
 
 ---
 
-### `ctxledger/src/ctxledger/server.py` で追加・更新した内容
-#### 1. MCP resource response type を追加
-追加:
-- `McpResourceResponse`
-
-shape:
-- `status_code`
-- `payload`
-- `headers`
-
-これにより、tool response とは分離して resource response を扱えるようにした。
-
----
-
-#### 2. stdio runtime adapter に resource registry / dispatch を追加
-`StdioRuntimeAdapter` に追加:
-- `_resource_handlers`
-- `register_resource_handler(...)`
-- `registered_resources()`
-- `dispatch_resource(...)`
-
-また、start/stop log metadata にも:
-- `registered_resources`
-を追加した。
-
----
-
-#### 3. runtime introspection shape を拡張
-`RuntimeIntrospection` に追加:
-- `resources: tuple[str, ...] = ()`
-
-`serialize_runtime_introspection(...)` も更新し、runtime payload に:
-- `resources`
-を含めるようにした。
-
-これにより、health / readiness / startup summary / runtime introspection payload で resource surface も見えるようになった。
-
----
-
-#### 4. MCP resource dispatch function を追加
-追加:
-- `dispatch_mcp_resource(...)`
-
-behavior:
-- stdio runtime に登録された resource patterns を走査
-- URI parser を使って適切な resource handler を選択
-- 成功時:
-  - `RuntimeDispatchResult(status="ok")`
-- handler が 4xx/5xx を返す場合:
-  - `RuntimeDispatchResult(status="error")`
-- 未登録/未一致の場合:
-  - `resource_not_found`
-  - 404
-  の `McpResourceResponse` を返す
-
----
-
-#### 5. workflow resource URI parsers を追加
-追加:
-- `parse_workspace_resume_resource_uri(...)`
-- `parse_workflow_detail_resource_uri(...)`
-
-supported URIs:
+### 今回追加・更新した docs
+#### 1. `ctxledger/docs/mcp-api.md`
+更新した主な内容:
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-validation:
-- UUID parse
-- expected path segment count / kind
-- invalid format は `None`
+について、**implemented on stdio runtime** であることを明記した。
+
+追加・更新した観点:
+- current implementation status
+- current response shape
+- `resource` payload が `workflow_resume` と同系統の composite resume payload であること
+- `memory://episode/{episode_id}`
+- `memory://summary/{scope}`
+  は引き続き future-facing / stubbed resource であること
+
+これにより、MCP API reference 上で:
+- required workflow resources は実装済み
+- memory resources はまだ未実装寄り
+という整理が明確になった。
 
 ---
 
-#### 6. workflow resource response builders を追加
-追加:
-- `build_workspace_resume_resource_response(...)`
-- `build_workflow_detail_resource_response(...)`
+#### 2. `ctxledger/README.md`
+更新した主な内容:
+- runtime debug example payload を resource-aware に更新
+- stdio runtime 側に visible な:
+  - `tools`
+  - `resources`
+  の両方が見える example を追加・更新
 
-##### `workspace://{workspace_id}/resume`
-semantics:
-1. workspace に running workflow があればそれを選ぶ
-2. なければ latest workflow を選ぶ
-3. なければ not_found
+主な反映内容:
+- HTTP runtime example では:
+  - `resources: []`
+- stdio runtime example では:
+  - `workflow_resume`
+  - `workspace://{workspace_id}/resume`
+  - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-success payload:
-- `uri`
-- `resource`
-  - `serialize_workflow_resume(...)` の payload
+が visible であることを反映
 
-error cases:
-- `server_not_ready`
-- workspace not found
-- no workflow available
-
-##### `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-semantics:
-- exact workflow identity lookup
-- workspace mismatch は invalid_request
-
-success payload:
-- `uri`
-- `resource`
-  - `serialize_workflow_resume(...)` の payload
-
-error cases:
-- `server_not_ready`
-- workflow not found
-- workflow/workspace mismatch
+これにより README は、現在の runtime introspection payload とかなり近い形になった。
 
 ---
 
-#### 7. fake service compatibility fallback を追加
-resource builder は:
-- real `WorkflowService` の場合:
-  - `_uow_factory` を使って workspace / workflow selection を行う
-- tests 用 fake service の場合:
-  - `resume_result` から workspace_id / workflow_instance_id / workspace mismatch を判定する
+#### 3. `ctxledger/docs/imple_plan_review_0.1.0.md`
+更新した主な内容:
+- 以前 unresolved 扱いだった **required MCP resources** を、現在は stdio runtime で implemented と整理し直した
+- naming mismatch についても、現在は `workflow_resume` で aligned 済みであることを反映
+- main remaining work を:
+  - acceptance evidence
+  - public surface matrix
+  - final documentation alignment
+  に再整理した
 
-これにより、server tests に real DB-style fake UoW を新設せずに resource tests を追加できる形にした。
+主な update:
+- `6.2 Required MCP resources are now implemented on the stdio runtime`
+- `6.3 Public workflow tool naming is now aligned across plan, README, and runtime`
+- `Task C` を implementation gap から docs/evidence follow-up に寄せた
+- short conclusion / recommended next action を closeout-oriented に更新した
 
----
-
-#### 8. stdio runtime registration に required resources を追加
-`build_stdio_runtime_adapter(server)` に追加した registrations:
-- `workspace://{workspace_id}/resume`
-- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-
-これで stdio runtime は tool だけでなく required workflow resources も visible になった。
-
----
-
-#### 9. exports を追加
-`__all__` に追加:
-- `McpResourceResponse`
-- `dispatch_mcp_resource`
-- `build_workspace_resume_resource_handler`
-- `build_workspace_resume_resource_response`
-- `build_workflow_detail_resource_handler`
-- `build_workflow_detail_resource_response`
-- `parse_workspace_resume_resource_uri`
-- `parse_workflow_detail_resource_uri`
+これにより review 文書は、古い gap 分析というより
+**ほぼ closeout checklist に近い状態**になった。
 
 ---
 
-### `ctxledger/tests/test_server.py` で追加・更新した内容
-#### 1. resource imports / response assertions を追加
-追加 import:
-- `McpResourceResponse`
-- `dispatch_mcp_resource`
-- `build_workspace_resume_resource_handler`
-- `build_workflow_detail_resource_handler`
-- `parse_workspace_resume_resource_uri`
-- `parse_workflow_detail_resource_uri`
+#### 4. 新規追加: `ctxledger/docs/v0.1.0_acceptance_evidence.md`
+新規作成した内容:
+- `v0.1.0` acceptance evidence matrix
 
----
-
-#### 2. resource parser tests を追加
-追加した代表 test:
-- `test_parse_workspace_resume_resource_uri_returns_workspace_id_for_valid_uri()`
-- `test_parse_workspace_resume_resource_uri_returns_none_for_invalid_uri()`
-- `test_parse_workflow_detail_resource_uri_returns_ids_for_valid_uri()`
-- `test_parse_workflow_detail_resource_uri_returns_none_for_invalid_uri()`
-
----
-
-#### 3. resource handler tests を追加
-追加した代表 test:
-- `test_build_workspace_resume_resource_handler_returns_success_payload()`
-- `test_build_workspace_resume_resource_handler_returns_not_found_for_invalid_uri()`
-- `test_build_workspace_resume_resource_handler_returns_server_not_ready_error()`
-
-- `test_build_workflow_detail_resource_handler_returns_success_payload()`
-- `test_build_workflow_detail_resource_handler_returns_not_found_for_invalid_uri()`
-- `test_build_workflow_detail_resource_handler_returns_server_not_ready_error()`
-
-固定した内容:
-- resource URI validation
-- success payload contract
-- `server_not_ready`
-- exact workflow resource identity behavior
-
----
-
-#### 4. resource dispatch test を追加
-追加:
-- `test_dispatch_mcp_resource_returns_dispatch_result_for_success()`
-- `test_dispatch_mcp_resource_returns_resource_not_found_result()`
-
-固定した内容:
-- stdio resource dispatch status
-- dispatch target
-- `resource_not_found` behavior
-
----
-
-#### 5. stdio introspection / composite runtime expectations を更新
-更新した領域:
-- `StdioRuntimeAdapter.introspect()`
-- `collect_runtime_introspection(...)`
-- `serialize_runtime_introspection_collection(...)`
-- health/readiness/startup/runtime summary expectations
-- composite runtime introspection expectations
-
-resource expectations として追加されたもの:
-- `workspace://{workspace_id}/resume`
-- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-
----
-
-#### 6. HTTP-only runtime introspection expectations も更新
-HTTP runtime に resource surface は現時点では追加していないため、
-HTTP-side expectations では:
-- `resources: []`
-を明示するように更新した。
-
-これにより payload contract が transport ごとに明確になった。
-
----
-
-### 今回変更したファイル
-- `ctxledger/src/ctxledger/server.py`
-- `ctxledger/tests/test_server.py`
-- `ctxledger/last_session.md`
-
----
-
-### 現在の整合状態
-#### stdio MCP workflow tools
-現在の stdio MCP tools には少なくとも:
+含めた主な項目:
+- Server starts successfully in local development
+- PostgreSQL-backed tables exist and are initialized
+- MCP workflow tools are callable
 - `workspace_register`
 - `workflow_start`
 - `workflow_checkpoint`
 - `workflow_resume`
 - `workflow_complete`
+- resumable workflow reconstruction after restart
+- required workflow MCP resources
+- Docker-based local deployment
+- core API behavior is documented
+- basic tests validate critical workflow paths
+- runtime debug visibility
+- projection failure lifecycle visibility
+- memory APIs remain safely stubbed/deferred
+
+各行で整理した列:
+- Implementation Evidence
+- Public Surface Evidence
+- Test Evidence
+- Documentation Evidence
+- Status
+- Notes
+
+加えて:
+- confirmed stdio workflow tools
+- confirmed stdio resources
+- confirmed HTTP workflow/ops routes
+- confirmed debug route set
+- remaining closeout gaps
+- practical closeout assessment
+
+も追記した。
+
+このファイルによって、`v0.1.0` の closeout 判断に必要な evidence がかなり一望しやすくなった。
+
+---
+
+### 直前に完了していた実装土台
+今回の docs/evidence 整理は、以下の直前作業が完了している前提で行った。
+
+#### workflow naming alignment
+- stdio tool: `workflow_resume`
+- HTTP route: `workflow_resume`
+
+#### required stdio workflow resources
+- `workspace://{workspace_id}/resume`
+- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+#### runtime introspection expansion
+- stdio introspection に `resources` を含む
+- health / readiness / startup summary でも `resources` が見える
+
+#### test status
+- `tests/test_server.py`
+  - `152 passed`
+
+---
+
+### 今回変更・追加したファイル
+- `ctxledger/README.md`
+- `ctxledger/docs/mcp-api.md`
+- `ctxledger/docs/imple_plan_review_0.1.0.md`
+- `ctxledger/docs/v0.1.0_acceptance_evidence.md`
+- `ctxledger/last_session.md`
+
+---
+
+### 現在の public surface まとめ
+#### confirmed stdio workflow tools
+- `workspace_register`
+- `workflow_start`
+- `workflow_checkpoint`
+- `workflow_resume`
+- `workflow_complete`
+
+#### confirmed stdio auxiliary tools
 - `projection_failures_ignore`
 - `projection_failures_resolve`
 - `memory_remember_episode`
 - `memory_search`
 - `memory_get_context`
 
-#### stdio MCP workflow resources
-現在の stdio MCP resources には:
+#### confirmed stdio workflow resources
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-が含まれる。
+#### confirmed HTTP workflow/ops routes
+- `workflow_resume`
+- `workflow_closed_projection_failures`
+- `projection_failures_ignore`
+- `projection_failures_resolve`
 
-#### runtime introspection
-stdio introspection では:
-- `tools`
-- `resources`
-の両方が visible
-
-HTTP introspection では現時点で:
-- `routes`
-- `tools: []`
-- `resources: []`
-
-という扱い
+#### confirmed HTTP debug routes
+- `runtime_introspection`
+- `runtime_routes`
+- `runtime_tools`
 
 ---
 
-### `v0.1.0` review 上の意味合い
-今回の変更により、これまで未確認 / likely missing と扱っていた:
+### 現在の意味合い
+この時点で、`v0.1.0` review 上の大きな gap だったものは概ね整理された。
 
-- `workspace://{workspace_id}/resume`
-- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+すでに埋まっている主要項目:
+- core workflow MCP tool exposure
+- `workflow_resume` naming consistency
+- required stdio workflow MCP resources
+- runtime/debug surface visibility
+- acceptance evidence matrix
 
-が stdio runtime 上で visible registration / dispatch / tests まで揃った。
-
-そのため、`v0.1.0` review 上の主要未解決テーマは
-**resource missing** からさらに狭まり、
-
-- acceptance evidence / public surface matrix
-- docs への resource implementation reflected status の最終整理
-
-に寄った。
+そのため、`v0.1.0` の残作業はもう
+**機能実装の穴埋め** というより、
+**closeout quality / final judgment / lightweight doc polishing**
+の領域になっている。
 
 ---
 
-### 確認結果
-今回確認できた範囲:
+### 確認済み状態
+確認済みとして持ってよいもの:
 - `ctxledger/src/ctxledger/server.py`: diagnostics 問題なし
 - `ctxledger/tests/test_server.py`: diagnostics 問題なし
+- `ctxledger/README.md`: diagnostics 問題なし
+- `ctxledger/docs/mcp-api.md`: diagnostics 問題なし
+- `ctxledger/docs/imple_plan_review_0.1.0.md`: diagnostics 問題なし
+- `ctxledger/docs/v0.1.0_acceptance_evidence.md`: diagnostics 問題なし
 - `pytest -q tests/test_server.py`
   - `152 passed`
 
 ---
 
-### git 状態メモ
-- 直前の関連コミット:
-  - `32bcb2f Expose core workflow MCP tools`
-  - `ae7d27e Align workflow resume MCP naming`
-- 今回の MCP resource 実装については
-  **この handoff 更新時点では commit 未記録**
-- `.gitignore` は引き続き ignore 対象の状態差分として扱う前提
+### 直近コミット
+直近の relevant commits:
+- `ae7d27e Align workflow resume MCP naming`
+- `703dd96 Implement workflow MCP resources`
+- `366202e Document MCP resource surface`
+- `6507862 Add v0.1.0 acceptance evidence matrix`
 
----
-
-### 補足
-- 今回追加したのは **stdio MCP resource surface**
-- HTTP route surface に resource endpoint を追加したわけではない
-- resource payload は現状 `serialize_workflow_resume(...)` ベースなので、
-  workflow detail resource も exact-identity selection の上で same resume payload shape を返す
-- fake workflow service 互換のために test-friendly fallback を server layer に入れている
+この handoff 更新時点では、
+**last_session.md 自体の最新 closeout 反映については commit 未記録**
+と扱うのが安全。
 
 ---
 
 ### 次に自然な作業
-次に自然なのは以下です。
+次に自然なのは以下。
 
-1. 今回の required MCP resource 実装を descriptive message で git commit する
-2. `README.md`
-3. `docs/mcp-api.md`
-4. `docs/imple_plan_review_0.1.0.md`
-   に resource 実装済み状態を明示反映する
-5. 必要なら public surface matrix / acceptance evidence table を追加する
+1. `last_session.md` のこの最新内容を含めて必要なら commit する
+2. `v0.1.0` を「closeable」扱いにするか最終判断する
+3. もし closeout をさらに強めるなら:
+   - `docs/imple_plan_review_0.1.0.md` を短く要約して final verdict を追記
+   - `docs/v0.1.0_acceptance_evidence.md` への cross-links を README か review doc に足す
+4. それが済んだら次フェーズとして:
+   - memory subsystem expansion
+   - richer resource surfaces
+   - stronger end-to-end deployment evidence
+   のどれに進むか決める
 
 ### 要約
-- stdio runtime に required workflow MCP resources を追加した
-- `workspace://{workspace_id}/resume`
-- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-  を parser / handler / dispatch / introspection / tests まで実装した
-- runtime introspection payload は `resources` を含むように拡張した
-- `tests/test_server.py` は `152 passed`
-- `v0.1.0` の主な残課題は、もう resource missing ではなく
-  **acceptance evidence と public surface documentation の最終整理**
+- required workflow MCP resources 実装後の docs 反映まで完了
+- `README.md` / `docs/mcp-api.md` / `docs/imple_plan_review_0.1.0.md` を current public surface に合わせて更新
+- `docs/v0.1.0_acceptance_evidence.md` を新規追加
+- `v0.1.0` の残課題は、もう実装穴ではなく **closeout evidence と最終整理** が中心
