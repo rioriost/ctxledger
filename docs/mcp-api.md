@@ -8,12 +8,20 @@ The MCP API is the public interface of the system, but it is not the canonical s
 Canonical state lives in PostgreSQL.  
 MCP tools and resources expose mutation and read access to that canonical state.
 
-The target protocol version is:
+For `v0.1.0`, the currently evidenced primary MCP surface is a **minimal HTTP MCP path** at:
 
-- `MCP 2025-03-26`
+- `/mcp`
+
+The repository now evidences the following HTTP MCP operations on that path:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
 
 In `v0.1.0`, the primary implemented surface is the workflow control subsystem.  
 Memory-related operations are defined architecturally but may remain stubbed or partially implemented.
+
+Broader compatibility wording beyond this minimal HTTP MCP path should be treated as a closeout decision, not as a stronger claim already proven by the current repository evidence.
 
 ---
 
@@ -59,7 +67,9 @@ Examples:
 - `workflow_checkpoint`
 - `workflow_complete`
 
-For stdio MCP clients, tool argument discovery is implemented through `tools/list`, which now returns concrete `inputSchema` payloads for the visible tool surface.
+Tool argument discovery is implemented through `tools/list`, which now returns concrete `inputSchema` payloads for the visible tool surface.
+
+The strongest current repository evidence is for this discovery flow over the primary HTTP MCP path at `/mcp`, with stdio remaining useful as a supporting and development-oriented surface.
 
 Representative `tools/list` response fragment:
 
@@ -126,10 +136,12 @@ Examples:
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
 
-Implemented in the current `v0.1.0` stdio runtime surface:
+Implemented in the current repository runtime surface as supporting MCP resources:
 
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+These resources are currently more strongly evidenced on the stdio side than on the primary HTTP MCP path.
 
 Not yet implemented and still future-facing/stubbed as resources:
 
@@ -261,6 +273,15 @@ This HTTP surface does not change the MCP responsibility split:
 - MCP Resources remain the primary read-model interface
 - dedicated HTTP operational surfaces may exist where a narrower concrete server contract is useful
 
+It is also important to distinguish:
+
+- the primary MCP protocol path at `/mcp`
+- workflow-specific HTTP routes
+- operator/action HTTP routes
+- debug/runtime HTTP routes
+
+The latter HTTP routes are useful and implemented, but they should not be treated as equivalent to MCP protocol evidence by themselves.
+
 The implemented endpoints reuse the same projection failure lifecycle semantics as `workflow_resume` and other resume-oriented surfaces.
 
 ---
@@ -296,7 +317,38 @@ They do not replace Tools or Resources and are not canonical inputs to the API.
 
 ---
 
-## 5. Tool Catalog
+## 5. Primary HTTP MCP Path
+
+For `v0.1.0`, the currently evidenced primary HTTP MCP path is:
+
+- `/mcp`
+
+The repository now evidences the following minimal MCP protocol behavior over HTTP:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+
+### Practical interpretation
+
+This means a remote MCP client can, at minimum:
+
+1. connect to `/mcp`
+2. initialize an MCP session
+3. list visible tools
+4. inspect tool input schemas through `tools/list`
+5. invoke tools through `tools/call`
+
+This is the main acceptance surface for `v0.1.0`.
+
+### Supporting scope note
+
+The repository still contains stdio MCP support and stdio-visible tool/resource coverage.  
+That support remains useful for development and internal validation, but it should be treated as supporting scope rather than as the primary release evidence surface.
+
+---
+
+## 6. Tool Catalog
 
 ## 5.1 `workspace_register`
 

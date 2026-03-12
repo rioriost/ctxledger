@@ -7,8 +7,17 @@ Durable Workflow Runtime and Multi-Layer Memory for AI Agents.
 - durable workflow control
 - multi-layer agent memory
 - PostgreSQL-backed persistence
-- MCP 2025-03-26 compatibility
+- a minimal HTTP MCP surface at `/mcp`
 - Docker-based deployment
+
+For `v0.1.0`, the repository now evidences a minimal HTTP MCP path over `/mcp` for:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+
+The release remains HTTP-first.  
+Broader protocol-scope claims beyond that minimal path should be treated carefully until they are explicitly verified and documented.
 
 ---
 
@@ -62,8 +71,8 @@ The initial release is centered on the workflow kernel.
 At a high level, `ctxledger` is composed of:
 
 - **MCP transport layer**
-  - Streamable HTTP
-  - stdio
+  - HTTP-first MCP surface at `/mcp`
+  - stdio support still exists in the repository, but is not the primary `v0.1.0` acceptance surface
 - **application services**
   - workflow orchestration
   - resource assembly
@@ -143,6 +152,20 @@ Typical top-level structure:
 
 ## MCP Surface
 
+### Primary HTTP MCP surface
+
+For `v0.1.0`, the primary MCP acceptance surface is HTTP at:
+
+- `/mcp`
+
+The currently evidenced minimal HTTP MCP path includes:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+
+This means repository evidence now supports the claim that a remote MCP client can reach `/mcp` and perform basic MCP session setup, tool discovery, and tool invocation over HTTP.
+
 ### Workflow tools
 - `workspace_register`
 - `workflow_start`
@@ -150,7 +173,7 @@ Typical top-level structure:
 - `workflow_resume`
 - `workflow_complete`
 
-For stdio MCP clients, tool argument discovery is available through `tools/list`, and each tool exposes a concrete `inputSchema`.
+Tool argument discovery is available through `tools/list`, and visible tools expose a concrete `inputSchema`.
 
 For example, `workspace_register` exposes:
 
@@ -163,6 +186,9 @@ For example, `workspace_register` exposes:
   - `metadata`
 
 This allows MCP clients to discover valid arguments before calling the tool instead of relying on runtime validation errors.
+
+At present, the strongest repository evidence is for the minimal HTTP MCP flow itself plus the concrete tool schema surface.  
+If stricter protocol-coverage claims are needed for release closeout, they should be stated separately from this minimal confirmed path.
 
 ### Memory tools
 - `memory_remember_episode`
@@ -212,16 +238,20 @@ Typical intent:
 - `/debug/routes` returns HTTP route registrations only
 - `/debug/tools` returns MCP tool registrations only
 
-For stdio MCP usage, the primary machine-readable source of tool argument requirements is `tools/list`, not the HTTP debug endpoints above.
+These endpoints are operational/debug surfaces.  
+They should not be treated as equivalent to the MCP protocol surface itself.
+
+For MCP usage, the primary machine-readable source of tool argument requirements is `tools/list` on `/mcp`, not the HTTP debug endpoints above.
 
 Typical payload shapes:
 
-```/dev/null/json#L1-28
+```/dev/null/json#L1-29
 {
   "runtime": [
     {
       "transport": "http",
       "routes": [
+        "mcp_rpc",
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",

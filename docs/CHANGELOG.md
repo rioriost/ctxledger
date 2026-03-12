@@ -126,6 +126,11 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ### Notes
 
+- the repository now also evidences a minimal HTTP MCP path at `/mcp`, including:
+  - `initialize`
+  - `tools/list`
+  - `tools/call`
+- current closeout framing should treat that minimal HTTP MCP path as proven, while still distinguishing it from broader protocol-scope claims that may need additional verification
 - runtime/status inspection is now consistently available from:
   - startup summary output
   - `health()`

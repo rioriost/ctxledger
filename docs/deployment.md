@@ -75,24 +75,30 @@ Recommended production topology:
 
 `ctxledger` is designed around a shared application core with separate transport adapters.
 
-Supported runtime modes:
+Supported runtime modes in the repository currently include:
 
-- Streamable HTTP
+- HTTP MCP at `/mcp`
 - stdio
 
 ### 4.1 Primary Runtime Mode
 
-For deployment, the primary mode is:
+For `v0.1.0`, the primary deployment and acceptance mode is:
 
-- Streamable HTTP
+- HTTP MCP at `/mcp`
 
-### 4.2 Development Runtime Mode
+The currently evidenced minimal HTTP MCP path supports:
 
-For local development and validation, stdio may also be used.
+- `initialize`
+- `tools/list`
+- `tools/call`
+
+### 4.2 Supporting Development Runtime Mode
+
+`stdio` may still exist in the repository as a supporting development/runtime surface, but it should not be treated as the primary `v0.1.0` deployment contract.
 
 ### 4.3 Deployment Recommendation
 
-Use HTTP mode for normal deployment, including Docker-based local operation.
+Use HTTP mode for normal deployment, including Docker-based local operation, and treat `/mcp` as the canonical MCP endpoint for `v0.1.0`.
 
 ---
 
@@ -156,9 +162,9 @@ See also:
 | Variable | Default | Purpose | Local / internal recommendation | Internet-exposed production recommendation |
 | --- | --- | --- | --- | --- |
 | `CTXLEDGER_DATABASE_URL` | none | PostgreSQL connection string for canonical state | set to local or shared development database | required; inject through secret management |
-| `CTXLEDGER_TRANSPORT` | `http` | selects enabled transport mode | `http` for Docker/local deployment, `both` only when explicitly needed | `http` unless there is a controlled need for `stdio` |
-| `CTXLEDGER_ENABLE_HTTP` | derived from transport | enables HTTP transport | keep aligned with `CTXLEDGER_TRANSPORT` | keep aligned with `CTXLEDGER_TRANSPORT` |
-| `CTXLEDGER_ENABLE_STDIO` | derived from transport | enables stdio transport | disable unless actively using stdio workflows | usually `false` |
+| `CTXLEDGER_TRANSPORT` | `http` | selects enabled transport mode | `http` for Docker/local deployment; avoid `both` unless explicitly validating non-primary transport behavior | `http` for the `v0.1.0` release posture |
+| `CTXLEDGER_ENABLE_HTTP` | derived from transport | enables HTTP transport | keep aligned with `CTXLEDGER_TRANSPORT`; expected `true` for normal local deployment | keep aligned with `CTXLEDGER_TRANSPORT`; expected `true` |
+| `CTXLEDGER_ENABLE_STDIO` | derived from transport | enables stdio transport | disable unless explicitly needed for internal development or comparison | usually `false`; not part of the primary `v0.1.0` deployment posture |
 | `CTXLEDGER_HOST` | `0.0.0.0` | HTTP bind host | `0.0.0.0` is acceptable in containers/local networks | bind according to network policy, typically behind a reverse proxy |
 | `CTXLEDGER_PORT` | `8080` | HTTP listen port | `8080` is a reasonable default | set explicitly to match deployment and proxy routing |
 | `CTXLEDGER_HTTP_PATH` | `/mcp` | MCP HTTP endpoint path | keep default unless integration requires a different path | keep stable and document it for proxy configuration |
