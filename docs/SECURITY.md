@@ -198,6 +198,22 @@ Representative observability guidance includes:
 - treat `workspace_id`, `workflow_instance_id`, and optional `projection_type` as sensitive operational identifiers that may appear in access logs
 - prefer structured logs or proxy fields that make operator-triggered closure events easy to correlate during incident review
 
+Representative edge logging example:
+
+```/dev/null/log#L1-8
+ts=2026-03-12T10:15:30Z layer=edge event=projection_failure_action_request method=GET path=/projection_failures_ignore auth.result=success response.status=404
+workspace_id=11111111-1111-1111-1111-111111111111 workflow_instance_id=22222222-2222-2222-2222-222222222222 projection_type=resume_json
+error.code=not_found error.message="projection failure ignore endpoint requires /projection_failures_ignore"
+forwarded_host=ctxledger.internal request_id=req_123 operator.subject=ops-user-7
+```
+
+This kind of logging should make it possible to distinguish at least:
+
+- successful operator-triggered ignore/resolve actions
+- rejected requests caused by bearer-auth failure
+- invalid-path `404 not_found` responses caused by proxy or caller path mismatch
+- validation-driven `400 invalid_request` responses caused by malformed or missing selector fields
+
 Representative operational risks include:
 
 - hiding active failure visibility too early by marking failures as `ignored`
