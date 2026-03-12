@@ -7,7 +7,7 @@ This project provides a **remote MCP server** implementing:
 1. **Durable Workflow Control**
 2. **Multi-layer Agent Memory**
 3. **PostgreSQL-backed canonical state**
-4. **MCP 2025-03-26 compatible interface**
+4. **[MCP 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26) compatible interface**
 5. **Docker deployment**
 
 The system is designed for AI agent editors (Zed and other MCP-compatible tools)
