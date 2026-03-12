@@ -282,6 +282,39 @@ Representative reverse-proxy expectations:
   - which workflow-scoping identifiers were present
   - the response status returned to the caller
 
+Representative reverse-proxy example:
+
+This is a representative Nginx-style example showing exact path matching for the HTTP action routes.  It is intentionally illustrative rather than production-complete.
+
+```/dev/null/nginx.conf#L1-20
+location = /projection_failures_ignore {
+    proxy_pass http://ctxledger_upstream;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    # Preserve normal operator-facing request logging.
+    access_log /var/log/nginx/ctxledger-action-access.log;
+}
+
+location = /projection_failures_resolve {
+    proxy_pass http://ctxledger_upstream;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    # Preserve normal operator-facing request logging.
+    access_log /var/log/nginx/ctxledger-action-access.log;
+}
+```
+
+Representative implications of this example:
+
+- exact path matching avoids accidentally accepting alternate action paths such as prefixed or rewritten variants
+- operator-facing auth and TLS policy should be applied consistently to both action routes
+- access logging should preserve enough request/response visibility for later incident review
+- query parameters may contain operational identifiers, so log retention and access policy should reflect that sensitivity
+
 For the broader security posture around bearer authentication, secret handling, and `/debug/*` exposure, see `SECURITY.md`.
 
 ---
