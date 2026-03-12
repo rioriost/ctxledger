@@ -4,7 +4,7 @@ import logging
 import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -32,6 +32,8 @@ from ctxledger.server import (
     StdioRuntimeAdapter,
     WorkflowResumeResponse,
     _print_runtime_summary,
+    build_closed_projection_failures_http_handler,
+    build_closed_projection_failures_response,
     build_database_health_checker,
     build_http_runtime_adapter,
     build_memory_get_context_tool_handler,
@@ -47,6 +49,7 @@ from ctxledger.server import (
     create_server,
     dispatch_http_request,
     dispatch_mcp_tool,
+    parse_closed_projection_failures_request_path,
     parse_workflow_resume_request_path,
     serialize_runtime_introspection,
     serialize_runtime_introspection_collection,
@@ -117,7 +120,10 @@ class FakeWorkflowService:
         return self.resume_result
 
 
-def make_resume_fixture() -> WorkflowResume:
+def make_resume_fixture(
+    *,
+    closed_projection_failures: tuple[object, ...] = (),
+) -> WorkflowResume:
     workspace_id = uuid4()
     workflow_instance_id = uuid4()
     attempt_id = uuid4()
@@ -208,6 +214,7 @@ def make_resume_fixture() -> WorkflowResume:
         resumable_status=ResumableStatus.RESUMABLE,
         projections=projections,
         warnings=warnings,
+        closed_projection_failures=closed_projection_failures,
         next_hint="Serialize resume output",
     )
 
@@ -608,6 +615,49 @@ def test_serialize_workflow_resume_returns_api_ready_payload() -> None:
             },
         }
     ]
+    assert payload["closed_projection_failures"] == []
+
+
+def test_serialize_workflow_resume_includes_closed_projection_failures() -> None:
+    attempt_id = uuid4()
+    closed_projection_failures = (
+        type(
+            "ClosedProjectionFailure",
+            (),
+            {
+                "projection_type": ProjectionArtifactType.RESUME_JSON,
+                "target_path": ".agent/resume.json",
+                "attempt_id": attempt_id,
+                "error_code": "EACCES",
+                "error_message": "permission denied",
+                "occurred_at": datetime(2024, 1, 9, tzinfo=UTC),
+                "resolved_at": datetime(2024, 1, 10, tzinfo=UTC),
+                "open_failure_count": 0,
+                "retry_count": 2,
+                "status": "ignored",
+            },
+        )(),
+    )
+    resume = make_resume_fixture(
+        closed_projection_failures=closed_projection_failures,
+    )
+
+    payload = serialize_workflow_resume(resume)
+
+    assert payload["closed_projection_failures"] == [
+        {
+            "projection_type": "resume_json",
+            "target_path": ".agent/resume.json",
+            "attempt_id": str(attempt_id),
+            "error_code": "EACCES",
+            "error_message": "permission denied",
+            "occurred_at": "2024-01-09T00:00:00+00:00",
+            "resolved_at": "2024-01-10T00:00:00+00:00",
+            "open_failure_count": 0,
+            "retry_count": 2,
+            "status": "ignored",
+        }
+    ]
 
 
 def test_build_workflow_resume_response_returns_success_payload() -> None:
@@ -654,6 +704,89 @@ def test_build_workflow_resume_response_returns_503_when_workflow_service_is_not
     }
 
 
+def test_build_closed_projection_failures_response_returns_success_payload() -> None:
+    attempt_id = uuid4()
+    closed_projection_failures = (
+        type(
+            "ClosedProjectionFailure",
+            (),
+            {
+                "projection_type": ProjectionArtifactType.RESUME_JSON,
+                "target_path": ".agent/resume.json",
+                "attempt_id": attempt_id,
+                "error_code": "EACCES",
+                "error_message": "permission denied",
+                "occurred_at": datetime(2024, 1, 9, tzinfo=UTC),
+                "resolved_at": datetime(2024, 1, 10, tzinfo=UTC),
+                "open_failure_count": 0,
+                "retry_count": 2,
+                "status": "ignored",
+            },
+        )(),
+    )
+    resume = make_resume_fixture(
+        closed_projection_failures=closed_projection_failures,
+    )
+    settings = make_settings()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    server.startup()
+
+    response = build_closed_projection_failures_response(
+        server,
+        resume.workflow_instance.workflow_instance_id,
+    )
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+        "closed_projection_failures": [
+            {
+                "projection_type": "resume_json",
+                "target_path": ".agent/resume.json",
+                "attempt_id": str(attempt_id),
+                "error_code": "EACCES",
+                "error_message": "permission denied",
+                "occurred_at": "2024-01-09T00:00:00+00:00",
+                "resolved_at": "2024-01-10T00:00:00+00:00",
+                "open_failure_count": 0,
+                "retry_count": 2,
+                "status": "ignored",
+            }
+        ],
+    }
+
+
+def test_build_closed_projection_failures_response_returns_503_when_workflow_service_is_not_initialized() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+
+    response = build_closed_projection_failures_response(server, uuid4())
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 503
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+
+
 def test_parse_workflow_resume_request_path_returns_uuid_for_valid_path() -> None:
     workflow_instance_id = uuid4()
 
@@ -675,6 +808,44 @@ def test_parse_workflow_resume_request_path_returns_none_for_invalid_path() -> N
     assert parse_workflow_resume_request_path("/workflow-resume") is None
     assert parse_workflow_resume_request_path("/workflow-resume/not-a-uuid") is None
     assert parse_workflow_resume_request_path("/other/endpoint") is None
+
+
+def test_parse_closed_projection_failures_request_path_returns_uuid_for_valid_path() -> (
+    None
+):
+    workflow_instance_id = uuid4()
+
+    assert (
+        parse_closed_projection_failures_request_path(
+            f"/workflow-resume/{workflow_instance_id}/closed-projection-failures"
+        )
+        == workflow_instance_id
+    )
+    assert (
+        parse_closed_projection_failures_request_path(
+            f"/workflow-resume/{workflow_instance_id}/closed-projection-failures?format=json"
+        )
+        == workflow_instance_id
+    )
+
+
+def test_parse_closed_projection_failures_request_path_returns_none_for_invalid_path() -> (
+    None
+):
+    assert parse_closed_projection_failures_request_path("") is None
+    assert parse_closed_projection_failures_request_path("/") is None
+    assert parse_closed_projection_failures_request_path("/workflow-resume") is None
+    assert (
+        parse_closed_projection_failures_request_path(
+            "/workflow-resume/not-a-uuid/closed-projection-failures"
+        )
+        is None
+    )
+    assert (
+        parse_closed_projection_failures_request_path("/workflow-resume/not-a-uuid")
+        is None
+    )
+    assert parse_closed_projection_failures_request_path("/other/endpoint") is None
 
 
 def test_build_workflow_resume_http_handler_returns_success_response() -> None:
@@ -737,6 +908,117 @@ def test_build_workflow_resume_http_handler_returns_503_when_server_is_not_ready
     handler = build_workflow_resume_http_handler(server)
 
     response = handler(f"/workflow-resume/{uuid4()}")
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 503
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_closed_projection_failures_http_handler_returns_success_response() -> (
+    None
+):
+    attempt_id = uuid4()
+    closed_projection_failures = (
+        type(
+            "ClosedProjectionFailure",
+            (),
+            {
+                "projection_type": ProjectionArtifactType.RESUME_JSON,
+                "target_path": ".agent/resume.json",
+                "attempt_id": attempt_id,
+                "error_code": "EACCES",
+                "error_message": "permission denied",
+                "occurred_at": datetime(2024, 1, 9, tzinfo=UTC),
+                "resolved_at": datetime(2024, 1, 10, tzinfo=UTC),
+                "open_failure_count": 0,
+                "retry_count": 2,
+                "status": "ignored",
+            },
+        )(),
+    )
+    resume = make_resume_fixture(
+        closed_projection_failures=closed_projection_failures,
+    )
+    settings = make_settings()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_closed_projection_failures_http_handler(server)
+
+    server.startup()
+
+    response = handler(
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}/closed-projection-failures"
+    )
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+        "closed_projection_failures": [
+            {
+                "projection_type": "resume_json",
+                "target_path": ".agent/resume.json",
+                "attempt_id": str(attempt_id),
+                "error_code": "EACCES",
+                "error_message": "permission denied",
+                "occurred_at": "2024-01-09T00:00:00+00:00",
+                "resolved_at": "2024-01-10T00:00:00+00:00",
+                "open_failure_count": 0,
+                "retry_count": 2,
+                "status": "ignored",
+            }
+        ],
+    }
+
+
+def test_build_closed_projection_failures_http_handler_returns_not_found_for_invalid_path() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_closed_projection_failures_http_handler(server)
+
+    response = handler("/workflow-resume/not-a-uuid/closed-projection-failures")
+
+    assert isinstance(response, WorkflowResumeResponse)
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "closed projection failures endpoint requires /workflow-resume/{workflow_instance_id}/closed-projection-failures",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_closed_projection_failures_http_handler_returns_503_when_server_is_not_ready() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_closed_projection_failures_http_handler(server)
+
+    response = handler(f"/workflow-resume/{uuid4()}/closed-projection-failures")
 
     assert isinstance(response, WorkflowResumeResponse)
     assert response.status_code == 503
@@ -812,6 +1094,7 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
+        "workflow_closed_projection_failures",
         "workflow_resume",
     )
 
@@ -824,6 +1107,69 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
 
     assert response.status_code == 200
     assert response.payload == serialize_workflow_resume(resume)
+
+
+def test_http_runtime_adapter_dispatches_registered_closed_projection_failures_handler() -> (
+    None
+):
+    attempt_id = uuid4()
+    closed_projection_failures = (
+        type(
+            "ClosedProjectionFailure",
+            (),
+            {
+                "projection_type": ProjectionArtifactType.RESUME_JSON,
+                "target_path": ".agent/resume.json",
+                "attempt_id": attempt_id,
+                "error_code": "EACCES",
+                "error_message": "permission denied",
+                "occurred_at": datetime(2024, 1, 9, tzinfo=UTC),
+                "resolved_at": datetime(2024, 1, 10, tzinfo=UTC),
+                "open_failure_count": 0,
+                "retry_count": 2,
+                "status": "ignored",
+            },
+        )(),
+    )
+    resume = make_resume_fixture(
+        closed_projection_failures=closed_projection_failures,
+    )
+    settings = make_settings()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "workflow_closed_projection_failures",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}/closed-projection-failures",
+    )
+
+    assert response.status_code == 200
+    assert response.payload == {
+        "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+        "closed_projection_failures": [
+            {
+                "projection_type": "resume_json",
+                "target_path": ".agent/resume.json",
+                "attempt_id": str(attempt_id),
+                "error_code": "EACCES",
+                "error_message": "permission denied",
+                "occurred_at": "2024-01-09T00:00:00+00:00",
+                "resolved_at": "2024-01-10T00:00:00+00:00",
+                "open_failure_count": 0,
+                "retry_count": 2,
+                "status": "ignored",
+            }
+        ],
+    }
+    assert response.headers == {"content-type": "application/json"}
 
 
 def test_http_workflow_resume_route_requires_bearer_token_when_auth_is_enabled() -> (
@@ -849,6 +1195,7 @@ def test_http_workflow_resume_route_requires_bearer_token_when_auth_is_enabled()
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
+        "workflow_closed_projection_failures",
         "workflow_resume",
     )
 
@@ -893,6 +1240,104 @@ def test_http_workflow_resume_route_requires_bearer_token_when_auth_is_enabled()
 
     assert valid_token_response.status_code == 200
     assert valid_token_response.payload == serialize_workflow_resume(resume)
+
+
+def test_http_closed_projection_failures_route_requires_bearer_token_when_auth_is_enabled() -> (
+    None
+):
+    attempt_id = uuid4()
+    closed_projection_failures = (
+        type(
+            "ClosedProjectionFailure",
+            (),
+            {
+                "projection_type": ProjectionArtifactType.RESUME_JSON,
+                "target_path": ".agent/resume.json",
+                "attempt_id": attempt_id,
+                "error_code": "EACCES",
+                "error_message": "permission denied",
+                "occurred_at": datetime(2024, 1, 9, tzinfo=UTC),
+                "resolved_at": datetime(2024, 1, 10, tzinfo=UTC),
+                "open_failure_count": 0,
+                "retry_count": 2,
+                "status": "ignored",
+            },
+        )(),
+    )
+    resume = make_resume_fixture(
+        closed_projection_failures=closed_projection_failures,
+    )
+    settings = make_settings(
+        auth_bearer_token="secret-token",
+        require_auth=True,
+    )
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    missing_token_response = runtime.dispatch(
+        "workflow_closed_projection_failures",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}/closed-projection-failures",
+    )
+    invalid_token_response = runtime.dispatch(
+        "workflow_closed_projection_failures",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}/closed-projection-failures?authorization=Bearer wrong-token",
+    )
+    valid_token_response = runtime.dispatch(
+        "workflow_closed_projection_failures",
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}/closed-projection-failures?authorization=Bearer secret-token",
+    )
+
+    assert missing_token_response.status_code == 401
+    assert missing_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "missing bearer token",
+        }
+    }
+    assert missing_token_response.headers == {
+        "content-type": "application/json",
+        "www-authenticate": 'Bearer realm="ctxledger"',
+    }
+
+    assert invalid_token_response.status_code == 401
+    assert invalid_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "invalid bearer token",
+        }
+    }
+    assert invalid_token_response.headers == {
+        "content-type": "application/json",
+        "www-authenticate": 'Bearer realm="ctxledger"',
+    }
+
+    assert valid_token_response.status_code == 200
+    assert valid_token_response.payload == {
+        "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+        "closed_projection_failures": [
+            {
+                "projection_type": "resume_json",
+                "target_path": ".agent/resume.json",
+                "attempt_id": str(attempt_id),
+                "error_code": "EACCES",
+                "error_message": "permission denied",
+                "occurred_at": "2024-01-09T00:00:00+00:00",
+                "resolved_at": "2024-01-10T00:00:00+00:00",
+                "open_failure_count": 0,
+                "retry_count": 2,
+                "status": "ignored",
+            }
+        ],
+    }
 
 
 def test_http_debug_routes_require_bearer_token_when_auth_is_enabled() -> None:

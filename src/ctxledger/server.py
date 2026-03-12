@@ -70,6 +70,13 @@ class WorkflowResumeResponse:
 
 
 @dataclass(slots=True)
+class ProjectionFailureHistoryResponse:
+    status_code: int
+    payload: dict[str, Any]
+    headers: dict[str, str]
+
+
+@dataclass(slots=True)
 class RuntimeIntrospectionResponse:
     status_code: int
     payload: dict[str, Any]
@@ -426,6 +433,33 @@ class CtxLedgerServer:
             headers={"content-type": "application/json"},
         )
 
+    def build_closed_projection_failures_response(
+        self,
+        workflow_instance_id: UUID,
+    ) -> ProjectionFailureHistoryResponse:
+        try:
+            resume = self.get_workflow_resume(workflow_instance_id)
+        except ServerBootstrapError as exc:
+            return ProjectionFailureHistoryResponse(
+                status_code=503,
+                payload={
+                    "error": {
+                        "code": "server_not_ready",
+                        "message": str(exc),
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return ProjectionFailureHistoryResponse(
+            status_code=200,
+            payload=serialize_closed_projection_failures_history(
+                workflow_instance_id,
+                getattr(resume, "closed_projection_failures", ()),
+            ),
+            headers={"content-type": "application/json"},
+        )
+
     def build_runtime_introspection_response(self) -> RuntimeIntrospectionResponse:
         introspections = collect_runtime_introspection(self.runtime)
         return RuntimeIntrospectionResponse(
@@ -701,6 +735,65 @@ def serialize_workflow_resume(resume: WorkflowResume) -> dict[str, Any]:
             }
             for warning in resume.warnings
         ],
+        "closed_projection_failures": [
+            {
+                "projection_type": failure.projection_type.value,
+                "target_path": failure.target_path,
+                "attempt_id": (
+                    str(failure.attempt_id) if failure.attempt_id is not None else None
+                ),
+                "error_code": failure.error_code,
+                "error_message": failure.error_message,
+                "occurred_at": (
+                    failure.occurred_at.isoformat()
+                    if failure.occurred_at is not None
+                    else None
+                ),
+                "resolved_at": (
+                    failure.resolved_at.isoformat()
+                    if failure.resolved_at is not None
+                    else None
+                ),
+                "open_failure_count": failure.open_failure_count,
+                "retry_count": failure.retry_count,
+                "status": failure.status,
+            }
+            for failure in getattr(resume, "closed_projection_failures", ())
+        ],
+    }
+
+
+def serialize_closed_projection_failures_history(
+    workflow_instance_id: UUID,
+    closed_projection_failures: tuple[Any, ...] | list[Any],
+) -> dict[str, Any]:
+    return {
+        "workflow_instance_id": str(workflow_instance_id),
+        "closed_projection_failures": [
+            {
+                "projection_type": failure.projection_type.value,
+                "target_path": failure.target_path,
+                "attempt_id": (
+                    str(failure.attempt_id) if failure.attempt_id is not None else None
+                ),
+                "error_code": failure.error_code,
+                "error_message": failure.error_message,
+                "occurred_at": (
+                    failure.occurred_at.isoformat()
+                    if failure.occurred_at is not None
+                    else None
+                ),
+                "resolved_at": (
+                    failure.resolved_at.isoformat()
+                    if failure.resolved_at is not None
+                    else None
+                ),
+                "open_failure_count": failure.open_failure_count,
+                "retry_count": failure.retry_count,
+                "status": failure.status,
+            }
+            for failure in closed_projection_failures
+        ],
     }
 
 
@@ -884,6 +977,13 @@ def build_workflow_resume_response(
     return server.build_workflow_resume_response(workflow_instance_id)
 
 
+def build_closed_projection_failures_response(
+    server: CtxLedgerServer,
+    workflow_instance_id: UUID,
+) -> ProjectionFailureHistoryResponse:
+    return server.build_closed_projection_failures_response(workflow_instance_id)
+
+
 def build_runtime_introspection_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
@@ -944,6 +1044,60 @@ def build_workflow_resume_http_handler(
             )
 
         return build_workflow_resume_response(server, workflow_instance_id)
+
+    return _handler
+
+
+def parse_closed_projection_failures_request_path(path: str) -> UUID | None:
+    normalized_path = path.strip()
+    if not normalized_path:
+        return None
+
+    path_without_query = normalized_path.split("?", 1)[0]
+    trimmed = path_without_query.strip("/")
+    if not trimmed:
+        return None
+
+    parts = trimmed.split("/")
+    if (
+        len(parts) != 3
+        or parts[0] != "workflow-resume"
+        or parts[2] != "closed-projection-failures"
+    ):
+        return None
+
+    try:
+        return UUID(parts[1])
+    except ValueError:
+        return None
+
+
+def build_closed_projection_failures_http_handler(
+    server: CtxLedgerServer,
+):
+    def _handler(path: str) -> ProjectionFailureHistoryResponse:
+        auth_error = _require_http_bearer_auth(server, path)
+        if auth_error is not None:
+            return ProjectionFailureHistoryResponse(
+                status_code=auth_error.status_code,
+                payload=auth_error.payload,
+                headers=auth_error.headers,
+            )
+
+        workflow_instance_id = parse_closed_projection_failures_request_path(path)
+        if workflow_instance_id is None:
+            return ProjectionFailureHistoryResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": "closed projection failure endpoint requires /workflow-resume/{workflow_instance_id}/closed-projection-failures",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        return build_closed_projection_failures_response(server, workflow_instance_id)
 
     return _handler
 
@@ -1232,6 +1386,10 @@ def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
         "workflow_resume",
         build_workflow_resume_http_handler(server),
     )
+    runtime.register_handler(
+        "closed_projection_failures",
+        build_closed_projection_failures_http_handler(server),
+    )
     return runtime
 
 
@@ -1481,6 +1639,7 @@ __all__ = [
     "HealthStatus",
     "HttpRuntimeAdapter",
     "McpToolResponse",
+    "ProjectionFailureHistoryResponse",
     "ReadinessStatus",
     "RuntimeDispatchResult",
     "RuntimeIntrospection",
@@ -1490,6 +1649,8 @@ __all__ = [
     "StdioRuntimeAdapter",
     "WorkflowResumeResponse",
     "WorkflowServiceFactory",
+    "build_closed_projection_failures_http_handler",
+    "build_closed_projection_failures_response",
     "build_http_runtime_adapter",
     "build_mcp_error_response",
     "build_mcp_success_response",
@@ -1512,8 +1673,10 @@ __all__ = [
     "create_server",
     "dispatch_http_request",
     "dispatch_mcp_tool",
+    "parse_closed_projection_failures_request_path",
     "parse_workflow_resume_request_path",
     "run_server",
+    "serialize_closed_projection_failures_history",
     "serialize_runtime_introspection",
     "serialize_runtime_introspection_collection",
     "serialize_stub_response",

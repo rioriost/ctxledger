@@ -420,9 +420,28 @@ Representative behavior:
   - emit `open projection failure`
 - `projection.status = failed` and `open_failure_count = 0`
   - do not emit `open projection failure`
+  - emit either `ignored projection failure` or `resolved projection failure` when closed failure history exists
   - retain failed projection state for diagnosis
 - `projection.status = fresh`
   - open projection failure warnings should not remain after successful reconciliation
+
+Closed failure visibility should remain available in the assembled resume model even after failures are no longer open.
+
+Representative read-side surfaces include:
+
+- closed failure history attached to the resume result
+- warning details containing closed failure entries
+- failure metadata including:
+  - `projection_type`
+  - `target_path`
+  - `attempt_id`
+  - `error_code`
+  - `error_message`
+  - `occurred_at`
+  - `resolved_at`
+  - `open_failure_count`
+  - `retry_count`
+  - `status`
 
 ## 13.3 Repeated Failure and Retry Metadata
 
@@ -432,8 +451,11 @@ Representative fields include:
 
 - `projection_type`
 - `target_path`
+- `attempt_id`
 - `error_code`
 - `error_message`
+- `occurred_at`
+- `resolved_at`
 - `open_failure_count`
 - `retry_count`
 - `status`
