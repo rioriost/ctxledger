@@ -143,6 +143,7 @@ from .mcp.rpc import handle_mcp_rpc_request
 from .mcp.stdio import (
     StdioRpcServer,
     StdioRuntimeAdapter,
+    build_stdio_runtime,
     dispatch_mcp_resource,
     dispatch_mcp_tool,
     find_stdio_runtime,
@@ -1904,10 +1905,10 @@ def create_runtime(
         runtimes.append(http_runtime)
 
     if settings.stdio.enabled:
-        stdio_runtime = (
-            build_stdio_runtime_adapter(server)
-            if server is not None
-            else StdioRuntimeAdapter(settings)
+        stdio_runtime = build_stdio_runtime(
+            settings,
+            server=server,
+            runtime_builder=build_stdio_runtime_adapter,
         )
         runtimes.append(stdio_runtime)
 

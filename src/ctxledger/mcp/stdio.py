@@ -35,6 +35,7 @@ McpToolHandler = Any
 McpResourceHandler = Any
 StdioToolHandlerFactory = Callable[[Any], tuple[McpToolHandler, McpToolSchema | None]]
 StdioResourceHandlerFactory = Callable[[Any], McpResourceHandler]
+StdioRuntimeBuilder = Callable[[Any], "StdioRuntimeAdapter"]
 
 
 class StdioRuntimeProtocol(Protocol):
@@ -327,6 +328,17 @@ def build_stdio_runtime_adapter(
     return runtime
 
 
+def build_stdio_runtime(
+    settings: Any,
+    *,
+    server: Any | None,
+    runtime_builder: StdioRuntimeBuilder,
+) -> StdioRuntimeAdapter:
+    if server is not None:
+        return runtime_builder(server)
+    return StdioRuntimeAdapter(settings)
+
+
 def find_stdio_runtime(runtime: Any) -> StdioRuntimeAdapter | None:
     if isinstance(runtime, StdioRuntimeAdapter):
         return runtime
@@ -356,9 +368,11 @@ __all__ = [
     "StdioResourceHandlerFactory",
     "StdioRpcServer",
     "StdioRuntimeAdapter",
+    "StdioRuntimeBuilder",
     "StdioRuntimeProtocol",
     "StdioToolHandlerFactory",
     "StdioTransportIntrospection",
+    "build_stdio_runtime",
     "build_stdio_runtime_adapter",
     "dispatch_mcp_resource",
     "dispatch_mcp_tool",
