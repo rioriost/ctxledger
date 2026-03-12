@@ -8,6 +8,7 @@ This document describes the current security posture of `ctxledger` in `v0.1.0`,
 - transport exposure guidance
 - secret-handling guidance
 - operational considerations for `/debug/*`
+- operational cautions for HTTP action routes
 - current limitations that operators should understand before deployment
 
 `ctxledger` is still in an early implementation phase.  
@@ -96,6 +97,8 @@ Representative HTTP route names exposed by these debug surfaces may include:
 - `runtime_tools`
 - `workflow_resume`
 - `workflow_closed_projection_failures`
+- `projection_failures_ignore`
+- `projection_failures_resolve`
 
 These endpoints are useful for diagnostics, but they can reveal operational metadata such as:
 
@@ -106,6 +109,8 @@ These endpoints are useful for diagnostics, but they can reveal operational meta
   - `runtime_tools`
   - `workflow_resume`
   - `workflow_closed_projection_failures`
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
 - registered stdio tools
 - runtime wiring state
 
@@ -153,6 +158,41 @@ If an operator has a strong reason to keep `/debug/*` enabled in production, the
 - behind TLS
 - behind a reverse proxy
 - restricted to trusted operators
+
+## 4.4 HTTP Action Route Cautions
+
+`ctxledger` also exposes HTTP mutation routes for projection failure lifecycle handling.
+
+Current action routes include:
+
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+
+These routes mutate canonical projection failure lifecycle state.  They do not merely return diagnostic metadata, and they should not be treated like low-risk read endpoints.
+
+Operational cautions:
+
+1. treat these routes as state-changing operator actions, even though their current HTTP contract may be invoked through query-parameter-based requests
+2. protect them with the same bearer-auth boundary as other protected HTTP endpoints whenever HTTP auth is enabled
+3. avoid exposing them to untrusted callers, because a successful request can change whether open projection failures remain operationally visible
+4. prefer routing them only through trusted operator paths such as an authenticated reverse proxy, VPN, private network, or equivalent internal access boundary
+5. do not treat `projection_failures_ignore` as a repair mechanism; it closes visibility of matching open failures without claiming successful projection recovery
+6. reserve `projection_failures_resolve` for cases where successful reconciliation or equivalent recovery evidence exists
+7. preserve normal operational logging around the use of these routes so that manual lifecycle closure actions remain observable during incident review
+
+Representative operational risks include:
+
+- hiding active failure visibility too early by marking failures as `ignored`
+- asserting successful recovery semantics too early by marking failures as `resolved`
+- allowing broad callers to mutate workflow-related operational state without sufficient operator intent
+- confusing projection artifact state with failure lifecycle state
+
+Recommended production posture:
+
+- require authentication for HTTP access
+- expose mutation routes only to trusted operators
+- place the service behind TLS and a reverse proxy
+- treat these routes as operational control surfaces rather than public integration endpoints
 
 ---
 

@@ -212,6 +212,8 @@ Representative HTTP route names exposed by these debug surfaces may include:
 - `runtime_tools`
 - `workflow_resume`
 - `workflow_closed_projection_failures`
+- `projection_failures_ignore`
+- `projection_failures_resolve`
 
 Deployment policy:
 
@@ -242,10 +244,26 @@ The payloads returned by `/debug/*` may reveal details such as:
   - `runtime_tools`
   - `workflow_resume`
   - `workflow_closed_projection_failures`
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
 - registered stdio tools
 - runtime wiring state
 
 These details are useful for diagnostics but increase observability exposure, so they should be treated as operationally sensitive.
+
+In addition to `/debug/*`, operators should also treat HTTP projection failure action routes as operational mutation surfaces:
+
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+
+Operational guidance for these routes:
+
+- protect them with the same bearer-auth boundary as other protected HTTP endpoints
+- expose them only to trusted operators or trusted automation
+- prefer TLS termination and reverse-proxy access control when the HTTP surface is network-accessible
+- treat query parameters such as `workspace_id`, `workflow_instance_id`, and optional `projection_type` as operational identifiers that may reveal internal workflow metadata in logs or access traces
+- avoid using these routes as general client-facing APIs; they are intended for explicit lifecycle handling of projection failures
+- remember that `ignored` closes visibility of an open failure without claiming successful projection repair, while `resolved` should be used only when reconciliation or equivalent recovery evidence exists
 
 For the broader security posture around bearer authentication, secret handling, and `/debug/*` exposure, see `SECURITY.md`.
 

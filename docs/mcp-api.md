@@ -143,7 +143,7 @@ Implemented request shape for these HTTP action routes:
   - `projection_type` (optional)
   - `authorization` (when HTTP auth is enabled)
 
-Representative HTTP request examples:
+Representative HTTP request examples when authentication is enabled:
 
 ```/dev/null/http#L1-2
 GET /projection_failures_ignore?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222&projection_type=resume_json
@@ -153,6 +153,16 @@ Authorization: Bearer example-token
 ```/dev/null/http#L1-2
 GET /projection_failures_resolve?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222
 Authorization: Bearer example-token
+```
+
+Representative HTTP request examples when authentication is disabled:
+
+```/dev/null/http#L1-1
+GET /projection_failures_ignore?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222&projection_type=resume_md
+```
+
+```/dev/null/http#L1-1
+GET /projection_failures_resolve?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222
 ```
 
 Representative design constraints for such action surfaces include:
