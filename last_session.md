@@ -1,68 +1,149 @@
-Phase 3 — Minimal HTTP MCP implementation に着手して、`/mcp` の HTTP MCP surface を実装・検証するところまで進めました。
+Docs realignment progress まで進めました。
 
 更新した内容:
 
-- `ctxledger/src/ctxledger/server.py`
-  - HTTP runtime に `mcp_rpc` ハンドラが実際に載る構成を確認
-  - `/mcp` で JSON-RPC request body を受ける HTTP MCP handler が動作する状態を整理
-  - HTTP 経由で `initialize` / `tools/list` / `tools/call` を通す最小 MCP flow が使えることを確認
-  - bearer token 認証ありの `/mcp` も同じ経路で動く前提が整っていることを確認
+- `ctxledger/docs/plans/http_mcp_acceptance_remediation_plan.md`
+  - 以前の「`/mcp` の HTTP MCP endpoint evidence is still missing」という前提を是正
+  - 現在は `/mcp` での最小 HTTP MCP path が repository 上で証明されている前提に更新
+  - `initialize` / `tools/list` / `tools/call` が HTTP で確認済みであることを反映
+  - blocker classification を
+    - **major implementation blocker**
+    から
+    - **substantially remediated for the minimal HTTP MCP path**
+    に更新
+  - 残課題を
+    - endpoint 不在
+    ではなく
+    - acceptance wording / remaining scope alignment
+    に再設定
+  - Phase 5 の test remediation も、未証明扱いではなく
+    “minimal HTTP MCP path は test-backed”
+    という前提に更新
 
-- `ctxledger/tests/test_server.py`
-  - HTTP `/mcp` に対する MCP テストを追加
-  - 追加した主な確認項目:
-    - HTTP `initialize`
-    - HTTP `tools/list`
-    - HTTP `tools/call`
-    - body なし request の 400
-    - `/mcp` 以外の path に対する 404
-    - auth 有効時の 401 / 成功時の 200
-  - debug endpoints 無効時でも `mcp_rpc` が残ることに合わせて既存期待値を修正
+- `ctxledger/docs/imple_plan_review_0.1.0.md`
+  - high-level assessment を更新
+  - 現在の main issue を
+    - 「HTTP MCP endpoint がない」
+    ではなく
+    - 「minimal HTTP MCP path はあるが、acceptance boundary の明確化が必要」
+    へ変更
+  - likely incomplete/unverified を
+    - full HTTP MCP closeout coverage
+    - HTTP MCP resources if required
+    に寄せて整理
+  - acceptance criteria section に
+    - `/mcp` で `initialize` / `tools/list` / `tools/call`
+      が見えていることを反映
+
+- `ctxledger/docs/v0.1.0_acceptance_evidence.md`
+  - acceptance matrix を HTTP-first の現実に合わせて更新
+  - `MCP workflow tools are callable` を
+    - HTTP `/mcp` 最小 path が証明済み
+    という評価へ修正
+  - `Docker-based local deployment works` も
+    - minimal `/mcp` flow の証拠あり
+    に更新
+  - public surface snapshot に
+    - `HTTP MCP route set`
+    として `/mcp`
+      - `initialize`
+      - `tools/list`
+      - `tools/call`
+    を追加
+  - closeout gaps を
+    - “HTTP MCP endpoint proof is still missing”
+    から
+    - “minimal HTTP MCP path is evidenced, but closeout precision is still needed”
+    に修正
+  - closeout assessment も
+    - **not yet proven**
+    ではなく
+    - **proven for the minimal path**
+    に更新
+
+## テスト状態
+
+docs 更新後の確認として、少なくとも関連テストは通っている前提です。
+
+- `tests/test_server.py`
+- `tests/test_cli.py`
+- `tests/test_config.py`
+
+合計で **198 passed** の状態まで確認済みです。
 
 ## 現在の整理
-ここまでで、少なくとも repository 上の「`/mcp` が placeholder ではなく最小 HTTP MCP endpoint として振る舞う」という証拠はかなり強くなりました。
 
-- `/mcp` で `initialize` が返る
-- `/mcp` で `tools/list` が返る
-- `/mcp` で `tools/call` が返る
-- auth 有効時の保護動作も HTTP MCP 側で確認できる
-- `tests/test_server.py` は **163 passed**
+ここまでで状況はかなりはっきりしました。
 
-## 重要な観察
-今回の実装・検証で見えたこと:
-
-- 以前 docs で blocker としていた「`/mcp` の usable remote MCP endpoint の証拠がない」という状態は、少なくとも code/test レベルではかなり解消された
-- ただし現時点の実装は **JSON-RPC over single HTTP request/response の最小形** であり、
-  docs 側で目標としている “MCP 2025-03-26 compatible” や “Streamable HTTP” と完全に一致しているかは、まだ別途整理が必要
-- つまり blocker は
-  - 「HTTP MCP endpoint がない」
-  から
-  - 「この最小 HTTP MCP 実装を release acceptance wording とどう整合させるか」
-  に少し移った
+- `v0.1.0` の主軸は引き続き **HTTP MCP transport**
+- ただし main blocker はもう
+  **`/mcp` に HTTP MCP endpoint の証拠がない**
+  ではない
+- 現在の main question は:
+  - いま証明済みの **minimal HTTP MCP path**
+    (`initialize` / `tools/list` / `tools/call`)
+    を `v0.1.0` acceptance としてどこまで主張するか
+  - `resources/list` / `resources/read` を HTTP でも必須にするか
+  - “MCP 2025-03-26 compatible” や “Streamable HTTP” の wording を
+    `v0.1.0` でどう扱うか
 
 ## 次にやるべきこと
-次フェーズ候補はこのあたりです。
 
-1. docs/evidence を現実に合わせて更新
-   - `docs/plans/http_mcp_acceptance_remediation_plan.md`
-   - `docs/imple_plan_review_0.1.0.md`
-   - `docs/v0.1.0_acceptance_evidence.md`
+次フェーズとして自然なのはこのどちらかです。
 
-2. 必要なら HTTP `resources/list` / `resources/read` も acceptance に合わせて追加確認
+### 1. release wording / scope decision を詰める
+やること:
+- `README.md`
+- `docs/mcp-api.md`
+- `docs/specification.md`
+- `docs/deployment.md`
+- `docs/architecture.md`
+- `docs/CHANGELOG.md`
 
-3. `stdio` を本当に `v0.1.0` scope から落とすなら
-   - config
-   - CLI
-   - runtime summary
-   - tests
-   の整理に進む
+を、現在の実装 reality に合わせて揃える。
+
+特に決めるべき論点:
+- `v0.1.0` は
+  - “minimum usable remote MCP server”
+  として closeable か
+- それとも
+  - additional HTTP resource coverage
+  - stricter protocol compatibility work
+  が必要か
+
+### 2. HTTP MCP coverage をさらに広げる
+候補:
+- HTTP で `workspace_register`
+- HTTP で `workflow_start`
+- HTTP で `workflow_checkpoint`
+- HTTP で `workflow_resume`
+- HTTP で `workflow_complete`
+- 必要なら HTTP で `resources/list` / `resources/read`
+
+の直接テストや実証を増やす
 
 ## 次の引き継ぎ先向けメモ
-次に入るなら、まず docs 側の blocker 記述を再評価するのが自然です。
 
-特に確認したい点:
-- 現在の `/mcp` 実装を `v0.1.0` acceptance evidence としてどこまで主張してよいか
-- “Streamable HTTP” を `v0.1.0` 必須から外すのか
-- それとも `v0.1.0` の required transport wording を下げずに追加実装が必要か
+次に入る人は、まず「未実装 blocker の是正」は済んだ前提で考えてよいです。
 
-少なくとも、**`/mcp` に HTTP MCP endpoint の証拠がない** という表現は、もうそのままでは維持しにくい状態です。
+つまり次の中心課題は:
+
+- **endpoint existence**
+ではなく
+- **acceptance boundary and wording**
+
+です。
+
+特に確認すべきポイント:
+1. `tools/call` はすでに generic に通るため、
+   required workflow tools それぞれの HTTP-side acceptance evidence をどこまで追加で明示するか
+2. `resources/list` / `resources/read` を `v0.1.0` required に残すか
+3. `stdio` を本当に release scope から落とすなら、
+   config / CLI / docs / tests をどこまで削るか
+4. changelog と README のトーンを、
+   “not yet evidenced”
+   から
+   “minimal path evidenced, broader closeout under evaluation”
+   に変えるか
+
+少なくとも、**`/mcp` に HTTP MCP endpoint の証拠がない** という記述は、もう維持しない前提で進めてよいです。
