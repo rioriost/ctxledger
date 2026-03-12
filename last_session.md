@@ -1,47 +1,57 @@
-Patch 2 の続きとして、今回は **stdio introspection concrete dependency cleanup** を進め、`runtime/introspection.py` に残っていた stdio runtime の concrete special case をさらに整理しました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers / HTTP runtime registration wiring cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup を土台にして、**runtime introspection の transport detection をさらに capability-based に寄せる整理** を実施しています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
+Patch 2 の続きとして、今回は **health/readiness helper extraction** を進め、`server.py` に残っていた status surface の一部 ownership をさらに分離しました。前回までに進めた runtime introspection / runtime orchestration / HTTP runtime builder / composite runtime / HTTP handler / server response builder / server factory wiring / resource response builder / database health helper / shared bootstrap error / shared runtime types / shared runtime serializers / HTTP runtime registration wiring cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup を土台にして、**server facade boundary と readiness/health ownership の整理** を実施しています。既存の公開 API と test expectation を壊さないことを優先して整理しました。
 
 今回の実装でやったこと:
 
-- `ctxledger/src/ctxledger/runtime/introspection.py` を更新して stdio runtime の concrete protocol/isinstance 前提を外す形に変更
-- `ctxledger/src/ctxledger/runtime/protocols.py` は前セッションで `StdioRuntimeAdapterProtocol` を追加していましたが、実行時 `isinstance(...)` には使わず、attribute/capability ベースの判定へ寄せる形に整理
+- `ctxledger/src/ctxledger/runtime/status.py` を新設
+- `ctxledger/src/ctxledger/server.py` を更新して `health()` / `readiness()` が shared status helper を使う形に変更
 - 回帰確認として `tests/test_server.py` と `tests/test_mcp_modules.py` を再実行
 - 最終的に green を維持
 
-## 1. `ctxledger/src/ctxledger/runtime/introspection.py`
-今回の中心です。`collect_runtime_introspection(...)` に残っていた stdio runtime の concrete special case を、より capability-based な判定へ寄せました。
+## 1. `ctxledger/src/ctxledger/runtime/status.py`
+今回の中心です。`server.py` に残っていた health/readiness の組み立てロジックを専用 helper module に抽出しました。
+
+追加したもの:
+- `build_health_status(server)`
+- `build_readiness_status(server)`
+
+ポイント:
+- runtime introspection の収集
+- status payload の組み立て
+- DB reachability / schema readiness の判定
+- `not_started`
+- `database_unavailable`
+- `schema_check_failed`
+- `schema_not_ready`
+- `ready`
+
+といった readiness branching を `server.py` から切り出せました
+- health/readiness の canonical helper が `runtime/status.py` に寄りました
+- `server.py` は application-facing status surface を持ちつつ、実体ロジックの所有を少し減らせました
+
+## 2. `ctxledger/src/ctxledger/server.py`
+`server.py` 側では `health()` / `readiness()` の実装を thin wrapper に寄せました。
 
 変更したこと:
-- `_is_stdio_runtime_like(...)` が runtime protocol に対する `isinstance(...)` を使わない形に変更
-- `registered_tools`
-- `registered_resources`
-- `tool_schema`
-- `introspect`
-といった stdio-like capability の存在で判定する形へ整理
+- `health()` が `build_health_status(self)` を返す形に変更
+- `readiness()` が `build_readiness_status(self)` を返す形に変更
+- in-method にあった details 組み立てと DB/schema branching を削除
 
-背景:
-- 一度 `StdioRuntimeAdapterProtocol` に対して `isinstance(...)` を使う形に寄せたところ、protocol が `@runtime_checkable` ではないため、実行時に `TypeError` が発生
-- startup/readiness/health/introspection 系テストが広く落ちたため、attribute-based detection に戻して修正しました
-
-ポイント:
-- stdio runtime の concrete class identity に依存しない方向を保ちつつ、実行時安全性も維持できました
-- runtime introspection helper は「その runtime が何者か」よりも「何をできるか」で判定する方向にさらに寄りました
-- concrete class / runtime-checkable protocol に強く依存しないので、今後の stdio removal path にも悪くありません
-
-## 2. `ctxledger/src/ctxledger/runtime/protocols.py`
-前セッションで追加した shared runtime protocol module は引き続き有効です。今回の観点では、protocol を型表現として使うことと、実行時判定に使うことは分けるべきだと確認できました。
-
-今回の整理で明確になったこと:
-- `StdioRuntimeAdapterProtocol` は type contract としては有用
-- ただし runtime 判定は `isinstance(...)` に頼らず capability-based に寄せたほうが安全
-- protocol extraction 自体の方向性は維持してよい
+維持しているもの:
+- `CtxLedgerServer.health()`
+- `CtxLedgerServer.readiness()`
+- `HealthStatus`
+- `ReadinessStatus`
+- 既存 details payload shape
+- 既存 readiness status names
+- 既存 health status shape
 
 ポイント:
-- protocol は ownership 分離に有効
-- runtime detection は duck typing に寄せたほうが今の構造には合う
-- その線引きが今回少し明確になりました
+- public surface は変えずに ownership だけを外へ寄せられました
+- `server.py` は facade / compatibility shell にさらに寄っています
+- health/readiness public behavior は維持しています
 
 ## 挙動面での現状
-今回の変更も extraction / canonicalization 中心で、機能追加ではなく責務整理と依存関係整理を優先しています。
+今回の変更も extraction / canonicalization 中心で、機能追加ではなく責務整理を優先しています。
 
 維持しているもの:
 - `initialize` over HTTP
@@ -63,17 +73,18 @@ Patch 2 の続きとして、今回は **stdio introspection concrete dependency
 - CLI resume-workflow JSON output shape
 - memory tool response shape
 - bootstrap failure / startup failure の既存 shape
+- health status payload shape
+- readiness status payload shape
 
 今回新しく進んだこと:
-- runtime introspection の stdio detection を concrete/runtime-protocol 判定よりも capability-based 判定へ寄せられた
-- runtime protocol と runtime detection の責務を少し切り分けられた
-- `server.py` concrete adapter class への indirect dependency を一段薄くできた
-- startup/readiness/health/introspection 周辺で安全に green を維持できた
+- health/readiness helper の canonical source を `runtime/status.py` に分離
+- `server.py` の status surface が helper delegate に寄った
+- `server.py` の facade 化をさらに少し進められた
+- readiness / health ownership の整理を一歩進められた
 
 まだ残っているもの:
 - `server.py` には concrete `HttpRuntimeAdapter` class 実装そのものが残っている
 - helper module は一部 `server.py` の wrapper / adapter class に依存している
-- readiness / health / DB/bootstrap helper 境界の最終整理は未完
 - canonical protocol/dataclass/serializer/helper 配置の最終最適化はまだ途中
 - stdio 削除前提の final dependency cleanup は未完
 - compliance claim はまだ不可
@@ -90,9 +101,8 @@ Patch 2 の続きとして、今回は **stdio introspection concrete dependency
 - `pytest -q tests/test_server.py tests/test_mcp_modules.py`
 
 補足:
-- 一度 protocol に対する実行時 `isinstance(...)` により多数のテストが落ちた
-- capability-based detection に戻して修正後、focused regression は green
-- 最終状態は **180 passed** を維持
+- 今回の変更後、focused regression は green です
+- health/readiness extraction 中心の変更で、behavioral regression は見えていません
 
 ## コミット
 このセッション時点では、まだコミットは切っていません。
@@ -100,27 +110,26 @@ Patch 2 の続きとして、今回は **stdio introspection concrete dependency
 次の人は `.rules` に従って、作業ループ完了時に descriptive message で `git commit` してください。
 
 コミット候補メッセージ例:
-- `Clean up stdio introspection dependencies`
-- `Use capability-based stdio runtime introspection`
+- `Extract health and readiness status helpers`
+- `Move server status logic into runtime helpers`
 
 ## 注意
 - この session では `last_session.md` 更新までを意図しています
 - ワークツリー上には別件の変更が存在する可能性があります
-- 今回の変更は stdio introspection concrete dependency cleanup が中心で、behavioral rewrite ではありません
+- 今回の変更は health/readiness helper extraction が中心で、behavioral rewrite ではありません
 
 ## 実装の評価
-今回の整理はかなり小さいですが、依存関係と実行時安全性の両方を整えるうえで意味があります。
+今回の整理は小さめですが、`server.py` の責務を減らすうえで意味があります。
 
 進んだこと:
-- runtime protocol の型用途と runtime detection の実行時用途を切り分けられた
-- stdio introspection 判定をより素直な duck typing に寄せられた
-- protocol extraction の方向性を壊さずに runtime failure を避けられた
+- health/readiness の組み立てロジックを `runtime/status.py` に寄せられた
+- `server.py` が status helper の所有者である必要がさらに薄れた
+- public import / method surface を保ったまま dependency boundary を改善できた
 - 既存 test expectation を保ったまま安全に前進できた
 
 まだ未着手に近いこと:
 - `server.py` から `HttpRuntimeAdapter` 本体をどう扱うかの整理
 - helper module から `server.py` adapter/wrapper への依存整理
-- readiness / health / bootstrap boundary の整理
 - stdio removal path を前提にした dependency cleanup
 - transport-specific startup orchestration のさらなる isolation
 - richer MCP transport semantics の本実装
@@ -130,14 +139,14 @@ Patch 2 の続きとして、今回は **stdio introspection concrete dependency
 
 候補:
 1. `server.py` に残る adapter/wrapper ownership をさらに整理する
-2. readiness / health / DB/bootstrap boundary を整理する
-3. canonical protocol/dataclass/serializer/helper の配置をさらに見直す
-4. stdio removal path を意識して transport-specific code をさらに隔離する
-5. `server.py` を application-facing server surface と compatibility shell により近づける
+2. canonical protocol/dataclass/serializer/helper の配置をさらに見直す
+3. stdio removal path を意識して transport-specific code をさらに隔離する
+4. `server.py` を application-facing server surface と compatibility shell により近づける
+5. runtime introspection / transport detection contract をさらに整える
 
 特に安全そうなのは:
-- runtime introspection / adapter dependency の整理
-- readiness / health surface の整理
+- server facade boundary の整理
+- adapter/wrapper dependency の整理
 - bootstrap / response / transport helper の境界整理
 
 ## 次の引き継ぎ先向けメモ
@@ -166,14 +175,15 @@ Patch 2 の続きとして、今回は **stdio introspection concrete dependency
 21. HTTP validation helper dependency cleanup が入っている
 22. shared runtime protocols extraction が入っている
 23. concrete HTTP adapter dependency cleanup が入っている
-24. 今回、stdio introspection concrete dependency cleanup が入った
-25. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
-26. `docs/specification.md` は引き続き触らない
-27. まだ compliance claim はしない
-28. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
+24. stdio introspection concrete dependency cleanup が入っている
+25. 今回、health/readiness helper extraction が入った
+26. `tests/test_server.py` と `tests/test_mcp_modules.py` を合わせて **180 passed**
+27. `docs/specification.md` は引き続き触らない
+28. まだ compliance claim はしない
+29. 最終的には stdio は削除前提だが、現段階では責務分離を優先している
 
 注意点:
-- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation / server response building / server construction wiring / database health helper / shared bootstrap error / shared runtime response types / shared runtime serializers / HTTP runtime wrapper dependency cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup の本体は外へ出始めた
+- `server.py` はまだ大きいが、transport orchestration / composite lifecycle / HTTP runtime builder / HTTP handler implementation / server response building / server construction wiring / database health helper / shared bootstrap error / shared runtime response types / shared runtime serializers / HTTP runtime wrapper dependency cleanup / HTTP validation helper dependency cleanup / shared runtime protocols extraction / concrete HTTP adapter dependency cleanup / stdio introspection concrete dependency cleanup / health-readiness helper extraction の本体は外へ出始めた
 - `create_runtime(...)` は public surface 維持のため `server.py` に wrapper として残っている
 - `_print_runtime_summary(...)` も test/import 互換のため `server.py` に wrapper として残してある
 - `build_http_runtime_adapter(...)` も public surface 維持のため `server.py` に wrapper を残してある
@@ -188,6 +198,7 @@ Patch 2 の続きとして、今回は **stdio introspection concrete dependency
 - `runtime/types.py` は shared response/status dataclass の canonical module
 - `runtime/serializers.py` は shared serializer の canonical module
 - `runtime/protocols.py` は shared runtime helper protocol の canonical module
+- `runtime/status.py` は health/readiness helper の canonical module
 - `runtime/composite.py` は composite lifecycle の canonical 実装
 - `runtime/orchestration.py` は runtime selection / run entrypoint orchestration の中心
 - `runtime/introspection.py` は stdio/http/composite を横断して正規化する責務を持つ
@@ -223,26 +234,25 @@ Patch 2 の続きとして、今回は **stdio introspection concrete dependency
 - shared runtime helper protocols
 - concrete HTTP adapter dependency cleanup
 - stdio introspection concrete dependency cleanup
+- health/readiness status helpers
 
 ### まだ `server.py` に残るもの
 - application-facing server surface 全般
-- health/readiness public surface
 - public compatibility wrapper 群
-- helper 群の最終 dependency boundary 調整
+- adapter/wrapper ownership の最終整理
 
 ## 次に自然な一手
-ここまで来たので、次は **server facade boundary と readiness/health ownership の整理** が一番きれいです。
+ここまで来たので、次は **server facade boundary と adapter ownership の整理** が一番きれいです。
 
 たとえば:
-- readiness / health helper の ownership
 - `server.py` に残る adapter/wrapper ownership
 - top-level public facade と internal helper boundary
 - transport helper と application-facing surface の分離
+- final dependency cleanup の下準備
 
 を dedicated helper/core boundary に寄せる段階です。
 
 これをやると、`server.py` はかなり
-- health/readiness public surface
 - workflow-facing public surface
 - compatibility export surface
 - canonical top-level facade

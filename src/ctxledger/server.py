@@ -171,6 +171,10 @@ from .runtime.server_responses import (
 from .runtime.server_responses import (
     build_workspace_resume_resource_response as extracted_build_workspace_resume_resource_response,
 )
+from .runtime.status import (
+    build_health_status,
+    build_readiness_status,
+)
 from .runtime.types import (
     HealthStatus,
     McpHttpResponse,
@@ -423,79 +427,10 @@ class CtxLedgerServer:
         logger.info("ctxledger shutdown complete")
 
     def health(self) -> HealthStatus:
-        runtime_introspection = collect_runtime_introspection(self.runtime)
-        return HealthStatus(
-            ok=True,
-            status="ok",
-            details={
-                "service": self.settings.app_name,
-                "version": self.settings.app_version,
-                "started": self._started,
-                "workflow_service_initialized": self.workflow_service is not None,
-                "runtime": serialize_runtime_introspection_collection(
-                    runtime_introspection
-                ),
-            },
-        )
+        return build_health_status(self)
 
     def readiness(self) -> ReadinessStatus:
-        runtime_introspection = collect_runtime_introspection(self.runtime)
-        details: dict[str, Any] = {
-            "service": self.settings.app_name,
-            "version": self.settings.app_version,
-            "started": self._started,
-            "database_configured": bool(self.settings.database.url),
-            "http_enabled": self.settings.http.enabled,
-            "stdio_enabled": self.settings.stdio.enabled,
-            "workflow_service_initialized": self.workflow_service is not None,
-            "runtime": serialize_runtime_introspection_collection(
-                runtime_introspection
-            ),
-        }
-
-        if not self._started:
-            return ReadinessStatus(
-                ready=False,
-                status="not_started",
-                details=details,
-            )
-
-        try:
-            self.db_health_checker.ping()
-            details["database_reachable"] = True
-        except Exception as exc:
-            details["database_reachable"] = False
-            details["error"] = str(exc)
-            return ReadinessStatus(
-                ready=False,
-                status="database_unavailable",
-                details=details,
-            )
-
-        try:
-            schema_ready = self.db_health_checker.schema_ready()
-            details["schema_ready"] = schema_ready
-        except Exception as exc:
-            details["schema_ready"] = False
-            details["error"] = str(exc)
-            return ReadinessStatus(
-                ready=False,
-                status="schema_check_failed",
-                details=details,
-            )
-
-        if not details["schema_ready"]:
-            return ReadinessStatus(
-                ready=False,
-                status="schema_not_ready",
-                details=details,
-            )
-
-        return ReadinessStatus(
-            ready=True,
-            status="ready",
-            details=details,
-        )
+        return build_readiness_status(self)
 
 
 def _extract_bearer_token(path: str) -> str | None:
