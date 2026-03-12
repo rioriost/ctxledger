@@ -1,162 +1,156 @@
-Patch 1 implementation progress まで進めました。
+Patch 2 の scaffold 実装まで進めました。
 
 今回の実装でやったこと:
 
-- `ctxledger/src/ctxledger/mcp/` パッケージを新設
-- 以下の新規ファイルを追加:
-  - `ctxledger/src/ctxledger/mcp/__init__.py`
-  - `ctxledger/src/ctxledger/mcp/tool_schemas.py`
-  - `ctxledger/src/ctxledger/mcp/tool_handlers.py`
-  - `ctxledger/src/ctxledger/mcp/resource_handlers.py`
+- `ctxledger/src/ctxledger/mcp/lifecycle.py` を新設
+- `ctxledger/src/ctxledger/mcp/streamable_http.py` を新設
+- `ctxledger/src/ctxledger/server.py` を更新して、MCP lifecycle / Streamable HTTP scaffold を経由するように変更
 
-## 1. `ctxledger/src/ctxledger/mcp/tool_schemas.py`
-`server.py` から、低リスクで再利用価値の高い MCP schema 群を抽出しました。
+## 1. `ctxledger/src/ctxledger/mcp/lifecycle.py`
+Patch 2 の lifecycle authority 移行の最初の足場として、MCP lifecycle 用の helper 群を追加しました。
 
-移したもの:
-- `McpToolSchema`
-- `DEFAULT_EMPTY_MCP_TOOL_SCHEMA`
-- `serialize_mcp_tool_schema(...)`
-- `WORKSPACE_REGISTER_TOOL_SCHEMA`
-- `WORKFLOW_RESUME_TOOL_SCHEMA`
-- `WORKFLOW_START_TOOL_SCHEMA`
-- `WORKFLOW_CHECKPOINT_TOOL_SCHEMA`
-- `WORKFLOW_COMPLETE_TOOL_SCHEMA`
-- `PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA`
-- `PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA`
-- `MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA`
-- `MEMORY_SEARCH_TOOL_SCHEMA`
-- `MEMORY_GET_CONTEXT_TOOL_SCHEMA`
+追加したもの:
+- `MCP_PROTOCOL_VERSION`
+- `McpServerInfo`
+- `McpLifecycleCapabilities`
+- `McpInitializeResult`
+- `McpJsonRpcSuccessResponse`
+- `McpJsonRpcError`
+- `McpJsonRpcErrorResponse`
+- `McpLifecycleState`
+- `McpLifecycleRuntime`
+- `build_initialize_result(...)`
+- `handle_initialize_request(...)`
+- `handle_initialized_notification(...)`
+- `handle_ping_request(...)`
+- `handle_shutdown_request(...)`
+- `is_initialized_notification(...)`
+- `dispatch_lifecycle_method(...)`
+- `build_jsonrpc_success_response(...)`
+- `build_jsonrpc_error_response(...)`
 
-これは Patch 1 plan で想定していた
-「stable MCP assets の切り出し」
-に対応しています。
+ポイント:
+- `initialize` の result 組み立てを `server.py` 直書きから外しました
+- `initialized` に加えて `notifications/initialized` も lifecycle helper 側で受けられるようにしました
+- lifecycle state として `initialized` / `negotiated_protocol_version` を持てるようにしています
+- まだ strict compliance を主張する段階ではなく、あくまで scaffold です
 
-## 2. `ctxledger/src/ctxledger/mcp/tool_handlers.py`
-`server.py` から、transport-neutral に近い tool handler builder 群を抽出しました。
+## 2. `ctxledger/src/ctxledger/mcp/streamable_http.py`
+HTTP `/mcp` を generic route の生実装から少し切り離すため、薄い Streamable HTTP scaffold を追加しました。
 
-移したもの:
-- `build_mcp_success_response(...)`
-- `build_mcp_error_response(...)`
-- `_parse_required_uuid_argument(...)`
-- `_parse_optional_projection_type_argument(...)`
-- `_parse_required_string_argument(...)`
-- `_parse_optional_string_argument(...)`
-- `_parse_optional_dict_argument(...)`
-- `_parse_optional_verify_status_argument(...)`
-- `_parse_required_workflow_status_argument(...)`
-- `_map_workflow_error_to_mcp_response(...)`
+追加したもの:
+- `StreamableHttpRequest`
+- `StreamableHttpResponse`
+- `StreamableHttpEndpoint`
+- `StreamableHttpRuntime`
+- `build_streamable_http_endpoint(...)`
+- `default_streamable_http_headers(...)`
+- `build_streamable_http_not_found_response(...)`
+- `build_streamable_http_invalid_request_response(...)`
+- `build_streamable_http_rpc_error_response(...)`
 
-および以下の handler builder:
-- `build_resume_workflow_tool_handler(...)`
-- `build_workspace_register_tool_handler(...)`
-- `build_workflow_start_tool_handler(...)`
-- `build_workflow_checkpoint_tool_handler(...)`
-- `build_workflow_complete_tool_handler(...)`
-- `build_projection_failures_ignore_tool_handler(...)`
-- `build_projection_failures_resolve_tool_handler(...)`
-- `build_memory_remember_episode_tool_handler(...)`
-- `build_memory_search_tool_handler(...)`
-- `build_memory_get_context_tool_handler(...)`
+現在の責務:
+- path が設定された MCP endpoint と一致するかを確認
+- JSON-RPC body 必須を保証
+- JSON parse / object shape を検証
+- RPC handler へ委譲
+- transport レベルの not_found / invalid_request / RPC error を正規化
 
-注意点:
-- `server.py` 側の auxiliary HTTP routes がまだ `_parse_required_uuid_argument(...)` /
-  `_parse_optional_projection_type_argument(...)` を使っていたため、
-  その2つは `server.py` 側にも残してあります。
-- つまり完全移行ではなく、Patch 1 の安全な抽出に留めています。
+注意:
+- SSE や streaming 本体はまだありません
+- つまり full Streamable HTTP transport 実装ではなく、endpoint scaffold です
 
-## 3. `ctxledger/src/ctxledger/mcp/resource_handlers.py`
-resource まわりの parser / handler / thin wrapper を抽出しました。
+## 3. `ctxledger/src/ctxledger/server.py`
+`server.py` 側は Patch 2 の範囲で authority を少し移しました。
 
-移したもの:
-- `parse_workspace_resume_resource_uri(...)`
-- `parse_workflow_detail_resource_uri(...)`
-- `build_workspace_resume_resource_response(...)`
-- `build_workflow_detail_resource_response(...)`
-- `build_workspace_resume_resource_handler(...)`
-- `build_workflow_detail_resource_handler(...)`
+変更点:
+- `handle_mcp_rpc_request(...)` が lifecycle helper を使うように変更
+- `initialize` / `initialized` / `notifications/initialized` / `ping` / `shutdown` の分岐を lifecycle module 経由に変更
+- JSON-RPC success envelope を lifecycle module の helper で返すように変更
+- `StdioRuntimeAdapter` に `_mcp_lifecycle_state` を持たせました
+- `build_mcp_http_handler(...)` が、直接 JSON parse / path validate / error mapping を行う形から、
+  `mcp/streamable_http.py` の endpoint scaffold を使う形に変更されました
 
-実装中に 1 点注意:
-- invalid resource URI 用の not_found response 構築で不自然な式が入ってしまったため、
-  修正済みです。
-- 現在は helper 経由で正しく `McpResourceResponse` を返す形になっています。
+意図:
+- protocol authority を少しずつ `server.py` 外へ動かす
+- `/mcp` を「ただの generic route」ではなく、MCP endpoint scaffold 経由で扱う
+- ただし transport rewrite を一気にやらず、安全に置き換える
 
-## 4. `ctxledger/src/ctxledger/server.py`
-`server.py` 側は以下の方針で修正しました。
+## 4. 挙動面での現状
+今回の Patch 2 は scaffold 中心なので、既存挙動を大きく変えないことを優先しています。
 
-- 新設した `mcp/` モジュールから import する形に変更
-- schema 定義の重複を削除
-- tool handler builder 群の重複を削除
-- resource parser / handler の重複を削除
-- ただし以下はまだ `server.py` に残置:
-  - custom `/mcp` transport path (`build_mcp_http_handler(...)`)
-  - `handle_mcp_rpc_request(...)`
-  - `HttpRuntimeAdapter`
-  - `StdioRpcServer`
-  - `StdioRuntimeAdapter`
-  - auxiliary HTTP routes
-  - startup / readiness / bootstrap
-  - `_parse_required_uuid_argument(...)`
-  - `_parse_optional_projection_type_argument(...)`
-    （aux HTTP routes のために当面残置）
-- `MemoryService` import を一度落として test failure が出たため、復帰済み
+維持しているもの:
+- `initialize` over HTTP
+- `tools/list`
+- `tools/call`
+- 既存の `/mcp` path validation
+- HTTP auth の挙動
+- invalid JSON / invalid object / missing body 時のエラー挙動
+- stdio / HTTP いずれも `handle_mcp_rpc_request(...)` を共通利用する構造
 
-## テスト状態
-Patch 1 の目的は「挙動を変えずに抽出する」ことだったので、
-まず `tests/test_server.py` を確認しました。
+新しく入ったもの:
+- `notifications/initialized` の受け口
+- lifecycle state を runtime 側に保持する足場
+- Streamable HTTP endpoint scaffold
+
+まだ残っているもの:
+- `server.py` が依然として transport orchestration の中心
+- stdio / HTTP adapter はまだ `server.py` に強く残る
+- `/mcp` は endpoint scaffold 化したが、本格的な stream transport 実装ではない
+- result mapping や richer MCP semantics はまだ local envelope 寄り
+- compliance claim はまだ不可
+
+## テスト
+確認したテスト:
+- `tests/test_server.py`
 
 結果:
 - **163 passed**
 
-途中で出た問題:
-- auxiliary HTTP routes から `_parse_required_uuid_argument` が見えなくなって NameError
-- `build_stdio_runtime_adapter(...)` で `MemoryService` import が欠けて NameError
+今回の変更後も、少なくとも既存の `test_server.py` に関しては green を維持しています。
 
-どちらも修正済みで、現時点では `tests/test_server.py` は green です。
+## 実装の評価
+Patch 2 としては、かなり小さく安全に前進できています。
 
-## 現在の整理
-ここまでで Patch 1 のゴールは概ね達成です。
+進んだこと:
+- lifecycle authority の一部を `mcp/lifecycle.py` へ分離
+- `/mcp` HTTP handling の transport-scaffold を `mcp/streamable_http.py` へ分離
+- `server.py` が直接抱えていた protocol / endpoint 責務を少し削減
+- 将来の stricter MCP transport 実装に向けた差し替えポイントができた
 
-達成できたこと:
-- `server.py` から stable MCP assets の一部抽出
-- 新しい `ctxledger.mcp` package の土台作成
-- 既存挙動を維持したまま責務分離を少し前進
-- 次の patch で lifecycle / transport scaffold を入れる下地づくり
-
-まだ残っているもの:
-- custom `/mcp` transport はそのまま
-- lifecycle authority はまだ `server.py` 側に強く残っている
-- stdio / HTTP の transport coupling もまだ強い
-- result mapping も local envelope 依存のまま
+まだ未着手に近いこと:
+- stdio 側の protocol surface のさらに明確な分離
+- HTTP/stdio の adapter 境界整理
+- richer capability negotiation
+- stream semantics / session semantics の本実装
+- full MCP transport compliance に向けた gap 解消
 
 ## 次にやること
-次は plan 通りなら **Patch 2** です。
+次は Patch 2 の仕上げ、または Patch 3 相当の整理に入るのが自然です。
 
-対象:
-- `ctxledger/src/ctxledger/mcp/lifecycle.py`
-- `ctxledger/src/ctxledger/mcp/streamable_http.py`
+候補:
+1. `server.py` から `handle_mcp_rpc_request(...)` の残りの protocol branching をさらに剥がす
+2. stdio adapter 側にも lifecycle / rpc dispatcher の責務分離を進める
+3. HTTP endpoint scaffold を session-aware / richer transport-aware に育てる
+4. capability surface をもう少し明示化する
+5. `tests/test_server.py` 依存だけでなく、新規 module 単体テストを足す
 
-そこでやること:
-- `initialize`
-- `protocolVersion`
-- `notifications/initialized`
-- `/mcp` を generic route ではなく MCP endpoint として扱う scaffold
-
-を入れて、
-`server.py` から protocol authority を動かし始めることです。
+特に安全そうなのは:
+- `mcp/lifecycle.py` と `mcp/streamable_http.py` の単体テスト追加
+- `server.py` の `handle_mcp_rpc_request(...)` 残余分岐の薄型化
 
 ## 次の引き継ぎ先向けメモ
 次に入る人は以下を前提にしてよいです。
 
 1. Patch 1 の extraction は入っている
-2. `tests/test_server.py` は 163 passed
-3. `docs/specification.md` は絶対に触らない
-4. まだ custom `/mcp` transport は生きているので、
-   compliance claim は一切してはいけない
-5. 次の主作業は Patch 2:
-   - lifecycle scaffold
-   - Streamable HTTP scaffold
+2. Patch 2 の scaffold も入った
+3. `tests/test_server.py` は **163 passed**
+4. `docs/specification.md` は引き続き触らない
+5. まだ compliance claim はしない
+6. いまの変更は「authority の移設と scaffold 追加」であって、full transport rewrite ではない
 
-特に注意:
-- `server.py` から helper を全部一気に消すと auxiliary HTTP routes が壊れやすい
-- Patch 2 では「authority を移す」ことが主目的で、
-  full transport rewrite を一気にやろうとしない方が安全
+注意点:
+- `handle_mcp_rpc_request(...)` はまだ `server.py` に残っているが、lifecycle 部分は helper 化された
+- `build_mcp_http_handler(...)` は streamable_http scaffold を使うようになったので、
+  ここを次に触るなら endpoint / session / error mapping の責務を意識して進めるとよい
+- 既存テストは維持されているため、次は module 単位の追加テストを優先すると安全

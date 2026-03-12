@@ -130,6 +130,12 @@ class McpRuntimeProtocol(Protocol):
     def dispatch_resource(self, uri: str) -> McpResourceResponse: ...
 
 
+from .mcp.lifecycle import (
+    McpLifecycleState,
+    build_jsonrpc_error_response,
+    build_jsonrpc_success_response,
+    dispatch_lifecycle_method,
+)
 from .mcp.resource_handlers import (
     build_workflow_detail_resource_handler,
     build_workflow_detail_resource_response,
@@ -137,6 +143,11 @@ from .mcp.resource_handlers import (
     build_workspace_resume_resource_response,
     parse_workflow_detail_resource_uri,
     parse_workspace_resume_resource_uri,
+)
+from .mcp.streamable_http import (
+    StreamableHttpRequest,
+    StreamableHttpResponse,
+    build_streamable_http_endpoint,
 )
 from .mcp.tool_handlers import (
     build_mcp_error_response,
@@ -177,25 +188,31 @@ def handle_mcp_rpc_request(
     params = req.get("params") or {}
     req_id = req.get("id")
 
-    if method == "initialize":
-        result = {
-            "protocolVersion": "2024-11-05",
-            "serverInfo": {
-                "name": "ctxledger",
-                "version": runtime.settings.app_version,
-            },
-            "capabilities": {
-                "tools": {},
-                "resources": {},
-            },
-        }
-    elif method == "initialized":
-        result = None
-    elif method == "ping":
-        result = {}
-    elif method == "shutdown":
-        result = None
-    elif method == "exit":
+    lifecycle_state = getattr(runtime, "_mcp_lifecycle_state", None)
+    if lifecycle_state is None:
+        lifecycle_state = McpLifecycleState()
+        setattr(runtime, "_mcp_lifecycle_state", lifecycle_state)
+
+    lifecycle_result = dispatch_lifecycle_method(
+        runtime,
+        lifecycle_state,
+        method,
+        params if isinstance(params, dict) else None,
+    )
+    if method in {
+        "initialize",
+        "initialized",
+        "notifications/initialized",
+        "ping",
+        "shutdown",
+    }:
+        if req_id is None:
+            return None
+        if lifecycle_result is None:
+            return None
+        return build_jsonrpc_success_response(req_id, lifecycle_result)
+
+    if method == "exit":
         raise SystemExit(0)
     elif method == "tools/list":
         result = {
@@ -259,11 +276,7 @@ def handle_mcp_rpc_request(
     if req_id is None:
         return None
 
-    return {
-        "jsonrpc": "2.0",
-        "id": req_id,
-        "result": result,
-    }
+    return build_jsonrpc_success_response(req_id, result)
 
 
 @dataclass(slots=True)
@@ -528,6 +541,7 @@ class StdioRuntimeAdapter:
         self._tool_handlers: dict[str, McpToolHandler] = tool_handlers or {}
         self._resource_handlers: dict[str, McpResourceHandler] = resource_handlers or {}
         self._tool_schemas: dict[str, McpToolSchema] = tool_schemas or {}
+        self._mcp_lifecycle_state = McpLifecycleState()
 
     def register_tool_handler(
         self,
@@ -2005,99 +2019,40 @@ def build_mcp_http_handler(
     runtime: McpRuntimeProtocol,
     server: CtxLedgerServer,
 ):
-    def _handler(path: str, body: str | None = None) -> McpHttpResponse:
+    def _validate_auth(path: str) -> StreamableHttpResponse | None:
         auth_error = _require_http_bearer_auth(server, path)
-        if auth_error is not None:
-            return McpHttpResponse(
-                status_code=auth_error.status_code,
-                payload=auth_error.payload,
-                headers=auth_error.headers,
-            )
+        if auth_error is None:
+            return None
+        return StreamableHttpResponse(
+            status_code=auth_error.status_code,
+            payload=auth_error.payload,
+            headers=auth_error.headers,
+        )
 
-        normalized_path = path.strip()
-        path_without_query = normalized_path.split("?", 1)[0].strip("/")
-        expected_path = server.settings.http.path.strip("/")
-        if path_without_query != expected_path:
-            return McpHttpResponse(
-                status_code=404,
-                payload={
-                    "error": {
-                        "code": "not_found",
-                        "message": f"MCP endpoint requires {server.settings.http.path}",
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
+    class _StreamableHttpRuntimeAdapter:
+        def handle_rpc_request(
+            self,
+            request: dict[str, Any],
+        ) -> dict[str, Any] | None:
+            return handle_mcp_rpc_request(runtime, request)
 
-        if body is None or not body.strip():
-            return McpHttpResponse(
-                status_code=400,
-                payload={
-                    "error": {
-                        "code": "invalid_request",
-                        "message": "HTTP MCP endpoint requires a JSON-RPC request body",
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
+    endpoint = build_streamable_http_endpoint(
+        _StreamableHttpRuntimeAdapter(),
+        mcp_path=server.settings.http.path,
+        auth_validator=_validate_auth,
+    )
 
-        try:
-            parsed = json.loads(body)
-        except json.JSONDecodeError as exc:
-            return McpHttpResponse(
-                status_code=400,
-                payload={
-                    "error": {
-                        "code": "invalid_request",
-                        "message": f"request body must be valid JSON: {exc.msg}",
-                    }
-                },
-                headers={"content-type": "application/json"},
+    def _handler(path: str, body: str | None = None) -> McpHttpResponse:
+        response = endpoint.handle(
+            StreamableHttpRequest(
+                path=path,
+                body=body,
             )
-
-        if not isinstance(parsed, dict):
-            return McpHttpResponse(
-                status_code=400,
-                payload={
-                    "error": {
-                        "code": "invalid_request",
-                        "message": "request body must be a JSON object",
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
-
-        req_id = parsed.get("id")
-        try:
-            response = handle_mcp_rpc_request(runtime, parsed)
-        except SystemExit:
-            raise
-        except Exception as exc:
-            error_payload = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {
-                    "code": -32000,
-                    "message": str(exc),
-                },
-            }
-            return McpHttpResponse(
-                status_code=400,
-                payload=error_payload,
-                headers={"content-type": "application/json"},
-            )
-
-        if response is None:
-            return McpHttpResponse(
-                status_code=202,
-                payload={},
-                headers={"content-type": "application/json"},
-            )
-
+        )
         return McpHttpResponse(
-            status_code=200,
-            payload=response,
-            headers={"content-type": "application/json"},
+            status_code=response.status_code,
+            payload=response.payload,
+            headers=response.headers,
         )
 
     return _handler
