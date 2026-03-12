@@ -91,6 +91,43 @@ However, it is also exposed as a Tool for client compatibility and ergonomic age
 
 Internally, it should reuse the same read-model assembly logic used by resume resources.
 
+## 3.4 Dedicated HTTP Read Surface
+
+In addition to MCP tools and resources, `ctxledger` also exposes selected HTTP read surfaces for operational and integration use cases.
+
+One such surface is a dedicated closed projection failure history endpoint:
+
+- `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+
+This route is a read-only HTTP surface over canonical workflow resume assembly data.  
+It is intended to expose closed projection failure lifecycle history without requiring consumers to fetch the entire workflow resume payload.
+
+Representative response contents:
+
+- `workflow_instance_id`
+- `closed_projection_failures`
+
+Representative closed failure fields include:
+
+- `projection_type`
+- `target_path`
+- `attempt_id`
+- `error_code`
+- `error_message`
+- `occurred_at`
+- `resolved_at`
+- `open_failure_count`
+- `retry_count`
+- `status`
+
+This HTTP surface does not change the MCP responsibility split:
+
+- MCP Tools remain the primary command interface
+- MCP Resources remain the primary read-model interface
+- dedicated HTTP operational read surfaces may exist where a narrower concrete server contract is useful
+
+The endpoint should reuse the same underlying closed-failure read model as `workflow_resume` and other resume-oriented read surfaces.
+
 ---
 
 ## 4. Read and Write Model Separation
@@ -345,6 +382,7 @@ Typical response content:
 - `projection_status`
 - `resumable_status`
 - `warnings`
+- `closed_projection_failures`
 - `next_hint`
 
 Representative projection-related response details may include:
@@ -359,6 +397,30 @@ Representative projection-related response details may include:
 - `resolved_at`
 - `error_code`
 - `error_message`
+
+When closed projection failure history is included, `closed_projection_failures` should expose representative failure records for lifecycle inspection.
+
+Representative closed failure fields include:
+
+- `projection_type`
+- `target_path`
+- `attempt_id`
+- `error_code`
+- `error_message`
+- `occurred_at`
+- `resolved_at`
+- `open_failure_count`
+- `retry_count`
+- `status`
+
+The same closed failure history may also be exposed through the dedicated HTTP read route:
+
+- `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+
+That route should return a narrower payload focused on:
+
+- `workflow_instance_id`
+- `closed_projection_failures`
 
 ### Projection Failure Lifecycle Semantics
 Projection failure lifecycle is distinct from projection freshness status.
@@ -403,8 +465,9 @@ Representative rules:
 - emit `open projection failure` only when open projection failures exist
 - `projection.status = failed` by itself does not necessarily imply an unresolved open failure
 - a projection may remain `failed` even when `open_failure_count = 0`
-- when `projection.status = failed` and `open_failure_count = 0`, the response may emit `ignored projection failure` to indicate ignored or previously resolved historical failures without treating them as currently open
+- when `projection.status = failed` and `open_failure_count = 0`, the response may emit `ignored projection failure` or `resolved projection failure` to indicate closed historical failures without treating them as currently open
 - if failure-level details are included, `resolved_at` should be present only for closed failures and should remain `null` for open ones
+- closed failure history may also be returned separately in `closed_projection_failures` so clients can inspect lifecycle records directly without parsing warnings alone
 
 Representative behavior:
 
@@ -415,9 +478,12 @@ Representative behavior:
 - `projection.status = failed` and `open_failure_count = 0`
   - do not emit `open projection failure`
   - may emit `ignored projection failure`
+  - may emit `resolved projection failure`
   - retain failed projection state for diagnosis
+  - expose closed lifecycle records through warning details and/or `closed_projection_failures`
 - `projection.status = fresh`
   - open projection failure warnings should not remain after successful reconciliation
+  - previously closed lifecycle records may still remain visible in `closed_projection_failures`
 
 ### `resumable_status` Examples
 - `resumable`
@@ -437,6 +503,8 @@ Soft issues returned inside response:
 - missing checkpoint
 - stale projection
 - open projection failure
+- ignored projection failure
+- resolved projection failure
 - missing projection
 - missing verify evidence
 - unavailable workspace path

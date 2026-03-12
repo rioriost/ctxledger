@@ -43,9 +43,29 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `retry_count` on projection failure records
   - failure `status` visibility in resume warning metadata
   - `ignore_resume_projection_failures(...)` for explicitly closing open projection failures without treating them as successful projection recovery
+- closed projection failure read-side exposure, including:
+  - `get_closed_failures_by_workflow_id(...)` on projection failure repositories
+  - `WorkflowResume.closed_projection_failures`
+  - `workflow_resume` / CLI JSON output exposing closed failure history
+  - CLI text output section for closed projection failures
+  - warning differentiation between `ignored_projection_failure` and `resolved_projection_failure`
+  - closed failure warning details including:
+    - `projection_type`
+    - `target_path`
+    - `attempt_id`
+    - `error_code`
+    - `error_message`
+    - `occurred_at`
+    - `resolved_at`
+    - `open_failure_count`
+    - `retry_count`
+    - `status`
 - documentation updates for projection failure lifecycle behavior in:
   - `docs/architecture.md`
   - `docs/workflow-model.md`
+  - `README.md`
+  - `docs/mcp-api.md`
+  - `docs/specification.md`
 - test coverage for:
   - repeated projection failures incrementing `retry_count`
   - ignored projection failures disappearing from open failure warnings
@@ -71,8 +91,15 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `docs/deployment.md`
   - `docs/SECURITY.md`
   - `docs/mcp-api.md`
+  - `docs/specification.md`
+  - `docs/workflow-model.md`
   - `docker/docker-compose.yml`
 - projection failure warnings are now emitted only when a projection has open failures, rather than for every projection whose status is merely `failed`
+- closed projection failure history is now exposed separately from open failure reads
+- resume surfaces now distinguish:
+  - `open_projection_failure`
+  - `ignored_projection_failure`
+  - `resolved_projection_failure`
 - repeated projection failures for the same projection type now preserve failure-by-failure visibility instead of behaving like a single unresolved flag
 
 ### Notes
@@ -94,7 +121,9 @@ The project currently follows a lightweight, human-maintained changelog style.
 - projection failure lifecycle now distinguishes:
   - projection status such as `failed`
   - failure lifecycle state such as `open`, `resolved`, or `ignored`
+- closed projection failure history is now readable through dedicated read-side accessors, resume surfaces, and the dedicated HTTP endpoint `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
 - a projection may remain in `failed` status even when `open_failure_count == 0`
 - ignored projection failures remain in canonical history but are no longer surfaced as `open projection failure` warnings
+- resolved and ignored closed failures are both retained in history, but are distinguished by lifecycle status and warning code
 
 ---

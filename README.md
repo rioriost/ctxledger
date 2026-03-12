@@ -85,6 +85,36 @@ Projection failure lifecycle is tracked canonically as operational metadata, inc
 
 Repeated failures remain visible as repeated operational events, and `retry_count` distinguishes first failure from subsequent unresolved failures for the same projection stream.
 
+The resume read side now distinguishes:
+
+- open projection failures
+- closed projection failures
+- warning-level visibility for ignored versus resolved closure
+
+Resume consumers can inspect:
+
+- open failures through projection warning details
+- closed failure history through `closed_projection_failures`
+- dedicated HTTP history endpoint:
+  - `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+- lifecycle-specific warning codes:
+  - `open_projection_failure`
+  - `ignored_projection_failure`
+  - `resolved_projection_failure`
+
+Closed projection failure details may include:
+
+- `projection_type`
+- `target_path`
+- `attempt_id`
+- `error_code`
+- `error_message`
+- `occurred_at`
+- `resolved_at`
+- `open_failure_count`
+- `retry_count`
+- `status`
+
 For detailed design, see:
 
 - `docs/architecture.md`
@@ -127,6 +157,28 @@ Typical top-level structure:
 
 Some memory APIs may remain stubbed in `v0.1.0` while the workflow subsystem is completed first.
 
+### Workflow HTTP read endpoints
+- `/workflow-resume/{workflow_instance_id}`
+- `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+
+The dedicated closed projection failure history endpoint returns:
+
+- `workflow_instance_id`
+- `closed_projection_failures`
+
+Each `closed_projection_failures` entry includes:
+
+- `projection_type`
+- `target_path`
+- `attempt_id`
+- `error_code`
+- `error_message`
+- `occurred_at`
+- `resolved_at`
+- `open_failure_count`
+- `retry_count`
+- `status`
+
 ### Resources
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
@@ -157,7 +209,8 @@ Typical payload shapes:
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
-        "workflow_resume"
+        "workflow_resume",
+        "workflow_closed_projection_failures"
       ],
       "tools": []
     },
@@ -184,7 +237,8 @@ Typical payload shapes:
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
-        "workflow_resume"
+        "workflow_resume",
+        "workflow_closed_projection_failures"
       ]
     }
   ]
@@ -218,6 +272,8 @@ Typical payload shapes:
 - execution identity
 - operational attempts
 - resumable snapshots
+
+The workflow resume contract also surfaces projection lifecycle diagnostics as part of resumable state assembly, including both unresolved open failures and closed failure history.
 
 Core workflow entities:
 
@@ -475,7 +531,7 @@ A typical startup summary shape is:
 ctxledger 0.1.0 started
 health=ok
 readiness=ready
-runtime=[{'transport': 'http', 'routes': ['runtime_introspection', 'runtime_routes', 'runtime_tools', 'workflow_resume'], 'tools': []}]
+runtime=[{'transport': 'http', 'routes': ['runtime_introspection', 'runtime_routes', 'runtime_tools', 'workflow_resume', 'workflow_closed_projection_failures'], 'tools': []}]
 mcp_endpoint=http://localhost:8080/mcp
 ```
 

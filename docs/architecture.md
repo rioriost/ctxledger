@@ -504,8 +504,11 @@ It may include:
 - latest verify report
 - projection status
 - warnings/issues
+- closed projection failure history
 - resumable classification
 - derived hints for next action
+
+The same assembled read model may also be exposed through concrete server-specific HTTP read surfaces for operational inspection.
 
 This read model is the primary recovery interface.
 
@@ -526,6 +529,8 @@ Possible warnings/issues include:
 - running attempt without checkpoint
 - stale projection
 - open projection failure
+- ignored projection failure
+- resolved projection failure
 - missing verify context
 - unavailable workspace path
 
@@ -694,10 +699,14 @@ Representative canonical metadata for an open projection failure includes:
 
 - `projection_type`
 - `target_path`
+- `attempt_id`
 - `error_code`
 - `error_message`
 - `occurred_at`
+- `resolved_at`
+- `open_failure_count`
 - `retry_count`
+- `status`
 
 `retry_count` should reflect how many prior open failures already existed for the same projection stream before the current failure was recorded.
 
@@ -717,6 +726,8 @@ In `v0.1.0`, the normal resolution mechanism is:
 
 Resolution closes the operational issue without deleting the failure history.
 
+Closed failure history should remain readable through dedicated read-side accessors and assembled resume views.
+
 #### `ignored`
 
 A projection failure becomes `ignored` when an operator or higher-level workflow policy decides that the open failure should no longer block or warn as an unresolved projection write issue.
@@ -730,6 +741,8 @@ Ignoring a failure means:
 Ignoring is not the same as successful projection recovery.  
 It is an operator or policy decision to stop treating the failure as an active unresolved issue.
 
+Closed lifecycle records may still be surfaced in resume warning details and closed failure history.
+
 ### 12.6 Projection Failure Visibility Rules
 
 Projection failure visibility should distinguish projection status from failure lifecycle state.
@@ -739,6 +752,7 @@ Important consequences:
 - a projection may still be `failed` even when no open projection failures remain
 - `failed` projection status alone does not necessarily mean there is an unresolved open failure
 - resume warnings for `open projection failure` should be emitted only when open projection failures exist
+- closed failures should remain distinguishable as `ignored` versus `resolved`
 
 Representative resume behavior:
 
@@ -746,9 +760,37 @@ Representative resume behavior:
   - emit `open projection failure`
 - `projection.status = failed` and `open_failure_count = 0`
   - do not emit `open projection failure`
+  - emit either `ignored projection failure` or `resolved projection failure` when closed history exists
   - retain failed projection status for diagnosis
+  - expose closed lifecycle records through warning details and/or `closed_projection_failures`
 - `projection.status = fresh`
   - open projection failure warnings should not remain for that projection after successful reconciliation
+  - previously closed lifecycle records may still remain visible in `closed_projection_failures`
+
+Concrete server implementations may additionally expose closed failure history through a dedicated HTTP read surface such as:
+
+- `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+
+A representative payload for that surface includes:
+
+- `workflow_instance_id`
+- `closed_projection_failures`
+
+Each closed failure entry may include:
+
+- `projection_type`
+- `target_path`
+- `attempt_id`
+- `error_code`
+- `error_message`
+- `occurred_at`
+- `resolved_at`
+- `open_failure_count`
+- `retry_count`
+- `status`
+
+This dedicated surface is a read-only convenience endpoint over canonical projection failure history.  
+It does not change the rule that PostgreSQL remains canonical and repository projections remain derived.
 
 This separation allows the system to preserve diagnostic state without overstating currently active failure conditions.
 

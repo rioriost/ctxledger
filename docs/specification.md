@@ -361,16 +361,20 @@ Representative response contents:
 - projection status
 - warnings/issues
 - resumable classification
+- closed projection failure history
 
 Representative projection-related warnings:
 
 - stale projection
 - open projection failure
+- ignored projection failure
+- resolved projection failure
 - missing projection
 
 Projection failure visibility rules:
 
 - `open projection failure` should be emitted only when open projection failures exist
+- `ignored projection failure` and `resolved projection failure` should be emitted only when closed projection failures exist
 - `projection.status = failed` by itself does not necessarily imply an open unresolved failure
 - a projection may remain `failed` even when `open_failure_count = 0`
 
@@ -378,11 +382,58 @@ Representative projection failure metadata exposed through resume:
 
 - projection_type
 - target_path
+- attempt_id
 - open_failure_count
 - retry_count
 - status
+- occurred_at
+- resolved_at
 - error_code
 - error_message
+
+Representative closed projection failure history exposed through resume:
+
+- `WorkflowResume.closed_projection_failures`
+- closed failure records with:
+  - `projection_type`
+  - `target_path`
+  - `attempt_id`
+  - `error_code`
+  - `error_message`
+  - `occurred_at`
+  - `resolved_at`
+  - `open_failure_count`
+  - `retry_count`
+  - `status`
+
+Dedicated HTTP read surface for closed projection failure history:
+
+- `GET /workflow-resume/{workflow_instance_id}/closed-projection-failures`
+
+Representative response contents:
+
+- `workflow_instance_id`
+- `closed_projection_failures`
+
+Representative closed failure record fields:
+
+- `projection_type`
+- `target_path`
+- `attempt_id`
+- `error_code`
+- `error_message`
+- `occurred_at`
+- `resolved_at`
+- `open_failure_count`
+- `retry_count`
+- `status`
+
+Behavior notes:
+
+- this endpoint is a read-only assembled HTTP surface over canonical state
+- it exposes closed failure lifecycle history only
+- open projection failures remain visible through resume warnings and related resume projection diagnostics
+- closed lifecycle records may be `resolved` or `ignored`
 
 ---
 
