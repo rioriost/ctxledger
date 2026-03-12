@@ -126,6 +126,7 @@ from .runtime.orchestration import (
 )
 from .runtime.protocols import (
     DatabaseHealthChecker,
+    HttpRuntimeAdapterProtocol,
     McpRuntimeProtocol,
     ServerRuntime,
     WorkflowServiceFactory,
@@ -740,6 +741,7 @@ __all__ = [
     "DefaultDatabaseHealthChecker",
     "HealthStatus",
     "HttpRuntimeAdapter",
+    "HttpRuntimeAdapterProtocol",
     "McpToolResponse",
     "ProjectionFailureHistoryResponse",
     "ReadinessStatus",

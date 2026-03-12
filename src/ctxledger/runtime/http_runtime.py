@@ -15,13 +15,13 @@ from .http_handlers import (
 from .protocols import HttpHandlerFactoryServer
 
 if TYPE_CHECKING:
-    from ..server import HttpRuntimeAdapter
+    from .protocols import HttpRuntimeAdapterProtocol
 
 
 def register_http_runtime_handlers(
-    runtime: HttpRuntimeAdapter,
+    runtime: HttpRuntimeAdapterProtocol,
     server: HttpHandlerFactoryServer,
-) -> HttpRuntimeAdapter:
+) -> HttpRuntimeAdapterProtocol:
     from .orchestration import build_stdio_runtime_adapter
 
     mcp_runtime = build_stdio_runtime_adapter(server)
@@ -70,7 +70,7 @@ def register_http_runtime_handlers(
 
 def build_http_runtime_adapter(
     server: HttpHandlerFactoryServer,
-) -> HttpRuntimeAdapter:
+) -> HttpRuntimeAdapterProtocol:
     from ..server import HttpRuntimeAdapter
 
     runtime = HttpRuntimeAdapter(server.settings)

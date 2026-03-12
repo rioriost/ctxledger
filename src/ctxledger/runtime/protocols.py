@@ -8,6 +8,7 @@ from .types import McpResourceResponse, McpToolResponse
 if TYPE_CHECKING:
     from ..mcp.tool_schemas import McpToolSchema
     from ..workflow.service import ProjectionArtifactType, WorkflowService
+    from .introspection import RuntimeIntrospection
 
 
 class DatabaseHealthChecker(Protocol):
@@ -38,6 +39,14 @@ class McpRuntimeProtocol(Protocol):
     ) -> McpToolResponse: ...
 
     def dispatch_resource(self, uri: str) -> McpResourceResponse: ...
+
+
+class HttpRuntimeAdapterProtocol(ServerRuntime, Protocol):
+    settings: AppSettings
+
+    def register_handler(self, route_name: str, handler: Any) -> None: ...
+    def registered_routes(self) -> tuple[str, ...]: ...
+    def introspect(self) -> RuntimeIntrospection: ...
 
 
 class HttpHandlerFactoryServer(Protocol):
@@ -79,6 +88,7 @@ __all__ = [
     "ServerRuntime",
     "WorkflowServiceFactory",
     "McpRuntimeProtocol",
+    "HttpRuntimeAdapterProtocol",
     "HttpHandlerFactoryServer",
     "WorkflowResponseBuilderServer",
 ]

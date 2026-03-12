@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .protocols import ServerRuntime
 
 if TYPE_CHECKING:
     from ..mcp.stdio import StdioRuntimeAdapter
-    from ..server import CompositeRuntimeAdapter, HttpRuntimeAdapter
 
 
 @dataclass(slots=True)
@@ -25,16 +24,26 @@ def collect_runtime_introspection(
         return ()
 
     from ..mcp.stdio import StdioRuntimeAdapter
-    from ..server import CompositeRuntimeAdapter, HttpRuntimeAdapter
 
-    if isinstance(runtime, CompositeRuntimeAdapter):
+    nested_runtimes = getattr(runtime, "_runtimes", None)
+    if isinstance(nested_runtimes, list):
         collected: list[RuntimeIntrospection] = []
-        for nested_runtime in runtime._runtimes:
+        for nested_runtime in nested_runtimes:
             collected.extend(collect_runtime_introspection(nested_runtime))
         return tuple(collected)
 
-    if isinstance(runtime, HttpRuntimeAdapter):
-        return (runtime.introspect(),)
+    introspect = getattr(runtime, "introspect", None)
+    if callable(introspect):
+        introspection = introspect()
+        if _is_runtime_introspection_like(introspection):
+            return (
+                RuntimeIntrospection(
+                    transport=str(introspection.transport),
+                    routes=tuple(getattr(introspection, "routes", ())),
+                    tools=tuple(getattr(introspection, "tools", ())),
+                    resources=tuple(getattr(introspection, "resources", ())),
+                ),
+            )
 
     if isinstance(runtime, StdioRuntimeAdapter):
         introspection = runtime.introspect()
@@ -48,6 +57,15 @@ def collect_runtime_introspection(
         )
 
     return ()
+
+
+def _is_runtime_introspection_like(value: Any) -> bool:
+    return (
+        hasattr(value, "transport")
+        and hasattr(value, "routes")
+        and hasattr(value, "tools")
+        and hasattr(value, "resources")
+    )
 
 
 from .serializers import (
