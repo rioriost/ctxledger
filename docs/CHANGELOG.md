@@ -67,6 +67,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `docs/mcp-api.md`
   - `docs/specification.md`
   - including clearer operator-handling semantics for `ignored` versus `resolved` closure
+  - including representative operator action surface design for explicit `ignored` / `resolved` lifecycle mutation
 - test coverage for:
   - repeated projection failures incrementing `retry_count`
   - ignored projection failures disappearing from open failure warnings
@@ -130,5 +131,10 @@ The project currently follows a lightweight, human-maintained changelog style.
 - operator-driven closure semantics are now documented more explicitly:
   - `resolved` indicates successful reconciliation or equivalent recovery evidence
   - `ignored` indicates visibility/handling closure without claiming successful projection repair
+- representative operator action surfaces are now documented for future concrete API design:
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
+  - selector scope may include `workspace_id`, `workflow_instance_id`, and optional `projection_type`
+  - action responses should preserve history and report `updated_failure_count`
 
 ---

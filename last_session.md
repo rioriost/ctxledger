@@ -1,91 +1,151 @@
 今回の変更
-#### `ctxledger/docs/workflow-model.md`
-projection failure lifecycle の operator semantics を明確化する追記を行いました。
+#### `ctxledger/docs/mcp-api.md`
+projection failure lifecycle の operator action surface を concrete API 設計として整理する追記を行いました。
 
-主な更新内容:
-- `resolved` の operational meaning を追記
-  - `resolved` は successful reconciliation や同等の成功的 closure を意味する
-  - operator が warning を消したいだけの場合とは区別する
-  - `resolved_at` は failure が open でなくなった時刻を表す
-- `ignored` の operator-handling semantics を追記
-  - operator または上位 policy による suppression として扱う
-  - successful projection recovery とは別物であることを明記
-  - known-noncritical projection や temporary acceptance の例を補足
-  - `resolved_at` があっても、closure reason の truth は `status` にあることを明記
-- projection failure visibility rules に、read-side surface と operator-facing interpretation を補足
-  - closed failure history は operator ignore 後も inspect 可能であるべき
-  - `ignored` と `resolved` は timestamp ではなく lifecycle `status` で区別すべき
-  - operator action は unresolved warning を消しても diagnostic history を消さない
-- read-side surface の例に、dedicated closed failure history HTTP surface を追加
-  - implemented な場合の例として扱う
+主な追加内容:
+- dedicated closed failure history read surface に加えて、
+  operator action surface の存在意義を明文化
+- representative operator action intents を追加
+  - matching open projection failures を `ignored` にする
+  - matching open projection failures を `resolved` にする
+  - 単一 `projection_type` または workflow 全体で scope できる
+- action surface の design constraints を追加
+  - canonical projection failure lifecycle state を mutate する
+  - projection file contents を直接 mutate するものではない
+  - failure history は削除せず保持する
+  - `ignored` と `resolved` の意味を混同しない
+  - narrow read-only history endpoint とは責務を分ける
 
 ---
 
-#### 今回 docs で明確になったこと
-projection failure lifecycle の意味づけは少なくとも次のように整理された状態です。
+#### `workflow_resume` 節で整理した operator action API design
+`docs/mcp-api.md` の `workflow_resume` / projection lifecycle 節に、
+representative future tool design として以下を追記しました。
 
-- `open`
-  - projection write failure がまだ active unresolved issue
-- `resolved`
-  - successful reconciliation など、成功的 closure によって open でなくなった
+Representative future tool examples:
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+
+Representative intended behavior:
+- `projection_failures_ignore`
+  - matching `open` projection failure records を `ignored` として close
+  - closed history は保持
+  - `open projection failure` warning は消える
+  - successful projection repair を主張しない
+- `projection_failures_resolve`
+  - matching `open` projection failure records を `resolved` として close
+  - closed history は保持
+  - successful reconciliation または recovery-oriented closure を記録
+  - `open projection failure` warning は消える
+
+Representative selector fields:
+- `workspace_id`
+- `workflow_instance_id`
+- `projection_type`
+
+Representative response fields:
+- `workspace_id`
+- `workflow_instance_id`
+- `projection_type` (scoped の場合)
+- `updated_failure_count`
+- `status`
+
+Representative response status values:
 - `ignored`
-  - operator / policy により active unresolved issue として扱わないことにした
-  - recovery 成功を意味しない
+- `resolved`
 
-特に重要な整理:
-- `resolved_at` は `resolved` と `ignored` の両方で closure time を持ちうる
-- closure reason の判別は `resolved_at` ではなく `status` を見る
-- operator ignore 後も closed history は残り続ける
-- warning visibility は変わっても canonical diagnostic history は消えない
+Representative error cases:
+- workspace not found
+- workflow not found
+- workflow/workspace mismatch
+- authentication failure
+- persistence failure
+
+Design note として明記したこと:
+- canonical projection failure lifecycle state を操作する API である
+- failure history は delete しない
+- projection write / reconciliation 自体を代替する API ではない
+- `ignored` と `resolved` の差分は、その後の resume / closed history でも見え続けるべき
 
 ---
 
-#### docs 全体との関係
-この更新により、少なくとも次の docs 群と整合しやすい形になっています。
+#### 既存実装との関係
+この設計追記は、少なくとも既存の service / repository にある次の capability と整合する想定です。
 
-- `ctxledger/docs/architecture.md`
-- `ctxledger/docs/mcp-api.md`
-- `ctxledger/docs/specification.md`
-- `ctxledger/docs/workflow-model.md`
+- `resolve_resume_projection_failures(...)`
+- `ignore_resume_projection_failures(...)`
 
-関連する既存の concrete surface:
-- dedicated closed failure history endpoint
+つまり今回の docs は、
+完全な新概念を追加したというより、
+
+- 既存の internal capability
+- 既存の read-side lifecycle semantics
+- 今後の public mutation surface
+
+をつなぐための API design 整理です。
+
+---
+
+#### read-side との責務分離
+この時点で projection failure lifecycle の surface は、概念上は次の 2 系統に分けて整理されています。
+
+1. read-side
+- `workflow_resume`
+- dedicated history endpoint
   - `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
-- runtime/debug route naming
-  - `workflow_closed_projection_failures`
+
+2. operator action / mutation-side
+- future MCP tools
+  - `projection_failures_ignore`
+  - `projection_failures_resolve`
+
+重要な整理:
+- read-side は assembled view を返す
+- mutation-side は canonical lifecycle state を更新する
+- read-side と mutation-side を混同しない
+- `ignored` は visibility/handling closure
+- `resolved` は recovery/evidence-backed closure
 
 ---
 
 ### 現在の状態
-closed projection failure history と projection failure lifecycle については、少なくとも以下の観点でだいぶ揃っています。
+projection failure lifecycle まわりは、少なくとも docs 上では次の観点でかなり揃っています。
 
-- server 実装
-- route registration
-- tests
-- README
-- MCP API docs
-- architecture docs
-- specification docs
-- workflow model docs
-- deployment / security docs
-- changelog
+- lifecycle semantics
+  - `open`
+  - `resolved`
+  - `ignored`
+- closed failure history read-side
+- dedicated HTTP history endpoint
+- runtime/debug route naming
+- operator semantics
+- future operator action API design
 
-特に、operator が failure を `ignored` として閉じた場合の意味が、workflow model docs 上で以前より明確になりました。
+特に、次の整理が docs 上で明確です。
+
+- `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+  は narrow read-only history surface
+- `projection_failures_ignore` / `projection_failures_resolve`
+  は future mutation surface の representative design
+- `ignored` と `resolved` は後続の resume / history でも区別され続けるべき
 
 ---
 
 ### 補足
 - `.gitignore` は保守対象外として扱う前提
-- handoff でも `.gitignore` は作業対象に含めない
+- この handoff でも `.gitignore` は作業対象に含めない
 
 ---
 
 ### 次に自然な作業
-次に自然なのは、未完了の surface や action を前に進めることです。例えば:
+次に自然なのは、docs 設計から implementation へ進めることです。例えば:
 
-1. projection failure lifecycle の operator action surface を concrete API として設計する
-2. 他の HTTP surface の contract を docs と実装で横並び確認する
-3. workflow / memory 系の未完成 surface 実装へ進む
-4. deployment / security / debug endpoint 周辺の残りの表現統一を続ける
+1. `projection_failures_ignore` / `projection_failures_resolve` の public surface を実装する
+   - MCP tool として出すか
+   - HTTP action endpoint としても出すか
+   - あるいは両方出すか
+2. request / response schema を具体化する
+3. auth / error mapping / tests を追加する
+4. docs と implementation を同時に前進させる
 
-この時点では、projection failure lifecycle の read-side と operator semantics の docs はかなり整理された状態です。
+この時点では、operator action surface の API design は docs 上でかなり整理された状態です。

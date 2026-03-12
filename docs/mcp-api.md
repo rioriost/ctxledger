@@ -120,6 +120,21 @@ Representative closed failure fields include:
 - `retry_count`
 - `status`
 
+A future concrete server surface may also expose operator action endpoints for projection failure lifecycle handling.
+
+Representative operator action intents include:
+
+- mark matching open projection failures as `ignored`
+- mark matching open projection failures as `resolved`
+- scope the action to a single projection type or all workflow projection failures
+
+Representative design constraints for such action surfaces include:
+
+- they should mutate canonical projection failure lifecycle state, not projection file contents directly
+- they should preserve failure history rather than deleting records
+- they should distinguish operator visibility closure (`ignored`) from successful reconciliation (`resolved`)
+- they should remain separate from narrow read-only history endpoints such as `/workflow-resume/{workflow_instance_id}/closed-projection-failures`
+
 This HTTP surface does not change the MCP responsibility split:
 
 - MCP Tools remain the primary command interface
@@ -456,6 +471,64 @@ Representative retry behavior:
 
 - first open failure for a projection stream: `retry_count = 0`
 - second consecutive open failure for the same projection stream: `retry_count = 1`
+
+### Representative Operator Action Surfaces
+
+Projection failure lifecycle handling may also require explicit mutation surfaces in addition to read-side resume access.
+
+Representative action surfaces may be modeled as MCP tools because they perform canonical state mutation.
+
+Representative future tool examples:
+
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+
+Representative intended behavior:
+
+- `projection_failures_ignore`
+  - close matching `open` projection failure records as `ignored`
+  - preserve closed history for later inspection
+  - stop surfacing those failures as `open projection failure` warnings
+  - do not claim successful projection repair
+- `projection_failures_resolve`
+  - close matching `open` projection failure records as `resolved`
+  - preserve closed history for later inspection
+  - record successful reconciliation or equivalent recovery-oriented closure semantics
+  - stop surfacing those failures as `open projection failure` warnings
+
+Representative selector fields for either tool may include:
+
+- `workspace_id`
+- `workflow_instance_id`
+- `projection_type`
+
+Representative response contents may include:
+
+- `workspace_id`
+- `workflow_instance_id`
+- `projection_type` (when scoped)
+- `updated_failure_count`
+- `status`
+
+Representative response status values may include:
+
+- `ignored`
+- `resolved`
+
+Representative error cases include:
+
+- workspace not found
+- workflow not found
+- workflow/workspace mismatch
+- authentication failure
+- persistence failure
+
+Design note:
+
+- these action surfaces should operate on canonical projection failure lifecycle state
+- they should not delete failure history
+- they should not be treated as projection write or reconciliation mechanisms by themselves
+- the distinction between `ignored` and `resolved` should remain visible in later resume views and closed history reads
 
 ### Projection Warning Visibility Rules
 Projection-related warnings should distinguish artifact status from failure lifecycle state.
