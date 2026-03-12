@@ -9,7 +9,6 @@ from urllib.parse import parse_qs, urlparse
 from uuid import UUID
 
 from .config import AppSettings
-from .db.postgres import PostgresConfig, build_postgres_uow_factory
 from .memory.service import StubResponse
 from .workflow.service import (
     CompleteWorkflowInput,
@@ -222,6 +221,33 @@ from .runtime.orchestration import (
 )
 from .runtime.orchestration import (
     create_runtime as create_runtime_orchestration,
+)
+from .runtime.server_factory import (
+    build_workflow_service_factory as extracted_build_workflow_service_factory,
+)
+from .runtime.server_factory import (
+    create_server as extracted_create_server,
+)
+from .runtime.server_responses import (
+    build_closed_projection_failures_response as extracted_build_closed_projection_failures_response,
+)
+from .runtime.server_responses import (
+    build_projection_failures_ignore_response as extracted_build_projection_failures_ignore_response,
+)
+from .runtime.server_responses import (
+    build_projection_failures_resolve_response as extracted_build_projection_failures_resolve_response,
+)
+from .runtime.server_responses import (
+    build_runtime_introspection_response as extracted_build_runtime_introspection_response,
+)
+from .runtime.server_responses import (
+    build_runtime_routes_response as extracted_build_runtime_routes_response,
+)
+from .runtime.server_responses import (
+    build_runtime_tools_response as extracted_build_runtime_tools_response,
+)
+from .runtime.server_responses import (
+    build_workflow_resume_response as extracted_build_workflow_resume_response,
 )
 
 WorkflowHttpHandler = Any
@@ -453,51 +479,15 @@ class CtxLedgerServer:
         self,
         workflow_instance_id: UUID,
     ) -> WorkflowResumeResponse:
-        try:
-            resume = self.get_workflow_resume(workflow_instance_id)
-        except ServerBootstrapError as exc:
-            return WorkflowResumeResponse(
-                status_code=503,
-                payload={
-                    "error": {
-                        "code": "server_not_ready",
-                        "message": str(exc),
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
-
-        return WorkflowResumeResponse(
-            status_code=200,
-            payload=serialize_workflow_resume(resume),
-            headers={"content-type": "application/json"},
-        )
+        return extracted_build_workflow_resume_response(self, workflow_instance_id)
 
     def build_closed_projection_failures_response(
         self,
         workflow_instance_id: UUID,
     ) -> ProjectionFailureHistoryResponse:
-        try:
-            resume = self.get_workflow_resume(workflow_instance_id)
-        except ServerBootstrapError as exc:
-            return ProjectionFailureHistoryResponse(
-                status_code=503,
-                payload={
-                    "error": {
-                        "code": "server_not_ready",
-                        "message": str(exc),
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
-
-        return ProjectionFailureHistoryResponse(
-            status_code=200,
-            payload=serialize_closed_projection_failures_history(
-                workflow_instance_id,
-                getattr(resume, "closed_projection_failures", ()),
-            ),
-            headers={"content-type": "application/json"},
+        return extracted_build_closed_projection_failures_response(
+            self,
+            workflow_instance_id,
         )
 
     def build_projection_failures_ignore_response(
@@ -507,61 +497,11 @@ class CtxLedgerServer:
         workflow_instance_id: UUID,
         projection_type: ProjectionArtifactType | None = None,
     ) -> ProjectionFailureActionResponse:
-        if self.workflow_service is None:
-            return ProjectionFailureActionResponse(
-                status_code=503,
-                payload={
-                    "error": {
-                        "code": "server_not_ready",
-                        "message": "workflow service is not initialized",
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
-
-        try:
-            updated_failure_count = (
-                self.workflow_service.ignore_resume_projection_failures(
-                    workspace_id=workspace_id,
-                    workflow_instance_id=workflow_instance_id,
-                    projection_type=projection_type,
-                )
-            )
-        except Exception as exc:
-            message = str(exc) or "failed to ignore projection failures"
-            lowered = message.lower()
-            if "not found" in lowered:
-                status_code = 404
-                code = "not_found"
-            elif "does not belong to workspace" in lowered or "mismatch" in lowered:
-                status_code = 400
-                code = "invalid_request"
-            else:
-                status_code = 500
-                code = "server_error"
-            return ProjectionFailureActionResponse(
-                status_code=status_code,
-                payload={
-                    "error": {
-                        "code": code,
-                        "message": message,
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
-
-        return ProjectionFailureActionResponse(
-            status_code=200,
-            payload={
-                "workspace_id": str(workspace_id),
-                "workflow_instance_id": str(workflow_instance_id),
-                "projection_type": (
-                    projection_type.value if projection_type is not None else None
-                ),
-                "updated_failure_count": updated_failure_count,
-                "status": "ignored",
-            },
-            headers={"content-type": "application/json"},
+        return extracted_build_projection_failures_ignore_response(
+            self,
+            workspace_id=workspace_id,
+            workflow_instance_id=workflow_instance_id,
+            projection_type=projection_type,
         )
 
     def build_projection_failures_resolve_response(
@@ -571,106 +511,21 @@ class CtxLedgerServer:
         workflow_instance_id: UUID,
         projection_type: ProjectionArtifactType | None = None,
     ) -> ProjectionFailureActionResponse:
-        if self.workflow_service is None:
-            return ProjectionFailureActionResponse(
-                status_code=503,
-                payload={
-                    "error": {
-                        "code": "server_not_ready",
-                        "message": "workflow service is not initialized",
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
-
-        try:
-            updated_failure_count = (
-                self.workflow_service.resolve_resume_projection_failures(
-                    workspace_id=workspace_id,
-                    workflow_instance_id=workflow_instance_id,
-                    projection_type=projection_type,
-                )
-            )
-        except Exception as exc:
-            message = str(exc) or "failed to resolve projection failures"
-            lowered = message.lower()
-            if "not found" in lowered:
-                status_code = 404
-                code = "not_found"
-            elif "does not belong to workspace" in lowered or "mismatch" in lowered:
-                status_code = 400
-                code = "invalid_request"
-            else:
-                status_code = 500
-                code = "server_error"
-            return ProjectionFailureActionResponse(
-                status_code=status_code,
-                payload={
-                    "error": {
-                        "code": code,
-                        "message": message,
-                    }
-                },
-                headers={"content-type": "application/json"},
-            )
-
-        return ProjectionFailureActionResponse(
-            status_code=200,
-            payload={
-                "workspace_id": str(workspace_id),
-                "workflow_instance_id": str(workflow_instance_id),
-                "projection_type": (
-                    projection_type.value if projection_type is not None else None
-                ),
-                "updated_failure_count": updated_failure_count,
-                "status": "resolved",
-            },
-            headers={"content-type": "application/json"},
+        return extracted_build_projection_failures_resolve_response(
+            self,
+            workspace_id=workspace_id,
+            workflow_instance_id=workflow_instance_id,
+            projection_type=projection_type,
         )
 
     def build_runtime_introspection_response(self) -> RuntimeIntrospectionResponse:
-        introspections = collect_runtime_introspection(self.runtime)
-        return RuntimeIntrospectionResponse(
-            status_code=200,
-            payload={
-                "runtime": serialize_runtime_introspection_collection(introspections),
-            },
-            headers={"content-type": "application/json"},
-        )
+        return extracted_build_runtime_introspection_response(self)
 
     def build_runtime_routes_response(self) -> RuntimeIntrospectionResponse:
-        introspections = collect_runtime_introspection(self.runtime)
-        return RuntimeIntrospectionResponse(
-            status_code=200,
-            payload={
-                "routes": [
-                    {
-                        "transport": introspection.transport,
-                        "routes": list(introspection.routes),
-                    }
-                    for introspection in introspections
-                    if introspection.routes
-                ],
-            },
-            headers={"content-type": "application/json"},
-        )
+        return extracted_build_runtime_routes_response(self)
 
     def build_runtime_tools_response(self) -> RuntimeIntrospectionResponse:
-        introspections = collect_runtime_introspection(self.runtime)
-        return RuntimeIntrospectionResponse(
-            status_code=200,
-            payload={
-                "tools": [
-                    {
-                        "transport": introspection.transport,
-                        "tools": list(introspection.tools),
-                    }
-                    for introspection in introspections
-                    if introspection.tools
-                ],
-            },
-            headers={"content-type": "application/json"},
-        )
+        return extracted_build_runtime_tools_response(self)
 
     def build_workspace_resume_resource_response(
         self,
@@ -1363,16 +1218,7 @@ def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
 def build_workflow_service_factory(
     settings: AppSettings,
 ) -> WorkflowServiceFactory | None:
-    if not settings.database.url:
-        return None
-
-    postgres_config = PostgresConfig.from_settings(settings)
-    uow_factory = build_postgres_uow_factory(postgres_config)
-
-    def _factory() -> WorkflowService:
-        return WorkflowService(uow_factory)
-
-    return _factory
+    return extracted_build_workflow_service_factory(settings)
 
 
 def create_runtime(
@@ -1404,20 +1250,15 @@ def create_server(
     runtime: ServerRuntime | None = None,
     workflow_service_factory: WorkflowServiceFactory | None = None,
 ) -> CtxLedgerServer:
-    server = CtxLedgerServer(
-        settings=settings,
+    return extracted_create_server(
+        settings,
+        server_class=CtxLedgerServer,
+        create_runtime=create_runtime,
+        build_database_health_checker=build_database_health_checker,
         db_health_checker=db_health_checker,
-        runtime=None,
-        workflow_service_factory=(
-            workflow_service_factory
-            if workflow_service_factory is not None
-            else build_workflow_service_factory(settings)
-        ),
+        runtime=runtime,
+        workflow_service_factory=workflow_service_factory,
     )
-    server.runtime = (
-        runtime if runtime is not None else create_runtime(settings, server)
-    )
-    return server
 
 
 __all__ = [
