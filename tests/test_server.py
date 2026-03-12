@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -23,6 +24,7 @@ from ctxledger.memory.service import MemoryService
 from ctxledger.server import (
     CtxLedgerServer,
     HttpRuntimeAdapter,
+    McpHttpResponse,
     McpResourceResponse,
     McpToolResponse,
     ProjectionFailureActionResponse,
@@ -1781,6 +1783,7 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
 
     assert isinstance(runtime, HttpRuntimeAdapter)
     assert runtime.registered_routes() == (
+        "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
         "runtime_introspection",
@@ -1799,6 +1802,282 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
 
     assert response.status_code == 200
     assert response.payload == serialize_workflow_resume(resume)
+
+
+def test_http_mcp_route_supports_initialize_over_http() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp",
+        (
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{'
+            '"protocolVersion":"2024-11-05",'
+            '"capabilities":{},'
+            '"clientInfo":{"name":"test-client","version":"0.1.0"}'
+            "}}"
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {
+                "name": "ctxledger",
+                "version": settings.app_version,
+            },
+            "capabilities": {
+                "tools": {},
+                "resources": {},
+            },
+        },
+    }
+
+
+def test_http_mcp_route_supports_tools_list_over_http() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp",
+        '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}',
+    )
+
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+
+    assert response.payload["jsonrpc"] == "2.0"
+    assert response.payload["id"] == 2
+    tools = response.payload["result"]["tools"]
+    tool_names = [tool["name"] for tool in tools]
+
+    assert tool_names == [
+        "memory_get_context",
+        "memory_remember_episode",
+        "memory_search",
+        "projection_failures_ignore",
+        "projection_failures_resolve",
+        "workflow_checkpoint",
+        "workflow_complete",
+        "workflow_resume",
+        "workflow_start",
+        "workspace_register",
+    ]
+
+    workspace_register_tool = next(
+        tool for tool in tools if tool["name"] == "workspace_register"
+    )
+    assert workspace_register_tool["inputSchema"] == {
+        "type": "object",
+        "properties": {
+            "repo_url": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Repository URL for the workspace.",
+            },
+            "canonical_path": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Canonical local filesystem path for the workspace checkout.",
+            },
+            "default_branch": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Default branch name for the workspace repository.",
+            },
+            "workspace_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Existing workspace identity for explicit update operations.",
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Optional workspace metadata.",
+                "additionalProperties": True,
+            },
+        },
+        "required": ["repo_url", "canonical_path", "default_branch"],
+        "additionalProperties": False,
+    }
+
+
+def test_http_mcp_route_supports_tools_call_over_http() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp",
+        (
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{'
+            '"name":"workflow_resume",'
+            f'"arguments":{{"workflow_instance_id":"{resume.workflow_instance.workflow_instance_id}"}}'
+            "}}"
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload["jsonrpc"] == "2.0"
+    assert response.payload["id"] == 3
+
+    content = response.payload["result"]["content"]
+    assert content[0]["type"] == "text"
+    assert '"ok": true' in content[0]["text"]
+    assert str(resume.workflow_instance.workflow_instance_id) in content[0]["text"]
+
+
+def test_http_mcp_route_requires_json_rpc_body() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch("mcp_rpc", "/mcp")
+
+    assert response.status_code == 400
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "HTTP MCP endpoint requires a JSON-RPC request body",
+        }
+    }
+
+
+def test_http_mcp_route_requires_configured_mcp_path() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "mcp_rpc",
+        "/not-mcp",
+        '{"jsonrpc":"2.0","id":4,"method":"tools/list","params":{}}',
+    )
+
+    assert response.status_code == 404
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "MCP endpoint requires /mcp",
+        }
+    }
+
+
+def test_http_mcp_route_requires_bearer_token_when_auth_is_enabled() -> None:
+    settings = make_settings(
+        auth_bearer_token="secret-token",
+        require_auth=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    missing_token_response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp",
+        '{"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}}',
+    )
+    invalid_token_response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp?authorization=Bearer wrong-token",
+        '{"jsonrpc":"2.0","id":6,"method":"tools/list","params":{}}',
+    )
+    valid_token_response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp?authorization=Bearer secret-token",
+        '{"jsonrpc":"2.0","id":7,"method":"tools/list","params":{}}',
+    )
+
+    expected_auth_headers = {
+        "content-type": "application/json",
+        "www-authenticate": 'Bearer realm="ctxledger"',
+    }
+
+    assert missing_token_response.status_code == 401
+    assert missing_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "missing bearer token",
+        }
+    }
+    assert missing_token_response.headers == expected_auth_headers
+
+    assert invalid_token_response.status_code == 401
+    assert invalid_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "invalid bearer token",
+        }
+    }
+    assert invalid_token_response.headers == expected_auth_headers
+
+    assert valid_token_response.status_code == 200
+    assert valid_token_response.headers == {"content-type": "application/json"}
+    assert valid_token_response.payload["result"]["tools"]
 
 
 def test_http_runtime_adapter_dispatches_registered_closed_projection_failures_handler() -> (
@@ -1884,6 +2163,7 @@ def test_http_workflow_resume_route_requires_bearer_token_when_auth_is_enabled()
 
     assert isinstance(runtime, HttpRuntimeAdapter)
     assert runtime.registered_routes() == (
+        "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
         "runtime_introspection",
@@ -2452,6 +2732,7 @@ def test_http_debug_routes_require_bearer_token_when_auth_is_enabled() -> None:
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert server.runtime.registered_routes() == (
+        "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
         "runtime_introspection",
@@ -2537,6 +2818,7 @@ def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert server.runtime.registered_routes() == (
+        "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
         "runtime_introspection",
@@ -2555,6 +2837,17 @@ def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
 
     assert response.status_code == 200
     assert response.payload == serialize_workflow_resume(resume)
+
+
+def test_create_server_returns_http_runtime_by_default() -> None:
+    settings = make_settings()
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    )
+
+    assert isinstance(server.runtime, HttpRuntimeAdapter)
 
 
 def test_build_resume_workflow_tool_handler_returns_success_payload() -> None:
@@ -3843,6 +4136,178 @@ def test_create_server_wires_stdio_runtime_with_registered_tools() -> None:
     assert response.payload["ok"] is True
 
 
+def test_http_mcp_rpc_initialize_returns_success_payload() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp",
+        body=json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {},
+            }
+        ),
+    )
+
+    assert isinstance(response, McpHttpResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {
+                "name": "ctxledger",
+                "version": "0.1.0",
+            },
+            "capabilities": {
+                "tools": {},
+                "resources": {},
+            },
+        },
+    }
+
+
+def test_http_mcp_rpc_tools_list_returns_registered_tools_with_input_schemas() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp",
+        body=json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/list",
+                "params": {},
+            }
+        ),
+    )
+
+    assert isinstance(response, McpHttpResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    result = response.payload["result"]
+    tools = {tool["name"]: tool for tool in result["tools"]}
+
+    assert "workspace_register" in tools
+    assert tools["workspace_register"]["inputSchema"]["required"] == [
+        "repo_url",
+        "canonical_path",
+        "default_branch",
+    ]
+    assert (
+        tools["workflow_start"]["inputSchema"]["properties"]["workspace_id"]["format"]
+        == "uuid"
+    )
+    assert (
+        tools["memory_get_context"]["inputSchema"]["properties"]["include_summaries"][
+            "type"
+        ]
+        == "boolean"
+    )
+
+
+def test_http_mcp_rpc_tools_call_returns_workspace_register_success_payload() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    registered_workspace = replace(
+        resume.workspace,
+        repo_url="https://example.com/registered.git",
+        canonical_path="/tmp/registered",
+        default_branch="main",
+        metadata={"team": "platform"},
+    )
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        register_workspace_result=registered_workspace,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+    server.startup()
+
+    response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp",
+        body=json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "workspace_register",
+                    "arguments": {
+                        "repo_url": registered_workspace.repo_url,
+                        "canonical_path": registered_workspace.canonical_path,
+                        "default_branch": registered_workspace.default_branch,
+                        "metadata": {"team": "platform"},
+                    },
+                },
+            }
+        ),
+    )
+
+    assert isinstance(response, McpHttpResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "ok": True,
+                            "result": {
+                                "workspace_id": str(registered_workspace.workspace_id),
+                                "repo_url": registered_workspace.repo_url,
+                                "canonical_path": registered_workspace.canonical_path,
+                                "default_branch": registered_workspace.default_branch,
+                                "metadata": registered_workspace.metadata,
+                                "created_at": registered_workspace.created_at.isoformat(),
+                                "updated_at": registered_workspace.updated_at.isoformat(),
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+            ]
+        },
+    }
+
+
 def test_dispatch_http_request_returns_dispatch_result_for_success() -> None:
     settings = make_settings()
     resume = make_resume_fixture()
@@ -4454,6 +4919,7 @@ def test_collect_runtime_introspection_returns_both_transports_for_composite_run
         RuntimeIntrospection(
             transport="http",
             routes=(
+                "mcp_rpc",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "runtime_introspection",
@@ -4561,6 +5027,7 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
             {
                 "transport": "http",
                 "routes": [
+                    "mcp_rpc",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "runtime_introspection",
@@ -4600,6 +5067,7 @@ def test_build_runtime_introspection_response_returns_http_payload_for_composite
             {
                 "transport": "http",
                 "routes": [
+                    "mcp_rpc",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "runtime_introspection",
@@ -4672,6 +5140,7 @@ def test_build_runtime_introspection_http_handler_returns_success_response() -> 
             {
                 "transport": "http",
                 "routes": [
+                    "mcp_rpc",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "runtime_introspection",
@@ -4728,6 +5197,7 @@ def test_build_http_runtime_adapter_omits_runtime_introspection_route_when_debug
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert "runtime_introspection" not in server.runtime._handlers
     assert server.runtime.registered_routes() == (
+        "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
         "workflow_closed_projection_failures",
@@ -4759,6 +5229,7 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
             {
                 "transport": "http",
                 "routes": [
+                    "mcp_rpc",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "runtime_introspection",
@@ -4790,6 +5261,7 @@ def test_health_includes_runtime_summary_details_for_http_runtime() -> None:
         {
             "transport": "http",
             "routes": [
+                "mcp_rpc",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "runtime_introspection",
@@ -4824,6 +5296,7 @@ def test_health_includes_runtime_summary_details_for_composite_runtime() -> None
         {
             "transport": "http",
             "routes": [
+                "mcp_rpc",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "runtime_introspection",
@@ -4875,6 +5348,7 @@ def test_readiness_includes_runtime_summary_details_for_http_runtime() -> None:
         {
             "transport": "http",
             "routes": [
+                "mcp_rpc",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "runtime_introspection",
@@ -4910,6 +5384,7 @@ def test_readiness_includes_runtime_summary_details_for_composite_runtime() -> N
         {
             "transport": "http",
             "routes": [
+                "mcp_rpc",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "runtime_introspection",
@@ -4983,6 +5458,7 @@ def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
         {
             "transport": "http",
             "routes": [
+                "mcp_rpc",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "runtime_introspection",
@@ -5040,6 +5516,7 @@ def test_startup_logs_runtime_introspection_metadata_for_composite_runtime(
         {
             "transport": "http",
             "routes": [
+                "mcp_rpc",
                 "projection_failures_ignore",
                 "projection_failures_resolve",
                 "runtime_introspection",
@@ -5093,6 +5570,7 @@ def test_build_debug_routes_http_handler_returns_runtime_routes_only() -> None:
             {
                 "transport": "http",
                 "routes": [
+                    "mcp_rpc",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "runtime_introspection",
@@ -5131,6 +5609,7 @@ def test_build_debug_routes_http_handler_returns_both_transports_with_empty_stdi
             {
                 "transport": "http",
                 "routes": [
+                    "mcp_rpc",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "runtime_introspection",
@@ -5183,6 +5662,7 @@ def test_build_http_runtime_adapter_omits_runtime_routes_handler_when_debug_endp
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert "runtime_routes" not in server.runtime._handlers
     assert server.runtime.registered_routes() == (
+        "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
         "workflow_closed_projection_failures",
@@ -5285,6 +5765,7 @@ def test_build_http_runtime_adapter_omits_runtime_tools_handler_when_debug_endpo
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert "runtime_tools" not in server.runtime._handlers
     assert server.runtime.registered_routes() == (
+        "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
         "workflow_closed_projection_failures",
@@ -5311,10 +5792,11 @@ def test_print_runtime_summary_includes_http_runtime_introspection(
     assert "health=ok" in captured.err
     assert "readiness=ready" in captured.err
     assert (
-        "runtime=[{'transport': 'http', 'routes': ['projection_failures_ignore', "
-        "'projection_failures_resolve', 'runtime_introspection', 'runtime_routes', "
-        "'runtime_tools', 'workflow_closed_projection_failures', 'workflow_resume'], "
-        "'tools': [], 'resources': []}]" in captured.err
+        "runtime=[{'transport': 'http', 'routes': ['mcp_rpc', "
+        "'projection_failures_ignore', 'projection_failures_resolve', "
+        "'runtime_introspection', 'runtime_routes', 'runtime_tools', "
+        "'workflow_closed_projection_failures', 'workflow_resume'], 'tools': [], "
+        "'resources': []}]" in captured.err
     )
     assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
 
@@ -5342,10 +5824,11 @@ def test_print_runtime_summary_includes_composite_runtime_introspection(
     assert "health=ok" in captured.err
     assert "readiness=ready" in captured.err
     assert (
-        "runtime=[{'transport': 'http', 'routes': ['projection_failures_ignore', "
-        "'projection_failures_resolve', 'runtime_introspection', 'runtime_routes', "
-        "'runtime_tools', 'workflow_closed_projection_failures', 'workflow_resume'], "
-        "'tools': [], 'resources': []}, {'transport': 'stdio', 'routes': [], "
+        "runtime=[{'transport': 'http', 'routes': ['mcp_rpc', "
+        "'projection_failures_ignore', 'projection_failures_resolve', "
+        "'runtime_introspection', 'runtime_routes', 'runtime_tools', "
+        "'workflow_closed_projection_failures', 'workflow_resume'], 'tools': [], "
+        "'resources': []}, {'transport': 'stdio', 'routes': [], "
         "'tools': ['memory_get_context', 'memory_remember_episode', 'memory_search', "
         "'projection_failures_ignore', 'projection_failures_resolve', "
         "'workflow_checkpoint', 'workflow_complete', 'workflow_resume', "
@@ -5379,6 +5862,7 @@ def test_http_runtime_adapter_dispatches_registered_debug_routes_handler() -> No
             {
                 "transport": "http",
                 "routes": [
+                    "mcp_rpc",
                     "projection_failures_ignore",
                     "projection_failures_resolve",
                     "runtime_introspection",
