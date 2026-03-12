@@ -656,16 +656,15 @@ def create_runtime(
     settings: AppSettings,
     server: CtxLedgerServer | None = None,
 ) -> ServerRuntime | None:
-    if server is None:
-        return create_runtime_orchestration(
-            settings,
-            server,
-            http_runtime_builder=lambda _: HttpRuntimeAdapter(settings),
-        )
+    http_runtime_builder = (
+        (lambda _: HttpRuntimeAdapter(settings))
+        if server is None
+        else build_http_runtime_adapter
+    )
     return create_runtime_orchestration(
         settings,
         server,
-        http_runtime_builder=build_http_runtime_adapter,
+        http_runtime_builder=http_runtime_builder,
     )
 
 
