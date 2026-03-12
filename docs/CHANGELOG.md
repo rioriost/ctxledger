@@ -66,12 +66,21 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `README.md`
   - `docs/mcp-api.md`
   - `docs/specification.md`
+  - `docs/SECURITY.md`
+  - `docs/deployment.md`
   - including clearer operator-handling semantics for `ignored` versus `resolved` closure
   - including representative operator action surface design for explicit `ignored` / `resolved` lifecycle mutation
+  - including HTTP action request examples for auth-enabled and auth-disabled operation
+  - including operational cautions and deployment guidance for HTTP projection failure action routes
 - test coverage for:
   - repeated projection failures incrementing `retry_count`
   - ignored projection failures disappearing from open failure warnings
   - resume warning metadata exposing `retry_count` and failure `status`
+  - HTTP projection failure action routes, including:
+    - bearer-auth enforcement
+    - validation errors
+    - server-not-ready behavior
+    - success payloads for `projection_failures_ignore` and `projection_failures_resolve`
 
 ### Changed
 
@@ -137,7 +146,14 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `projection_failures_ignore`
   - `projection_failures_resolve`
   - HTTP docs now describe query-parameter request shape using `workspace_id`, `workflow_instance_id`, and optional `projection_type`
-  - HTTP docs now include representative request, success response, and validation error examples
+  - HTTP docs now include representative request examples for both auth-enabled and auth-disabled operation
+  - HTTP docs now include representative success response and validation error examples
+  - security and deployment docs now describe operator-only handling expectations for these mutation routes
   - action responses preserve history and report `updated_failure_count`
+- HTTP projection failure action route coverage now verifies:
+  - bearer-auth enforcement
+  - invalid request mapping
+  - `server_not_ready` responses
+  - successful ignore / resolve dispatch behavior
 
 ---

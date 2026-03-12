@@ -1,159 +1,171 @@
 今回の変更
-#### `ctxledger/docs/mcp-api.md`
-projection failure lifecycle の HTTP action surface について、**auth enabled / disabled の両方の request example** を docs に追加しました。
+#### `ctxledger/tests/test_server.py`
+projection failure lifecycle の HTTP action surface について、**HTTP route coverage を追加・拡張**しました。
 
 今回の方針:
-- すでに実装済みの HTTP route surface を、運用時の auth 有無の違いまで docs 上で明確化
-- query-parameter ベースの current contract を、そのまま読んで使える例として整理
-- 既存の success / validation error example と整合する形で説明粒度を揃える
+- 既存の `workflow_resume` / `workflow_closed_projection_failures` の HTTP auth / validation test style に揃える
+- MCP tool 側で確認していた validation / success semantics と、HTTP route surface 側の contract が一致していることを tests で担保する
+- docs だけでなく test coverage でも、projection failure lifecycle の public HTTP mutation surface を明示的に固定する
 
 ---
 
-### `docs/mcp-api.md` で追加・更新した内容
-#### 1. auth enabled 時の HTTP request example を明確化
-既存の representative request examples を、**authentication is enabled** の例であることが分かるように更新しました。
-
-対象:
+### `tests/test_server.py` で追加・更新した内容
+#### 1. HTTP action route の bearer-auth coverage を追加
+追加した主な観点:
 - `projection_failures_ignore`
 - `projection_failures_resolve`
 
-example で表現している内容:
-- `Authorization: Bearer ...` を付ける形
+確認した内容:
+- auth enabled 時に bearer token なし request は `401`
+- invalid bearer token は `401`
+- valid bearer token では正常 dispatch される
+- auth error 時の payload / headers が既存 HTTP auth contract と一致する
+
+主な assertion 対象:
+- `error.code = "authentication_error"`
+- `message = "missing bearer token"` / `message = "invalid bearer token"`
+- `www-authenticate = 'Bearer realm="ctxledger"'`
+
+---
+
+#### 2. HTTP action route の success payload coverage を追加
+追加した success coverage:
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+
+確認した内容:
+- HTTP route dispatch 後の payload が expected shape を返すこと
+- `FakeWorkflowService` の ignore / resolve call history が expected arguments で記録されること
+- `projection_type` があるケース / ないケースで shape が期待どおりであること
+
+代表 assertion:
 - `workspace_id`
 - `workflow_instance_id`
-- `projection_type` (optional)
-を query parameter で指定する current contract
+- `projection_type`
+- `updated_failure_count`
+- `status`
+
+`projection_failures_ignore` では:
+- `projection_type = "resume_json"`
+- `status = "ignored"`
+
+`projection_failures_resolve` では:
+- `projection_type = None`
+- `status = "resolved"`
 
 ---
 
-#### 2. auth disabled 時の HTTP request example を追加
-HTTP auth が無効な環境向けに、`Authorization` header を含まない representative request examples を追加しました。
+#### 3. HTTP validation error coverage を追加
+追加した validation coverage:
+- `projection_failures_ignore` に invalid `projection_type`
+- `projection_failures_resolve` に invalid `workflow_instance_id`
 
-追加した example 対象:
-- `projection_failures_ignore`
-- `projection_failures_resolve`
+確認した内容:
+- invalid request が `400` に map されること
+- error payload が expected validation contract を返すこと
+- allowed values が docs / implementation と一致すること
 
-これにより docs 上で、
-- auth enabled のときは bearer token が必要
-- auth disabled のときは query parameter のみで request する
-という運用差分が読み取れる状態になりました。
+代表 assertion:
+- `error.code = "invalid_request"`
+- `projection_type must be a supported projection artifact type`
+- `workflow_instance_id must be a valid UUID`
+- allowed values:
+  - `resume_json`
+  - `resume_md`
 
 ---
 
-#### 3. 既存の action route docs との整合を維持
-今回追加した request examples は、すでに docs に反映済みの以下と整合する形にしています。
-
-整合対象:
-- implemented HTTP action routes
+#### 4. HTTP server-not-ready coverage を追加
+追加した観点:
+- workflow service 未初期化時の
   - `projection_failures_ignore`
   - `projection_failures_resolve`
-- request shape
-  - `path: str` contract 維持
-  - query parameter 方式
-- representative response fields
-  - `workspace_id`
-  - `workflow_instance_id`
-  - `projection_type`
-  - `updated_failure_count`
-  - `status`
-- representative validation error shape
-  - `error.code = "invalid_request"`
+
+確認した内容:
+- response が `503`
+- payload が
+  - `error.code = "server_not_ready"`
+  - `message = "workflow service is not initialized"`
+  を返すこと
+
+これにより、docs に書いてある representative HTTP error behavior が test でも固定されました。
 
 ---
 
-#### `ctxledger/docs/SECURITY.md`
-security docs に、HTTP projection failure action routes の **運用上の注意** を追加しました。
+#### 5. MCP tool-side validation coverage も補強
+HTTP route coverage に合わせて、MCP tool 側の validation coverage も補強しました。
+
+追加した主な観点:
+- `build_projection_failures_ignore_tool_handler(...)`
+  - invalid `workflow_instance_id`
+- `build_projection_failures_resolve_tool_handler(...)`
+  - invalid `projection_type`
+
+確認した内容:
+- MCP tool 側でも `invalid_request` error shape が expected どおりであること
+- HTTP route side / tool side の validation semantics が揃っていること
+
+---
+
+#### `ctxledger/docs/CHANGELOG.md`
+Unreleased changelog を更新し、今回の docs / test 進展を反映しました。
 
 反映した主な内容:
-- document purpose に
-  - `operational cautions for HTTP action routes`
+- projection failure lifecycle の documentation update 対象に
+  - `docs/SECURITY.md`
+  - `docs/deployment.md`
   を追加
-- `/debug/*` 関連の route visibility 例に
-  - `projection_failures_ignore`
-  - `projection_failures_resolve`
+- HTTP action docs について
+  - auth-enabled / auth-disabled request examples
+  - operational cautions
+  - deployment guidance
+  を追記したことを明記
+- HTTP projection failure action routes の test coverage について
+  - bearer-auth enforcement
+  - validation errors
+  - server-not-ready behavior
+  - success payloads
   を追加
-- 新しい節として `4.4 HTTP Action Route Cautions` を追加
-
-`4.4` で明記した主なポイント:
-- action routes は diagnostic read ではなく canonical state mutation surface であること
-- HTTP auth 有効時は他の protected routes と同じ bearer-auth boundary で守ること
-- untrusted caller に公開しないこと
-- reverse proxy / VPN / private network など trusted operator path を推奨すること
-- `projection_failures_ignore` は repair ではなく visibility closure であること
-- `projection_failures_resolve` は reconciliation evidence があるときに使うこと
-- manual lifecycle closure action をログで追跡できるようにすること
-
-代表的な operational risk として:
-- active failure visibility を早すぎるタイミングで隠してしまうこと
-- recovery semantics を早すぎるタイミングで主張してしまうこと
-- broad caller に workflow-related operational state mutation を許してしまうこと
-- projection artifact state と failure lifecycle state を混同すること
-
-も記載しました。
-
----
-
-#### `ctxledger/docs/deployment.md`
-deployment docs に、HTTP projection failure action routes の **運用 guidance** を追加しました。
-
-反映した主な内容:
-- `/debug/*` で見える representative route list に
-  - `projection_failures_ignore`
-  - `projection_failures_resolve`
-  を追加
-- `/debug/*` payload が reveal しうる route list にも同じ 2 route を追加
-- `/debug/*` の話に続けて、HTTP projection failure action routes を
-  **operational mutation surfaces**
-  として扱う guidance を追加
-
-deployment guidance で追記した主な内容:
-- action routes も protected HTTP endpoints と同じ auth boundary で守ること
-- trusted operators / trusted automation のみに expose すること
-- network-accessible な環境では TLS termination と reverse-proxy access control を使うこと
-- `workspace_id` / `workflow_instance_id` / optional `projection_type` は、logs や access traces で internal workflow metadata を示しうる operational identifiers として扱うこと
-- general client-facing API として使わないこと
-- `ignored` と `resolved` の意味論を運用で混同しないこと
 
 ---
 
 ### 今回変更したファイル
-- `ctxledger/docs/mcp-api.md`
-- `ctxledger/docs/SECURITY.md`
-- `ctxledger/docs/deployment.md`
+- `ctxledger/tests/test_server.py`
+- `ctxledger/docs/CHANGELOG.md`
 - `ctxledger/last_session.md`
 
 ---
 
 ### 確認結果
 今回確認できている範囲:
+- `ctxledger/tests/test_server.py`: diagnostics 問題なし
+- `ctxledger/docs/CHANGELOG.md`: diagnostics 問題なし
+- `pytest -q tests/test_server.py`
+  - `111 passed`
+
+前回までに確認済みの状態:
+- `ctxledger/src/ctxledger/server.py`: diagnostics 問題なし
 - `ctxledger/docs/mcp-api.md`: diagnostics 問題なし
 - `ctxledger/docs/SECURITY.md`: diagnostics 問題なし
 - `ctxledger/docs/deployment.md`: diagnostics 問題なし
 
-前回までに確認済みの状態:
-- `ctxledger/src/ctxledger/server.py`: diagnostics 問題なし
-- `ctxledger/tests/test_server.py`: diagnostics 問題なし
-- `pytest -q tests/test_server.py`
-  - `103 passed`
-
-今回は docs 更新のみで、追加の test 実行は未実施です。
-
 ---
 
 ### git commit
-- 今回の security / deployment / mcp-api docs 更新については、まだ git commit 未実施
+- 今回の HTTP action test coverage / changelog 更新については、まだ git commit 未実施
 
 ---
 
 ### 補足
 - `.gitignore` は引き続き変更対象に含めない前提
-- この handoff は security / deployment docs の運用補足まで含む状態に更新
-- 今回の作業では実装コード自体の変更は行っていない
+- この handoff は HTTP action route test coverage 追加まで含む状態に更新
+- 今回の作業では production code 自体の変更は行っていない
+- public surface の behavior を docs と tests の両方で固定する方向で整理した
 
 ---
 
 ### 現在の状態
-projection failure lifecycle の public surface は、少なくとも以下が docs / implementation 上で整合しています。
+projection failure lifecycle の public surface は、少なくとも以下が docs / tests / implementation 上で整合しています。
 
 #### read-side
 - `workflow_resume`
@@ -169,19 +181,25 @@ projection failure lifecycle の public surface は、少なくとも以下が d
 
 #### docs
 - `docs/mcp-api.md`
-  - auth enabled / disabled の request example を追加済み
+  - auth enabled / disabled request example を追加済み
   - success / validation error example も反映済み
 - `docs/SECURITY.md`
   - HTTP action route cautions を追加済み
 - `docs/deployment.md`
   - HTTP action routes の deployment guidance を追加済み
+- `docs/CHANGELOG.md`
+  - docs / HTTP action test coverage 反映を追加済み
+
+#### tests
+- `tests/test_server.py`
+  - HTTP action route の auth / validation / success / server-not-ready を coverage 済み
 
 ---
 
 ### 次に自然な作業
 次に自然なのは以下です。
 
-1. 今回の docs 更新を descriptive message で git commit する
-2. 必要なら `docs/CHANGELOG.md` に security / deployment docs 反映の補足を追加する
-3. HTTP-oriented integration coverage を広げる
-4. action routes の representative operational logging guidance を docs でもう少し具体化する
+1. 今回の test / changelog 更新を descriptive message で git commit する
+2. integration / service 層で HTTP-oriented coverage をさらに広げる
+3. action routes の operational logging guidance を docs でもう少し具体化する
+4. 必要なら HTTP action route の not-found / path-shape edge case coverage も追加する

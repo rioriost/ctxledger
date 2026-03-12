@@ -1391,6 +1391,337 @@ def test_http_closed_projection_failures_route_requires_bearer_token_when_auth_i
     }
 
 
+def test_http_projection_failures_ignore_route_requires_bearer_token_when_auth_is_enabled() -> (
+    None
+):
+    settings = make_settings(
+        auth_bearer_token="secret-token",
+        require_auth=True,
+    )
+    resume = make_resume_fixture()
+    workspace_id = resume.workspace.workspace_id
+    workflow_instance_id = resume.workflow_instance.workflow_instance_id
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        ignore_result=2,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    missing_token_response = runtime.dispatch(
+        "projection_failures_ignore",
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={workspace_id}"
+            f"&workflow_instance_id={workflow_instance_id}"
+            "&projection_type=resume_json"
+        ),
+    )
+    invalid_token_response = runtime.dispatch(
+        "projection_failures_ignore",
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={workspace_id}"
+            f"&workflow_instance_id={workflow_instance_id}"
+            "&projection_type=resume_json"
+            "&authorization=Bearer wrong-token"
+        ),
+    )
+    valid_token_response = runtime.dispatch(
+        "projection_failures_ignore",
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={workspace_id}"
+            f"&workflow_instance_id={workflow_instance_id}"
+            "&projection_type=resume_json"
+            "&authorization=Bearer secret-token"
+        ),
+    )
+
+    expected_auth_headers = {
+        "content-type": "application/json",
+        "www-authenticate": 'Bearer realm="ctxledger"',
+    }
+
+    assert missing_token_response.status_code == 401
+    assert missing_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "missing bearer token",
+        }
+    }
+    assert missing_token_response.headers == expected_auth_headers
+
+    assert invalid_token_response.status_code == 401
+    assert invalid_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "invalid bearer token",
+        }
+    }
+    assert invalid_token_response.headers == expected_auth_headers
+
+    assert valid_token_response.status_code == 200
+    assert isinstance(valid_token_response, ProjectionFailureActionResponse)
+    assert valid_token_response.payload == {
+        "workspace_id": str(workspace_id),
+        "workflow_instance_id": str(workflow_instance_id),
+        "projection_type": "resume_json",
+        "updated_failure_count": 2,
+        "status": "ignored",
+    }
+    assert fake_workflow_service.ignore_calls == [
+        {
+            "workspace_id": workspace_id,
+            "workflow_instance_id": workflow_instance_id,
+            "projection_type": ProjectionArtifactType.RESUME_JSON,
+        }
+    ]
+
+
+def test_http_projection_failures_ignore_route_returns_invalid_request_for_bad_projection_type() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "projection_failures_ignore",
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
+            "&projection_type=not-a-real-projection"
+        ),
+    )
+
+    assert response.status_code == 400
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "projection_type must be a supported projection artifact type",
+            "details": {
+                "field": "projection_type",
+                "allowed_values": ["resume_json", "resume_md"],
+            },
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_http_projection_failures_ignore_route_returns_server_not_ready_error() -> None:
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    response = runtime.dispatch(
+        "projection_failures_ignore",
+        (
+            "/projection_failures_ignore"
+            f"?workspace_id={uuid4()}"
+            f"&workflow_instance_id={uuid4()}"
+        ),
+    )
+
+    assert response.status_code == 503
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_http_projection_failures_resolve_route_requires_bearer_token_when_auth_is_enabled() -> (
+    None
+):
+    settings = make_settings(
+        auth_bearer_token="secret-token",
+        require_auth=True,
+    )
+    resume = make_resume_fixture()
+    workspace_id = resume.workspace.workspace_id
+    workflow_instance_id = resume.workflow_instance.workflow_instance_id
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        resolve_result=3,
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    missing_token_response = runtime.dispatch(
+        "projection_failures_resolve",
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={workspace_id}"
+            f"&workflow_instance_id={workflow_instance_id}"
+        ),
+    )
+    invalid_token_response = runtime.dispatch(
+        "projection_failures_resolve",
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={workspace_id}"
+            f"&workflow_instance_id={workflow_instance_id}"
+            "&authorization=Bearer wrong-token"
+        ),
+    )
+    valid_token_response = runtime.dispatch(
+        "projection_failures_resolve",
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={workspace_id}"
+            f"&workflow_instance_id={workflow_instance_id}"
+            "&authorization=Bearer secret-token"
+        ),
+    )
+
+    expected_auth_headers = {
+        "content-type": "application/json",
+        "www-authenticate": 'Bearer realm="ctxledger"',
+    }
+
+    assert missing_token_response.status_code == 401
+    assert missing_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "missing bearer token",
+        }
+    }
+    assert missing_token_response.headers == expected_auth_headers
+
+    assert invalid_token_response.status_code == 401
+    assert invalid_token_response.payload == {
+        "error": {
+            "code": "authentication_error",
+            "message": "invalid bearer token",
+        }
+    }
+    assert invalid_token_response.headers == expected_auth_headers
+
+    assert valid_token_response.status_code == 200
+    assert isinstance(valid_token_response, ProjectionFailureActionResponse)
+    assert valid_token_response.payload == {
+        "workspace_id": str(workspace_id),
+        "workflow_instance_id": str(workflow_instance_id),
+        "projection_type": None,
+        "updated_failure_count": 3,
+        "status": "resolved",
+    }
+    assert fake_workflow_service.resolve_calls == [
+        {
+            "workspace_id": workspace_id,
+            "workflow_instance_id": workflow_instance_id,
+            "projection_type": None,
+        }
+    ]
+
+
+def test_http_projection_failures_resolve_route_returns_invalid_request_for_bad_workflow_id() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    server.startup()
+
+    response = runtime.dispatch(
+        "projection_failures_resolve",
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={resume.workspace.workspace_id}"
+            "&workflow_instance_id=not-a-uuid"
+        ),
+    )
+
+    assert response.status_code == 400
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_instance_id must be a valid UUID",
+            "details": {"field": "workflow_instance_id"},
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_http_projection_failures_resolve_route_returns_server_not_ready_error() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    response = runtime.dispatch(
+        "projection_failures_resolve",
+        (
+            "/projection_failures_resolve"
+            f"?workspace_id={uuid4()}"
+            f"&workflow_instance_id={uuid4()}"
+        ),
+    )
+
+    assert response.status_code == 503
+    assert isinstance(response, ProjectionFailureActionResponse)
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
 def test_http_debug_routes_require_bearer_token_when_auth_is_enabled() -> None:
     settings = make_settings(
         auth_bearer_token="secret-token",
@@ -1677,6 +2008,35 @@ def test_build_projection_failures_ignore_tool_handler_returns_invalid_request_f
     }
 
 
+def test_build_projection_failures_ignore_tool_handler_returns_invalid_request_for_bad_workflow_id() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_projection_failures_ignore_tool_handler(server)
+
+    response = handler(
+        {
+            "workspace_id": str(uuid4()),
+            "workflow_instance_id": "not-a-uuid",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_instance_id must be a valid UUID",
+            "details": {"field": "workflow_instance_id"},
+        },
+    }
+
+
 def test_build_projection_failures_ignore_tool_handler_returns_invalid_request_for_bad_projection_type() -> (
     None
 ):
@@ -1841,6 +2201,39 @@ def test_build_projection_failures_resolve_tool_handler_returns_server_not_ready
             "code": "server_not_ready",
             "message": "workflow service is not initialized",
             "details": {},
+        },
+    }
+
+
+def test_build_projection_failures_resolve_tool_handler_returns_invalid_request_for_bad_projection_type() -> (
+    None
+):
+    settings = make_settings()
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+    )
+    handler = build_projection_failures_resolve_tool_handler(server)
+
+    response = handler(
+        {
+            "workspace_id": str(uuid4()),
+            "workflow_instance_id": str(uuid4()),
+            "projection_type": "not-a-real-projection",
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "projection_type must be a supported projection artifact type",
+            "details": {
+                "field": "projection_type",
+                "allowed_values": ["resume_json", "resume_md"],
+            },
         },
     }
 
