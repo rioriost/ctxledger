@@ -320,20 +320,26 @@ A concrete runtime audit of `src/ctxledger/server.py` shows:
   - `memory_search`
   - `memory_get_context`
 
-A follow-up audit of visible service-layer implementation and server-side tool-handler definitions shows:
+  A follow-up audit of visible service-layer implementation and server-side tool-handler definitions shows:
 
-- workflow service methods do exist for:
-  - `register_workspace`
-  - `start_workflow`
-  - `create_checkpoint`
-  - `complete_workflow`
-- but no corresponding visible MCP tool-handler definitions or stdio registrations were confirmed for:
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_checkpoint`
-  - `workflow_complete`
+  - workflow service methods do exist for:
+    - `register_workspace`
+    - `start_workflow`
+    - `create_checkpoint`
+    - `complete_workflow`
+  - but no corresponding visible MCP tool-handler definitions or stdio registrations were confirmed for:
+    - `workspace_register`
+    - `workflow_start`
+    - `workflow_checkpoint`
+    - `workflow_complete`
 
-In the inspected stdio runtime registration area, there is no visible registration for:
+  This sharpens the current assessment:
+
+  - the underlying workflow operations appear to exist in the service/domain layer
+  - the remaining gap appears to be MCP exposure and runtime wiring
+  - current plan misalignment is therefore more about public-surface completeness than about missing workflow-domain behavior
+
+  In the inspected stdio runtime registration area, there is no visible registration for:
 
 - `workspace_register`
 - `workflow_start`
@@ -547,6 +553,11 @@ Concrete runtime audit result:
   - `start_workflow`
   - `create_checkpoint`
   - `complete_workflow`
+- no corresponding visible MCP tool-handler definitions were confirmed for:
+  - `workspace_register`
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_complete`
 - not visibly registered as stdio tools in the inspected runtime wiring:
   - `workspace_register`
   - `workflow_start`
@@ -556,6 +567,7 @@ Concrete runtime audit result:
 Interpretation:
 - the missing plan-required workflow operations appear to exist at the service layer
 - but they are still not confirmed as public MCP tools in the inspected runtime wiring
+- no visible tool-handler implementation was confirmed for those workflow operations in the inspected server surface
 - this makes the remaining gap look more like MCP exposure/wiring work than missing domain implementation
 
 Next step:
@@ -662,7 +674,9 @@ Current concrete audit findings sharpen that question:
 - `workflow_resume` is visible as an HTTP route
 - `resume_workflow` is visible as a stdio tool
 - `workspace_register`, `workflow_start`, `workflow_checkpoint`, and `workflow_complete` are not visibly registered in the inspected stdio runtime wiring
-- corresponding workflow service methods for those missing operations are visible, so the current gap appears to be MCP surface exposure rather than missing workflow-domain behavior
+- corresponding workflow service methods for those missing operations are visible
+- no corresponding visible MCP tool-handler definitions were confirmed for those operations in the inspected server implementation
+- the current gap therefore appears to be MCP surface exposure rather than missing workflow-domain behavior
 - no resource registration or `workspace://...` resolver wiring was visibly confirmed in the inspected implementation
 
 That is the key blocker to declaring the `v0.1.0` implementation plan complete.
