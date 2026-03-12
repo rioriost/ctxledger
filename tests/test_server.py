@@ -31,6 +31,7 @@ from ctxledger.server import (
     RuntimeDispatchResult,
     RuntimeIntrospection,
     ServerBootstrapError,
+    StdioRpcServer,
     StdioRuntimeAdapter,
     WorkflowResumeResponse,
     _print_runtime_summary,
@@ -3722,6 +3723,19 @@ def test_build_stdio_runtime_adapter_registers_expected_tools() -> None:
         "workspace_register",
     )
 
+    workspace_register_schema = runtime.tool_schema("workspace_register")
+    assert workspace_register_schema.required == (
+        "repo_url",
+        "canonical_path",
+        "default_branch",
+    )
+    assert workspace_register_schema.properties["repo_url"]["type"] == "string"
+    assert workspace_register_schema.properties["workspace_id"]["format"] == "uuid"
+
+    memory_get_context_schema = runtime.tool_schema("memory_get_context")
+    assert memory_get_context_schema.required == ()
+    assert memory_get_context_schema.properties["include_episodes"]["type"] == "boolean"
+
     server.startup()
 
     response = runtime.dispatch_tool(
@@ -3730,6 +3744,64 @@ def test_build_stdio_runtime_adapter_registers_expected_tools() -> None:
     )
 
     assert response.payload["ok"] is True
+
+
+def test_stdio_rpc_server_tools_list_exposes_input_schemas() -> None:
+    settings = make_settings(
+        transport=TransportMode.STDIO,
+        http_enabled=False,
+        stdio_enabled=True,
+    )
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_stdio_runtime_adapter(server)
+    rpc_server = StdioRpcServer(runtime)
+
+    response = rpc_server.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+            "params": {},
+        }
+    )
+
+    assert response is not None
+    result = response["result"]
+    tools = {tool["name"]: tool for tool in result["tools"]}
+
+    assert "workspace_register" in tools
+    assert tools["workspace_register"]["inputSchema"]["required"] == [
+        "repo_url",
+        "canonical_path",
+        "default_branch",
+    ]
+    assert (
+        tools["workspace_register"]["inputSchema"]["properties"]["canonical_path"][
+            "type"
+        ]
+        == "string"
+    )
+    assert (
+        tools["workflow_start"]["inputSchema"]["properties"]["workspace_id"]["format"]
+        == "uuid"
+    )
+    assert tools["workflow_complete"]["inputSchema"]["properties"]["workflow_status"][
+        "enum"
+    ] == ["running", "completed", "failed", "cancelled"]
+    assert (
+        tools["memory_get_context"]["inputSchema"]["properties"]["include_summaries"][
+            "type"
+        ]
+        == "boolean"
+    )
 
 
 def test_create_server_wires_stdio_runtime_with_registered_tools() -> None:

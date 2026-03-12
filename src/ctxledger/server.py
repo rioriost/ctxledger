@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import signal
 import sys
@@ -114,12 +115,153 @@ class McpToolResponse:
     payload: dict[str, Any]
 
 
+@dataclass(slots=True, frozen=True)
+class McpToolSchema:
+    type: str
+    properties: dict[str, Any]
+    required: tuple[str, ...] = ()
+    additional_properties: bool = False
+
+
 @dataclass(slots=True)
 class RuntimeDispatchResult:
     transport: str
     target: str
     status: str
     response: WorkflowResumeResponse | McpToolResponse | McpResourceResponse
+
+
+@dataclass(slots=True)
+class StdioRpcServer:
+    runtime: "StdioRuntimeAdapter"
+
+    def handle_request(self, req: dict[str, Any]) -> dict[str, Any] | None:
+        method = req.get("method")
+        params = req.get("params") or {}
+        req_id = req.get("id")
+
+        if method == "initialize":
+            result = {
+                "protocolVersion": "2024-11-05",
+                "serverInfo": {
+                    "name": "ctxledger",
+                    "version": self.runtime.settings.app_version,
+                },
+                "capabilities": {
+                    "tools": {},
+                    "resources": {},
+                },
+            }
+        elif method == "initialized":
+            result = None
+        elif method == "ping":
+            result = {}
+        elif method == "shutdown":
+            result = None
+        elif method == "exit":
+            raise SystemExit(0)
+        elif method == "tools/list":
+            result = {
+                "tools": [
+                    {
+                        "name": tool_name,
+                        "description": f"{tool_name} tool",
+                        "inputSchema": serialize_mcp_tool_schema(
+                            self.runtime.tool_schema(tool_name)
+                        ),
+                    }
+                    for tool_name in self.runtime.registered_tools()
+                ]
+            }
+        elif method == "tools/call":
+            name = params.get("name")
+            arguments = params.get("arguments") or {}
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("tools/call requires 'name' (string)")
+            if not isinstance(arguments, dict):
+                raise ValueError("tools/call requires 'arguments' (object)")
+
+            response = self.runtime.dispatch_tool(name.strip(), arguments)
+            result = {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(response.payload, ensure_ascii=False),
+                    }
+                ]
+            }
+        elif method == "resources/list":
+            result = {
+                "resources": [
+                    {
+                        "uri": resource_uri,
+                        "name": resource_uri,
+                        "description": f"{resource_uri} resource",
+                    }
+                    for resource_uri in self.runtime.registered_resources()
+                ]
+            }
+        elif method == "resources/read":
+            uri = params.get("uri")
+            if not isinstance(uri, str) or not uri.strip():
+                raise ValueError("resources/read requires 'uri' (string)")
+
+            response = self.runtime.dispatch_resource(uri.strip())
+            result = {
+                "contents": [
+                    {
+                        "uri": uri.strip(),
+                        "mimeType": "application/json",
+                        "text": json.dumps(response.payload, ensure_ascii=False),
+                    }
+                ]
+            }
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
+        if req_id is None:
+            return None
+
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": result,
+        }
+
+    def run(self) -> None:
+        for line in sys.stdin:
+            raw_line = line.strip()
+            if not raw_line:
+                continue
+
+            req: dict[str, Any] | None = None
+            req_id: Any = None
+            try:
+                parsed = json.loads(raw_line)
+                if not isinstance(parsed, dict):
+                    raise ValueError("Request must be a JSON object")
+                req = parsed
+                req_id = req.get("id")
+                response = self.handle_request(req)
+                if response is not None:
+                    sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
+                    sys.stdout.flush()
+            except SystemExit:
+                raise
+            except Exception as exc:
+                if req_id is not None:
+                    error_response = {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "error": {
+                            "code": -32000,
+                            "message": str(exc),
+                        },
+                    }
+                    sys.stdout.write(
+                        json.dumps(error_response, ensure_ascii=False) + "\n"
+                    )
+                    sys.stdout.flush()
 
 
 @dataclass(slots=True)
@@ -321,14 +463,23 @@ class StdioRuntimeAdapter:
         settings: AppSettings,
         tool_handlers: dict[str, McpToolHandler] | None = None,
         resource_handlers: dict[str, McpResourceHandler] | None = None,
+        tool_schemas: dict[str, McpToolSchema] | None = None,
     ) -> None:
         self.settings = settings
         self._started = False
         self._tool_handlers: dict[str, McpToolHandler] = tool_handlers or {}
         self._resource_handlers: dict[str, McpResourceHandler] = resource_handlers or {}
+        self._tool_schemas: dict[str, McpToolSchema] = tool_schemas or {}
 
-    def register_tool_handler(self, tool_name: str, handler: McpToolHandler) -> None:
+    def register_tool_handler(
+        self,
+        tool_name: str,
+        handler: McpToolHandler,
+        schema: McpToolSchema | None = None,
+    ) -> None:
         self._tool_handlers[tool_name] = handler
+        if schema is not None:
+            self._tool_schemas[tool_name] = schema
 
     def register_resource_handler(
         self,
@@ -342,6 +493,9 @@ class StdioRuntimeAdapter:
 
     def registered_resources(self) -> tuple[str, ...]:
         return tuple(sorted(self._resource_handlers.keys()))
+
+    def tool_schema(self, tool_name: str) -> McpToolSchema:
+        return self._tool_schemas.get(tool_name, DEFAULT_EMPTY_MCP_TOOL_SCHEMA)
 
     def introspect(self) -> RuntimeIntrospection:
         return RuntimeIntrospection(
@@ -1174,6 +1328,310 @@ def serialize_runtime_introspection(
         "tools": list(introspection.tools),
         "resources": list(introspection.resources),
     }
+
+
+DEFAULT_EMPTY_MCP_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={},
+)
+
+
+def serialize_mcp_tool_schema(schema: McpToolSchema) -> dict[str, Any]:
+    serialized: dict[str, Any] = {
+        "type": schema.type,
+        "properties": dict(schema.properties),
+        "additionalProperties": schema.additional_properties,
+    }
+    if schema.required:
+        serialized["required"] = list(schema.required)
+    return serialized
+
+
+WORKSPACE_REGISTER_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "repo_url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repository URL for the workspace.",
+        },
+        "canonical_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Canonical local filesystem path for the workspace checkout.",
+        },
+        "default_branch": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Default branch name for the workspace repository.",
+        },
+        "workspace_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Existing workspace identity for explicit update operations.",
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Optional workspace metadata.",
+            "additionalProperties": True,
+        },
+    },
+    required=("repo_url", "canonical_path", "default_branch"),
+)
+
+WORKFLOW_RESUME_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "workflow_instance_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workflow instance to resume.",
+        }
+    },
+    required=("workflow_instance_id",),
+)
+
+WORKFLOW_START_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "workspace_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workspace identity for the workflow.",
+        },
+        "ticket_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "External ticket or work item identifier.",
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Optional workflow metadata.",
+            "additionalProperties": True,
+        },
+    },
+    required=("workspace_id", "ticket_id"),
+)
+
+WORKFLOW_CHECKPOINT_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "workflow_instance_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workflow instance identity.",
+        },
+        "attempt_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workflow attempt identity.",
+        },
+        "step_name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Logical step name for the checkpoint.",
+        },
+        "summary": {
+            "type": "string",
+            "description": "Optional human-readable checkpoint summary.",
+        },
+        "checkpoint_json": {
+            "type": "object",
+            "description": "Optional structured checkpoint payload.",
+            "additionalProperties": True,
+        },
+        "verify_status": {
+            "type": "string",
+            "enum": [status.value for status in VerifyStatus],
+            "description": "Optional verification status recorded with the checkpoint.",
+        },
+        "verify_report": {
+            "type": "object",
+            "description": "Optional structured verification report.",
+            "additionalProperties": True,
+        },
+    },
+    required=("workflow_instance_id", "attempt_id", "step_name"),
+)
+
+WORKFLOW_COMPLETE_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "workflow_instance_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workflow instance identity.",
+        },
+        "attempt_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workflow attempt identity.",
+        },
+        "workflow_status": {
+            "type": "string",
+            "enum": [status.value for status in WorkflowInstanceStatus],
+            "description": "Terminal workflow status.",
+        },
+        "summary": {
+            "type": "string",
+            "description": "Optional final summary.",
+        },
+        "verify_status": {
+            "type": "string",
+            "enum": [status.value for status in VerifyStatus],
+            "description": "Optional final verification status.",
+        },
+        "verify_report": {
+            "type": "object",
+            "description": "Optional structured final verification report.",
+            "additionalProperties": True,
+        },
+        "failure_reason": {
+            "type": "string",
+            "description": "Optional failure reason for unsuccessful completion.",
+        },
+    },
+    required=("workflow_instance_id", "attempt_id", "workflow_status"),
+)
+
+PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "workspace_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workspace identity for the projection failures.",
+        },
+        "workflow_instance_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workflow instance identity for the projection failures.",
+        },
+        "projection_type": {
+            "type": "string",
+            "enum": [
+                projection_type.value for projection_type in ProjectionArtifactType
+            ],
+            "description": "Optional projection type filter.",
+        },
+    },
+    required=("workspace_id", "workflow_instance_id"),
+)
+
+PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "workspace_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workspace identity for the projection failures.",
+        },
+        "workflow_instance_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workflow instance identity for the projection failures.",
+        },
+        "projection_type": {
+            "type": "string",
+            "enum": [
+                projection_type.value for projection_type in ProjectionArtifactType
+            ],
+            "description": "Optional projection type filter.",
+        },
+    },
+    required=("workspace_id", "workflow_instance_id"),
+)
+
+MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "workflow_instance_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Workflow instance identifier associated with the episode.",
+        },
+        "summary": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Episode summary text.",
+        },
+        "attempt_id": {
+            "type": "string",
+            "description": "Optional workflow attempt identifier.",
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Optional episode metadata.",
+            "additionalProperties": True,
+        },
+    },
+    required=("workflow_instance_id", "summary"),
+)
+
+MEMORY_SEARCH_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Search query text.",
+        },
+        "workspace_id": {
+            "type": "string",
+            "description": "Optional workspace identifier to constrain results.",
+        },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum number of results to return.",
+        },
+        "filters": {
+            "type": "object",
+            "description": "Optional structured filters.",
+            "additionalProperties": True,
+        },
+    },
+    required=("query",),
+)
+
+MEMORY_GET_CONTEXT_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "query": {
+            "type": "string",
+            "description": "Optional context query text.",
+        },
+        "workspace_id": {
+            "type": "string",
+            "description": "Optional workspace identifier.",
+        },
+        "workflow_instance_id": {
+            "type": "string",
+            "description": "Optional workflow instance identifier.",
+        },
+        "ticket_id": {
+            "type": "string",
+            "description": "Optional ticket identifier.",
+        },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum number of context items to return.",
+        },
+        "include_episodes": {
+            "type": "boolean",
+            "description": "Whether to include episodes in the response.",
+        },
+        "include_memory_items": {
+            "type": "boolean",
+            "description": "Whether to include memory items in the response.",
+        },
+        "include_summaries": {
+            "type": "boolean",
+            "description": "Whether to include summaries in the response.",
+        },
+    },
+)
 
 
 def build_mcp_success_response(result: dict[str, Any]) -> McpToolResponse:
@@ -2752,42 +3210,52 @@ def build_stdio_runtime_adapter(server: CtxLedgerServer) -> StdioRuntimeAdapter:
     runtime.register_tool_handler(
         "workflow_resume",
         build_resume_workflow_tool_handler(server),
+        WORKFLOW_RESUME_TOOL_SCHEMA,
     )
     runtime.register_tool_handler(
         "workspace_register",
         build_workspace_register_tool_handler(server),
+        WORKSPACE_REGISTER_TOOL_SCHEMA,
     )
     runtime.register_tool_handler(
         "workflow_start",
         build_workflow_start_tool_handler(server),
+        WORKFLOW_START_TOOL_SCHEMA,
     )
     runtime.register_tool_handler(
         "workflow_checkpoint",
         build_workflow_checkpoint_tool_handler(server),
+        WORKFLOW_CHECKPOINT_TOOL_SCHEMA,
     )
     runtime.register_tool_handler(
         "workflow_complete",
         build_workflow_complete_tool_handler(server),
+        WORKFLOW_COMPLETE_TOOL_SCHEMA,
     )
     runtime.register_tool_handler(
         "projection_failures_ignore",
         build_projection_failures_ignore_tool_handler(server),
+        PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA,
     )
     runtime.register_tool_handler(
         "projection_failures_resolve",
         build_projection_failures_resolve_tool_handler(server),
+        PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA,
     )
     runtime.register_tool_handler(
         "memory_remember_episode",
         build_memory_remember_episode_tool_handler(memory_service),
+        MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
     )
     runtime.register_tool_handler(
         "memory_search",
         build_memory_search_tool_handler(memory_service),
+        MEMORY_SEARCH_TOOL_SCHEMA,
     )
     runtime.register_tool_handler(
         "memory_get_context",
         build_memory_get_context_tool_handler(memory_service),
+        MEMORY_GET_CONTEXT_TOOL_SCHEMA,
     )
     return runtime
 
@@ -2899,6 +3367,7 @@ def _apply_overrides(
         http=http_settings,
         stdio=stdio_settings,
         auth=settings.auth,
+        debug=settings.debug,
         projection=settings.projection,
         logging=settings.logging,
     )
@@ -2969,6 +3438,19 @@ def run_server(
         _install_signal_handlers(server)
         server.startup()
         _print_runtime_summary(server)
+
+        if settings.stdio.enabled and isinstance(server.runtime, StdioRuntimeAdapter):
+            StdioRpcServer(server.runtime).run()
+            return 0
+
+        if settings.stdio.enabled and isinstance(
+            server.runtime, CompositeRuntimeAdapter
+        ):
+            for nested_runtime in server.runtime._runtimes:
+                if isinstance(nested_runtime, StdioRuntimeAdapter):
+                    StdioRpcServer(nested_runtime).run()
+                    return 0
+
         return 0
     except ServerBootstrapError as exc:
         print(f"Startup failed: {exc}", file=sys.stderr)
