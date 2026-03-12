@@ -111,12 +111,16 @@ Tables:
 - workflow_attempts
 - workflow_checkpoints
 - verify_reports
+- projection_states
+- projection_failures
 
 Purpose:
 
 - durable execution
 - safe resume
 - commit verification
+- projection freshness visibility
+- projection failure lifecycle tracking
 
 ---
 
@@ -222,6 +226,61 @@ created_at
 
 ---
 
+## projection_states
+
+projection_state_id
+workspace_id
+workflow_instance_id
+projection_type
+target_path
+status
+last_successful_write_at
+last_canonical_update_at
+
+Representative projection statuses:
+
+- fresh
+- stale
+- missing
+- failed
+
+---
+
+## projection_failures
+
+projection_failure_id
+workspace_id
+workflow_instance_id
+attempt_id
+projection_type
+target_path
+error_code
+error_message
+status
+retry_count
+occurred_at
+resolved_at
+
+Representative failure lifecycle states:
+
+- open
+- resolved
+- ignored
+
+Notes:
+
+- projection file contents are derived artifacts and are not canonical
+- projection failure metadata is canonical operational state
+- repeated failures for the same projection type should remain visible as repeated records
+- `retry_count` represents how many prior open failures already existed for the same projection stream before the current failure was recorded
+- `occurred_at` is the timestamp when the individual projection failure record was created
+- `resolved_at` is `NULL` while the failure record remains `open`
+- `resolved_at` is set when an `open` failure transitions to either `resolved` or `ignored`
+- `resolved_at` records closure time, not successful write time
+- `ignored` uses the same `resolved_at` field as `resolved`; the distinction between the two closure modes is carried by `status`
+
+---
+
 # Memory Tables
 
 ## episodes
@@ -278,25 +337,64 @@ Registers repository workspace
 
 workflow_start
 
-Start workflow instance
+Start workflow instance and create the initial running attempt
 
 ---
 
 workflow_checkpoint
 
-Persist workflow checkpoint
+Persist workflow checkpoint and optional verification context
 
 ---
 
 workflow_resume
 
-Return latest resumable state
+Return latest resumable state assembled from canonical records
+
+Representative response contents:
+
+- workspace metadata
+- workflow metadata
+- active or latest attempt
+- latest checkpoint
+- latest verify report
+- projection status
+- warnings/issues
+- resumable classification
+
+Representative projection-related warnings:
+
+- stale projection
+- open projection failure
+- missing projection
+
+Projection failure visibility rules:
+
+- `open projection failure` should be emitted only when open projection failures exist
+- `projection.status = failed` by itself does not necessarily imply an open unresolved failure
+- a projection may remain `failed` even when `open_failure_count = 0`
+
+Representative projection failure metadata exposed through resume:
+
+- projection_type
+- target_path
+- open_failure_count
+- retry_count
+- status
+- error_code
+- error_message
 
 ---
 
 workflow_complete
 
-Mark workflow finished
+Mark workflow finished with a terminal workflow status
+
+Representative terminal outcomes:
+
+- completed
+- failed
+- cancelled
 
 ---
 
@@ -315,6 +413,39 @@ Semantic search over memory
 memory_get_context
 
 Retrieve relevant memory for agent
+
+---
+
+## Projection Failure Lifecycle Summary
+
+Projection failure lifecycle is distinct from projection freshness status.
+
+Representative lifecycle states:
+
+- `open`
+- `resolved`
+- `ignored`
+
+Meaning:
+
+- `open`
+  - projection write failed and the failure is still operationally active
+- `resolved`
+  - the failure is no longer open because successful reconciliation or explicit resolution occurred
+- `ignored`
+  - the failure is no longer open because the system or operator decided to stop treating it as an active unresolved issue
+
+Important distinctions:
+
+- projection status such as `failed` describes the projection artifact state
+- failure lifecycle state describes whether failure records are still open
+- `ignored` is not the same as successful projection recovery
+- repeated failures should remain visible as repeated operational events rather than a single boolean flag
+
+Representative retry behavior:
+
+- first open failure for a projection stream: `retry_count = 0`
+- second consecutive open failure for the same projection stream: `retry_count = 1`
 
 ---
 

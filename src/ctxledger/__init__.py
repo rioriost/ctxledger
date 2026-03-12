@@ -320,6 +320,33 @@ def _resume_workflow(args: argparse.Namespace) -> int:
                     }
                     for warning in resume.warnings
                 ],
+                "closed_projection_failures": [
+                    {
+                        "projection_type": failure.projection_type.value,
+                        "target_path": failure.target_path,
+                        "attempt_id": (
+                            str(failure.attempt_id)
+                            if failure.attempt_id is not None
+                            else None
+                        ),
+                        "error_code": failure.error_code,
+                        "error_message": failure.error_message,
+                        "occurred_at": (
+                            failure.occurred_at.isoformat()
+                            if failure.occurred_at is not None
+                            else None
+                        ),
+                        "resolved_at": (
+                            failure.resolved_at.isoformat()
+                            if failure.resolved_at is not None
+                            else None
+                        ),
+                        "open_failure_count": failure.open_failure_count,
+                        "retry_count": failure.retry_count,
+                        "status": failure.status,
+                    }
+                    for failure in getattr(resume, "closed_projection_failures", ())
+                ],
             }
             print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
             return 0
@@ -368,7 +395,45 @@ def _resume_workflow(args: argparse.Namespace) -> int:
             print("- none")
         else:
             for warning in resume.warnings:
-                print(f"- {warning.code}: {warning.message}")
+                line = f"- {warning.code}: {warning.message}"
+                details = warning.details or {}
+                projection_type = details.get("projection_type")
+                target_path = details.get("target_path")
+                open_failure_count = details.get("open_failure_count")
+
+                if projection_type:
+                    line += f" [projection={projection_type}]"
+                if target_path:
+                    line += f" [path={target_path}]"
+                if open_failure_count is not None:
+                    line += f" [open_failures={open_failure_count}]"
+
+                print(line)
+
+        print("Closed projection failures:")
+        closed_projection_failures = tuple(
+            getattr(resume, "closed_projection_failures", ())
+        )
+        if not closed_projection_failures:
+            print("- none")
+        else:
+            for failure in closed_projection_failures:
+                line = (
+                    f"- {failure.status}: {failure.projection_type.value} "
+                    f"[path={failure.target_path}]"
+                )
+                if getattr(failure, "attempt_id", None) is not None:
+                    line += f" [attempt_id={failure.attempt_id}]"
+                if failure.error_code:
+                    line += f" [error_code={failure.error_code}]"
+                line += f" [message={failure.error_message}]"
+                if failure.occurred_at is not None:
+                    line += f" [occurred_at={failure.occurred_at.isoformat()}]"
+                if failure.resolved_at is not None:
+                    line += f" [resolved_at={failure.resolved_at.isoformat()}]"
+                line += f" [open_failures={failure.open_failure_count}]"
+                line += f" [retry_count={failure.retry_count}]"
+                print(line)
 
         print(f"Next hint: {resume.next_hint or 'none'}")
         return 0

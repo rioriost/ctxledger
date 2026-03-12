@@ -12,6 +12,7 @@ from ctxledger.config import (
     AppSettings,
     AuthSettings,
     DatabaseSettings,
+    DebugSettings,
     HttpSettings,
     LoggingSettings,
     LogLevel,
@@ -54,6 +55,7 @@ def make_settings(
             bearer_token=None,
             require_auth=False,
         ),
+        debug=DebugSettings(enabled=True),
         projection=ProjectionSettings(
             enabled=True,
             directory_name=".agent",
@@ -481,6 +483,124 @@ def test_main_resume_workflow_renders_text_output(
     assert captured.err == ""
 
 
+def test_main_resume_workflow_renders_ignored_projection_warning_details(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    workflow_instance_id = uuid4()
+
+    fake_resume = SimpleNamespace(
+        workspace=SimpleNamespace(
+            workspace_id=uuid4(),
+            repo_url="https://example.com/org/repo.git",
+            canonical_path=str(tmp_path),
+            default_branch="main",
+            metadata={},
+        ),
+        workflow_instance=SimpleNamespace(
+            workflow_instance_id=workflow_instance_id,
+            workspace_id=uuid4(),
+            ticket_id="CLI-RESUME-IGNORED-1",
+            status=SimpleNamespace(value="running"),
+            metadata={},
+        ),
+        attempt=SimpleNamespace(
+            attempt_id=uuid4(),
+            workflow_instance_id=workflow_instance_id,
+            attempt_number=1,
+            status=SimpleNamespace(value="failed"),
+            failure_reason="projection write failed previously",
+            verify_status=None,
+            started_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:00:00+00:00"),
+            finished_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:05:00+00:00"),
+        ),
+        latest_checkpoint=SimpleNamespace(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=workflow_instance_id,
+            attempt_id=uuid4(),
+            step_name="inspect_projection_failure",
+            summary="Investigate ignored projection failures",
+            checkpoint_json={"next_intended_action": "Review warning output"},
+            created_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:04:00+00:00"),
+        ),
+        latest_verify_report=None,
+        projections=(
+            SimpleNamespace(
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                status=ProjectionStatus.FAILED,
+                target_path=".agent/resume.json",
+                last_successful_write_at=None,
+                last_canonical_update_at=None,
+                open_failure_count=0,
+            ),
+        ),
+        resumable_status=SimpleNamespace(value="resumable"),
+        warnings=(
+            ResumeIssue(
+                code="ignored_projection_failure",
+                message="resume projection has ignored or previously resolved write failures",
+                details={
+                    "projection_type": "resume_json",
+                    "target_path": ".agent/resume.json",
+                    "open_failure_count": 0,
+                    "failures": [
+                        {
+                            "projection_type": "resume_json",
+                            "target_path": ".agent/resume.json",
+                            "attempt_id": "11111111-1111-1111-1111-111111111111",
+                            "error_code": "permission_error",
+                            "error_message": "previous projection write was ignored",
+                            "occurred_at": "2024-01-01T00:03:00+00:00",
+                            "resolved_at": "2024-01-01T00:04:00+00:00",
+                            "open_failure_count": 1,
+                            "retry_count": 0,
+                            "status": "ignored",
+                        }
+                    ],
+                },
+            ),
+        ),
+        next_hint="Review warning output",
+    )
+
+    monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: FakeWorkflowService(fake_resume),
+    )
+
+    exit_code = cli_module.main(
+        [
+            "resume-workflow",
+            "--workflow-instance-id",
+            str(workflow_instance_id),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Warnings:" in captured.out
+    assert (
+        "- ignored_projection_failure: "
+        "resume projection has ignored or previously resolved write failures "
+        "[projection=resume_json] [path=.agent/resume.json] [open_failures=0]"
+        in captured.out
+    )
+    assert "Next hint: Review warning output" in captured.out
+    assert captured.err == ""
+
+
 def test_main_resume_workflow_renders_json_output(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -542,7 +662,31 @@ def test_main_resume_workflow_renders_json_output(
             ),
         ),
         resumable_status=SimpleNamespace(value="resumable"),
-        warnings=(),
+        warnings=(
+            ResumeIssue(
+                code="ignored_projection_failure",
+                message="resume projection has ignored or previously resolved write failures",
+                details={
+                    "projection_type": "resume_json",
+                    "target_path": ".agent/resume.json",
+                    "open_failure_count": 0,
+                    "failures": [
+                        {
+                            "projection_type": "resume_json",
+                            "target_path": ".agent/resume.json",
+                            "attempt_id": str(attempt_id),
+                            "error_code": "io_error",
+                            "error_message": "previous projection write was resolved",
+                            "occurred_at": "2024-01-01T00:01:30+00:00",
+                            "resolved_at": "2024-01-01T00:02:00+00:00",
+                            "open_failure_count": 1,
+                            "retry_count": 0,
+                            "status": "resolved",
+                        }
+                    ],
+                },
+            ),
+        ),
         next_hint="Inspect JSON",
     )
 
@@ -591,7 +735,31 @@ def test_main_resume_workflow_renders_json_output(
     ]
     assert payload["resumable_status"] == "resumable"
     assert payload["next_hint"] == "Inspect JSON"
-    assert payload["warnings"] == []
+    assert payload["warnings"] == [
+        {
+            "code": "ignored_projection_failure",
+            "message": "resume projection has ignored or previously resolved write failures",
+            "details": {
+                "projection_type": "resume_json",
+                "target_path": ".agent/resume.json",
+                "open_failure_count": 0,
+                "failures": [
+                    {
+                        "projection_type": "resume_json",
+                        "target_path": ".agent/resume.json",
+                        "attempt_id": str(attempt_id),
+                        "error_code": "io_error",
+                        "error_message": "previous projection write was resolved",
+                        "occurred_at": "2024-01-01T00:01:30+00:00",
+                        "resolved_at": "2024-01-01T00:02:00+00:00",
+                        "open_failure_count": 1,
+                        "retry_count": 0,
+                        "status": "resolved",
+                    }
+                ],
+            },
+        }
+    ]
     assert captured.err == ""
 
 

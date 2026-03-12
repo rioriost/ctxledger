@@ -81,6 +81,11 @@ class ResumeProjectionWriter:
                     self._build_failure_update(
                         workspace_id=workspace_id,
                         workflow_instance_id=workflow_instance_id,
+                        attempt_id=(
+                            resume.attempt.attempt_id
+                            if resume.attempt is not None
+                            else None
+                        ),
                         projection_type=ProjectionArtifactType.RESUME_JSON,
                         target_path=self._relative_target_path(
                             workspace_root_path, json_path
@@ -125,6 +130,11 @@ class ResumeProjectionWriter:
                     self._build_failure_update(
                         workspace_id=workspace_id,
                         workflow_instance_id=workflow_instance_id,
+                        attempt_id=(
+                            resume.attempt.attempt_id
+                            if resume.attempt is not None
+                            else None
+                        ),
                         projection_type=ProjectionArtifactType.RESUME_MD,
                         target_path=self._relative_target_path(
                             workspace_root_path,
@@ -231,6 +241,7 @@ class ResumeProjectionWriter:
         *,
         workspace_id: Any,
         workflow_instance_id: Any,
+        attempt_id: Any,
         projection_type: ProjectionArtifactType,
         target_path: str,
         exc: Exception,
@@ -239,6 +250,7 @@ class ResumeProjectionWriter:
         return RecordProjectionFailureInput(
             workspace_id=workspace_id,
             workflow_instance_id=workflow_instance_id,
+            attempt_id=attempt_id,
             projection_type=projection_type,
             target_path=target_path,
             error_message=str(exc),

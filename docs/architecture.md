@@ -670,7 +670,89 @@ Projection failure records should capture enough metadata for:
 Projection failure metadata is canonical.  
 Projection file contents are not.
 
-### 12.5 Projection Freshness Model
+### 12.5 Projection Failure Lifecycle
+
+Projection failure tracking follows a small lifecycle model.
+
+Representative failure states include:
+
+- `open`
+- `resolved`
+- `ignored`
+
+#### `open`
+
+An `open` projection failure means:
+
+- a projection write attempt failed
+- the failure remains operationally relevant
+- resume views should surface it as an unresolved issue
+
+Repeated failures for the same projection type should remain visible as repeated operational events, not be collapsed into a single boolean flag.
+
+Representative canonical metadata for an open projection failure includes:
+
+- `projection_type`
+- `target_path`
+- `error_code`
+- `error_message`
+- `occurred_at`
+- `retry_count`
+
+`retry_count` should reflect how many prior open failures already existed for the same projection stream before the current failure was recorded.
+
+Representative examples:
+
+- first open failure: `retry_count = 0`
+- second consecutive open failure for the same projection: `retry_count = 1`
+
+#### `resolved`
+
+A projection failure becomes `resolved` when the system has sufficient evidence that the failure is no longer open.
+
+In `v0.1.0`, the normal resolution mechanism is:
+
+- a successful projection reconciliation for the same projection type
+- explicit closing of matching open projection failures in canonical storage
+
+Resolution closes the operational issue without deleting the failure history.
+
+#### `ignored`
+
+A projection failure becomes `ignored` when an operator or higher-level workflow policy decides that the open failure should no longer block or warn as an unresolved projection write issue.
+
+Ignoring a failure means:
+
+- the failure history remains canonical
+- the failure is no longer considered open
+- resume views should stop presenting it as an `open projection failure`
+
+Ignoring is not the same as successful projection recovery.  
+It is an operator or policy decision to stop treating the failure as an active unresolved issue.
+
+### 12.6 Projection Failure Visibility Rules
+
+Projection failure visibility should distinguish projection status from failure lifecycle state.
+
+Important consequences:
+
+- a projection may still be `failed` even when no open projection failures remain
+- `failed` projection status alone does not necessarily mean there is an unresolved open failure
+- resume warnings for `open projection failure` should be emitted only when open projection failures exist
+
+Representative resume behavior:
+
+- `projection.status = failed` and `open_failure_count > 0`
+  - emit `open projection failure`
+- `projection.status = failed` and `open_failure_count = 0`
+  - do not emit `open projection failure`
+  - retain failed projection status for diagnosis
+- `projection.status = fresh`
+  - open projection failure warnings should not remain for that projection after successful reconciliation
+
+This separation allows the system to preserve diagnostic state without overstating currently active failure conditions.
+
+### 12.7 Projection Freshness Model
 
 Projection status should reflect freshness, not only failure.
 

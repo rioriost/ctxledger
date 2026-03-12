@@ -27,6 +27,7 @@ from ctxledger.workflow.service import (
     WorkflowInstanceRepository,
     Workspace,
     WorkspaceRepository,
+    utc_now,
 )
 
 
@@ -304,7 +305,33 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
                 candidate_workspace_id == workspace_id
                 and candidate_workflow_instance_id == workflow_instance_id
             ):
-                failures.extend(candidate_failures)
+                failures.extend(
+                    failure
+                    for failure in candidate_failures
+                    if failure.status == "open"
+                )
+        return list(failures)
+
+    def get_closed_failures_by_workflow_id(
+        self,
+        workspace_id: object,
+        workflow_instance_id: object,
+    ) -> list[ProjectionFailureInfo]:
+        failures: list[ProjectionFailureInfo] = []
+        for (
+            candidate_workspace_id,
+            candidate_workflow_instance_id,
+            _,
+        ), candidate_failures in self._failures_by_key.items():
+            if (
+                candidate_workspace_id == workspace_id
+                and candidate_workflow_instance_id == workflow_instance_id
+            ):
+                failures.extend(
+                    failure
+                    for failure in candidate_failures
+                    if failure.status in {"resolved", "ignored"}
+                )
         return list(failures)
 
     def record_resume_projection_failure(
@@ -322,7 +349,11 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
             error_code=failure.error_code,
             error_message=failure.error_message,
             target_path=failure.target_path,
+            attempt_id=failure.attempt_id,
+            occurred_at=utc_now(),
             open_failure_count=len(existing) + 1,
+            retry_count=len(existing),
+            status="open",
         )
         existing.append(failure_info)
         self._failures_by_key[key] = existing
@@ -344,19 +375,45 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
         self,
         workspace_id: object,
         workflow_instance_id: object,
+        projection_type: ProjectionArtifactType | None = None,
     ) -> int:
         resolved_count = 0
 
-        for projection_type in (
-            ProjectionArtifactType.RESUME_JSON,
-            ProjectionArtifactType.RESUME_MD,
-        ):
-            key = (workspace_id, workflow_instance_id, projection_type)
+        projection_types = (
+            (projection_type,)
+            if projection_type is not None
+            else (
+                ProjectionArtifactType.RESUME_JSON,
+                ProjectionArtifactType.RESUME_MD,
+            )
+        )
+
+        for candidate_projection_type in projection_types:
+            key = (
+                workspace_id,
+                workflow_instance_id,
+                candidate_projection_type,
+            )
             existing = self._failures_by_key.get(key, [])
             resolved_count += len(existing)
 
             if existing:
-                self._failures_by_key[key] = []
+                resolved_at = utc_now()
+                self._failures_by_key[key] = [
+                    ProjectionFailureInfo(
+                        projection_type=failure.projection_type,
+                        error_code=failure.error_code,
+                        error_message=failure.error_message,
+                        target_path=failure.target_path,
+                        attempt_id=failure.attempt_id,
+                        occurred_at=failure.occurred_at,
+                        resolved_at=resolved_at,
+                        open_failure_count=failure.open_failure_count,
+                        retry_count=failure.retry_count,
+                        status="resolved",
+                    )
+                    for failure in existing
+                ]
 
             current_projection = self._projection_states_by_key.get(key)
             if current_projection is not None:
@@ -370,6 +427,63 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
                 )
 
         return resolved_count
+
+    def ignore_resume_projection_failures(
+        self,
+        workspace_id: object,
+        workflow_instance_id: object,
+        projection_type: ProjectionArtifactType | None = None,
+    ) -> int:
+        ignored_count = 0
+
+        projection_types = (
+            (projection_type,)
+            if projection_type is not None
+            else (
+                ProjectionArtifactType.RESUME_JSON,
+                ProjectionArtifactType.RESUME_MD,
+            )
+        )
+
+        for candidate_projection_type in projection_types:
+            key = (
+                workspace_id,
+                workflow_instance_id,
+                candidate_projection_type,
+            )
+            existing = self._failures_by_key.get(key, [])
+            ignored_count += len(existing)
+
+            if existing:
+                resolved_at = utc_now()
+                self._failures_by_key[key] = [
+                    ProjectionFailureInfo(
+                        projection_type=failure.projection_type,
+                        error_code=failure.error_code,
+                        error_message=failure.error_message,
+                        target_path=failure.target_path,
+                        attempt_id=failure.attempt_id,
+                        occurred_at=failure.occurred_at,
+                        resolved_at=resolved_at,
+                        open_failure_count=failure.open_failure_count,
+                        retry_count=failure.retry_count,
+                        status="ignored",
+                    )
+                    for failure in existing
+                ]
+
+            current_projection = self._projection_states_by_key.get(key)
+            if current_projection is not None:
+                self._projection_states_by_key[key] = ProjectionInfo(
+                    projection_type=current_projection.projection_type,
+                    status=current_projection.status,
+                    target_path=current_projection.target_path,
+                    last_successful_write_at=current_projection.last_successful_write_at,
+                    last_canonical_update_at=current_projection.last_canonical_update_at,
+                    open_failure_count=0,
+                )
+
+        return ignored_count
 
 
 class InMemoryUnitOfWork(UnitOfWork):

@@ -32,6 +32,7 @@ from ctxledger.workflow.service import (
     WorkflowInstanceStatus,
     Workspace,
     WorkspaceRepository,
+    utc_now,
 )
 
 try:
@@ -958,30 +959,96 @@ class PostgresProjectionFailureRepository(ProjectionFailureRepository):
                 """
                 SELECT
                     projection_type,
+                    attempt_id,
                     error_code,
                     error_message,
-                    target_path
+                    target_path,
+                    retry_count,
+                    occurred_at,
+                    resolved_at,
+                    status
                 FROM projection_failures
                 WHERE workspace_id = %s
                   AND workflow_instance_id = %s
                   AND status = 'open'
-                ORDER BY occurred_at ASC
+                ORDER BY projection_type ASC, occurred_at ASC
                 """,
                 (workspace_id, workflow_instance_id),
             )
             rows = cur.fetchall()
 
         failures: list[ProjectionFailureInfo] = []
-        for index, row in enumerate(rows, start=1):
+        open_counts_by_projection_type: dict[ProjectionArtifactType, int] = {}
+        for row in rows:
+            projection_type = ProjectionArtifactType(str(row["projection_type"]))
+            open_count = open_counts_by_projection_type.get(projection_type, 0) + 1
+            open_counts_by_projection_type[projection_type] = open_count
             failures.append(
                 ProjectionFailureInfo(
-                    projection_type=ProjectionArtifactType.RESUME_JSON
-                    if str(row["target_path"]).endswith(".json")
-                    else ProjectionArtifactType.RESUME_MD,
+                    projection_type=projection_type,
                     error_code=row["error_code"],
                     error_message=row["error_message"],
                     target_path=row["target_path"],
-                    open_failure_count=index,
+                    attempt_id=_to_uuid(row["attempt_id"])
+                    if row["attempt_id"] is not None
+                    else None,
+                    occurred_at=_optional_datetime(row["occurred_at"]),
+                    resolved_at=_optional_datetime(row["resolved_at"]),
+                    open_failure_count=open_count,
+                    retry_count=int(row["retry_count"] or 0),
+                    status=str(row["status"]),
+                )
+            )
+        return failures
+
+    def get_closed_failures_by_workflow_id(
+        self,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+    ) -> list[ProjectionFailureInfo]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    projection_type,
+                    attempt_id,
+                    error_code,
+                    error_message,
+                    target_path,
+                    retry_count,
+                    occurred_at,
+                    resolved_at,
+                    status
+                FROM projection_failures
+                WHERE workspace_id = %s
+                  AND workflow_instance_id = %s
+                  AND status IN ('resolved', 'ignored')
+                ORDER BY projection_type ASC, occurred_at ASC
+                """,
+                (workspace_id, workflow_instance_id),
+            )
+            rows = cur.fetchall()
+
+        failures: list[ProjectionFailureInfo] = []
+        closed_counts_by_projection_type: dict[ProjectionArtifactType, int] = {}
+        for row in rows:
+            projection_type = ProjectionArtifactType(str(row["projection_type"]))
+            closed_count = closed_counts_by_projection_type.get(projection_type, 0) + 1
+            closed_counts_by_projection_type[projection_type] = closed_count
+            failures.append(
+                ProjectionFailureInfo(
+                    projection_type=projection_type,
+                    error_code=row["error_code"],
+                    error_message=row["error_message"],
+                    target_path=row["target_path"],
+                    attempt_id=_to_uuid(row["attempt_id"])
+                    if row["attempt_id"] is not None
+                    else None,
+                    occurred_at=_optional_datetime(row["occurred_at"]),
+                    resolved_at=_optional_datetime(row["resolved_at"]),
+                    open_failure_count=closed_count,
+                    retry_count=int(row["retry_count"] or 0),
+                    status=str(row["status"]),
                 )
             )
         return failures
@@ -997,6 +1064,7 @@ class PostgresProjectionFailureRepository(ProjectionFailureRepository):
                     projection_failure_id,
                     workspace_id,
                     workflow_instance_id,
+                    attempt_id,
                     projection_type,
                     target_path,
                     error_code,
@@ -1013,69 +1081,159 @@ class PostgresProjectionFailureRepository(ProjectionFailureRepository):
                     %s,
                     %s,
                     %s,
+                    %s,
                     'open',
-                    0,
+                    %s,
                     now()
                 )
                 """,
                 (
                     failure.workspace_id,
                     failure.workflow_instance_id,
+                    failure.attempt_id,
                     failure.projection_type.value,
                     failure.target_path,
                     failure.error_code,
                     failure.error_message,
+                    self._count_open_failures(
+                        failure.workspace_id,
+                        failure.workflow_instance_id,
+                        failure.projection_type,
+                    ),
                 ),
             )
 
         open_failure_count = self._count_open_failures(
             failure.workspace_id,
             failure.workflow_instance_id,
+            failure.projection_type,
         )
         return ProjectionFailureInfo(
             projection_type=failure.projection_type,
             error_code=failure.error_code,
             error_message=failure.error_message,
             target_path=failure.target_path,
+            attempt_id=failure.attempt_id,
+            occurred_at=utc_now(),
             open_failure_count=open_failure_count,
+            retry_count=open_failure_count - 1,
+            status="open",
         )
 
     def resolve_resume_projection_failures(
         self,
         workspace_id: UUID,
         workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
     ) -> int:
         with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE projection_failures
-                SET
-                    status = 'resolved',
-                    resolved_at = now()
-                WHERE workspace_id = %s
-                  AND workflow_instance_id = %s
-                  AND status = 'open'
-                """,
-                (workspace_id, workflow_instance_id),
-            )
+            if projection_type is None:
+                cur.execute(
+                    """
+                    UPDATE projection_failures
+                    SET
+                        status = 'resolved',
+                        resolved_at = now()
+                    WHERE workspace_id = %s
+                      AND workflow_instance_id = %s
+                      AND status = 'open'
+                    """,
+                    (workspace_id, workflow_instance_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE projection_failures
+                    SET
+                        status = 'resolved',
+                        resolved_at = now()
+                    WHERE workspace_id = %s
+                      AND workflow_instance_id = %s
+                      AND projection_type = %s
+                      AND status = 'open'
+                    """,
+                    (
+                        workspace_id,
+                        workflow_instance_id,
+                        projection_type.value,
+                    ),
+                )
+            return cur.rowcount
+
+    def ignore_resume_projection_failures(
+        self,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
+    ) -> int:
+        with self._conn.cursor() as cur:
+            if projection_type is None:
+                cur.execute(
+                    """
+                    UPDATE projection_failures
+                    SET
+                        status = 'ignored',
+                        resolved_at = now()
+                    WHERE workspace_id = %s
+                      AND workflow_instance_id = %s
+                      AND status = 'open'
+                    """,
+                    (workspace_id, workflow_instance_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE projection_failures
+                    SET
+                        status = 'ignored',
+                        resolved_at = now()
+                    WHERE workspace_id = %s
+                      AND workflow_instance_id = %s
+                      AND projection_type = %s
+                      AND status = 'open'
+                    """,
+                    (
+                        workspace_id,
+                        workflow_instance_id,
+                        projection_type.value,
+                    ),
+                )
             return cur.rowcount
 
     def _count_open_failures(
         self,
         workspace_id: UUID,
         workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
     ) -> int:
         with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT COUNT(*) AS failure_count
-                FROM projection_failures
-                WHERE workspace_id = %s
-                  AND workflow_instance_id = %s
-                  AND status = 'open'
-                """,
-                (workspace_id, workflow_instance_id),
-            )
+            if projection_type is None:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) AS failure_count
+                    FROM projection_failures
+                    WHERE workspace_id = %s
+                      AND workflow_instance_id = %s
+                      AND status = 'open'
+                    """,
+                    (workspace_id, workflow_instance_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) AS failure_count
+                    FROM projection_failures
+                    WHERE workspace_id = %s
+                      AND workflow_instance_id = %s
+                      AND projection_type = %s
+                      AND status = 'open'
+                    """,
+                    (
+                        workspace_id,
+                        workflow_instance_id,
+                        projection_type.value,
+                    ),
+                )
             row = cur.fetchone()
         if row is None:
             return 0

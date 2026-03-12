@@ -77,6 +77,14 @@ At a high level, `ctxledger` is composed of:
   - `.agent/resume.json`
   - `.agent/resume.md`
 
+Projection failure lifecycle is tracked canonically as operational metadata, including:
+
+- `open`
+- `resolved`
+- `ignored`
+
+Repeated failures remain visible as repeated operational events, and `retry_count` distinguishes first failure from subsequent unresolved failures for the same projection stream.
+
 For detailed design, see:
 
 - `docs/architecture.md`
@@ -252,6 +260,41 @@ Examples of projections:
 
 Projection failures or staleness should never redefine truth.  
 Canonical workflow state must still be reconstructed from PostgreSQL.
+
+### Projection failure lifecycle summary
+
+Projection failure lifecycle is distinct from projection freshness status.
+
+Representative lifecycle states:
+
+- `open`
+- `resolved`
+- `ignored`
+
+Important distinctions:
+
+- projection status such as `failed` describes the artifact state
+- failure lifecycle state describes whether projection failure records are still open
+- `ignored` is not the same as successful projection recovery
+- repeated failures remain visible as repeated operational events
+
+Representative retry behavior:
+
+- first open failure for a projection stream: `retry_count = 0`
+- second consecutive open failure for the same projection stream: `retry_count = 1`
+
+Representative resolution timing behavior:
+
+- `resolved_at` is unset while a failure remains `open`
+- `resolved_at` is set when a failure transitions to either `resolved` or `ignored`
+- `resolved_at` records when the failure stopped being open; it does not by itself mean the projection artifact became `fresh`
+
+Representative warning behavior:
+
+- `open projection failure` is emitted only when open projection failures exist
+- `ignored projection failure` may be emitted when a projection remains `failed` but its failure records are no longer open
+- `projection.status = failed` by itself does not necessarily imply an unresolved open failure
+- a projection may remain `failed` even when `open_failure_count = 0`
 
 ---
 
@@ -505,6 +548,8 @@ The service may still be degraded-but-ready if, for example:
 
 - a projection is stale
 - projection generation previously failed
+- an open projection failure exists
+- a projection remains failed after failure records were resolved or ignored
 - embedding/indexing work is lagging
 
 ---
@@ -531,7 +576,8 @@ For production-like environments, the recommended topology is:
 - canonical state must survive restarts
 - readiness should be tied to DB and schema health
 
-For more detail, see `docs/deployment.md` and `docs/SECURITY.md`.
+For deployment details, see `docs/deployment.md`.  
+For security posture and exposure guidance, see `docs/SECURITY.md`.
 
 ---
 
@@ -551,7 +597,6 @@ Recommended production posture:
 - provide `CTXLEDGER_AUTH_BEARER_TOKEN` through environment variables or secret-management tooling
 - set `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` for internet-exposed production deployments unless operator access to `/debug/*` is explicitly required
 - if `/debug/*` must remain enabled in production, keep it behind the same bearer auth boundary and restrict access to trusted operators
-- inject secrets through environment variables or secret-management tooling
 - do not hardcode credentials in repository files
 
 ---

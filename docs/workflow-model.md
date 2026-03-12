@@ -360,6 +360,98 @@ Examples of diagnostic issues include:
 Hard failures such as unknown workflow, unknown workspace, or authentication failure remain request errors.  
 Operational inconsistencies should instead be surfaced in the assembled resume view whenever possible.
 
+## 13.1 Projection Failure Lifecycle in Resume
+
+Projection failure tracking participates directly in the workflow resume model.
+
+Projection failures should be treated as canonical operational metadata associated with a workflow, even though the projection files themselves are derived artifacts.
+
+Representative projection failure lifecycle states are:
+
+- `open`
+- `resolved`
+- `ignored`
+
+### `open`
+
+An `open` projection failure means:
+
+- a projection write failed
+- the failure is still considered operationally active
+- resume should surface the failure as an unresolved issue
+
+Repeated failures for the same projection type should remain visible as repeated failure records rather than collapsing immediately into a single boolean state.
+
+### `resolved`
+
+A projection failure becomes `resolved` when the system has sufficient evidence that the failure is no longer open.
+
+In `v0.1.0`, the representative resolution path is:
+
+- successful projection reconciliation for the same projection type
+- closure of matching open projection failure records in canonical storage
+
+### `ignored`
+
+A projection failure becomes `ignored` when the system or operator decides that the failure should no longer be treated as an active unresolved issue.
+
+Ignoring means:
+
+- the failure history remains canonical
+- the failure is no longer open
+- resume should stop surfacing it as an `open projection failure`
+
+Ignoring is not equivalent to successful projection recovery.  
+It is a lifecycle transition for issue visibility and operational handling.
+
+## 13.2 Projection Failure Visibility Rules
+
+Resume should distinguish projection status from projection failure lifecycle state.
+
+Important consequences:
+
+- a projection may still be `failed` even when no open projection failures remain
+- `failed` projection status alone does not imply that an unresolved open failure still exists
+- `open projection failure` warnings should be emitted only when open projection failures exist
+
+Representative behavior:
+
+- `projection.status = failed` and `open_failure_count > 0`
+  - emit `open projection failure`
+- `projection.status = failed` and `open_failure_count = 0`
+  - do not emit `open projection failure`
+  - retain failed projection state for diagnosis
+- `projection.status = fresh`
+  - open projection failure warnings should not remain after successful reconciliation
+
+## 13.3 Repeated Failure and Retry Metadata
+
+Repeated projection failures should remain visible in canonical resume metadata.
+
+Representative fields include:
+
+- `projection_type`
+- `target_path`
+- `error_code`
+- `error_message`
+- `open_failure_count`
+- `retry_count`
+- `status`
+
+`retry_count` should represent how many prior open failures already existed for the same projection stream before the current failure was recorded.
+
+Representative examples:
+
+- first failure for a projection stream: `retry_count = 0`
+- second consecutive open failure for the same projection stream: `retry_count = 1`
+
+This allows resume consumers to distinguish:
+
+- one-off transient failure
+- repeated unresolved failure
+- failure that was later resolved
+- failure that was later ignored
+
 ---
 
 ## 14. Workspace-Scoped Resume
@@ -485,6 +577,19 @@ Future workflow-adjacent records may include:
 - artifact metadata
 - links from checkpoints to artifacts
 - links from attempts to verification evidence
+
+Projection failure records are especially important because they connect derived repository state back to canonical operational state.
+
+At minimum, the workflow model should remain compatible with projection failure fields such as:
+
+- projection type
+- target path
+- failure status
+- retry count
+- occurrence timestamp
+- resolution timestamp
+- workflow ownership
+- attempt ownership where available
 
 These are not required to define the core workflow hierarchy, but they are important extensions of the operational model.
 

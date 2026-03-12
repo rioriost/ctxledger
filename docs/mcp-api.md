@@ -347,6 +347,78 @@ Typical response content:
 - `warnings`
 - `next_hint`
 
+Representative projection-related response details may include:
+
+- `projection_type`
+- `target_path`
+- `attempt_id`
+- `open_failure_count`
+- `retry_count`
+- `status`
+- `occurred_at`
+- `resolved_at`
+- `error_code`
+- `error_message`
+
+### Projection Failure Lifecycle Semantics
+Projection failure lifecycle is distinct from projection freshness status.
+
+Representative lifecycle states:
+
+- `open`
+- `resolved`
+- `ignored`
+
+Meaning:
+
+- `open`
+  - a projection write failed and the failure is still operationally active
+  - `resolved_at` should be `null`
+- `resolved`
+  - the failure is no longer open because successful reconciliation or explicit resolution occurred
+  - `resolved_at` should be set to the timestamp when the failure stopped being open
+- `ignored`
+  - the failure is no longer open because the system or operator decided to stop treating it as an active unresolved issue
+  - `resolved_at` should be set to the timestamp when the failure was ignored and closed
+
+Important distinctions:
+
+- projection status such as `failed` describes the projection artifact state
+- failure lifecycle state describes whether projection failure records are still open
+- `ignored` is not the same as successful projection recovery
+- `resolved_at` is the canonical closure timestamp for both `resolved` and `ignored`
+- `resolved_at` does not by itself imply successful projection recovery; lifecycle status must still be checked
+- repeated failures should remain visible as repeated operational events rather than as a single boolean flag
+
+Representative retry behavior:
+
+- first open failure for a projection stream: `retry_count = 0`
+- second consecutive open failure for the same projection stream: `retry_count = 1`
+
+### Projection Warning Visibility Rules
+Projection-related warnings should distinguish artifact status from failure lifecycle state.
+
+Representative rules:
+
+- emit `open projection failure` only when open projection failures exist
+- `projection.status = failed` by itself does not necessarily imply an unresolved open failure
+- a projection may remain `failed` even when `open_failure_count = 0`
+- when `projection.status = failed` and `open_failure_count = 0`, the response may emit `ignored projection failure` to indicate ignored or previously resolved historical failures without treating them as currently open
+- if failure-level details are included, `resolved_at` should be present only for closed failures and should remain `null` for open ones
+
+Representative behavior:
+
+- `projection.status = failed` and `open_failure_count > 0`
+  - emit `open projection failure`
+  - failure detail entries should remain in `status = open`
+  - failure detail entries should expose `resolved_at = null`
+- `projection.status = failed` and `open_failure_count = 0`
+  - do not emit `open projection failure`
+  - may emit `ignored projection failure`
+  - retain failed projection state for diagnosis
+- `projection.status = fresh`
+  - open projection failure warnings should not remain after successful reconciliation
+
 ### `resumable_status` Examples
 - `resumable`
 - `terminal`
@@ -365,6 +437,7 @@ Soft issues returned inside response:
 - missing checkpoint
 - stale projection
 - open projection failure
+- missing projection
 - missing verify evidence
 - unavailable workspace path
 
@@ -428,6 +501,11 @@ Typical response content:
 - `attempt_status`
 - `finished_at`
 - `latest_verify_status` (optional)
+
+### Projection Failure Interaction
+`workflow_complete` does not redefine projection failure lifecycle, but implementations may still record projection-related operational failures if projection regeneration or projection state updates fail during terminalization flows.
+
+Projection failure metadata remains canonical operational state even when the projection files themselves are derived artifacts.
 
 ### Error Cases
 - workflow not found

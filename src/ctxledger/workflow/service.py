@@ -195,7 +195,12 @@ class ProjectionFailureInfo:
     error_code: str | None
     error_message: str
     target_path: str
+    attempt_id: UUID | None = None
+    occurred_at: datetime | None = None
+    resolved_at: datetime | None = None
     open_failure_count: int = 1
+    retry_count: int = 0
+    status: str = "open"
 
 
 @dataclass(slots=True, frozen=True)
@@ -232,6 +237,7 @@ class RecordProjectionFailureInput:
     projection_type: ProjectionArtifactType
     target_path: str
     error_message: str
+    attempt_id: UUID | None = None
     error_code: str | None = None
 
 
@@ -252,6 +258,7 @@ class WorkflowResume:
     resumable_status: ResumableStatus
     projections: tuple[ProjectionInfo, ...] = ()
     warnings: tuple[ResumeIssue, ...] = ()
+    closed_projection_failures: tuple[ProjectionFailureInfo, ...] = ()
     next_hint: str | None = None
 
 
@@ -416,6 +423,11 @@ class ProjectionFailureRepository:
     ) -> list[ProjectionFailureInfo]:
         raise NotImplementedError
 
+    def get_closed_failures_by_workflow_id(
+        self, workspace_id: UUID, workflow_instance_id: UUID
+    ) -> list[ProjectionFailureInfo]:
+        raise NotImplementedError
+
     def record_resume_projection_failure(
         self, failure: RecordProjectionFailureInput
     ) -> ProjectionFailureInfo:
@@ -425,6 +437,15 @@ class ProjectionFailureRepository:
         self,
         workspace_id: UUID,
         workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
+    ) -> int:
+        raise NotImplementedError
+
+    def ignore_resume_projection_failures(
+        self,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
     ) -> int:
         raise NotImplementedError
 
@@ -672,9 +693,16 @@ class WorkflowService:
                 )
 
             open_projection_failures: list[ProjectionFailureInfo] = []
+            closed_projection_failures: list[ProjectionFailureInfo] = []
             if getattr(uow, "projection_failures", None) is not None:
                 open_projection_failures = (
                     uow.projection_failures.get_open_failures_by_workflow_id(
+                        workspace.workspace_id,
+                        workflow.workflow_instance_id,
+                    )
+                )
+                closed_projection_failures = (
+                    uow.projection_failures.get_closed_failures_by_workflow_id(
                         workspace.workspace_id,
                         workflow.workflow_instance_id,
                     )
@@ -688,6 +716,7 @@ class WorkflowService:
                     latest_verify_report,
                     projections,
                     open_projection_failures,
+                    closed_projection_failures,
                 )
             )
             resumable_status = self._classify_resumable_status(
@@ -706,6 +735,7 @@ class WorkflowService:
                 resumable_status=resumable_status,
                 projections=projections,
                 warnings=tuple(warnings),
+                closed_projection_failures=tuple(closed_projection_failures),
                 next_hint=next_hint,
             )
 
@@ -782,6 +812,7 @@ class WorkflowService:
         *,
         workspace_id: UUID,
         workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
     ) -> int:
         with self._uow_factory() as uow:
             workspace = self._require_workspace(uow, workspace_id)
@@ -792,7 +823,7 @@ class WorkflowService:
                     "workflow does not belong to workspace",
                     details={
                         "workspace_id": str(workspace.workspace_id),
-                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "workflow_instance_id": str(workflow_instance_id),
                         "workflow.workspace_id": str(workflow.workspace_id),
                     },
                 )
@@ -803,9 +834,42 @@ class WorkflowService:
             resolved_count = uow.projection_failures.resolve_resume_projection_failures(
                 workspace.workspace_id,
                 workflow.workflow_instance_id,
+                projection_type,
             )
             uow.commit()
             return resolved_count
+
+    def ignore_resume_projection_failures(
+        self,
+        *,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
+    ) -> int:
+        with self._uow_factory() as uow:
+            workspace = self._require_workspace(uow, workspace_id)
+            workflow = self._require_workflow(uow, workflow_instance_id)
+
+            if workflow.workspace_id != workspace.workspace_id:
+                raise WorkflowAttemptMismatchError(
+                    "workflow does not belong to workspace",
+                    details={
+                        "workspace_id": str(workspace.workspace_id),
+                        "workflow_instance_id": str(workflow_instance_id),
+                        "workflow.workspace_id": str(workflow.workspace_id),
+                    },
+                )
+
+            if getattr(uow, "projection_failures", None) is None:
+                raise PersistenceError("projection failure repository is not available")
+
+            ignored_count = uow.projection_failures.ignore_resume_projection_failures(
+                workspace.workspace_id,
+                workflow.workflow_instance_id,
+                projection_type,
+            )
+            uow.commit()
+            return ignored_count
 
     def reconcile_resume_projection(
         self,
@@ -815,16 +879,21 @@ class WorkflowService:
     ) -> tuple[ProjectionInfo, ...]:
         reconciled: list[ProjectionInfo] = []
 
-        resolved_workflows: set[tuple[UUID, UUID]] = set()
+        resolved_projections: set[tuple[UUID, UUID, ProjectionArtifactType]] = set()
 
         for state in success_updates:
-            key = (state.workspace_id, state.workflow_instance_id)
-            if key not in resolved_workflows:
+            key = (
+                state.workspace_id,
+                state.workflow_instance_id,
+                state.projection_type,
+            )
+            if key not in resolved_projections:
                 self.resolve_resume_projection_failures(
                     workspace_id=state.workspace_id,
                     workflow_instance_id=state.workflow_instance_id,
+                    projection_type=state.projection_type,
                 )
-                resolved_workflows.add(key)
+                resolved_projections.add(key)
             reconciled.append(self.record_resume_projection(state))
 
         for failure in failure_updates:
@@ -978,6 +1047,7 @@ class WorkflowService:
         latest_verify_report: VerifyReport | None,
         projections: tuple[ProjectionInfo, ...],
         open_projection_failures: list[ProjectionFailureInfo] | None = None,
+        closed_projection_failures: list[ProjectionFailureInfo] | None = None,
     ) -> tuple[ResumeIssue, ...]:
         warnings: list[ResumeIssue] = []
 
@@ -1024,6 +1094,15 @@ class WorkflowService:
                     failure.projection_type, []
                 ).append(failure)
 
+        closed_failures_by_projection_type: dict[
+            ProjectionArtifactType, list[ProjectionFailureInfo]
+        ] = {}
+        if closed_projection_failures:
+            for failure in closed_projection_failures:
+                closed_failures_by_projection_type.setdefault(
+                    failure.projection_type, []
+                ).append(failure)
+
         for projection in projections:
             if projection.status == ProjectionStatus.STALE:
                 warnings.append(
@@ -1040,30 +1119,102 @@ class WorkflowService:
                 projection_failures = failures_by_projection_type.get(
                     projection.projection_type, []
                 )
-                failure_details: dict[str, Any] = {
-                    "projection_type": projection.projection_type.value,
-                    "target_path": projection.target_path or "",
-                    "open_failure_count": projection.open_failure_count,
-                }
-                if projection_failures:
-                    failure_details["failures"] = [
-                        {
-                            "projection_type": failure.projection_type.value,
-                            "target_path": failure.target_path,
-                            "error_code": failure.error_code,
-                            "error_message": failure.error_message,
-                            "open_failure_count": failure.open_failure_count,
-                        }
-                        for failure in projection_failures
-                    ]
-
-                warnings.append(
-                    ResumeIssue(
-                        code="open_projection_failure",
-                        message="resume projection has unresolved write failures",
-                        details=failure_details,
-                    )
+                closed_failures = closed_failures_by_projection_type.get(
+                    projection.projection_type, []
                 )
+                if projection.open_failure_count > 0:
+                    failure_details: dict[str, Any] = {
+                        "projection_type": projection.projection_type.value,
+                        "target_path": projection.target_path or "",
+                        "open_failure_count": projection.open_failure_count,
+                    }
+                    if projection_failures:
+                        failure_details["failures"] = [
+                            {
+                                "projection_type": failure.projection_type.value,
+                                "target_path": failure.target_path,
+                                "attempt_id": (
+                                    str(failure.attempt_id)
+                                    if failure.attempt_id is not None
+                                    else None
+                                ),
+                                "error_code": failure.error_code,
+                                "error_message": failure.error_message,
+                                "occurred_at": (
+                                    failure.occurred_at.isoformat()
+                                    if failure.occurred_at is not None
+                                    else None
+                                ),
+                                "resolved_at": (
+                                    failure.resolved_at.isoformat()
+                                    if failure.resolved_at is not None
+                                    else None
+                                ),
+                                "open_failure_count": failure.open_failure_count,
+                                "retry_count": failure.retry_count,
+                                "status": failure.status,
+                            }
+                            for failure in projection_failures
+                        ]
+
+                    warnings.append(
+                        ResumeIssue(
+                            code="open_projection_failure",
+                            message="resume projection has unresolved write failures",
+                            details=failure_details,
+                        )
+                    )
+                elif closed_failures:
+                    warning_code = (
+                        "ignored_projection_failure"
+                        if any(
+                            failure.status == "ignored" for failure in closed_failures
+                        )
+                        else "resolved_projection_failure"
+                    )
+                    warning_message = (
+                        "resume projection has ignored write failures"
+                        if warning_code == "ignored_projection_failure"
+                        else "resume projection has previously resolved write failures"
+                    )
+                    warnings.append(
+                        ResumeIssue(
+                            code=warning_code,
+                            message=warning_message,
+                            details={
+                                "projection_type": projection.projection_type.value,
+                                "target_path": projection.target_path or "",
+                                "open_failure_count": projection.open_failure_count,
+                                "failures": [
+                                    {
+                                        "projection_type": failure.projection_type.value,
+                                        "target_path": failure.target_path,
+                                        "attempt_id": (
+                                            str(failure.attempt_id)
+                                            if failure.attempt_id is not None
+                                            else None
+                                        ),
+                                        "error_code": failure.error_code,
+                                        "error_message": failure.error_message,
+                                        "occurred_at": (
+                                            failure.occurred_at.isoformat()
+                                            if failure.occurred_at is not None
+                                            else None
+                                        ),
+                                        "resolved_at": (
+                                            failure.resolved_at.isoformat()
+                                            if failure.resolved_at is not None
+                                            else None
+                                        ),
+                                        "open_failure_count": failure.open_failure_count,
+                                        "retry_count": failure.retry_count,
+                                        "status": failure.status,
+                                    }
+                                    for failure in closed_failures
+                                ],
+                            },
+                        )
+                    )
             elif projection.status == ProjectionStatus.MISSING:
                 warnings.append(
                     ResumeIssue(
