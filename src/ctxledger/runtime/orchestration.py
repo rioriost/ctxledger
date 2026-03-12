@@ -44,6 +44,8 @@ from ..mcp.tool_schemas import (
     WORKSPACE_REGISTER_TOOL_SCHEMA,
 )
 from ..memory.service import MemoryService
+from ..runtime.composite import CompositeRuntimeAdapter
+from ..runtime.http_runtime import build_http_runtime_adapter
 from ..runtime.introspection import (
     RuntimeIntrospection,
     collect_runtime_introspection,
@@ -118,7 +120,7 @@ def create_runtime(
 
     if settings.http.enabled:
         if server is not None:
-            http_runtime = http_runtime_builder(server)
+            http_runtime = build_http_runtime_adapter(server)
         else:
             from ..server import HttpRuntimeAdapter
 
@@ -138,8 +140,6 @@ def create_runtime(
 
     if len(runtimes) == 1:
         return runtimes[0]
-
-    from ..server import CompositeRuntimeAdapter
 
     return CompositeRuntimeAdapter(runtimes)
 

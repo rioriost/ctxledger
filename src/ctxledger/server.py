@@ -178,6 +178,7 @@ from .mcp.tool_schemas import (
     McpToolSchema,
     serialize_mcp_tool_schema,
 )
+from .runtime.composite import CompositeRuntimeAdapter
 from .runtime.introspection import (
     RuntimeIntrospection,
     collect_runtime_introspection,
@@ -380,43 +381,6 @@ class HttpRuntimeAdapter:
                 "registered_routes": list(self.registered_routes()),
             },
         )
-        self._started = False
-
-
-class CompositeRuntimeAdapter:
-    """
-    Aggregates multiple runtime adapters behind a single lifecycle boundary.
-    """
-
-    def __init__(self, runtimes: list[ServerRuntime]) -> None:
-        self._runtimes = runtimes
-        self._started = False
-
-    def start(self) -> None:
-        started: list[ServerRuntime] = []
-        try:
-            for runtime in self._runtimes:
-                runtime.start()
-                started.append(runtime)
-            self._started = True
-        except Exception:
-            for runtime in reversed(started):
-                try:
-                    runtime.stop()
-                except Exception:
-                    logger.exception("Failed to stop partially started runtime")
-            raise
-
-    def stop(self) -> None:
-        if not self._started:
-            return
-
-        for runtime in reversed(self._runtimes):
-            try:
-                runtime.stop()
-            except Exception:
-                logger.exception("Runtime shutdown failed")
-
         self._started = False
 
 
@@ -1753,49 +1717,11 @@ def build_mcp_http_handler(
 
 
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
-    runtime = HttpRuntimeAdapter(server.settings)
-    mcp_runtime = build_stdio_runtime_adapter(server)
-    debug_settings = getattr(server.settings, "debug", None)
-    debug_http_endpoints_enabled = (
-        True if debug_settings is None else getattr(debug_settings, "enabled", True)
+    from .runtime.http_runtime import (
+        build_http_runtime_adapter as _build_http_runtime_adapter,
     )
 
-    runtime.register_handler(
-        "mcp_rpc",
-        build_mcp_http_handler(mcp_runtime, server),
-    )
-
-    if debug_http_endpoints_enabled:
-        runtime.register_handler(
-            "runtime_introspection",
-            build_runtime_introspection_http_handler(server),
-        )
-        runtime.register_handler(
-            "runtime_routes",
-            build_runtime_routes_http_handler(server),
-        )
-        runtime.register_handler(
-            "runtime_tools",
-            build_runtime_tools_http_handler(server),
-        )
-
-    runtime.register_handler(
-        "workflow_resume",
-        build_workflow_resume_http_handler(server),
-    )
-    runtime.register_handler(
-        "workflow_closed_projection_failures",
-        build_closed_projection_failures_http_handler(server),
-    )
-    runtime.register_handler(
-        "projection_failures_ignore",
-        build_projection_failures_ignore_http_handler(server),
-    )
-    runtime.register_handler(
-        "projection_failures_resolve",
-        build_projection_failures_resolve_http_handler(server),
-    )
-    return runtime
+    return _build_http_runtime_adapter(server)
 
 
 def build_workflow_service_factory(
