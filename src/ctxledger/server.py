@@ -145,6 +145,8 @@ from .mcp.stdio import (
     StdioRuntimeAdapter,
     dispatch_mcp_resource,
     dispatch_mcp_tool,
+    find_stdio_runtime,
+    run_stdio_runtime_if_present,
 )
 from .mcp.stdio import (
     build_stdio_runtime_adapter as build_extracted_stdio_runtime_adapter,
@@ -2066,17 +2068,8 @@ def run_server(
         server.startup()
         _print_runtime_summary(server)
 
-        if settings.stdio.enabled and isinstance(server.runtime, StdioRuntimeAdapter):
-            StdioRpcServer(server.runtime).run()
+        if settings.stdio.enabled and run_stdio_runtime_if_present(server.runtime):
             return 0
-
-        if settings.stdio.enabled and isinstance(
-            server.runtime, CompositeRuntimeAdapter
-        ):
-            for nested_runtime in server.runtime._runtimes:
-                if isinstance(nested_runtime, StdioRuntimeAdapter):
-                    StdioRpcServer(nested_runtime).run()
-                    return 0
 
         return 0
     except ServerBootstrapError as exc:

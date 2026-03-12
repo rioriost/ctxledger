@@ -327,6 +327,29 @@ def build_stdio_runtime_adapter(
     return runtime
 
 
+def find_stdio_runtime(runtime: Any) -> StdioRuntimeAdapter | None:
+    if isinstance(runtime, StdioRuntimeAdapter):
+        return runtime
+
+    nested_runtimes = getattr(runtime, "_runtimes", None)
+    if isinstance(nested_runtimes, list):
+        for nested_runtime in nested_runtimes:
+            stdio_runtime = find_stdio_runtime(nested_runtime)
+            if stdio_runtime is not None:
+                return stdio_runtime
+
+    return None
+
+
+def run_stdio_runtime_if_present(runtime: Any) -> bool:
+    stdio_runtime = find_stdio_runtime(runtime)
+    if stdio_runtime is None:
+        return False
+
+    StdioRpcServer(stdio_runtime).run()
+    return True
+
+
 __all__ = [
     "McpResourceHandler",
     "McpToolHandler",
@@ -339,4 +362,6 @@ __all__ = [
     "build_stdio_runtime_adapter",
     "dispatch_mcp_resource",
     "dispatch_mcp_tool",
+    "find_stdio_runtime",
+    "run_stdio_runtime_if_present",
 ]
