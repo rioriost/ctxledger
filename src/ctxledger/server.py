@@ -176,6 +176,7 @@ from .runtime.database_health import (
     PostgresDatabaseHealthChecker,
     build_database_health_checker,
 )
+from .runtime.errors import ServerBootstrapError
 from .runtime.http_handlers import (
     build_closed_projection_failures_http_handler as extracted_build_closed_projection_failures_http_handler,
 )
@@ -271,10 +272,6 @@ class McpHttpResponse:
     status_code: int
     payload: dict[str, Any]
     headers: dict[str, str]
-
-
-class ServerBootstrapError(RuntimeError):
-    pass
 
 
 class HttpRuntimeAdapter:

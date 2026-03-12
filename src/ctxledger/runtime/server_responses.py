@@ -20,11 +20,8 @@ def build_workflow_resume_response(
     server: CtxLedgerServer,
     workflow_instance_id: UUID,
 ) -> WorkflowResumeResponse:
-    from ..server import (
-        ServerBootstrapError,
-        WorkflowResumeResponse,
-        serialize_workflow_resume,
-    )
+    from ..runtime.database_health import ServerBootstrapError
+    from ..server import WorkflowResumeResponse, serialize_workflow_resume
 
     try:
         resume = server.get_workflow_resume(workflow_instance_id)
@@ -51,9 +48,9 @@ def build_closed_projection_failures_response(
     server: CtxLedgerServer,
     workflow_instance_id: UUID,
 ) -> ProjectionFailureHistoryResponse:
+    from ..runtime.database_health import ServerBootstrapError
     from ..server import (
         ProjectionFailureHistoryResponse,
-        ServerBootstrapError,
         serialize_closed_projection_failures_history,
     )
 

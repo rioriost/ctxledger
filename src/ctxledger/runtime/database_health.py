@@ -9,8 +9,7 @@ class DatabaseHealthChecker(Protocol):
     def schema_ready(self) -> bool: ...
 
 
-class ServerBootstrapError(RuntimeError):
-    pass
+from .errors import ServerBootstrapError
 
 
 class DefaultDatabaseHealthChecker:

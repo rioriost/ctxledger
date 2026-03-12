@@ -242,7 +242,8 @@ def run_server(
             host=host,
             port=port,
         )
-        from ..server import ServerBootstrapError, create_server
+        from ..runtime.database_health import ServerBootstrapError
+        from ..server import create_server
 
         server = create_server(settings)
         install_signal_handlers(server)
