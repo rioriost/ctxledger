@@ -6,8 +6,8 @@ from uuid import UUID
 from ..workflow.service import ProjectionArtifactType
 
 if TYPE_CHECKING:
-    from ..server import (
-        CtxLedgerServer,
+    from ..server import CtxLedgerServer
+    from .types import (
         McpResourceResponse,
         ProjectionFailureActionResponse,
         ProjectionFailureHistoryResponse,
@@ -21,7 +21,8 @@ def build_workflow_resume_response(
     workflow_instance_id: UUID,
 ) -> WorkflowResumeResponse:
     from ..runtime.database_health import ServerBootstrapError
-    from ..server import WorkflowResumeResponse, serialize_workflow_resume
+    from ..server import serialize_workflow_resume
+    from .types import WorkflowResumeResponse
 
     try:
         resume = server.get_workflow_resume(workflow_instance_id)
@@ -49,10 +50,8 @@ def build_closed_projection_failures_response(
     workflow_instance_id: UUID,
 ) -> ProjectionFailureHistoryResponse:
     from ..runtime.database_health import ServerBootstrapError
-    from ..server import (
-        ProjectionFailureHistoryResponse,
-        serialize_closed_projection_failures_history,
-    )
+    from ..server import serialize_closed_projection_failures_history
+    from .types import ProjectionFailureHistoryResponse
 
     try:
         resume = server.get_workflow_resume(workflow_instance_id)
@@ -85,7 +84,7 @@ def build_projection_failures_ignore_response(
     workflow_instance_id: UUID,
     projection_type: ProjectionArtifactType | None = None,
 ) -> ProjectionFailureActionResponse:
-    from ..server import ProjectionFailureActionResponse
+    from .types import ProjectionFailureActionResponse
 
     if server.workflow_service is None:
         return ProjectionFailureActionResponse(
@@ -152,7 +151,7 @@ def build_projection_failures_resolve_response(
     workflow_instance_id: UUID,
     projection_type: ProjectionArtifactType | None = None,
 ) -> ProjectionFailureActionResponse:
-    from ..server import ProjectionFailureActionResponse
+    from .types import ProjectionFailureActionResponse
 
     if server.workflow_service is None:
         return ProjectionFailureActionResponse(
@@ -215,11 +214,11 @@ def build_projection_failures_resolve_response(
 def build_runtime_introspection_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
-    from ..server import RuntimeIntrospectionResponse
     from .introspection import (
         collect_runtime_introspection,
         serialize_runtime_introspection_collection,
     )
+    from .types import RuntimeIntrospectionResponse
 
     introspections = collect_runtime_introspection(server.runtime)
     return RuntimeIntrospectionResponse(
@@ -234,8 +233,8 @@ def build_runtime_introspection_response(
 def build_runtime_routes_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
-    from ..server import RuntimeIntrospectionResponse
     from .introspection import collect_runtime_introspection
+    from .types import RuntimeIntrospectionResponse
 
     introspections = collect_runtime_introspection(server.runtime)
     return RuntimeIntrospectionResponse(
@@ -257,8 +256,8 @@ def build_runtime_routes_response(
 def build_runtime_tools_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
-    from ..server import RuntimeIntrospectionResponse
     from .introspection import collect_runtime_introspection
+    from .types import RuntimeIntrospectionResponse
 
     introspections = collect_runtime_introspection(server.runtime)
     return RuntimeIntrospectionResponse(

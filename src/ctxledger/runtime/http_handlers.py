@@ -13,12 +13,10 @@ from ..mcp.streamable_http import (
 if TYPE_CHECKING:
     from uuid import UUID
 
-    from ..server import (
-        CtxLedgerServer,
+    from ..server import CtxLedgerServer, McpRuntimeProtocol, ProjectionArtifactType
+    from .types import (
         McpHttpResponse,
-        McpRuntimeProtocol,
         McpToolResponse,
-        ProjectionArtifactType,
         ProjectionFailureActionResponse,
         ProjectionFailureHistoryResponse,
         RuntimeIntrospectionResponse,
@@ -49,7 +47,7 @@ def extract_bearer_token(path: str) -> str | None:
 
 
 def build_http_auth_error_response(message: str) -> WorkflowResumeResponse:
-    from ..server import WorkflowResumeResponse
+    from .types import WorkflowResumeResponse
 
     return WorkflowResumeResponse(
         status_code=401,
@@ -197,7 +195,8 @@ def parse_closed_projection_failures_request_path(path: str):
 def build_workflow_resume_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import WorkflowResumeResponse, build_workflow_resume_response
+    from ..server import build_workflow_resume_response
+    from .types import WorkflowResumeResponse
 
     def _handler(path: str) -> WorkflowResumeResponse:
         auth_error = require_http_bearer_auth(server, path)
@@ -228,10 +227,8 @@ def build_workflow_resume_http_handler(
 def build_closed_projection_failures_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import (
-        ProjectionFailureHistoryResponse,
-        build_closed_projection_failures_response,
-    )
+    from ..server import build_closed_projection_failures_response
+    from .types import ProjectionFailureHistoryResponse
 
     def _handler(path: str) -> ProjectionFailureHistoryResponse:
         auth_error = require_http_bearer_auth(server, path)
@@ -267,11 +264,8 @@ def build_closed_projection_failures_http_handler(
 def build_projection_failures_ignore_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import (
-        McpToolResponse,
-        ProjectionFailureActionResponse,
-        build_projection_failures_ignore_response,
-    )
+    from ..server import build_projection_failures_ignore_response
+    from .types import McpToolResponse, ProjectionFailureActionResponse
 
     def _handler(path: str) -> ProjectionFailureActionResponse:
         auth_error = require_http_bearer_auth(server, path)
@@ -343,11 +337,8 @@ def build_projection_failures_ignore_http_handler(
 def build_projection_failures_resolve_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import (
-        McpToolResponse,
-        ProjectionFailureActionResponse,
-        build_projection_failures_resolve_response,
-    )
+    from ..server import build_projection_failures_resolve_response
+    from .types import McpToolResponse, ProjectionFailureActionResponse
 
     def _handler(path: str) -> ProjectionFailureActionResponse:
         auth_error = require_http_bearer_auth(server, path)
@@ -419,10 +410,8 @@ def build_projection_failures_resolve_http_handler(
 def build_runtime_introspection_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import (
-        RuntimeIntrospectionResponse,
-        build_runtime_introspection_response,
-    )
+    from ..server import build_runtime_introspection_response
+    from .types import RuntimeIntrospectionResponse
 
     def _handler(path: str) -> RuntimeIntrospectionResponse:
         auth_error = require_http_bearer_auth(server, path)
@@ -457,7 +446,8 @@ def build_runtime_introspection_http_handler(
 def build_runtime_routes_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import RuntimeIntrospectionResponse, build_runtime_routes_response
+    from ..server import build_runtime_routes_response
+    from .types import RuntimeIntrospectionResponse
 
     def _handler(path: str) -> RuntimeIntrospectionResponse:
         auth_error = require_http_bearer_auth(server, path)
@@ -490,7 +480,8 @@ def build_runtime_routes_http_handler(
 def build_runtime_tools_http_handler(
     server: CtxLedgerServer,
 ):
-    from ..server import RuntimeIntrospectionResponse, build_runtime_tools_response
+    from ..server import build_runtime_tools_response
+    from .types import RuntimeIntrospectionResponse
 
     def _handler(path: str) -> RuntimeIntrospectionResponse:
         auth_error = require_http_bearer_auth(server, path)
@@ -524,7 +515,7 @@ def build_mcp_http_handler(
     runtime: McpRuntimeProtocol,
     server: CtxLedgerServer,
 ):
-    from ..server import McpHttpResponse
+    from .types import McpHttpResponse
 
     def _validate_auth(path: str) -> StreamableHttpResponse | None:
         auth_error = require_http_bearer_auth(server, path)

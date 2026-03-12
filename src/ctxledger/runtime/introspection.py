@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from ..mcp.stdio import StdioRuntimeAdapter
-    from ..server import CompositeRuntimeAdapter, HttpRuntimeAdapter, ServerRuntime
+    from ..server import CompositeRuntimeAdapter, HttpRuntimeAdapter
+
+
+class ServerRuntime(Protocol):
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
 
 
 @dataclass(slots=True)
