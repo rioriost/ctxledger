@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .protocols import ServerRuntime
-
-if TYPE_CHECKING:
-    from ..mcp.stdio import StdioRuntimeAdapter
 
 
 @dataclass(slots=True)
@@ -22,8 +19,6 @@ def collect_runtime_introspection(
 ) -> tuple[RuntimeIntrospection, ...]:
     if runtime is None:
         return ()
-
-    from ..mcp.stdio import StdioRuntimeAdapter
 
     nested_runtimes = getattr(runtime, "_runtimes", None)
     if isinstance(nested_runtimes, list):
@@ -45,7 +40,7 @@ def collect_runtime_introspection(
                 ),
             )
 
-    if isinstance(runtime, StdioRuntimeAdapter):
+    if _is_stdio_runtime_like(runtime):
         introspection = runtime.introspect()
         return (
             RuntimeIntrospection(
@@ -65,6 +60,15 @@ def _is_runtime_introspection_like(value: Any) -> bool:
         and hasattr(value, "routes")
         and hasattr(value, "tools")
         and hasattr(value, "resources")
+    )
+
+
+def _is_stdio_runtime_like(value: Any) -> bool:
+    return (
+        hasattr(value, "registered_tools")
+        and hasattr(value, "registered_resources")
+        and hasattr(value, "tool_schema")
+        and hasattr(value, "introspect")
     )
 
 
