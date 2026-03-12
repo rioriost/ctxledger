@@ -204,7 +204,7 @@ def _resume_workflow(args: argparse.Namespace) -> int:
 
         from .config import get_settings
         from .db.postgres import PostgresConfig, build_postgres_uow_factory
-        from .server import serialize_workflow_resume
+        from .runtime.serializers import serialize_workflow_resume
         from .workflow.service import ResumeWorkflowInput, WorkflowService
 
         workflow_instance_id = UUID(args.workflow_instance_id)

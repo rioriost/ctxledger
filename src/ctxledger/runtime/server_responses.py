@@ -21,7 +21,7 @@ def build_workflow_resume_response(
     workflow_instance_id: UUID,
 ) -> WorkflowResumeResponse:
     from ..runtime.database_health import ServerBootstrapError
-    from ..server import serialize_workflow_resume
+    from .serializers import serialize_workflow_resume
     from .types import WorkflowResumeResponse
 
     try:
@@ -50,7 +50,7 @@ def build_closed_projection_failures_response(
     workflow_instance_id: UUID,
 ) -> ProjectionFailureHistoryResponse:
     from ..runtime.database_health import ServerBootstrapError
-    from ..server import serialize_closed_projection_failures_history
+    from .serializers import serialize_closed_projection_failures_history
     from .types import ProjectionFailureHistoryResponse
 
     try:

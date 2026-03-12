@@ -747,7 +747,7 @@ def build_memory_remember_episode_tool_handler(
                     ),
                 )
             )
-            from ..server import serialize_stub_response
+            from ..runtime.serializers import serialize_stub_response
 
             return build_mcp_success_response(serialize_stub_response(response))
         except MemoryServiceError as exc:
@@ -785,7 +785,7 @@ def build_memory_search_tool_handler(
                     ),
                 )
             )
-            from ..server import serialize_stub_response
+            from ..runtime.serializers import serialize_stub_response
 
             return build_mcp_success_response(serialize_stub_response(response))
         except MemoryServiceError as exc:
@@ -847,7 +847,7 @@ def build_memory_get_context_tool_handler(
                     ),
                 )
             )
-            from ..server import serialize_stub_response
+            from ..runtime.serializers import serialize_stub_response
 
             return build_mcp_success_response(serialize_stub_response(response))
         except MemoryServiceError as exc:

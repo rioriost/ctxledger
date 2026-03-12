@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from ..mcp.stdio import StdioRuntimeAdapter
@@ -53,25 +53,10 @@ def collect_runtime_introspection(
     return ()
 
 
-def serialize_runtime_introspection(
-    introspection: RuntimeIntrospection,
-) -> dict[str, Any]:
-    return {
-        "transport": introspection.transport,
-        "routes": list(introspection.routes),
-        "tools": list(introspection.tools),
-        "resources": list(introspection.resources),
-    }
-
-
-def serialize_runtime_introspection_collection(
-    introspections: tuple[RuntimeIntrospection, ...],
-) -> list[dict[str, Any]]:
-    return [
-        serialize_runtime_introspection(introspection)
-        for introspection in introspections
-    ]
-
+from .serializers import (
+    serialize_runtime_introspection,
+    serialize_runtime_introspection_collection,
+)
 
 __all__ = [
     "RuntimeIntrospection",
