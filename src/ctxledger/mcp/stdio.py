@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from .lifecycle import McpLifecycleState
 from .resource_handlers import (
@@ -33,6 +33,8 @@ def _lookup_server_symbol(name: str) -> type[Any]:
 
 McpToolHandler = Any
 McpResourceHandler = Any
+StdioToolHandlerFactory = Callable[[Any], tuple[McpToolHandler, McpToolSchema | None]]
+StdioResourceHandlerFactory = Callable[[Any], McpResourceHandler]
 
 
 class StdioRuntimeProtocol(Protocol):
@@ -265,13 +267,76 @@ def dispatch_mcp_resource(
     )
 
 
+def build_stdio_runtime_adapter(
+    server: Any,
+    *,
+    memory_service: Any,
+    workflow_resume_tool_handler_factory: StdioToolHandlerFactory,
+    workspace_register_tool_handler_factory: StdioToolHandlerFactory,
+    workflow_start_tool_handler_factory: StdioToolHandlerFactory,
+    workflow_checkpoint_tool_handler_factory: StdioToolHandlerFactory,
+    workflow_complete_tool_handler_factory: StdioToolHandlerFactory,
+    projection_failures_ignore_tool_handler_factory: StdioToolHandlerFactory,
+    projection_failures_resolve_tool_handler_factory: StdioToolHandlerFactory,
+    memory_remember_episode_tool_handler_factory: Callable[
+        [Any], tuple[McpToolHandler, McpToolSchema | None]
+    ],
+    memory_search_tool_handler_factory: Callable[
+        [Any], tuple[McpToolHandler, McpToolSchema | None]
+    ],
+    memory_get_context_tool_handler_factory: Callable[
+        [Any], tuple[McpToolHandler, McpToolSchema | None]
+    ],
+    workspace_resume_resource_handler_factory: StdioResourceHandlerFactory,
+    workflow_detail_resource_handler_factory: StdioResourceHandlerFactory,
+) -> StdioRuntimeAdapter:
+    runtime = StdioRuntimeAdapter(server.settings)
+
+    runtime.register_resource_handler(
+        "workspace://{workspace_id}/resume",
+        workspace_resume_resource_handler_factory(server),
+    )
+    runtime.register_resource_handler(
+        "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+        workflow_detail_resource_handler_factory(server),
+    )
+
+    for tool_name, handler_factory in (
+        ("workflow_resume", workflow_resume_tool_handler_factory),
+        ("workspace_register", workspace_register_tool_handler_factory),
+        ("workflow_start", workflow_start_tool_handler_factory),
+        ("workflow_checkpoint", workflow_checkpoint_tool_handler_factory),
+        ("workflow_complete", workflow_complete_tool_handler_factory),
+        ("projection_failures_ignore", projection_failures_ignore_tool_handler_factory),
+        (
+            "projection_failures_resolve",
+            projection_failures_resolve_tool_handler_factory,
+        ),
+    ):
+        handler, schema = handler_factory(server)
+        runtime.register_tool_handler(tool_name, handler, schema)
+
+    for tool_name, handler_factory in (
+        ("memory_remember_episode", memory_remember_episode_tool_handler_factory),
+        ("memory_search", memory_search_tool_handler_factory),
+        ("memory_get_context", memory_get_context_tool_handler_factory),
+    ):
+        handler, schema = handler_factory(memory_service)
+        runtime.register_tool_handler(tool_name, handler, schema)
+
+    return runtime
+
+
 __all__ = [
     "McpResourceHandler",
     "McpToolHandler",
+    "StdioResourceHandlerFactory",
     "StdioRpcServer",
     "StdioRuntimeAdapter",
     "StdioRuntimeProtocol",
+    "StdioToolHandlerFactory",
     "StdioTransportIntrospection",
+    "build_stdio_runtime_adapter",
     "dispatch_mcp_resource",
     "dispatch_mcp_tool",
 ]

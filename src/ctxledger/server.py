@@ -146,6 +146,9 @@ from .mcp.stdio import (
     dispatch_mcp_resource,
     dispatch_mcp_tool,
 )
+from .mcp.stdio import (
+    build_stdio_runtime_adapter as build_extracted_stdio_runtime_adapter,
+)
 from .mcp.streamable_http import (
     StreamableHttpRequest,
     StreamableHttpResponse,
@@ -1835,67 +1838,53 @@ def serialize_runtime_introspection_collection(
 
 
 def build_stdio_runtime_adapter(server: CtxLedgerServer) -> StdioRuntimeAdapter:
-    runtime = StdioRuntimeAdapter(server.settings)
     memory_service = MemoryService()
-    runtime.register_resource_handler(
-        "workspace://{workspace_id}/resume",
-        build_workspace_resume_resource_handler(server),
+    return build_extracted_stdio_runtime_adapter(
+        server,
+        memory_service=memory_service,
+        workflow_resume_tool_handler_factory=lambda current_server: (
+            build_resume_workflow_tool_handler(current_server),
+            WORKFLOW_RESUME_TOOL_SCHEMA,
+        ),
+        workspace_register_tool_handler_factory=lambda current_server: (
+            build_workspace_register_tool_handler(current_server),
+            WORKSPACE_REGISTER_TOOL_SCHEMA,
+        ),
+        workflow_start_tool_handler_factory=lambda current_server: (
+            build_workflow_start_tool_handler(current_server),
+            WORKFLOW_START_TOOL_SCHEMA,
+        ),
+        workflow_checkpoint_tool_handler_factory=lambda current_server: (
+            build_workflow_checkpoint_tool_handler(current_server),
+            WORKFLOW_CHECKPOINT_TOOL_SCHEMA,
+        ),
+        workflow_complete_tool_handler_factory=lambda current_server: (
+            build_workflow_complete_tool_handler(current_server),
+            WORKFLOW_COMPLETE_TOOL_SCHEMA,
+        ),
+        projection_failures_ignore_tool_handler_factory=lambda current_server: (
+            build_projection_failures_ignore_tool_handler(current_server),
+            PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA,
+        ),
+        projection_failures_resolve_tool_handler_factory=lambda current_server: (
+            build_projection_failures_resolve_tool_handler(current_server),
+            PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA,
+        ),
+        memory_remember_episode_tool_handler_factory=lambda current_memory_service: (
+            build_memory_remember_episode_tool_handler(current_memory_service),
+            MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
+        ),
+        memory_search_tool_handler_factory=lambda current_memory_service: (
+            build_memory_search_tool_handler(current_memory_service),
+            MEMORY_SEARCH_TOOL_SCHEMA,
+        ),
+        memory_get_context_tool_handler_factory=lambda current_memory_service: (
+            build_memory_get_context_tool_handler(current_memory_service),
+            MEMORY_GET_CONTEXT_TOOL_SCHEMA,
+        ),
+        workspace_resume_resource_handler_factory=build_workspace_resume_resource_handler,
+        workflow_detail_resource_handler_factory=build_workflow_detail_resource_handler,
     )
-    runtime.register_resource_handler(
-        "workspace://{workspace_id}/workflow/{workflow_instance_id}",
-        build_workflow_detail_resource_handler(server),
-    )
-    runtime.register_tool_handler(
-        "workflow_resume",
-        build_resume_workflow_tool_handler(server),
-        WORKFLOW_RESUME_TOOL_SCHEMA,
-    )
-    runtime.register_tool_handler(
-        "workspace_register",
-        build_workspace_register_tool_handler(server),
-        WORKSPACE_REGISTER_TOOL_SCHEMA,
-    )
-    runtime.register_tool_handler(
-        "workflow_start",
-        build_workflow_start_tool_handler(server),
-        WORKFLOW_START_TOOL_SCHEMA,
-    )
-    runtime.register_tool_handler(
-        "workflow_checkpoint",
-        build_workflow_checkpoint_tool_handler(server),
-        WORKFLOW_CHECKPOINT_TOOL_SCHEMA,
-    )
-    runtime.register_tool_handler(
-        "workflow_complete",
-        build_workflow_complete_tool_handler(server),
-        WORKFLOW_COMPLETE_TOOL_SCHEMA,
-    )
-    runtime.register_tool_handler(
-        "projection_failures_ignore",
-        build_projection_failures_ignore_tool_handler(server),
-        PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA,
-    )
-    runtime.register_tool_handler(
-        "projection_failures_resolve",
-        build_projection_failures_resolve_tool_handler(server),
-        PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA,
-    )
-    runtime.register_tool_handler(
-        "memory_remember_episode",
-        build_memory_remember_episode_tool_handler(memory_service),
-        MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
-    )
-    runtime.register_tool_handler(
-        "memory_search",
-        build_memory_search_tool_handler(memory_service),
-        MEMORY_SEARCH_TOOL_SCHEMA,
-    )
-    runtime.register_tool_handler(
-        "memory_get_context",
-        build_memory_get_context_tool_handler(memory_service),
-        MEMORY_GET_CONTEXT_TOOL_SCHEMA,
-    )
-    return runtime
 
 
 def create_runtime(
