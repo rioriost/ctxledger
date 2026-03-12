@@ -72,6 +72,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - including representative operator action surface design for explicit `ignored` / `resolved` lifecycle mutation
   - including HTTP action request examples for auth-enabled and auth-disabled operation
   - including representative `404 not_found` response examples for invalid HTTP action route path shapes
+  - including representative edge/proxy logging examples for HTTP projection failure action routes
   - including operational cautions and deployment guidance for HTTP projection failure action routes
 - test coverage for:
   - repeated projection failures incrementing `retry_count`
@@ -156,6 +157,8 @@ The project currently follows a lightweight, human-maintained changelog style.
   - HTTP docs now include representative request examples for both auth-enabled and auth-disabled operation
   - HTTP docs now include representative success response, validation error, and invalid-path `404 not_found` response examples
   - security and deployment docs now describe operator-only handling expectations for these mutation routes
+  - security docs now include a representative edge logging example for invalid-path and other operator-route outcomes
+  - deployment docs now include a representative proxy access-log example for invalid-path and related operator-route outcomes
   - action responses preserve history and report `updated_failure_count`
 - HTTP projection failure action route coverage now verifies:
   - bearer-auth enforcement
