@@ -30,8 +30,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - overall health status
   - readiness status
   - runtime wiring summary
-  - MCP endpoint when HTTP transport is enabled
-  - stdio transport indicator when stdio is enabled
+  - MCP endpoint for the HTTP runtime
 - test coverage for:
   - runtime introspection serialization
   - runtime debug endpoint handlers

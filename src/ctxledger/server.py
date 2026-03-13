@@ -326,7 +326,7 @@ class CtxLedgerServer:
     - validate startup configuration
     - initialize runtime dependencies
     - expose liveness and readiness checks
-    - provide a lifecycle boundary for HTTP/stdio adapters
+    - provide a lifecycle boundary for the HTTP runtime adapter
     """
 
     def __init__(

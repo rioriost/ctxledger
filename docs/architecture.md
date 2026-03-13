@@ -47,8 +47,7 @@ These categories must not be conflated.
 
 Primary interfaces:
 
-- HTTP-first MCP at `/mcp`
-- stdio as a supporting/development surface still present in the repository
+- HTTP MCP at `/mcp`
 
 Primary canonical dependency:
 
@@ -99,10 +98,9 @@ This keeps MCP as an interface layer rather than the core of the system.
 
 The runtime is organized around a **shared application core** with separate transport adapters.
 
-Adapters:
+Adapter:
 
-- primary HTTP MCP adapter for `/mcp`
-- stdio MCP adapter retained as a supporting/development surface
+- HTTP MCP adapter for `/mcp`
 
 Shared core responsibilities:
 
@@ -114,7 +112,7 @@ Shared core responsibilities:
 - configuration usage
 
 Transport-specific code must remain thin.  
-Switching between HTTP and stdio must not alter business semantics.
+HTTP transport concerns must not alter business semantics.
 
 For `v0.1.0`, the primary acceptance surface is the minimal HTTP MCP path at `/mcp`, where the repository now evidences:
 
@@ -145,7 +143,7 @@ The system follows an explicit layered architecture.
 
 Responsibilities:
 
-- MCP HTTP and stdio transport handling
+- MCP HTTP transport handling
 - authentication entrypoint
 - request parsing
 - response serialization

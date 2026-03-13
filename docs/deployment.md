@@ -75,10 +75,9 @@ Recommended production topology:
 
 `ctxledger` is designed around a shared application core with separate transport adapters.
 
-Supported runtime modes in the repository currently include:
+Supported runtime mode in the repository currently is:
 
 - HTTP MCP at `/mcp`
-- stdio
 
 ### 4.1 Primary Runtime Mode
 
@@ -92,11 +91,7 @@ The currently evidenced minimal HTTP MCP path supports:
 - `tools/list`
 - `tools/call`
 
-### 4.2 Supporting Development Runtime Mode
-
-`stdio` may still exist in the repository as a supporting development/runtime surface, but it should not be treated as the primary `v0.1.0` deployment contract.
-
-### 4.3 Deployment Recommendation
+### 4.2 Deployment Recommendation
 
 Use HTTP mode for normal deployment, including Docker-based local operation, and treat `/mcp` as the canonical MCP endpoint for `v0.1.0`.
 

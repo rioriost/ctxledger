@@ -71,8 +71,7 @@ The initial release is centered on the workflow kernel.
 At a high level, `ctxledger` is composed of:
 
 - **MCP transport layer**
-  - HTTP-first MCP surface at `/mcp`
-  - stdio support still exists in the repository, but is not the primary `v0.1.0` acceptance surface
+  - HTTP MCP surface at `/mcp`
 - **application services**
   - workflow orchestration
   - resource assembly
@@ -245,7 +244,7 @@ For MCP usage, the primary machine-readable source of tool argument requirements
 
 Typical payload shapes:
 
-```/dev/null/json#L1-29
+```/dev/null/json#L1-17
 {
   "runtime": [
     {
@@ -260,20 +259,6 @@ Typical payload shapes:
       ],
       "tools": [],
       "resources": []
-    },
-    {
-      "transport": "stdio",
-      "routes": [],
-      "tools": [
-        "memory_get_context",
-        "memory_remember_episode",
-        "memory_search",
-        "workflow_resume"
-      ],
-      "resources": [
-        "workspace://{workspace_id}/resume",
-        "workspace://{workspace_id}/workflow/{workflow_instance_id}"
-      ]
     }
   ]
 }
@@ -296,37 +281,9 @@ Typical payload shapes:
 }
 ```
 
-```/dev/null/json#L1-18
+```/dev/null/json#L1-5
 {
-  "tools": [
-    {
-      "transport": "stdio",
-      "tools": [
-        "memory_get_context",
-        "memory_remember_episode",
-        "memory_search",
-        "workflow_resume"
-      ]
-    }
-  ]
-}
-```
-
-Representative stdio resource visibility is now:
-
-```/dev/null/json#L1-12
-{
-  "runtime": [
-    {
-      "transport": "stdio",
-      "routes": [],
-      "tools": [],
-      "resources": [
-        "workspace://{workspace_id}/resume",
-        "workspace://{workspace_id}/workflow/{workflow_instance_id}"
-      ]
-    }
-  ]
+  "tools": []
 }
 ```
 
@@ -445,7 +402,7 @@ Important environment variables include:
 - `CTXLEDGER_DATABASE_URL`
 - `CTXLEDGER_TRANSPORT`
 - `CTXLEDGER_ENABLE_HTTP`
-- `CTXLEDGER_ENABLE_STDIO`
+
 - `CTXLEDGER_HOST`
 - `CTXLEDGER_PORT`
 - `CTXLEDGER_HTTP_PATH`
@@ -473,11 +430,10 @@ Important environment variables include:
 
 See `./.env.example` for a committed local-development configuration template.
 
-```/dev/null/.env.example#L1-13
+```/dev/null/.env.example#L1-12
 CTXLEDGER_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ctxledger
 CTXLEDGER_TRANSPORT=http
 CTXLEDGER_ENABLE_HTTP=true
-CTXLEDGER_ENABLE_STDIO=false
 CTXLEDGER_HOST=0.0.0.0
 CTXLEDGER_PORT=8080
 CTXLEDGER_HTTP_PATH=/mcp
@@ -494,11 +450,10 @@ CTXLEDGER_LOG_LEVEL=info
 
 See `./.env.production.example` for a committed production-oriented configuration template.
 
-```/dev/null/.env.production.example#L1-15
+```/dev/null/.env.production.example#L1-14
 CTXLEDGER_DATABASE_URL=postgresql://ctxledger:replace-me@db.internal:5432/ctxledger
 CTXLEDGER_TRANSPORT=http
 CTXLEDGER_ENABLE_HTTP=true
-CTXLEDGER_ENABLE_STDIO=false
 CTXLEDGER_HOST=0.0.0.0
 CTXLEDGER_PORT=8080
 CTXLEDGER_HTTP_PATH=/mcp
@@ -579,7 +534,7 @@ psql postgresql://ctxledger:ctxledger@localhost:5432/ctxledger -f schemas/postgr
 Example shape:
 
 ```/dev/null/sh#L1-1
-docker run --rm -p 8080:8080 -e CTXLEDGER_DATABASE_URL=postgresql://ctxledger:ctxledger@host.docker.internal:5432/ctxledger -e CTXLEDGER_TRANSPORT=http -e CTXLEDGER_ENABLE_HTTP=true -e CTXLEDGER_ENABLE_STDIO=false -e CTXLEDGER_HOST=0.0.0.0 -e CTXLEDGER_PORT=8080 -e CTXLEDGER_HTTP_PATH=/mcp ctxledger:local
+docker run --rm -p 8080:8080 -e CTXLEDGER_DATABASE_URL=postgresql://ctxledger:ctxledger@host.docker.internal:5432/ctxledger -e CTXLEDGER_TRANSPORT=http -e CTXLEDGER_ENABLE_HTTP=true -e CTXLEDGER_HOST=0.0.0.0 -e CTXLEDGER_PORT=8080 -e CTXLEDGER_HTTP_PATH=/mcp ctxledger:local
 ```
 
 If your Docker environment does not support `host.docker.internal`, use an address appropriate for your host networking setup.
@@ -602,12 +557,6 @@ health=ok
 readiness=ready
 runtime=[{'transport': 'http', 'routes': ['runtime_introspection', 'runtime_routes', 'runtime_tools', 'workflow_resume', 'workflow_closed_projection_failures'], 'tools': []}]
 mcp_endpoint=http://localhost:8080/mcp
-```
-
-When stdio is also enabled, the summary additionally includes composite runtime wiring and:
-
-```/dev/null/txt#L1-2
-stdio_transport=enabled
 ```
 
 You can then inspect the same runtime wiring through:

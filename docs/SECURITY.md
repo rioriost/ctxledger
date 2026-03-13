@@ -102,7 +102,6 @@ Representative HTTP route names exposed by these debug surfaces may include:
 
 These endpoints are useful for diagnostics, but they can reveal operational metadata such as:
 
-- enabled transports
 - registered HTTP routes such as:
   - `runtime_introspection`
   - `runtime_routes`
@@ -111,7 +110,6 @@ These endpoints are useful for diagnostics, but they can reveal operational meta
   - `workflow_closed_projection_failures`
   - `projection_failures_ignore`
   - `projection_failures_resolve`
-- registered stdio tools
 - runtime wiring state
 
 Because of this, `/debug/*` should be treated as operationally sensitive.

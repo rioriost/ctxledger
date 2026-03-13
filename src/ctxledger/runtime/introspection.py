@@ -40,17 +40,6 @@ def collect_runtime_introspection(
                 ),
             )
 
-    if _is_stdio_runtime_like(runtime):
-        introspection = runtime.introspect()
-        return (
-            RuntimeIntrospection(
-                transport=introspection.transport,
-                routes=tuple(getattr(introspection, "routes", ())),
-                tools=tuple(introspection.tools),
-                resources=tuple(introspection.resources),
-            ),
-        )
-
     return ()
 
 
@@ -60,15 +49,6 @@ def _is_runtime_introspection_like(value: Any) -> bool:
         and hasattr(value, "routes")
         and hasattr(value, "tools")
         and hasattr(value, "resources")
-    )
-
-
-def _is_stdio_runtime_like(value: Any) -> bool:
-    return (
-        hasattr(value, "registered_tools")
-        and hasattr(value, "registered_resources")
-        and hasattr(value, "tool_schema")
-        and hasattr(value, "introspect")
     )
 
 

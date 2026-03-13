@@ -1,120 +1,217 @@
-stdio removal patch 1C の続きとして、今回は **remaining stdio implementation cleanup を進め、dead source と lingering references をさらに削減** しました。patch 1A の HTTP-only config/orchestration、patch 1B の server/module/CLI cleanup を前提に、今回は **legacy stdio module 本体の削除と、それに追随する test/reference cleanup** を行っています。
+stdio removal patch 1D の続きとして、今回は **HTTP-only への residual stdio cleanup を source / docs / notes レベルでさらに進めた** セッションとして整理します。patch 1A の config/orchestration HTTP-only 化、patch 1B の server/module/CLI cleanup、patch 1C の legacy stdio module 削除を土台にして、今回は **remaining protocol/introspection wording と transport documentation の最終寄せ** を行いました。
 
 このセッションで実際に進んだこと:
 
-- `ctxledger/src/ctxledger/mcp/stdio.py` を削除
-- `ctxledger/tests/test_postgres_integration.py` から `CTXLEDGER_ENABLE_STDIO` を削除
-- `ctxledger/tests/test_server.py` に残っていた stdio introspection example を削除
-- `pytest -q tests/test_server.py tests/test_mcp_modules.py tests/test_cli.py tests/test_postgres_integration.py`
-- **183 passed**
+- `src/ctxledger/runtime/protocols.py` から stdio-only protocol type を削除
+- `src/ctxledger/runtime/introspection.py` から stdio-specific fallback path を削除
+- `src/ctxledger/server.py` の lifecycle docstring を HTTP-only wording に更新
+- `README.md` の transport / debug / config / startup examples を HTTP-only に更新
+- `docs/CHANGELOG.md` の startup summary wording を HTTP-only に更新
+- `docs/architecture.md` の stdio transport assumptions を削除
+- `docs/deployment.md` の runtime mode / config / exposure wording を HTTP-only に更新
+- `docs/SECURITY.md` の debug exposure wording から stdio references を削除
+- `pytest -q tests/test_config.py tests/test_server.py tests/test_mcp_modules.py tests/test_cli.py tests/test_postgres_integration.py`
+- **204 passed**
 
-## 1. 進んだ変更: `ctxledger/src/ctxledger/mcp/stdio.py`
-今回の中心です。legacy stdio implementation module を source tree から削除しました。
-
-削除したもの:
-- `StdioTransportIntrospection`
-- `StdioRuntimeAdapter`
-- `StdioRpcServer`
-- `dispatch_mcp_tool(...)`
-- `dispatch_mcp_resource(...)`
-- `build_stdio_runtime_adapter(...)`
-- `build_stdio_runtime(...)`
-- `find_stdio_runtime(...)`
-- `run_stdio_runtime_if_present(...)`
-
-新しい考え方:
-- stdio transport はもはや runtime surface / public surface / tested surface のいずれでも前提にしない
-- HTTP-only migration は “facade から消した” 段階を超えて、**concrete implementation source の削除** に入った
-- MCP RPC は HTTP runtime 側だけで成立させる
-
-ポイント:
-- patch 1B 時点では “legacy implementation として残っていた stdio module” を今回正式に removal 側へ進めた
-- source tree 上の stdio runtime path が一段階さらに整理された
-- これで stdio responsibility split の成果物は役目を終えたと見てよい
-
-## 2. 進んだ変更: `ctxledger/tests/test_postgres_integration.py`
-integration test 側に残っていた stdio env reference を整理しました。
+## 1. 進んだ変更: `src/ctxledger/runtime/protocols.py`
+protocol layer に残っていた stdio-specific type surface を整理しました。
 
 変更したこと:
-- `test_postgres_settings_can_build_uow_factory_from_loaded_settings(...)` の env から
-  - `CTXLEDGER_ENABLE_STDIO`
+- `TYPE_CHECKING` から `StdioTransportIntrospection` import を削除
+- `StdioRuntimeAdapterProtocol` を削除
+- `__all__` から `StdioRuntimeAdapterProtocol` を削除
+
+新しい考え方:
+- runtime protocol surface は HTTP-only の現在仕様に合わせる
+- active protocol contract として維持すべきなのは
+  - `ServerRuntime`
+  - `McpRuntimeProtocol`
+  - `HttpRuntimeAdapterProtocol`
+  で十分
+- stdio removal 後に protocol だけ残して “古い transport shape を暗黙に支持している” 状態を避ける
+
+ポイント:
+- source tree に残る stdio “型の残骸” を一段整理できた
+- runtime boundary の説明責務がより明確になった
+
+## 2. 進んだ変更: `src/ctxledger/runtime/introspection.py`
+introspection helper から stdio-specific fallback を落としました。
+
+変更したこと:
+- `_is_stdio_runtime_like(...)` を削除
+- `collect_runtime_introspection(...)` から stdio-like runtime 向け fallback path を削除
+
+新しい考え方:
+- runtime introspection は generic `introspect()` surface を持つ runtime のみを扱えばよい
+- HTTP-only 現状では、明示的な introspection object を返す runtime を辿れば十分
+- 削除済み legacy transport を “duck typing でまだ拾う” 必要はもうない
+
+ポイント:
+- introspection helper が transport migration 後も古い adapter shape に引きずられなくなった
+- helper の責務がより小さくなった
+
+## 3. 進んだ変更: `src/ctxledger/server.py`
+server facade に残っていた wording も整理しました。
+
+変更したこと:
+- `CtxLedgerServer` docstring の
+  - `provide a lifecycle boundary for HTTP/stdio adapters`
+  を
+  - `provide a lifecycle boundary for the HTTP runtime adapter`
+  に更新
+
+新しい考え方:
+- docstring も active architecture を表現するべき
+- 実装が HTTP-only なのに multi-transport wording を残さない
+
+ポイント:
+- 小さい変更ですが、今後の読み手が “stdio adapter がまだ正式にあるのでは？” と誤読しにくくなった
+
+## 4. 進んだ変更: `README.md`
+README の user-facing transport narrative をかなり整理しました。
+
+変更したこと:
+- architecture summary から “stdio support still exists” 記述を削除
+- runtime debug payload examples から stdio blocks を削除
+- `/debug/tools` example を HTTP-only expectation に更新
+- configuration section から `CTXLEDGER_ENABLE_STDIO` を削除
+- local / production env examples から `CTXLEDGER_ENABLE_STDIO=false` を削除
+- Docker run example から `CTXLEDGER_ENABLE_STDIO=false` を削除
+- startup summary section から `stdio_transport=enabled` 記述を削除
+
+新しい考え方:
+- README は現在の canonical operator/developer experience を反映する
+- transport docs は HTTP-only を前提に統一
+- debug endpoints の説明も HTTP runtime に対応した実 payload を示す
+
+ポイント:
+- source だけでなく user-facing primary doc も now-current behavior に揃った
+- 初見の利用者が古い stdio option を前提に環境変数や runtime summary を読んで混乱する余地を減らせた
+
+## 5. 進んだ変更: `docs/CHANGELOG.md`
+changelog wording も HTTP-only に揃えました。
+
+変更したこと:
+- startup stderr summary の追加項目から
+  - `stdio transport indicator when stdio is enabled`
+  を削除
+- 代わりに
+  - `MCP endpoint for the HTTP runtime`
+  という wording に整理
+
+新しい考え方:
+- changelog は historical note であっても current unreleased branch の reality を外しすぎない方がよい
+- すでに stdio support が active feature ではないため、その表現を残さない
+
+ポイント:
+- “いま何が追加されたのか” を current branch と整合する表現に更新できた
+
+## 6. 進んだ変更: `docs/architecture.md`
+architecture doc の transport story を HTTP-only に寄せました。
+
+変更したこと:
+- system context から stdio supporting surface の記述を削除
+- shared core / separate adapters セクションを HTTP adapter 前提に更新
+- “Switching between HTTP and stdio must not alter business semantics” を削除し、
+  HTTP transport concerns の wording に変更
+- transport layer responsibilities から stdio handling を削除
+- typed configuration boundary の `stdio enablement` を削除
+- transport/adapter test section の `HTTP/stdio semantic parity` を削除
+
+新しい考え方:
+- architecture doc は historical split を語るより、今の architecture を説明すべき
+- stdio extraction history は last_session や commit history で追えばよく、現行 architecture doc では active shape を優先する
+
+ポイント:
+- conceptual architecture と実装 reality のズレがかなり減った
+- reader が “still dual transport” と誤解しにくくなった
+
+## 7. 進んだ変更: `docs/deployment.md`
+deployment guide も transport mode を一本化しました。
+
+変更したこと:
+- supported runtime modes を HTTP のみに更新
+- supporting development runtime mode としての stdio説明を削除
+- runtime mode section を HTTP-only へ簡素化
+- config/env guidance に残っていた stdio-related行を整理
+- debug exposure wording から enabled transports / stdio tools を削除
+
+新しい考え方:
+- deployment doc は “実際にどう動かすか” の文書なので、削除前提 transport を載せない
+- operator-facing setup examples は current minimal env を示すべき
+
+ポイント:
+- deploy path の説明がより一貫した
+- config examples から stale transport options を外せた
+
+## 8. 進んだ変更: `docs/SECURITY.md`
+security doc の debug surface explanation も HTTP-only に整理しました。
+
+変更したこと:
+- `/debug/*` が reveal しうる metadata から
+  - `enabled transports`
+  - `registered stdio tools`
   を削除
 
 新しい考え方:
-- loaded settings を構成する minimum env は HTTP-only semantics に合わせる
-- integration test でも stdio enablement flag は不要
+- operationally sensitive metadata の説明も current runtime surface に合わせる
+- セキュリティ文書に stale transport mention を残すと、不要な attack surface を想像させてしまう
 
 ポイント:
-- patch 1A の config model 変更が integration test にも浸透
-- “まだ stdio env を握っている箇所” を一つ潰せた
+- security guidance が実態に即したものになった
+- docs 間の transport narrative が揃ってきた
 
-## 3. 進んだ変更: `ctxledger/tests/test_server.py`
-server tests に残っていた stdio example payload も整理しました。
-
-変更したこと:
-- `test_serialize_runtime_introspection_collection_returns_json_ready_payloads()` から
-  - `transport="stdio"` の introspection example
-  - 対応する serialized expectation
-  を削除
-
-新しい考え方:
-- serializer test も HTTP-only baseline に寄せる
-- introspection collection の example は “HTTP + stdio の混在例” である必要がもうない
-
-ポイント:
-- stdio が “実装は消したが example だけ残る” 状態を避けた
-- test fixtures / examples からも stdio を徐々に消していく流れが維持できている
-
-## 4. テスト結果
+## 9. テスト結果
 このセッションで確認できた green は次の通りです。
 
-- `pytest -q tests/test_server.py tests/test_mcp_modules.py tests/test_cli.py tests/test_postgres_integration.py`
-- **183 passed**
+- `pytest -q tests/test_config.py tests/test_server.py tests/test_mcp_modules.py tests/test_cli.py tests/test_postgres_integration.py`
+- **204 passed**
 
-前セッションまでの確認済み green:
-- `tests/test_config.py`
-- **21 passed**
-
-したがって現時点の確認済み基準は:
-
+現時点の確認済み基準はそのまま:
 - `tests/test_config.py`
 - `tests/test_server.py`
 - `tests/test_mcp_modules.py`
 - `tests/test_cli.py`
 - `tests/test_postgres_integration.py`
-
-で、
 - **204 passed**
-として扱ってよいです。
 
-## 5. いまの状態の評価
+## 10. いまの状態の評価
 今の状態は次のように整理できます。
 
 ### すでに整合しているもの
 - `src/ctxledger/config.py`
 - `src/ctxledger/runtime/orchestration.py`
-- `src/ctxledger/server.py`
 - `src/ctxledger/runtime/status.py`
 - `src/ctxledger/runtime/http_runtime.py`
+- `src/ctxledger/runtime/introspection.py`
+- `src/ctxledger/runtime/protocols.py`
+- `src/ctxledger/server.py`
 - `src/ctxledger/__init__.py`
+- `README.md`
+- `docs/CHANGELOG.md`
+- `docs/architecture.md`
+- `docs/deployment.md`
+- `docs/SECURITY.md`
 - `tests/test_config.py`
 - `tests/test_server.py`
 - `tests/test_mcp_modules.py`
 - `tests/test_cli.py`
 - `tests/test_postgres_integration.py`
 
-### この patch で新たに進んだこと
-- legacy stdio source module を削除
-- integration test に残っていた stdio env reference を削除
-- serializer/server test に残っていた stdio example を削除
+### この patch でさらに解消したもの
+- residual stdio protocol type
+- stdio-like runtime introspection fallback
+- lifecycle/docstring wording の stale transport mention
+- primary docs / deployment docs / security docs に残っていた stdio-centric explanation
+- env / startup example の stale stdio flag
 
-### まだ確認したいもの
-- 他の source/test/doc に `stdio` 文字列や historical comments が残っていないか
-- dead imports / stale comments / stale names の最終 sweep
-- 必要なら project-wide grep による residual stdio reference の最終確認
-- project-wide test baseline の再確認
+### まだ最終確認してもよさそうなもの
+- 他 docs (`docs/mcp-api.md`, `docs/workflow-model.md`, `docs/memory-model.md`, `docs/design-principles.md`, `docs/roadmap.md` など) に historical stdio wording が残っていないか
+- `.env.example` / `.env.production.example` 実ファイル内容の最終確認
+- project-wide full test baseline
+- 最終 commit 系列の整理
 
-## 6. canonical ownership の再確認
+## 11. canonical ownership の再確認
 このセッション後も canonical ownership は次の理解でよいです。
 
 - bootstrap error: `runtime/errors.py`
@@ -131,51 +228,51 @@ server tests に残っていた stdio example payload も整理しました。
 - transport/runtime selection orchestration: `runtime/orchestration.py`
 
 追加の含意:
-- stdio は canonical ownership を持つ active subsystem ではなくなった
-- MCP transport ownership は実質的に HTTP runtime 側へ一本化された
+- transport architecture は実質的に HTTP-only
+- stdio は active subsystem / active protocol surface / active docs surface のどれでもない
+- removal work はほぼ “residual mention cleanup と final verification” の段階に入った
 
-## 7. このセッションでの結論
+## 12. このセッションでの結論
 今回の結論は次の通りです。
 
-- **stdio removal patch 1C は前進した**
-- legacy stdio module 本体を削除した
-- server/config/integration test 側の lingering stdio references も追加で整理した
-- 新しい確認済み green 基準は **204 passed**
-- stdio removal は source/test 両面でかなり終盤に入っている
+- **HTTP-only residual stdio cleanup はさらに前進した**
+- source-level stale types/helpers と docs-level stale wording の両方を整理した
+- current verified baseline は引き続き **204 passed**
+- stdio removal はほぼ最終確認フェーズに入っている
 
-## 8. 次にやること
-次の自然な一手は **stdio removal patch 1D** です。
+## 13. 次にやること
+次の自然な一手は **stdio removal patch 1E / final verification sweep** です。
 
-### patch 1D 候補
-1. source 全体で residual `stdio` references を最終探索
-2. historical comments / docstrings / stale helper names の cleanup
-3. 必要なら `README` や user-facing docs の transport wording を HTTP-only に更新
-4. project-wide test run を回して最終 baseline を確定
-5. removal 完了後の transport architecture を `last_session.md` に再整理
+### patch 1E 候補
+1. project-wide で residual `stdio` / `CTXLEDGER_ENABLE_STDIO` / `TransportMode.STDIO` / `TransportMode.BOTH` を最終探索
+2. `docs/mcp-api.md` など未確認 docs の HTTP-only wording を必要なら更新
+3. `.env.example` / `.env.production.example` の実ファイル内容が README examples と一致しているか確認
+4. project-wide test run を回して final baseline を確定
+5. stdio removal の完了判定メモを `last_session.md` に残す
 
-## 9. 次の引き継ぎ先向けメモ
+## 14. 次の引き継ぎ先向けメモ
 次に入る人は以下を前提にしてよいです。
 
 1. Patch 1 の extraction は入っている
 2. Patch 2 の scaffold も入っている
 3. `mcp/rpc.py` への MCP RPC extraction は入っている
 4. patch 1A として config/orchestration の HTTP-only 化は入っている
-5. patch 1B として server/module/CLI test cleanup と facade/runtime surface cleanup は入っている
-6. **今回 patch 1C として `src/ctxledger/mcp/stdio.py` の削除が入った**
-7. `server.py` は stdio public surface を export しない
-8. `runtime/status.py` は stdio readiness metadata を持たない
-9. `runtime/http_runtime.py` は stdio builder に依存しない
-10. `tests/test_postgres_integration.py` から `CTXLEDGER_ENABLE_STDIO` は削除済み
-11. `tests/test_server.py` の stdio introspection example は削除済み
-12. `tests/test_config.py` は **21 passed**
-13. `tests/test_server.py` / `tests/test_mcp_modules.py` / `tests/test_cli.py` / `tests/test_postgres_integration.py` は **183 passed**
-14. 現時点の確認済み合計は **204 passed**
+5. patch 1B として server/module/CLI cleanup は入っている
+6. patch 1C として `src/ctxledger/mcp/stdio.py` の削除は入っている
+7. **今回 patch 1D として residual stdio protocol/introspection/docs cleanup が入った**
+8. `server.py` は stdio public surface を export しない
+9. `runtime/status.py` は stdio readiness metadata を持たない
+10. `runtime/http_runtime.py` は stdio builder に依存しない
+11. `runtime/protocols.py` は stdio adapter protocol を持たない
+12. `runtime/introspection.py` は stdio-like fallback を持たない
+13. `README.md`, `docs/CHANGELOG.md`, `docs/architecture.md`, `docs/deployment.md`, `docs/SECURITY.md` は HTTP-only wording にかなり寄っている
+14. `tests/test_config.py` / `tests/test_server.py` / `tests/test_mcp_modules.py` / `tests/test_cli.py` / `tests/test_postgres_integration.py` は確認済みで **204 passed**
 15. `docs/specification.md` は引き続き触っていない
 16. まだ compliance claim はしない
-17. 次は residual references / docs / project-wide verification を進めるのが自然
+17. 次は final residual sweep と project-wide verification が自然
 
-## 10. コミット
+## 15. コミット
 このセッションのコミット候補メッセージ例:
-- `Remove legacy stdio module`
-- `Advance stdio removal patch 1C`
-- `Delete unused stdio runtime implementation`
+- `Clean up residual stdio references`
+- `Finish HTTP-only stdio documentation cleanup`
+- `Remove remaining stdio protocol and docs mentions`

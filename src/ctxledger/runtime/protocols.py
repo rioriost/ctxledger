@@ -6,7 +6,6 @@ from ..config import AppSettings
 from .types import McpResourceResponse, McpToolResponse
 
 if TYPE_CHECKING:
-    from ..mcp.stdio import StdioTransportIntrospection
     from ..mcp.tool_schemas import McpToolSchema
     from ..workflow.service import ProjectionArtifactType, WorkflowService
     from .introspection import RuntimeIntrospection
@@ -50,23 +49,6 @@ class HttpRuntimeAdapterProtocol(ServerRuntime, Protocol):
     def introspect(self) -> RuntimeIntrospection: ...
 
 
-class StdioRuntimeAdapterProtocol(ServerRuntime, Protocol):
-    settings: AppSettings
-
-    def registered_tools(self) -> tuple[str, ...]: ...
-    def registered_resources(self) -> tuple[str, ...]: ...
-    def tool_schema(self, tool_name: str) -> McpToolSchema: ...
-    def introspect(self) -> StdioTransportIntrospection: ...
-
-    def dispatch_tool(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-    ) -> Any: ...
-
-    def dispatch_resource(self, uri: str) -> Any: ...
-
-
 class HttpHandlerFactoryServer(Protocol):
     settings: AppSettings
 
@@ -107,7 +89,6 @@ __all__ = [
     "WorkflowServiceFactory",
     "McpRuntimeProtocol",
     "HttpRuntimeAdapterProtocol",
-    "StdioRuntimeAdapterProtocol",
     "HttpHandlerFactoryServer",
     "WorkflowResponseBuilderServer",
 ]
