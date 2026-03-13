@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import secrets
 import sys
 import urllib.error
 import urllib.request
@@ -249,6 +250,7 @@ def _run_workflow_scenario(
     timeout_seconds: float,
     read_resources: bool = False,
 ) -> None:
+    workflow_suffix = secrets.token_hex(8)
     workspace_result = _require_tool_success(
         _call_tool(
             endpoint_url=endpoint_url,
@@ -257,12 +259,13 @@ def _run_workflow_scenario(
             request_id=10,
             tool_name="workspace_register",
             arguments={
-                "repo_url": f"https://example.com/ctxledger-smoke-{timeout_seconds}.git",
-                "canonical_path": f"/tmp/ctxledger-smoke-{timeout_seconds}",
+                "repo_url": f"https://example.com/ctxledger-smoke-{workflow_suffix}.git",
+                "canonical_path": f"/tmp/ctxledger-smoke-{workflow_suffix}",
                 "default_branch": "main",
                 "metadata": {
                     "scenario": "workflow",
                     "source": "mcp_http_smoke",
+                    "workflow_suffix": workflow_suffix,
                 },
             },
         ),

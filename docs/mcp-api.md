@@ -17,11 +17,20 @@ The repository now evidences the following HTTP MCP operations on that path:
 - `initialize`
 - `tools/list`
 - `tools/call`
+- `resources/list`
+- `resources/read`
 
 In `v0.1.0`, the primary implemented surface is the workflow control subsystem.  
 Memory-related operations are defined architecturally but may remain stubbed or partially implemented.
 
-Broader compatibility wording beyond this minimal HTTP MCP path should be treated as a closeout decision, not as a stronger claim already proven by the current repository evidence.
+The currently evidenced remote serving shape is:
+
+- FastAPI application wrapper
+- `uvicorn` process
+- Docker-based local runtime
+- MCP HTTP access through `/mcp`
+
+Broader compatibility wording beyond this currently evidenced HTTP MCP path should be treated as a closeout decision, not as a stronger claim already proven by the current repository evidence.
 
 ---
 
@@ -69,7 +78,7 @@ Examples:
 
 Tool argument discovery is implemented through `tools/list`, which now returns concrete `inputSchema` payloads for the visible tool surface.
 
-The strongest current repository evidence is for this discovery flow over the primary HTTP MCP path at `/mcp`.
+The strongest current repository evidence is for this discovery flow over the primary HTTP MCP path at `/mcp`, including live Docker-based smoke validation through the FastAPI/`uvicorn` runtime.
 
 Representative `tools/list` response fragment:
 
@@ -141,7 +150,7 @@ Implemented in the current repository runtime surface as supporting MCP resource
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-These resources are currently implemented as workflow-oriented read surfaces alongside the primary HTTP MCP path.
+These resources are currently implemented as workflow-oriented read surfaces alongside the primary HTTP MCP path, and the repository now includes live remote evidence for both `resources/list` and `resources/read` over `/mcp`.
 
 Not yet implemented and still future-facing/stubbed as resources:
 
@@ -318,6 +327,79 @@ They do not replace Tools or Resources and are not canonical inputs to the API.
 ---
 
 ## 5. Primary HTTP MCP Path
+
+The primary deployment and acceptance path for `v0.1.0` is a real remote HTTP MCP server exposed at `/mcp`.
+
+The currently evidenced runtime shape is:
+
+- FastAPI application wrapper in `src/ctxledger/http_app.py`
+- `uvicorn` process startup
+- Docker Compose startup through `docker/docker-compose.yml`
+
+This means the HTTP MCP surface is no longer only an internal dispatch/testing concern.  
+It is also exercised as a live remote endpoint in the repository’s local deployment flow.
+
+### 5.1 Confirmed HTTP MCP Operations
+
+The currently evidenced HTTP MCP operations on `/mcp` are:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+- `resources/list`
+- `resources/read`
+
+### 5.2 Minimum Remote Validation Path
+
+A repository-provided smoke client exists at:
+
+- `scripts/mcp_http_smoke.py`
+
+Representative validation command shapes include:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --tool-name memory_get_context
+```
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow
+```
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read
+```
+
+These validations now cover:
+
+- MCP lifecycle setup through `initialize`
+- tool discovery through `tools/list`
+- tool invocation through `tools/call`
+- resource discovery through `resources/list`
+- resource reading through `resources/read`
+- workflow-tool mutation flows against a live PostgreSQL-backed deployment
+
+### 5.3 Confirmed Workflow Tool Validation Over Remote HTTP MCP
+
+The workflow smoke scenario now confirms successful remote invocation of:
+
+- `workspace_register`
+- `workflow_start`
+- `workflow_checkpoint`
+- `workflow_resume`
+- `workflow_complete`
+
+This matters because it proves that the repository’s documented remote HTTP MCP deployment path can perform real canonical workflow mutations and reads against the live Dockerized PostgreSQL instance, rather than only returning stub or static responses.
+
+### 5.4 Confirmed Workflow Resource Validation Over Remote HTTP MCP
+
+The workflow resource-read validation now confirms successful remote reads for:
+
+- `workspace://{workspace_id}/resume`
+- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+This matters because it proves that resource-oriented workflow reads are not only implemented internally, but are also reachable and functioning over the actual `/mcp` protocol surface in the live deployment path.
+
+## 6. Error Model and Boundary Behavior
 
 For `v0.1.0`, the currently evidenced primary HTTP MCP path is:
 
