@@ -35,7 +35,10 @@
 - さらに `src/ctxledger/runtime/server_factory.py` を整理し、現在の `server.py` から使われなくなっていた `create_server()` helper を削除しました。
 - `src/ctxledger/runtime/server_factory.py` は `build_workflow_service_factory()` のみを持つ小さな factory module に縮小されました。
 - あわせて `runtime.server_factory` から不要になった type-only import と protocol import を削除し、module の責務に合わせて import surface を簡素化しました。
-- `tests/test_server.py` / `tests/test_cli.py` / `tests/test_postgres_integration.py` を回して、runtime server factory helper pruning 後も主要な server/bootstrap path が壊れていないことを確認しました。
+- 今回さらに `src/ctxledger/runtime/server_responses.py` に残っていた `server.py` への response type backref を整理しました。
+- `build_workspace_resume_resource_response()` と `build_workflow_detail_resource_response()` が `from ..server import McpResourceResponse` を使っていたため、これを canonical な `ctxledger.runtime.types.McpResourceResponse` 参照へ変更しました。
+- これにより、server response builder 群は response DTO 型について `server.py` を経由しない構成になり、response type の dependency direction もより自然になりました。
+- `tests/test_server.py` / `tests/test_cli.py` / `tests/test_postgres_integration.py` を回して、response type backref 除去後も主要な server/bootstrap path が壊れていないことを確認しました。
 
 今回確認したテスト結果:
 - `pytest -q tests/test_server.py`
@@ -53,7 +56,8 @@
 - `93b472b` — `Import HTTP runtime adapter from canonical module in tests`
 - `3181d7a` — `Slim server exports to public entrypoints`
 - `d7d2284` — `Inline server bootstrap helper flow`
-- `runtime.server_factory.py` の unused helper pruning 変更は、まだ commit していません。
+- `28de53a` — `Prune unused runtime server factory helper`
+- `runtime.server_responses.py` の remaining response type backref 除去変更は、まだ commit していません。
 
 現時点での設計メモ:
 - `server.py` から concrete HTTP adapter 実装が抜けたことで、bootstrap surface と runtime implementation の境界がかなり自然になりました。
@@ -68,9 +72,10 @@
 - `mcp/tool_handlers.py` 側の `McpToolResponse` 参照が canonical `runtime.types` に寄ったので、MCP response types の dependency direction はより自然になりました。
 - `server.py` に残っていた internal bridge helper がなくなったことで、server bootstrap の責務と call graph はさらに単純化されました。
 - `runtime.server_factory.py` は now `build_workflow_service_factory()` のみを提供する最小 module になり、server bootstrap helper の旧 layering artifact はさらに減りました。
+- `runtime.server_responses.py` からも remaining `server.py` 経由の response type import が外れたため、response DTO layer の canonical location は `runtime.types` にほぼ揃いました。
 
 次セッションで優先してやること:
-1. 今回の `runtime.server_factory.py` の unused helper pruning 変更を descriptive commit にまとめる
+1. 今回の `runtime.server_responses.py` の remaining response type backref 除去変更を descriptive commit にまとめる
 2. `registered_routes()` と debug/introspection surface の責務整理を進める
 3. 必要なら `tests/test_cli.py` や他の周辺 test も含めて import surface 変更の波及を確認する
 4. 変更がまとまった段階で `pytest -q` を全体実行して回帰確認する

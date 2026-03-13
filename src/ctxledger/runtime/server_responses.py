@@ -280,7 +280,7 @@ def build_workspace_resume_resource_response(
     server: CtxLedgerServer,
     workspace_id: UUID,
 ) -> McpResourceResponse:
-    from ..server import McpResourceResponse
+    from .types import McpResourceResponse
 
     if server.workflow_service is None:
         return McpResourceResponse(
@@ -377,7 +377,7 @@ def build_workflow_detail_resource_response(
     workspace_id: UUID,
     workflow_instance_id: UUID,
 ) -> McpResourceResponse:
-    from ..server import McpResourceResponse
+    from .types import McpResourceResponse
 
     if server.workflow_service is None:
         return McpResourceResponse(
