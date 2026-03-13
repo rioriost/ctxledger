@@ -33,7 +33,6 @@ services:
       CTXLEDGER_DATABASE_URL: postgresql://ctxledger:ctxledger@postgres:5432/ctxledger
       CTXLEDGER_TRANSPORT: http
       CTXLEDGER_ENABLE_HTTP: "true"
-      CTXLEDGER_ENABLE_STDIO: "false"
       CTXLEDGER_HOST: 0.0.0.0
       CTXLEDGER_PORT: 8080
       CTXLEDGER_HTTP_PATH: /mcp

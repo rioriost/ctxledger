@@ -1,4 +1,4 @@
-このプロジェクトでは、Dockerコンテナで動作する remote MCP サーバを HTTP 専用で提供しています。
+このプロジェクトでは、Docker コンテナで動作する remote MCP サーバを HTTP 専用で提供しています。
 
 直近の進捗:
 - 以前の session までに、HTTP `/mcp` に対する最小 MCP 経路として `initialize` / `tools/list` / `tools/call` を実装済みでした。
@@ -11,20 +11,28 @@
 - `src/ctxledger/runtime/orchestration.py` から `ctxledger.mcp.stdio` 参照、stdio runtime builder、stdio launch 分岐、stdio summary 出力を削除しました。
 - `tests/test_config.py` から stdio 前提の設定テストを削除し、HTTP 専用の設定期待値に更新しました。
 - `tests/test_cli.py` と `tests/test_server.py` の `StdioSettings` 依存を削除し、`AppSettings` 構築を HTTP 専用 shape に更新しました。
-- 一時的に入れてしまった「stdio fallback で import error を逃がす修正」は取り消し済みです。stdio を復活させる方向のコードは入れていません。
+- repository-wide の追加確認として、`README.md` と `docs/**/*.md` には `CTXLEDGER_ENABLE_STDIO` / `TransportMode.STDIO` / `TransportMode.BOTH` / `StdioSettings` の残骸は見当たらない前提で整理済みです。
+- Docker compose に残っていた `CTXLEDGER_ENABLE_STDIO: "false"` も削除済みです。
+- 一時的に入れてしまった「stdio fallback で import error を逃がす修正」は取り消し済みで、stdio を復活させる方向のコードは入っていません。
 
 今回確認したテスト結果:
 - `pytest -q tests/test_config.py tests/test_cli.py tests/test_server.py`
 - 結果: `171 passed`
 
+今回のコミット:
+- `957768b` — `Remove leftover stdio runtime support`
+
+現時点で把握している未整理変更:
+- `src/ctxledger/runtime/server_responses.py`
+- `src/ctxledger/server.py`
+- これらは stdio cleanup commit には含めていない既存の別変更です
+
 現時点で残っていそうな確認対象:
-1. `src` / `tests` 以外のドキュメントや補助スクリプトに `stdio` 記述が残っていないか
-2. `README.md` や `docs/*` の transport 説明に `stdio` や `both` が残っていないか
-3. 必要なら全体テストを回して HTTP 専用化で他に影響がないか確認する
-4. 作業ループ完了時にコミットを切る
+1. 上記 2 ファイルの未コミット変更が何かを確認する
+2. 必要なら全体テストを回して HTTP 専用化が他領域へ波及していないか確認する
+3. stdio cleanup 後の repo 状態に合わせて必要なら追加コミットを切る
 
 次セッションで優先してやること:
-- `stdio` / `CTXLEDGER_ENABLE_STDIO` / `TransportMode.BOTH|STDIO` の全体 grep 相当の最終確認
-- docs / README の stdio 記述削除
-- 必要なら全テスト実行
-- 最後に git commit
+- `src/ctxledger/runtime/server_responses.py` と `src/ctxledger/server.py` の未整理変更内容を確認
+- 必要なら `pytest -q` などで全体テスト実行
+- 問題なければ最後の整理コミット
