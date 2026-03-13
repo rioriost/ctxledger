@@ -266,7 +266,7 @@ class HttpRuntimeAdapter:
         path: str,
         body: str | None = None,
     ) -> WorkflowResumeResponse | McpHttpResponse:
-        return dispatch_http_request(self, route_name, path, body).response
+        return build_runtime_dispatch_result(self, route_name, path, body).response
 
     def start(self) -> None:
         logger.info(
@@ -493,7 +493,7 @@ def _require_http_bearer_auth(
     return require_http_bearer_auth(server, path)
 
 
-def dispatch_http_request(
+def build_runtime_dispatch_result(
     runtime: HttpRuntimeAdapter,
     route_name: str,
     path: str,
@@ -522,12 +522,22 @@ def dispatch_http_request(
         response = handler(path, body)
     else:
         response = handler(path)
+
     return RuntimeDispatchResult(
         transport="http",
         target=route_name,
         status="ok" if response.status_code < 400 else "error",
         response=response,
     )
+
+
+def dispatch_http_request(
+    runtime: HttpRuntimeAdapter,
+    route_name: str,
+    path: str,
+    body: str | None = None,
+) -> RuntimeDispatchResult:
+    return build_runtime_dispatch_result(runtime, route_name, path, body)
 
 
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
@@ -629,6 +639,7 @@ __all__ = [
     "build_workflow_service_factory",
     "create_runtime",
     "create_server",
+    "build_runtime_dispatch_result",
     "dispatch_http_request",
     "parse_workspace_resume_resource_uri",
     "parse_workflow_detail_resource_uri",

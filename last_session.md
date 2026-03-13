@@ -24,7 +24,10 @@
 - さらに `HttpRuntimeAdapter` に `handler(route_name)` / `require_handler(route_name)` を追加し、内部の `_handlers` dict へ直接触れずに registered handler を扱える accessor を用意しました。
 - `dispatch_http_request()` は `_handlers.get(...)` ではなく `runtime.handler(route_name)` を使うように変更しました。
 - `tests/test_server.py` の debug/runtime route まわりも `_handlers[...]` 直参照ではなく `handler(...)` / `require_handler(...)` 経由へ変更しました。
-- この段階で route registry はまだ残っていますが、internal dict 直叩き箇所は減り、次段で registry の縮小や差し替えをしやすい形になっています。
+- さらに `src/ctxledger/server.py` に `build_runtime_dispatch_result()` を追加し、`HttpRuntimeAdapter.dispatch()` の実体を `dispatch_http_request()` ではなくこの helper に寄せました。
+- `dispatch_http_request()` は互換維持の薄い wrapper として `build_runtime_dispatch_result()` を呼ぶだけの形になりました。
+- `tests/test_server.py` の dispatch result 系テストも `dispatch_http_request()` ではなく `build_runtime_dispatch_result()` を直接使う形へ切り替えました。
+- この段階で route registry はまだ残っていますが、dispatch の中心 helper が少し明確になり、次段で `dispatch_http_request()` を完全削除するための足場ができています。
 - `server.py` はまだ完全に小さくはないものの、以前より compatibility surface はかなり減り、HTTP handler / server response の一次公開窓口としての役割はかなり薄くなっています。
 - 一方で、`dispatch_http_request()`、`HttpRuntimeAdapter.register_handler()`、`registered_routes()` などは依然として残っており、次段の整理対象です。
 
@@ -37,23 +40,25 @@
 - `33c8815` — `Move tests to canonical runtime modules`
 - `9cd5f9e` — `Prune obsolete server compatibility wrappers`
 - `6ef0808` — `Use runtime serializers directly in server tests`
+- `5d278e0` — `Add explicit HTTP runtime handler accessors`
 
 現時点での設計メモ:
 - `http_app.py` はかなり自然になり、FastAPI の route flow は直接的になっています。
 - `server.py` の module-level wrapper はかなり減ったが、まだ bootstrap と runtime adapter と legacy-friendly export が混在しています。
 - `CtxLedgerServer` の resource response メソッドは `runtime.server_responses` を遅延 import する形になっており、循環を避けつつ現状を保つための暫定バランスです。
-- `dispatch_http_request()` は現時点で主に既存テストと route registry ベースの runtime path を支えるために残しています。
+- `build_runtime_dispatch_result()` は新しい中心 helper で、`dispatch_http_request()` は実質 compatibility wrapper になりました。
 - `registered_routes()` は debug/introspection と既存テストで参照されているため、削除前に introspection の責務整理が必要です。
 - 設定面では `TransportMode` と `http.enabled` の二重性がまだ残っており、HTTP 専用化に合わせた簡素化余地があります。
 - FastAPI app は依然として import 時に `create_default_fastapi_app()` が走る shape なので、必要なら次段で lifespan 管理へ寄せる余地があります。
-- `tests/test_server.py` はまだ `CtxLedgerServer` / `HttpRuntimeAdapter` / `build_http_runtime_adapter` / `dispatch_http_request` などを `ctxledger.server` から import しており、ここが今後の `server.py` 縮小の境界になります。
+- `tests/test_server.py` はまだ `CtxLedgerServer` / `HttpRuntimeAdapter` / `build_http_runtime_adapter` / `build_runtime_dispatch_result` などを `ctxledger.server` から import しており、ここが今後の `server.py` 縮小の境界になります。
 - serializer helper は `tests/test_server.py` 側では canonical module に寄せられたので、`server.py` からの再公開削減をさらに進めやすくなりました。
-- route registry 自体は残るが、handler lookup の窓口が accessor に寄ったので、将来 `_handlers` の実体を変えても追従しやすくなっています。
+- route registry 自体は残るが、handler lookup と dispatch helper の窓口が少し整理されたので、将来 `_handlers` の実体や dispatch の置き場所を変えても追従しやすくなっています。
 
 次セッションで優先してやること:
-1. `server.py` にまだ残っている re-export / helper 群の棚卸しを続ける
-2. `dispatch_http_request()` と route registry を本当に残すべきか再評価する
-3. `RuntimeIntrospection` や他の公開位置を見直し、`server.py` から外せるものを外す
-4. 可能なら FastAPI lifespan 管理への移行可否を確認する
-5. 変更が一段落したら `pytest -q` で全体確認する
-6. 問題なければ cleanup 用の次の descriptive commit を作成
+1. `dispatch_http_request()` を完全に不要化できるか検討し、可能なら削除する
+2. `server.py` にまだ残っている re-export / helper 群の棚卸しを続ける
+3. `registered_routes()` を introspection 用の責務へさらに限定できるか考える
+4. `RuntimeIntrospection` や他の公開位置を見直し、`server.py` から外せるものを外す
+5. 可能なら FastAPI lifespan 管理への移行可否を確認する
+6. 変更が一段落したら `pytest -q` で全体確認する
+7. 問題なければ cleanup 用の次の descriptive commit を作成

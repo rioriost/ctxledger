@@ -76,9 +76,9 @@ from ctxledger.server import (
     _print_runtime_summary,
     build_database_health_checker,
     build_http_runtime_adapter,
+    build_runtime_dispatch_result,
     create_runtime,
     create_server,
-    dispatch_http_request,
 )
 from ctxledger.workflow.service import (
     CompleteWorkflowInput,
@@ -4077,7 +4077,7 @@ def test_dispatch_http_request_returns_dispatch_result_for_success() -> None:
 
     server.startup()
 
-    result = dispatch_http_request(
+    result = build_runtime_dispatch_result(
         runtime,
         "workflow_resume",
         f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}",
@@ -4096,7 +4096,7 @@ def test_dispatch_http_request_returns_route_not_found_result() -> None:
     settings = make_settings()
     runtime = HttpRuntimeAdapter(settings)
 
-    result = dispatch_http_request(
+    result = build_runtime_dispatch_result(
         runtime,
         "missing_route",
         f"/workflow-resume/{uuid4()}",
@@ -4127,7 +4127,7 @@ def test_dispatch_http_request_returns_error_result_for_handler_error_response()
     )
     runtime = build_http_runtime_adapter(server)
 
-    result = dispatch_http_request(
+    result = build_runtime_dispatch_result(
         runtime,
         "workflow_resume",
         f"/workflow-resume/{uuid4()}",
