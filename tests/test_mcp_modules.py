@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
 
 from ctxledger.config import (
     AppSettings,
@@ -20,14 +24,24 @@ from ctxledger.mcp.lifecycle import (
     build_jsonrpc_success_response,
     dispatch_lifecycle_method,
 )
+from ctxledger.mcp.resource_handlers import (
+    build_workflow_detail_resource_handler,
+    build_workflow_detail_resource_response,
+    build_workspace_resume_resource_handler,
+    build_workspace_resume_resource_response,
+    parse_workflow_detail_resource_uri,
+    parse_workspace_resume_resource_uri,
+)
 from ctxledger.mcp.rpc import handle_mcp_rpc_request
 from ctxledger.mcp.streamable_http import (
     StreamableHttpRequest,
     StreamableHttpResponse,
+    _path_matches,
     build_streamable_http_endpoint,
     build_streamable_http_invalid_request_response,
     build_streamable_http_not_found_response,
     build_streamable_http_rpc_error_response,
+    default_streamable_http_headers,
 )
 from ctxledger.runtime.types import McpResourceResponse, McpToolResponse
 
@@ -343,6 +357,416 @@ def test_streamable_http_endpoint_uses_auth_validator_before_rpc_handler() -> No
             }
         },
         headers={"content-type": "application/json"},
+    )
+
+
+def test_streamable_http_endpoint_returns_not_found_for_wrong_path() -> None:
+    class FakeStreamableRuntime:
+        settings = None
+
+        def handle_rpc_request(self, request: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("rpc handler should not be called")
+
+    endpoint = build_streamable_http_endpoint(
+        FakeStreamableRuntime(),
+        mcp_path="/mcp",
+    )
+
+    response = endpoint.handle(
+        StreamableHttpRequest(
+            path="/other",
+            body='{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}',
+        )
+    )
+
+    assert response == StreamableHttpResponse(
+        status_code=404,
+        payload={
+            "error": {
+                "code": "not_found",
+                "message": "MCP endpoint requires /mcp",
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_streamable_http_endpoint_rejects_missing_body() -> None:
+    class FakeStreamableRuntime:
+        settings = None
+
+        def handle_rpc_request(self, request: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("rpc handler should not be called")
+
+    endpoint = build_streamable_http_endpoint(
+        FakeStreamableRuntime(),
+        mcp_path="/mcp",
+    )
+
+    response = endpoint.handle(StreamableHttpRequest(path="/mcp", body="  "))
+
+    assert response == StreamableHttpResponse(
+        status_code=400,
+        payload={
+            "error": {
+                "code": "invalid_request",
+                "message": "HTTP MCP endpoint requires a JSON-RPC request body",
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_streamable_http_endpoint_rejects_invalid_json() -> None:
+    class FakeStreamableRuntime:
+        settings = None
+
+        def handle_rpc_request(self, request: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("rpc handler should not be called")
+
+    endpoint = build_streamable_http_endpoint(
+        FakeStreamableRuntime(),
+        mcp_path="/mcp",
+    )
+
+    response = endpoint.handle(StreamableHttpRequest(path="/mcp", body="{"))
+
+    assert response.status_code == 400
+    assert response.payload["error"]["code"] == "invalid_request"
+    assert response.payload["error"]["message"].startswith(
+        "request body must be valid JSON:"
+    )
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_streamable_http_endpoint_rejects_non_object_json() -> None:
+    class FakeStreamableRuntime:
+        settings = None
+
+        def handle_rpc_request(self, request: dict[str, object]) -> dict[str, object]:
+            raise AssertionError("rpc handler should not be called")
+
+    endpoint = build_streamable_http_endpoint(
+        FakeStreamableRuntime(),
+        mcp_path="/mcp",
+    )
+
+    response = endpoint.handle(StreamableHttpRequest(path="/mcp", body='["x"]'))
+
+    assert response == StreamableHttpResponse(
+        status_code=400,
+        payload={
+            "error": {
+                "code": "invalid_request",
+                "message": "request body must be a JSON object",
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_streamable_http_endpoint_returns_200_for_rpc_result() -> None:
+    class FakeStreamableRuntime:
+        settings = None
+
+        def handle_rpc_request(self, request: dict[str, object]) -> dict[str, object]:
+            assert request == {
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "tools/list",
+                "params": {},
+            }
+            return {"jsonrpc": "2.0", "id": 8, "result": {"ok": True}}
+
+    endpoint = build_streamable_http_endpoint(
+        FakeStreamableRuntime(),
+        mcp_path="/mcp",
+    )
+
+    response = endpoint.handle(
+        StreamableHttpRequest(
+            path="/mcp",
+            body='{"jsonrpc":"2.0","id":8,"method":"tools/list","params":{}}',
+        )
+    )
+
+    assert response == StreamableHttpResponse(
+        status_code=200,
+        payload={"jsonrpc": "2.0", "id": 8, "result": {"ok": True}},
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_streamable_http_endpoint_reraises_system_exit() -> None:
+    class FakeStreamableRuntime:
+        settings = None
+
+        def handle_rpc_request(self, request: dict[str, object]) -> dict[str, object]:
+            raise SystemExit(9)
+
+    endpoint = build_streamable_http_endpoint(
+        FakeStreamableRuntime(),
+        mcp_path="/mcp",
+    )
+
+    with pytest.raises(SystemExit, match="9"):
+        endpoint.handle(
+            StreamableHttpRequest(
+                path="/mcp",
+                body='{"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}}',
+            )
+        )
+
+
+def test_default_streamable_http_headers_returns_json_content_type() -> None:
+    assert default_streamable_http_headers() == {"content-type": "application/json"}
+
+
+def test_build_streamable_http_rpc_error_response_omits_empty_data() -> None:
+    response = build_streamable_http_rpc_error_response(
+        request_id="abc",
+        code=-32001,
+        message="boom",
+        data={},
+    )
+
+    assert response == StreamableHttpResponse(
+        status_code=400,
+        payload={
+            "jsonrpc": "2.0",
+            "id": "abc",
+            "error": {
+                "code": -32001,
+                "message": "boom",
+            },
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+@pytest.mark.parametrize(
+    ("actual_path", "expected_path", "matched"),
+    [
+        ("/mcp", "/mcp", True),
+        (" /mcp/ ", "/mcp", True),
+        ("/mcp?foo=bar", "/mcp", True),
+        ("/mcp", "/mcp?foo=bar", True),
+        ("/other", "/mcp", False),
+    ],
+)
+def test_path_matches_normalizes_paths(
+    actual_path: str,
+    expected_path: str,
+    matched: bool,
+) -> None:
+    assert _path_matches(actual_path, expected_path) is matched
+
+
+def test_parse_workspace_resume_resource_uri_returns_workspace_id() -> None:
+    workspace_id = uuid4()
+
+    assert parse_workspace_resume_resource_uri(
+        f"workspace://{workspace_id}/resume"
+    ) == (workspace_id)
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "",
+        "   ",
+        "http://example.com",
+        "workspace://",
+        "workspace://not-a-uuid/resume",
+        "workspace://1234/workflow",
+        "workspace://1234/resume/extra",
+    ],
+)
+def test_parse_workspace_resume_resource_uri_rejects_invalid_values(
+    uri: str,
+) -> None:
+    assert parse_workspace_resume_resource_uri(uri) is None
+
+
+def test_parse_workflow_detail_resource_uri_returns_workspace_and_workflow_ids() -> (
+    None
+):
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    assert parse_workflow_detail_resource_uri(
+        f"workspace://{workspace_id}/workflow/{workflow_instance_id}"
+    ) == (workspace_id, workflow_instance_id)
+    assert parse_workflow_detail_resource_uri(
+        f"  workspace://{workspace_id}/workflow/{workflow_instance_id}  "
+    ) == (workspace_id, workflow_instance_id)
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "",
+        "   ",
+        "workspace://",
+        "workspace://not-a-uuid/workflow/also-not-a-uuid",
+        "workspace://1234/resume",
+        "workspace://1234/workflow",
+        "workspace://1234/workflow/5678/extra",
+    ],
+)
+def test_parse_workflow_detail_resource_uri_rejects_invalid_values(uri: str) -> None:
+    assert parse_workflow_detail_resource_uri(uri) is None
+
+
+def test_build_workspace_resume_resource_response_delegates_to_server() -> None:
+    workspace_id = uuid4()
+    expected = McpResourceResponse(
+        status_code=200,
+        payload={"resource": {"kind": "workspace"}},
+        headers={"content-type": "application/json"},
+    )
+    server = SimpleNamespace(
+        build_workspace_resume_resource_response=lambda received_workspace_id: (
+            expected if received_workspace_id == workspace_id else None
+        )
+    )
+
+    assert build_workspace_resume_resource_response(server, workspace_id) == expected
+
+
+def test_build_workflow_detail_resource_response_delegates_to_server() -> None:
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+    expected = McpResourceResponse(
+        status_code=200,
+        payload={"resource": {"kind": "workflow"}},
+        headers={"content-type": "application/json"},
+    )
+    server = SimpleNamespace(
+        build_workflow_detail_resource_response=(
+            lambda received_workspace_id, received_workflow_instance_id: (
+                expected
+                if received_workspace_id == workspace_id
+                and received_workflow_instance_id == workflow_instance_id
+                else None
+            )
+        )
+    )
+
+    assert (
+        build_workflow_detail_resource_response(
+            server,
+            workspace_id=workspace_id,
+            workflow_instance_id=workflow_instance_id,
+        )
+        == expected
+    )
+
+
+def test_build_workspace_resume_resource_handler_returns_not_found_for_invalid_uri() -> (
+    None
+):
+    class FakeServer:
+        pass
+
+    FakeServer.__module__ = "ctxledger.runtime.types"
+
+    handler = build_workspace_resume_resource_handler(FakeServer())
+
+    response = handler("workspace://bad/resume")
+
+    assert response == McpResourceResponse(
+        status_code=404,
+        payload={
+            "error": {
+                "code": "not_found",
+                "message": (
+                    "workspace resume resource requires "
+                    "workspace://{workspace_id}/resume"
+                ),
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_build_workspace_resume_resource_handler_returns_server_response() -> None:
+    workspace_id = uuid4()
+    expected = McpResourceResponse(
+        status_code=200,
+        payload={"resource": {"workspace_id": str(workspace_id)}},
+        headers={"content-type": "application/json"},
+    )
+
+    class FakeServer:
+        def build_workspace_resume_resource_response(
+            self,
+            received_workspace_id,
+        ) -> McpResourceResponse:
+            assert received_workspace_id == workspace_id
+            return expected
+
+    handler = build_workspace_resume_resource_handler(FakeServer())
+
+    assert handler(f"workspace://{workspace_id}/resume") == expected
+
+
+def test_build_workflow_detail_resource_handler_returns_not_found_for_invalid_uri() -> (
+    None
+):
+    class FakeServer:
+        pass
+
+    FakeServer.__module__ = "ctxledger.runtime.types"
+
+    handler = build_workflow_detail_resource_handler(FakeServer())
+
+    response = handler("workspace://bad/workflow/nope")
+
+    assert response == McpResourceResponse(
+        status_code=404,
+        payload={
+            "error": {
+                "code": "not_found",
+                "message": (
+                    "workflow detail resource requires "
+                    "workspace://{workspace_id}/workflow/{workflow_instance_id}"
+                ),
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def test_build_workflow_detail_resource_handler_returns_server_response() -> None:
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+    expected = McpResourceResponse(
+        status_code=200,
+        payload={
+            "resource": {
+                "workspace_id": str(workspace_id),
+                "workflow_instance_id": str(workflow_instance_id),
+            }
+        },
+        headers={"content-type": "application/json"},
+    )
+
+    class FakeServer:
+        def build_workflow_detail_resource_response(
+            self,
+            received_workspace_id,
+            received_workflow_instance_id,
+        ) -> McpResourceResponse:
+            assert received_workspace_id == workspace_id
+            assert received_workflow_instance_id == workflow_instance_id
+            return expected
+
+    handler = build_workflow_detail_resource_handler(FakeServer())
+
+    assert (
+        handler(f"workspace://{workspace_id}/workflow/{workflow_instance_id}")
+        == expected
     )
 
 

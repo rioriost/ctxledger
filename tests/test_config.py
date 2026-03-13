@@ -9,7 +9,18 @@ import pytest
 from ctxledger.config import (
     AppSettings,
     ConfigError,
+    DatabaseSettings,
+    DebugSettings,
+    HttpSettings,
+    LoggingSettings,
     LogLevel,
+    ProjectionSettings,
+    _format_expected_values,
+    _get_env,
+    _parse_bool,
+    _parse_int,
+    _parse_log_level,
+    _parse_optional_int,
     get_settings,
     load_settings,
 )
@@ -235,4 +246,166 @@ def test_optional_statement_timeout_can_be_omitted(clean_ctxledger_env: None) ->
     with patched_env(**env):
         settings = load_settings()
 
+    assert settings.database.statement_timeout_ms is None
+
+
+def test_get_env_returns_default_for_missing_value(clean_ctxledger_env: None) -> None:
+    with patched_env(CTXLEDGER_SAMPLE=None):
+        assert _get_env("CTXLEDGER_SAMPLE", "fallback") == "fallback"
+
+
+def test_get_env_strips_existing_value(clean_ctxledger_env: None) -> None:
+    with patched_env(CTXLEDGER_SAMPLE="  value  "):
+        assert _get_env("CTXLEDGER_SAMPLE") == "value"
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        ("TRUE", True),
+        (" yes ", True),
+        ("0", False),
+        ("Off", False),
+    ],
+)
+def test_parse_bool_accepts_supported_values(
+    clean_ctxledger_env: None,
+    raw_value: str,
+    expected: bool,
+) -> None:
+    with patched_env(CTXLEDGER_SAMPLE_BOOL=raw_value):
+        assert _parse_bool("CTXLEDGER_SAMPLE_BOOL", default=not expected) is expected
+
+
+def test_parse_bool_returns_default_when_missing(clean_ctxledger_env: None) -> None:
+    with patched_env(CTXLEDGER_SAMPLE_BOOL=None):
+        assert _parse_bool("CTXLEDGER_SAMPLE_BOOL", default=False) is False
+
+
+def test_parse_int_returns_default_when_missing(clean_ctxledger_env: None) -> None:
+    with patched_env(CTXLEDGER_SAMPLE_INT=None):
+        assert _parse_int("CTXLEDGER_SAMPLE_INT", default=17) == 17
+
+
+def test_parse_optional_int_parses_value(clean_ctxledger_env: None) -> None:
+    with patched_env(CTXLEDGER_SAMPLE_INT="42"):
+        assert _parse_optional_int("CTXLEDGER_SAMPLE_INT") == 42
+
+
+def test_parse_optional_int_rejects_invalid_value(clean_ctxledger_env: None) -> None:
+    with patched_env(CTXLEDGER_SAMPLE_INT="abc"):
+        with pytest.raises(
+            ConfigError,
+            match="CTXLEDGER_SAMPLE_INT must be an integer",
+        ):
+            _parse_optional_int("CTXLEDGER_SAMPLE_INT")
+
+
+def test_parse_log_level_returns_default_when_missing(
+    clean_ctxledger_env: None,
+) -> None:
+    with patched_env(CTXLEDGER_LOG_LEVEL=None):
+        assert (
+            _parse_log_level("CTXLEDGER_LOG_LEVEL", LogLevel.WARNING)
+            is LogLevel.WARNING
+        )
+
+
+def test_format_expected_values_supports_non_collection_object() -> None:
+    assert _format_expected_values("value") == "value"
+
+
+def test_database_settings_is_configured_reflects_url_presence() -> None:
+    configured = DatabaseSettings(
+        url="postgresql://example/db",
+        connect_timeout_seconds=5,
+        statement_timeout_ms=None,
+    )
+    missing = DatabaseSettings(
+        url="",
+        connect_timeout_seconds=5,
+        statement_timeout_ms=None,
+    )
+
+    assert configured.is_configured is True
+    assert missing.is_configured is False
+
+
+def test_http_settings_base_url_and_mcp_url_normalize_path() -> None:
+    settings = HttpSettings(host="127.0.0.1", port=9000, path="mcp")
+
+    assert settings.base_url == "http://127.0.0.1:9000"
+    assert settings.mcp_url == "http://127.0.0.1:9000/mcp"
+
+
+def test_app_settings_validate_rejects_empty_host() -> None:
+    settings = AppSettings(
+        app_name="ctxledger",
+        app_version="0.1.0",
+        environment="test",
+        database=DatabaseSettings(
+            url="postgresql://example/db",
+            connect_timeout_seconds=5,
+            statement_timeout_ms=None,
+        ),
+        http=HttpSettings(host="", port=8080, path="/mcp"),
+        debug=DebugSettings(enabled=True),
+        projection=ProjectionSettings(
+            enabled=True,
+            directory_name=".agent",
+            write_markdown=True,
+            write_json=True,
+        ),
+        logging=LoggingSettings(level=LogLevel.INFO, structured=True),
+    )
+
+    with pytest.raises(ConfigError, match="CTXLEDGER_HOST must not be empty"):
+        settings.validate()
+
+
+def test_app_settings_validate_rejects_empty_http_path() -> None:
+    settings = AppSettings(
+        app_name="ctxledger",
+        app_version="0.1.0",
+        environment="test",
+        database=DatabaseSettings(
+            url="postgresql://example/db",
+            connect_timeout_seconds=5,
+            statement_timeout_ms=None,
+        ),
+        http=HttpSettings(host="127.0.0.1", port=8080, path=""),
+        debug=DebugSettings(enabled=True),
+        projection=ProjectionSettings(
+            enabled=True,
+            directory_name=".agent",
+            write_markdown=True,
+            write_json=True,
+        ),
+        logging=LoggingSettings(level=LogLevel.INFO, structured=True),
+    )
+
+    with pytest.raises(ConfigError, match="CTXLEDGER_HTTP_PATH must not be empty"):
+        settings.validate()
+
+
+def test_load_settings_uses_defaults_for_optional_values(
+    clean_ctxledger_env: None,
+) -> None:
+    with patched_env(CTXLEDGER_DATABASE_URL="postgresql://example/db"):
+        settings = load_settings()
+
+    assert settings.app_name == "ctxledger"
+    assert settings.app_version == "0.1.0"
+    assert settings.environment == "development"
+    assert settings.http.host == "0.0.0.0"
+    assert settings.http.port == 8080
+    assert settings.http.path == "/mcp"
+    assert settings.debug.enabled is True
+    assert settings.projection.enabled is True
+    assert settings.projection.directory_name == ".agent"
+    assert settings.projection.write_markdown is True
+    assert settings.projection.write_json is True
+    assert settings.logging.level is LogLevel.INFO
+    assert settings.logging.structured is True
+    assert settings.database.connect_timeout_seconds == 5
     assert settings.database.statement_timeout_ms is None

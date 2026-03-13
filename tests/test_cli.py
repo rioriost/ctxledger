@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -423,6 +424,24 @@ def test_main_resume_workflow_renders_text_output(
                 details={"projection_type": "resume_md"},
             ),
         ),
+        closed_projection_failures=(
+            SimpleNamespace(
+                status="resolved",
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                target_path=".agent/resume.json",
+                attempt_id=uuid4(),
+                error_code="io_error",
+                error_message="previous projection write was resolved",
+                occurred_at=SimpleNamespace(
+                    isoformat=lambda: "2024-01-01T00:00:30+00:00"
+                ),
+                resolved_at=SimpleNamespace(
+                    isoformat=lambda: "2024-01-01T00:00:45+00:00"
+                ),
+                open_failure_count=0,
+                retry_count=1,
+            ),
+        ),
         next_hint="Run CLI resume command",
     )
 
@@ -466,6 +485,14 @@ def test_main_resume_workflow_renders_text_output(
         "- stale_projection: resume projection is stale relative to canonical workflow state"
         in captured.out
     )
+    assert "Closed projection failures:" in captured.out
+    assert "- resolved: resume_json [path=.agent/resume.json]" in captured.out
+    assert "[error_code=io_error]" in captured.out
+    assert "[message=previous projection write was resolved]" in captured.out
+    assert "[occurred_at=2024-01-01T00:00:30+00:00]" in captured.out
+    assert "[resolved_at=2024-01-01T00:00:45+00:00]" in captured.out
+    assert "[open_failures=0]" in captured.out
+    assert "[retry_count=1]" in captured.out
     assert "Next hint: Run CLI resume command" in captured.out
     assert captured.err == ""
 
@@ -774,6 +801,327 @@ def test_main_resume_workflow_reports_missing_database_url(
     assert exit_code == 1
     assert captured.out == ""
     assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+
+
+def test_build_parser_includes_expected_subcommands() -> None:
+    parser = cli_module._build_parser()
+
+    actions = [
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    ]
+    assert len(actions) == 1
+
+    subcommands = set(actions[0].choices)
+    assert subcommands == {
+        "serve",
+        "print-schema-path",
+        "apply-schema",
+        "write-resume-projection",
+        "resume-workflow",
+        "version",
+    }
+
+
+def test_schema_path_points_to_bundled_postgres_schema() -> None:
+    path = cli_module._schema_path()
+
+    assert path.name == "postgres.sql"
+    assert path.parent.name == "schemas"
+    assert path.exists()
+
+
+def test_print_version_falls_back_when_metadata_lookup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    real_import = __import__
+
+    def fake_import(
+        name: str,
+        globals: object | None = None,
+        locals: object | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "importlib.metadata":
+            raise RuntimeError("metadata unavailable")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    exit_code = cli_module._print_version()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.out.strip() == "0.1.0"
+    assert captured.err == ""
+
+
+def test_print_schema_path_outputs_relative_and_absolute_variants(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli_module._print_schema_path(False)
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.out.strip().endswith("schemas/postgres.sql")
+    assert captured.err == ""
+
+    exit_code = cli_module._print_schema_path(True)
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert Path(captured.out.strip()).is_absolute()
+    assert captured.err == ""
+
+
+def test_apply_schema_reports_missing_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url=""),
+    )
+
+    exit_code = cli_module._apply_schema(argparse.Namespace(database_url=None))
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert (
+        "Database URL is required. Set CTXLEDGER_DATABASE_URL or pass --database-url."
+        in captured.err
+    )
+
+
+def test_apply_schema_uses_explicit_database_url_and_commits(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    executed_sql: list[str] = []
+    connect_calls: list[str] = []
+    commit_calls: list[str] = []
+
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str) -> None:
+            executed_sql.append(query)
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def commit(self) -> None:
+            commit_calls.append("commit")
+
+    fake_psycopg = SimpleNamespace(
+        connect=lambda database_url: (
+            connect_calls.append(database_url) or FakeConnection()
+        )
+    )
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.load_postgres_schema_sql",
+        lambda: "SELECT 1;",
+    )
+
+    exit_code = cli_module._apply_schema(
+        argparse.Namespace(database_url="postgresql://explicit/db")
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.out.strip() == "Schema applied successfully."
+    assert captured.err == ""
+    assert connect_calls == ["postgresql://explicit/db"]
+    assert executed_sql == ["SELECT 1;"]
+    assert commit_calls == ["commit"]
+
+
+def test_apply_schema_reports_driver_import_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    real_import = __import__
+
+    def fake_import(
+        name: str,
+        globals: object | None = None,
+        locals: object | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "psycopg":
+            raise ImportError("missing psycopg")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    exit_code = cli_module._apply_schema(
+        argparse.Namespace(database_url="postgresql://explicit/db")
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert (
+        "Failed to import PostgreSQL driver. Install psycopg[binary] first."
+        in captured.err
+    )
+
+
+def test_apply_schema_reports_unexpected_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.load_postgres_schema_sql",
+        lambda: (_ for _ in ()).throw(RuntimeError("schema exploded")),
+    )
+
+    fake_psycopg = SimpleNamespace(connect=lambda database_url: None)
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+
+    exit_code = cli_module._apply_schema(
+        argparse.Namespace(database_url="postgresql://explicit/db")
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to apply schema: schema exploded" in captured.err
+
+
+def test_serve_returns_zero_when_run_server_result_is_not_int(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.server.run_server",
+        lambda **kwargs: "ok",
+    )
+
+    result = cli_module._serve(argparse.Namespace(transport=None, host=None, port=None))
+
+    assert result == 0
+
+
+def test_main_dispatches_print_schema_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: list[bool] = []
+
+    monkeypatch.setattr(
+        cli_module,
+        "_print_schema_path",
+        lambda absolute: called.append(absolute) or 7,
+    )
+
+    result = cli_module.main(["print-schema-path", "--absolute"])
+
+    assert result == 7
+    assert called == [True]
+
+
+def test_main_dispatches_apply_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received_urls: list[str | None] = []
+
+    def fake_apply_schema(args: argparse.Namespace) -> int:
+        received_urls.append(args.database_url)
+        return 5
+
+    monkeypatch.setattr(cli_module, "_apply_schema", fake_apply_schema)
+
+    result = cli_module.main(
+        ["apply-schema", "--database-url", "postgresql://override/db"]
+    )
+
+    assert result == 5
+    assert received_urls == ["postgresql://override/db"]
+
+
+def test_main_dispatches_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: list[str] = []
+
+    monkeypatch.setattr(
+        cli_module, "_print_version", lambda: called.append("version") or 3
+    )
+
+    result = cli_module.main(["version"])
+
+    assert result == 3
+    assert called == ["version"]
+
+
+def test_main_defaults_to_serve_when_no_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: list[argparse.Namespace] = []
+
+    def fake_serve(args: argparse.Namespace) -> int:
+        called.append(args)
+        return 0
+
+    monkeypatch.setattr(cli_module, "_serve", fake_serve)
+
+    result = cli_module.main([])
+
+    assert result == 0
+    assert len(called) == 1
+    assert called[0].command is None
+
+
+def test_main_returns_parser_error_for_unknown_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeParser:
+        def parse_args(self, argv: list[str] | None) -> argparse.Namespace:
+            return argparse.Namespace(command="mystery")
+
+        def error(self, message: str) -> None:
+            raise RuntimeError(message)
+
+    monkeypatch.setattr(cli_module, "_build_parser", lambda: FakeParser())
+
+    with pytest.raises(RuntimeError, match="Unknown command: mystery"):
+        cli_module.main(["mystery"])
+
+
+def test_main_dispatches_resume_workflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received_ids: list[str] = []
+
+    def fake_resume_workflow(args: argparse.Namespace) -> int:
+        received_ids.append(args.workflow_instance_id)
+        return 9
+
+    monkeypatch.setattr(cli_module, "_resume_workflow", fake_resume_workflow)
+
+    result = cli_module.main(
+        ["resume-workflow", "--workflow-instance-id", "workflow-123"]
+    )
+
+    assert result == 9
+    assert received_ids == ["workflow-123"]
 
 
 def test_main_serve_renders_startup_summary_from_run_server(

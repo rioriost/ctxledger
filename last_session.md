@@ -1,132 +1,173 @@
-このプロジェクトでは、Docker コンテナで動作する remote MCP サーバを HTTP 専用で提供しています。
+この session では、coverage 90% 未満ファイルを 90%以上に引き上げる作業を継続し、最終的に対象をすべて達成しました。MCP tool handlers と PostgreSQL backend を中心に、unit test を大幅追加して coverage 条件をクリアしています。
 
-現在の repository posture:
-- HTTP `/mcp` に対する最小 MCP 経路として `initialize` / `tools/list` / `tools/call` を実装済みです。
-- 追加で HTTP 側の `resources/list` / `resources/read` も実装済みで、workflow 系 resources も live Docker 上で確認済みです。
-- stdio MCP サーバの残骸は削除済みで、HTTP 専用 shape に寄せています。
-- `server.py` 依存の縮小、HTTP runtime adapter の canonical module への移動、debug/runtime introspection の serializer 整理など、HTTP-only cleanup の大きな pruning は完了済みです。
+今回の追加成果
 
-HTTP/runtime cleanup の current state:
-- `HttpRuntimeAdapter` は `src/ctxledger/runtime/http_runtime.py` に移動済みです。
-- `src/ctxledger/server.py` の public surface は `CtxLedgerServer` / `create_server` / `run_server` のみに縮小済みです。
-- response DTO や introspection serializer の canonical import path への整理も完了しています。
-- route registry naming は `registered_routes()` ではなく `introspection_endpoints()` に統一済みです。
+### `src/ctxledger/mcp/resource_handlers.py`
+前段でかなり改善済みの状態を維持しました。
 
-proxy-only auth cleanup の current state:
-- `src/ctxledger/config.py` から app-layer auth 設定を削除済みです。
-  - `AuthSettings`
-  - `AppSettings.auth`
-  - `CTXLEDGER_REQUIRE_AUTH`
-  - `CTXLEDGER_AUTH_BEARER_TOKEN`
-- `src/ctxledger/runtime/http_handlers.py` から app-layer bearer auth helper を削除済みです。
-- その結果、`ctxledger` 本体は documented deployment path 上では app-layer bearer auth を持たず、認証境界は proxy layer のみです。
-- `docker/docker-compose.auth.yml` は deprecated compatibility stub のみになっています。
-- `docker/docker-compose.yml` と `docker/docker-compose.small-auth.yml` から deprecated direct-backend auth env の残骸も除去済みです。
+結果:
+- `mcp/resource_handlers.py` → `98%`
 
-small pattern の current state:
-- `Traefik -> auth-small -> private ctxledger backend -> PostgreSQL` の small pattern は実装済みです。
-- 主要 artifact:
-  - `docker/docker-compose.small-auth.yml`
-  - `docker/traefik/dynamic.yml`
-  - `docker/auth_small/src/auth_small_app.py`
-  - `scripts/mcp_http_smoke.py`
-- `docs/small_auth_operator_runbook.md` を追加済みで、startup / reject-allow smoke / shutdown / common failure modes をまとめています。
-- documented proxy port は `8091` です。
-- `ctxledger-private` は host port 非公開、`traefik` が唯一の公開 entrypoint です。
+### `src/ctxledger/mcp/streamable_http.py`
+前段で取り切った状態を維持しました。
 
-small pattern の latest live validation:
-- overlay stack 起動後、以下を確認済みです。
-  - `ctxledger-postgres` healthy
-  - `ctxledger-auth-small` healthy
-  - `ctxledger-server-private` healthy
-  - `ctxledger-traefik` healthy
-- missing token path:
-  - `401`
-  - `error: missing_bearer_token`
-- invalid token path:
-  - `401`
-  - `error: invalid_bearer_token`
-- valid token path:
-  - `initialize`
-  - `tools/list`
-  - `tools/call`
-  - `resources/list`
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_checkpoint`
-  - `workflow_resume`
-  - `resources/read` for workspace resume
-  - `resources/read` for workflow detail
-  - `workflow_complete`
-  を live Docker 上で再確認済みです。
+結果:
+- `mcp/streamable_http.py` → `100%`
 
-large pattern documentation prep の current state:
-- `docs/plans/auth_proxy_scaling_plan.md` で、large pattern は **after roadmap `0.4`** の deferred phase という整理です。
-- `docs/plans/auth_large_gateway_evaluation_memo.md` を追加済みです。
-  - `Pomerium`
-  - `oauth2-proxy`
-  - other OIDC-aware gateway
-  - organization-standard gateway
-  の比較観点を整理しています。
-- 同 memo に weighted scoring rubric を追加済みです。
-  - MCP IDE compatibility = `5`
-  - identity quality = `4`
-  - operational fit = `4`
-  - identity propagation readiness = `3`
-  - authorization extensibility = `3`
-  - architecture alignment = `4`
-  - organization-standard alignment = `2`
-- `docs/plans/auth_large_gateway_decision_record_template.md` を追加済みです。
-- `docs/plans/auth_large_gateway_shortlist_example.md` を追加済みで、provisional な example scorecard / mock shortlist を記録しています。
-  - example ranking:
-    - `Pomerium`
-    - organization-standard gateway
-    - `oauth2-proxy`
-    - other OIDC-aware gateway
-- ただし large pattern はまだ実装開始ではなく、design-prep material の段階です。
+### `src/ctxledger/config.py`
+helper / validation / default loading 分岐を補完して取り切りました。
 
-docs/navigation の current state:
-- `README.md` の Documentation Index に auth/deployment guidance への導線を追加済みです。
-- `docs/plans/auth_planning_index.md` を追加済みです。
-- `docs/CONTRIBUTING.md` を実質的な contributor guide に拡張済みです。
-- `docs/plans/mcp_planning_index.md` から `docs/plans/auth_planning_index.md` への参照も追加済みです。
+追加した観点:
+- `_get_env()`
+- `_parse_bool()`
+- `_parse_int()`
+- `_parse_optional_int()`
+- `_parse_log_level()`
+- `_format_expected_values()`
+- `DatabaseSettings.is_configured`
+- `HttpSettings.base_url`
+- `HttpSettings.mcp_url`
+- `AppSettings.validate()` の host / http path 分岐
+- `load_settings()` default path
 
-テストの current state:
-- 通常状態では `pytest -q` は `246 passed` です。
-- coverage 付きで `pytest --cov=src/ctxledger --cov-report=term-missing` を実行し、`246 passed` / `TOTAL 82%` を確認済みです。
-- 主要な coverage gap:
-  - `src/ctxledger/http_app.py` = `0%`
-  - `src/ctxledger/db/memory_uow.py` = `0%`
-  - `src/ctxledger/runtime/database_health.py` = `43%`
-  - `src/ctxledger/runtime/orchestration.py` = `44%`
-  - `src/ctxledger/runtime/server_factory.py` = `50%`
-- `tests/test_config.py` / `tests/test_mcp_modules.py` / `tests/test_cli.py` / `tests/test_server.py` は `178 passed` を確認済みです。
-- 注意点:
-  - small-pattern live Docker validation の直後に full `pytest -q` や coverage 実行を流すと、`tests/test_postgres_integration.py` の integration fixture と live Docker state が干渉して失敗することがあります。
-  - recovery 手順は:
-    - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans`
-    - その後に `pytest -q` または `pytest --cov=src/ctxledger --cov-report=term-missing`
-  です。
+結果:
+- `config.py` → `100%`
 
-現在の直近コミット群:
-- `420a057` — `Add large auth gateway evaluation memo`
-- `66f4b7b` — `Align docs with proxy-only auth model`
-- `b7fc5aa` — `Refine proxy auth wording in API docs`
-- `dd64ba9` — `Align specification with proxy auth model`
-- `b967a7f` — `Add small auth operator runbook`
-- `1a3fa92` — `Remove deprecated auth envs from compose`
-- `76bfe6f` — `Record small auth revalidation results`
-- `8cf8cbe` — `Add large auth gateway decision template`
-- `4b1b261` — `Add auth planning index and contributing guide`
-- `b8bd514` — `Document auth planning navigation and test recovery`
-- `33d5db1` — `Add large auth gateway shortlist example`
-- `9381a1e` — `Link large auth shortlist example in docs`
+### `src/ctxledger/__init__.py`
+CLI entrypoint まわりを大きく補完しました。
 
-次 session で自然な候補:
-1. large-pattern design prep をさらに進める
-   - shortlist example を actual decision record へ橋渡しする運用整理
-2. 別 stream に戻る
-   - MCP transport / compliance
-   - workflow / memory
-   - remaining code cleanup
-3. small-pattern live validation を再実行する場合は、終了後に overlay stack を落としてから full test suite を回す
+追加した観点:
+- `_build_parser()`
+- `_schema_path()`
+- `_print_version()`
+- `_print_schema_path()`
+- `_apply_schema()` missing URL / explicit URL / driver import failure / unexpected failure
+- `_serve()`
+- `main()` dispatch
+- `resume-workflow` の text/json/closed projection failures 表示分岐
+- unknown command parser error path
+
+結果:
+- `__init__.py` → `95%`
+
+### `src/ctxledger/mcp/tool_handlers.py`
+かなり重い対象でしたが、90% 超えまで取りました。
+
+追加した観点:
+- `build_mcp_success_response()`
+- `build_mcp_error_response()`
+- `_parse_required_uuid_argument()`
+- `_parse_optional_projection_type_argument()`
+- `_parse_required_string_argument()`
+- `_parse_optional_string_argument()`
+- `_parse_optional_dict_argument()`
+- `_parse_optional_verify_status_argument()`
+- `_parse_required_workflow_status_argument()`
+- `_map_workflow_error_to_mcp_response()`
+- `build_resume_workflow_tool_handler()`
+- `build_workspace_register_tool_handler()`
+- `build_workflow_start_tool_handler()`
+- `build_workflow_checkpoint_tool_handler()`
+- `build_workflow_complete_tool_handler()`
+- `build_projection_failures_ignore_tool_handler()`
+- `build_projection_failures_resolve_tool_handler()`
+- memory MCP tool handlers 3種
+
+結果:
+- `mcp/tool_handlers.py` → `91%`
+
+### `src/ctxledger/db/postgres.py`
+最終的にほぼ全部取りました。
+
+追加した観点:
+- helper 関数群
+  - `_require_psycopg()`
+  - `_json_dumps()`
+  - `_json_loads()`
+  - `_to_datetime()`
+  - `_to_uuid()`
+  - `_optional_datetime()`
+  - `_optional_str_enum()`
+  - `_schema_path()`
+  - `_connect()`
+- `PostgresConfig.from_settings()`
+- `PostgresDatabaseHealthChecker.ping()`
+- `PostgresDatabaseHealthChecker.schema_ready()`
+- repository 群
+  - `PostgresWorkspaceRepository`
+  - `PostgresWorkflowInstanceRepository`
+  - `PostgresWorkflowAttemptRepository`
+  - `PostgresWorkflowCheckpointRepository`
+  - `PostgresVerifyReportRepository`
+  - `PostgresProjectionStateRepository`
+  - `PostgresProjectionFailureRepository`
+- `PostgresUnitOfWork`
+- `build_postgres_uow_factory()`
+- `load_postgres_schema_sql()`
+
+結果:
+- `db/postgres.py` → `99%`
+
+## 今の主要カバレッジ
+
+- `src/ctxledger/config.py` → `100%`
+- `src/ctxledger/db/__init__.py` → `100%`
+- `src/ctxledger/db/memory_uow.py` → `100%`
+- `src/ctxledger/mcp/streamable_http.py` → `100%`
+- `src/ctxledger/runtime/serializers.py` → `100%`
+- `src/ctxledger/runtime/status.py` → `100%`
+- `src/ctxledger/runtime/server_factory.py` → `100%`
+- `src/ctxledger/db/postgres.py` → `99%`
+- `src/ctxledger/memory/service.py` → `99%`
+- `src/ctxledger/projection/writer.py` → `98%`
+- `src/ctxledger/mcp/resource_handlers.py` → `98%`
+- `src/ctxledger/runtime/database_health.py` → `97%`
+- `src/ctxledger/runtime/http_runtime.py` → `97%`
+- `src/ctxledger/mcp/tool_schemas.py` → `96%`
+- `src/ctxledger/__init__.py` → `95%`
+- `src/ctxledger/mcp/lifecycle.py` → `95%`
+- `src/ctxledger/server.py` → `95%`
+- `src/ctxledger/http_app.py` → `93%`
+- `src/ctxledger/runtime/orchestration.py` → `92%`
+- `src/ctxledger/workflow/service.py` → `92%`
+- `src/ctxledger/mcp/tool_handlers.py` → `91%`
+- `src/ctxledger/runtime/http_handlers.py` → `91%`
+- `src/ctxledger/runtime/server_responses.py` → `91%`
+
+## 条件達成状況
+
+今回の目標だった「coverage 90% 未満のファイルを、90%以上になるまで連続実行」は達成済みです。
+今回の最終レポート上では、90% 未満のファイルはありません。
+
+## テスト結果
+
+- `pytest -q tests/test_mcp_tool_handlers.py`
+  - `92 passed`
+
+- `pytest -q tests/test_postgres_helpers.py`
+  - `34 passed`
+
+- `pytest --cov=src/ctxledger --cov-report=term-missing tests/test_coverage_targets.py tests/test_workflow_service.py tests/test_mcp_modules.py tests/test_config.py tests/test_cli.py tests/test_mcp_tool_handlers.py tests/test_postgres_helpers.py`
+  - `394 passed`
+
+## 今回追加・更新した主なテストファイル
+
+- `tests/test_mcp_modules.py`
+- `tests/test_config.py`
+- `tests/test_cli.py`
+- `tests/test_mcp_tool_handlers.py`
+- `tests/test_postgres_helpers.py`
+
+## 現在の未コミット差分
+
+- `M tests/test_cli.py`
+- `M tests/test_config.py`
+- `M tests/test_coverage_targets.py`
+- `M tests/test_mcp_modules.py`
+- `M tests/test_workflow_service.py`
+- `M last_session.md`
+- `?? tests/test_mcp_tool_handlers.py`
+- `?? tests/test_postgres_helpers.py`
+- `?? .coverage`
+
+次の session では、必要ならこの差分を確認して `git commit` まで進めればよい状態です。

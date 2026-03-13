@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -23,6 +24,7 @@ from ctxledger.workflow.service import (
     ResumeWorkflowInput,
     StartWorkflowInput,
     VerifyStatus,
+    WorkflowAttempt,
     WorkflowAttemptMismatchError,
     WorkflowAttemptStatus,
     WorkflowCompleteResult,
@@ -548,6 +550,385 @@ def test_create_checkpoint_raises_for_unknown_attempt() -> None:
         assert exc.code == "attempt_not_found"
     else:
         raise AssertionError("Expected AttemptNotFoundError")
+
+
+def test_complete_workflow_rejects_non_terminal_target_status() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(workspace_id=workspace.workspace_id, ticket_id="OPEN")
+    )
+
+    try:
+        service.complete_workflow(
+            CompleteWorkflowInput(
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                workflow_status=WorkflowInstanceStatus.RUNNING,
+            )
+        )
+    except InvalidStateTransitionError as exc:
+        assert exc.code == "invalid_state_transition"
+        assert "non-terminal state" in str(exc)
+    else:
+        raise AssertionError("Expected InvalidStateTransitionError")
+
+
+def test_resume_workflow_returns_inconsistent_without_attempt() -> None:
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="NO-ATTEMPT",
+        )
+    )
+
+    uow.attempts_by_id.pop(started.attempt.attempt_id, None)
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert resume.attempt is None
+    assert resume.resumable_status == ResumableStatus.INCONSISTENT
+    assert any(
+        warning.code == "running_workflow_without_attempt"
+        for warning in resume.warnings
+    )
+    assert (
+        resume.next_hint
+        == "No attempt is available. Inspect workflow consistency before continuing."
+    )
+
+
+def test_resume_workflow_returns_blocked_for_non_running_latest_attempt() -> None:
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="STOPPED-ATTEMPT",
+        )
+    )
+
+    stopped_attempt = WorkflowAttempt(
+        attempt_id=started.attempt.attempt_id,
+        workflow_instance_id=started.attempt.workflow_instance_id,
+        attempt_number=started.attempt.attempt_number,
+        status=WorkflowAttemptStatus.FAILED,
+        failure_reason="stopped",
+        verify_status=started.attempt.verify_status,
+        started_at=started.attempt.started_at,
+        finished_at=datetime(2024, 1, 1, tzinfo=UTC),
+        created_at=started.attempt.created_at,
+        updated_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    uow.attempts_by_id[stopped_attempt.attempt_id] = stopped_attempt
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert resume.attempt is not None
+    assert resume.attempt.status == WorkflowAttemptStatus.FAILED
+    assert resume.resumable_status == ResumableStatus.BLOCKED
+
+
+def test_resume_workflow_adds_missing_verify_report_warning() -> None:
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="VERIFY-WARNING",
+        )
+    )
+
+    attempt_with_verify = WorkflowAttempt(
+        attempt_id=started.attempt.attempt_id,
+        workflow_instance_id=started.attempt.workflow_instance_id,
+        attempt_number=started.attempt.attempt_number,
+        status=started.attempt.status,
+        failure_reason=started.attempt.failure_reason,
+        verify_status=VerifyStatus.PASSED,
+        started_at=started.attempt.started_at,
+        finished_at=started.attempt.finished_at,
+        created_at=started.attempt.created_at,
+        updated_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    uow.attempts_by_id[attempt_with_verify.attempt_id] = attempt_with_verify
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    missing_verify_warning = next(
+        warning
+        for warning in resume.warnings
+        if warning.code == "missing_verify_report"
+    )
+    assert missing_verify_warning.details == {
+        "attempt_id": str(started.attempt.attempt_id)
+    }
+
+
+def test_resume_workflow_adds_open_projection_failure_warning_details() -> None:
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="OPEN-PROJECTION",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="checkpointed",
+        )
+    )
+
+    uow.projection_states_by_key[
+        (
+            workspace.workspace_id,
+            started.workflow_instance.workflow_instance_id,
+            ProjectionArtifactType.RESUME_JSON,
+        )
+    ] = ProjectionInfo(
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        status=ProjectionStatus.FAILED,
+        target_path=".agent/resume.json",
+        open_failure_count=2,
+    )
+    uow.projection_failures_by_key[
+        (
+            workspace.workspace_id,
+            started.workflow_instance.workflow_instance_id,
+            ProjectionArtifactType.RESUME_JSON,
+        )
+    ] = [
+        ProjectionFailureInfo(
+            attempt_id=started.attempt.attempt_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            target_path=".agent/resume.json",
+            error_code="io_error",
+            error_message="write failed",
+            occurred_at=datetime(2024, 1, 1, tzinfo=UTC),
+            resolved_at=None,
+            open_failure_count=2,
+            retry_count=1,
+            status="open",
+        )
+    ]
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    warning = next(
+        warning
+        for warning in resume.warnings
+        if warning.code == "open_projection_failure"
+    )
+    assert warning.details["projection_type"] == "resume_json"
+    assert warning.details["target_path"] == ".agent/resume.json"
+    assert warning.details["open_failure_count"] == 2
+    assert warning.details["failures"] == [
+        {
+            "projection_type": "resume_json",
+            "target_path": ".agent/resume.json",
+            "attempt_id": str(started.attempt.attempt_id),
+            "error_code": "io_error",
+            "error_message": "write failed",
+            "occurred_at": "2024-01-01T00:00:00+00:00",
+            "resolved_at": None,
+            "open_failure_count": 2,
+            "retry_count": 1,
+            "status": "open",
+        }
+    ]
+
+
+def test_resume_workflow_adds_missing_projection_warning() -> None:
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="MISSING-PROJECTION",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="checkpointed",
+        )
+    )
+
+    uow.projection_states_by_key[
+        (
+            workspace.workspace_id,
+            started.workflow_instance.workflow_instance_id,
+            ProjectionArtifactType.RESUME_MD,
+        )
+    ] = ProjectionInfo(
+        projection_type=ProjectionArtifactType.RESUME_MD,
+        status=ProjectionStatus.MISSING,
+        target_path=".agent/resume.md",
+        open_failure_count=0,
+    )
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    warning = next(
+        warning for warning in resume.warnings if warning.code == "missing_projection"
+    )
+    assert warning.details == {
+        "projection_type": "resume_md",
+        "target_path": ".agent/resume.md",
+    }
+
+
+def test_build_resume_warnings_returns_resolved_projection_failure_warning() -> None:
+    service, _ = make_service_and_uow()
+
+    workflow = SimpleNamespace(status=WorkflowInstanceStatus.RUNNING)
+    attempt = SimpleNamespace(
+        attempt_id=uuid4(),
+        status=WorkflowAttemptStatus.RUNNING,
+        verify_status=None,
+    )
+    latest_checkpoint = SimpleNamespace()
+    projections = (
+        ProjectionInfo(
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FAILED,
+            target_path=".agent/resume.json",
+            open_failure_count=0,
+        ),
+    )
+    closed_projection_failures = [
+        ProjectionFailureInfo(
+            attempt_id=uuid4(),
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            target_path=".agent/resume.json",
+            error_code="io_error",
+            error_message="resolved write failure",
+            occurred_at=datetime(2024, 1, 1, tzinfo=UTC),
+            resolved_at=datetime(2024, 1, 2, tzinfo=UTC),
+            open_failure_count=0,
+            retry_count=1,
+            status="resolved",
+        )
+    ]
+
+    warnings = service._build_resume_warnings(
+        workflow,
+        attempt,
+        latest_checkpoint,
+        None,
+        projections,
+        [],
+        closed_projection_failures,
+    )
+
+    warning = next(
+        item for item in warnings if item.code == "resolved_projection_failure"
+    )
+    assert warning.message == "resume projection has previously resolved write failures"
+    assert warning.details["projection_type"] == "resume_json"
+    assert warning.details["target_path"] == ".agent/resume.json"
+    assert warning.details["open_failure_count"] == 0
+    assert warning.details["failures"][0]["status"] == "resolved"
+
+
+def test_derive_next_hint_uses_summary_when_next_action_missing() -> None:
+    service, _ = make_service_and_uow()
+
+    hint = service._derive_next_hint(
+        SimpleNamespace(is_terminal=False),
+        SimpleNamespace(),
+        SimpleNamespace(
+            step_name="implement_feature",
+            summary="Continue implementation",
+            checkpoint_json={},
+        ),
+        ResumableStatus.RESUMABLE,
+    )
+
+    assert (
+        hint
+        == "Resume from step 'implement_feature' using the latest checkpoint summary."
+    )
+
+
+def test_derive_next_hint_uses_step_name_when_summary_missing() -> None:
+    service, _ = make_service_and_uow()
+
+    hint = service._derive_next_hint(
+        SimpleNamespace(is_terminal=False),
+        SimpleNamespace(),
+        SimpleNamespace(
+            step_name="implement_feature",
+            summary=None,
+            checkpoint_json={},
+        ),
+        ResumableStatus.RESUMABLE,
+    )
+
+    assert hint == "Resume from step 'implement_feature'."
+
+
+def test_validate_helpers_reject_empty_values() -> None:
+    service, _ = make_service_and_uow()
+
+    with pytest.raises(Exception, match="repo_url must not be empty"):
+        service._validate_workspace_input(
+            RegisterWorkspaceInput(
+                repo_url="   ",
+                canonical_path="/tmp/repo",
+                default_branch="main",
+            )
+        )
+
+    with pytest.raises(Exception, match="canonical_path must not be empty"):
+        service._validate_workspace_input(
+            RegisterWorkspaceInput(
+                repo_url="https://example.com/org/repo.git",
+                canonical_path="   ",
+                default_branch="main",
+            )
+        )
+
+    with pytest.raises(Exception, match="default_branch must not be empty"):
+        service._validate_workspace_input(
+            RegisterWorkspaceInput(
+                repo_url="https://example.com/org/repo.git",
+                canonical_path="/tmp/repo",
+                default_branch="   ",
+            )
+        )
+
+    with pytest.raises(Exception, match="ticket_id must not be empty"):
+        service._validate_ticket_id("   ")
+
+    with pytest.raises(Exception, match="step_name must not be empty"):
+        service._validate_step_name("   ")
 
 
 def test_register_workspace_updates_existing_workspace_with_explicit_workspace_id() -> (
