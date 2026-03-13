@@ -37,9 +37,9 @@ However, when evaluated strictly against the `v0.1.0` implementation plan, there
 
 The most important remaining gaps are now narrower than before:
 
-1. **A minimal primary HTTP MCP endpoint at `/mcp` is now evidenced, but the exact acceptance boundary still needs clarification**
+1. **A minimal primary HTTP MCP endpoint at `/mcp` is now evidenced, and that minimal path should be treated as the strongest current `v0.1.0` acceptance surface**
 2. **The visible MCP protocol surface is now proven on HTTP for the minimal path, and the repository has since moved to HTTP-only transport semantics**
-3. **Some acceptance criteria may still need broader HTTP closeout evidence, but the remaining concern is no longer transport selection**
+3. **Any broader MCP coverage question should be treated as a separate release-framing decision, not as uncertainty about the active transport direction**
 
 ---
 
@@ -257,7 +257,7 @@ The plan acceptance criteria include public and behavioral expectations such as:
 
 A number of these are strongly suggested by current code and tests.  
 In addition, the public HTTP MCP surface is now directly evidenced for the minimal `/mcp` path (`initialize`, `tools/list`, `tools/call`).  
-However, the public HTTP MCP evidence is still incomplete for some required tools and resources as explicit closeout proof.
+That minimal path should be treated as the strongest current acceptance evidence for `v0.1.0`, while any additional HTTP MCP resource or protocol-scope proof should be tracked separately as broader closeout evidence.
 
 ### Assessment
 **Partially aligned / needs validation**
@@ -376,11 +376,12 @@ That materially strengthens the implementation-plan evidence for a minimum usabl
 ### Remaining follow-up
 The highest-priority follow-up is now:
 
-- tighten the HTTP acceptance boundary for `/mcp`
+- keep the minimal confirmed `/mcp` path explicit in release wording
 - confirm whether additional MCP resource operations are required for final closeout
 - keep release evidence centered on the HTTP MCP surface
 
-Schema-discovery evidence can now be counted as part of the HTTP release story, but broader acceptance proof may still need an explicit matrix.
+Schema-discovery evidence can now be counted as part of the HTTP release story.  
+Broader acceptance proof, if desired, should be represented as an explicit additional matrix rather than as a prerequisite for acknowledging the already-confirmed minimal HTTP MCP path.
 
 ---
 
@@ -486,7 +487,9 @@ Specifically, repository evidence confirms HTTP handling for:
 - `tools/list`
 - `tools/call`
 
-The remaining question is whether final release acceptance must also require:
+This minimal confirmed path should be treated as the strongest current `v0.1.0` acceptance surface.
+
+The remaining question is whether final release acceptance must also require additional proof for:
 
 - `resources/list`
 - `resources/read`
@@ -710,22 +713,23 @@ Until those are resolved or formally reconciled, `v0.1.0` should be treated as *
 
 Start from the concrete audit findings already established:
 
-1. treat the currently confirmed minimal HTTP MCP surface as **authoritative for `v0.1.0` transport evidence**
-2. treat the currently confirmed HTTP workflow/ops route set as including:
+1. treat the currently confirmed minimal HTTP MCP surface as **authoritative for current `v0.1.0` transport evidence**
+2. treat that minimal `/mcp` path as the strongest currently confirmed acceptance surface
+3. treat the currently confirmed HTTP workflow/ops route set as including:
    - `workflow_resume`
    - `workflow_closed_projection_failures`
    - `projection_failures_ignore`
    - `projection_failures_resolve`
    - optional debug routes
-3. treat the current `/mcp` state as:
+4. treat the current `/mcp` state as:
    - configured
    - documented
    - evidenced as a usable minimal HTTP MCP protocol endpoint
-4. treat the next unresolved public-surface questions as:
-   - whether the minimal `/mcp` path is sufficient for final acceptance
+5. treat the next unresolved public-surface questions as:
+   - whether the minimal `/mcp` path is sufficient for final acceptance wording
    - whether required resources must also be exposed through the HTTP MCP transport
    - whether any broader MCP operations still need explicit proof
-5. compare all of the above against:
+6. compare all of the above against:
    - `docs/imple_plan_0.1.0.md`
    - `docs/specification.md`
    - `README.md`
