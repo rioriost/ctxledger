@@ -144,12 +144,14 @@ It captures:
   - other OIDC-aware gateways
   - organization-standard gateways
 - readiness questions that must be answered before final selection
+- the weighted scoring rubric used to narrow candidates more concretely
 
 This is the best document for answering:
 
 - “How are we supposed to compare large-pattern gateway options?”
 - “Why has no gateway been chosen yet?”
 - “What must be validated before selection?”
+- “How should we score or shortlist candidates before a final decision record?”
 
 ---
 
@@ -201,6 +203,9 @@ Use this section if you do not want to read everything in order.
 ### “How are future large-pattern gateways being compared?”
 - `docs/plans/auth_large_gateway_evaluation_memo.md`
 
+### “How should we score or shortlist gateway candidates before final selection?”
+- `docs/plans/auth_large_gateway_evaluation_memo.md`
+
 ### “Where should the final large-pattern gateway choice be recorded?”
 - `docs/plans/auth_large_gateway_decision_record_template.md`
 
@@ -240,6 +245,10 @@ Read:
 3. `docs/plans/auth_large_gateway_decision_record_template.md`
 4. `docs/roadmap.md`
 
+For shortlist preparation specifically, use the scoring rubric and worksheet in:
+
+- `docs/plans/auth_large_gateway_evaluation_memo.md`
+
 ---
 
 ## 5. Scope Boundaries
@@ -276,4 +285,4 @@ At the current repository stage:
 
 In short:
 
-> use the small-pattern runbook for current operation, use the scaling plan and evaluation memo for future planning, and use the decision-record template only when the project is truly ready to choose a large-pattern gateway.
+> use the small-pattern runbook for current operation, use the scaling plan and evaluation memo for future planning, use the evaluation memo’s scoring rubric when narrowing a shortlist, and use the decision-record template only when the project is truly ready to choose a large-pattern gateway.

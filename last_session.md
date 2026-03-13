@@ -419,6 +419,19 @@ docs consistency cleanup:
   - `tests/test_cli.py`
   - `tests/test_server.py`
   を実行し、`178 passed` を確認しました。
+- 次に large-pattern design prep をさらに進めるなら、scoring rubric を使った **example scorecard / mock shortlist** を 1 枚追加するのが自然です。
+- その artifact では:
+  - `Pomerium`
+  - `oauth2-proxy`
+  - organization-standard gateway
+  - other OIDC-aware gateway
+  を provisional に比較し、
+  - MCP IDE compatibility
+  - operational fit
+  - identity propagation readiness
+  - architecture alignment
+  の観点で例示的に shortlisting するのがよさそうです。
+- ただしそれは final gateway decision ではなく、future decision record に進む前の design-prep material として扱うべきです。
 
 次 session への引き継ぎ候補:
 - `git status` を見て今回の docs/navigation 変更を確認する
@@ -431,6 +444,10 @@ docs consistency cleanup:
 - `docs/plans/auth_large_gateway_evaluation_memo.md` の scoring rubric を使って、candidate shortlisting の example scorecard や filled example を 1 枚追加するのも自然
 - `README.md` の documentation index と `docs/plans/auth_planning_index.md` / `docs/CONTRIBUTING.md` / `docs/plans/mcp_planning_index.md` の導線は追加済みなので、必要なら次は plans 間の相互リンクや auth index から具体 plans への cross-reference をもう一段強化する
 - integration-test recovery の観点では、small-pattern live validation 後に full test suite が失敗した場合、まず overlay stack を落としてから `pytest -q` を再実行する
+- large-pattern design prep の次段として、candidate shortlisting 用の example scorecard / mock shortlist artifact を 1 枚追加するのが自然
+  - scoring rubric を実例化
+  - final decision ではなく provisional shortlist として扱う
+  - 将来の actual decision record へ橋渡しする資料にする
 
 今回の作業:
 - small pattern をさらに進め、**proxy-only auth cleanup** を実施しました。
