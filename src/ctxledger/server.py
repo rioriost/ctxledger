@@ -47,41 +47,11 @@ from .runtime.database_health import (
 )
 from .runtime.errors import ServerBootstrapError
 from .runtime.http_handlers import (
-    build_closed_projection_failures_http_handler as extracted_build_closed_projection_failures_http_handler,
-)
-from .runtime.http_handlers import (
     build_http_auth_error_response,
     extract_bearer_token,
     parse_optional_projection_type_argument,
     parse_required_uuid_argument,
     require_http_bearer_auth,
-)
-from .runtime.http_handlers import (
-    build_mcp_http_handler as extracted_build_mcp_http_handler,
-)
-from .runtime.http_handlers import (
-    build_projection_failures_ignore_http_handler as extracted_build_projection_failures_ignore_http_handler,
-)
-from .runtime.http_handlers import (
-    build_projection_failures_resolve_http_handler as extracted_build_projection_failures_resolve_http_handler,
-)
-from .runtime.http_handlers import (
-    build_runtime_introspection_http_handler as extracted_build_runtime_introspection_http_handler,
-)
-from .runtime.http_handlers import (
-    build_runtime_routes_http_handler as extracted_build_runtime_routes_http_handler,
-)
-from .runtime.http_handlers import (
-    build_runtime_tools_http_handler as extracted_build_runtime_tools_http_handler,
-)
-from .runtime.http_handlers import (
-    build_workflow_resume_http_handler as extracted_build_workflow_resume_http_handler,
-)
-from .runtime.http_handlers import (
-    parse_closed_projection_failures_request_path as extracted_parse_closed_projection_failures_request_path,
-)
-from .runtime.http_handlers import (
-    parse_workflow_resume_request_path as extracted_parse_workflow_resume_request_path,
 )
 from .runtime.http_runtime import (
     build_http_runtime_adapter as extracted_build_http_runtime_adapter,
@@ -127,13 +97,7 @@ from .runtime.server_responses import (
     build_runtime_tools_response as extracted_build_runtime_tools_response,
 )
 from .runtime.server_responses import (
-    build_workflow_detail_resource_response as extracted_build_workflow_detail_resource_response,
-)
-from .runtime.server_responses import (
     build_workflow_resume_response as extracted_build_workflow_resume_response,
-)
-from .runtime.server_responses import (
-    build_workspace_resume_resource_response as extracted_build_workspace_resume_resource_response,
 )
 from .runtime.status import (
     build_health_status,
@@ -415,6 +379,10 @@ class CtxLedgerServer:
         self,
         workspace_id: UUID,
     ) -> McpResourceResponse:
+        from .runtime.server_responses import (
+            build_workspace_resume_resource_response,
+        )
+
         return build_workspace_resume_resource_response(self, workspace_id)
 
     def build_workflow_detail_resource_response(
@@ -422,6 +390,10 @@ class CtxLedgerServer:
         workspace_id: UUID,
         workflow_instance_id: UUID,
     ) -> McpResourceResponse:
+        from .runtime.server_responses import (
+            build_workflow_detail_resource_response,
+        )
+
         return build_workflow_detail_resource_response(
             self,
             workspace_id,
@@ -549,160 +521,6 @@ def dispatch_http_request(
     )
 
 
-def build_workflow_resume_response(
-    server: CtxLedgerServer,
-    workflow_instance_id: UUID,
-) -> WorkflowResumeResponse:
-    return extracted_build_workflow_resume_response(server, workflow_instance_id)
-
-
-def build_closed_projection_failures_response(
-    server: CtxLedgerServer,
-    workflow_instance_id: UUID,
-) -> ProjectionFailureHistoryResponse:
-    return extracted_build_closed_projection_failures_response(
-        server,
-        workflow_instance_id,
-    )
-
-
-def build_projection_failures_ignore_response(
-    server: CtxLedgerServer,
-    *,
-    workspace_id: UUID,
-    workflow_instance_id: UUID,
-    projection_type: ProjectionArtifactType | None = None,
-) -> ProjectionFailureActionResponse:
-    return extracted_build_projection_failures_ignore_response(
-        server,
-        workspace_id=workspace_id,
-        workflow_instance_id=workflow_instance_id,
-        projection_type=projection_type,
-    )
-
-
-def build_projection_failures_resolve_response(
-    server: CtxLedgerServer,
-    *,
-    workspace_id: UUID,
-    workflow_instance_id: UUID,
-    projection_type: ProjectionArtifactType | None = None,
-) -> ProjectionFailureActionResponse:
-    return extracted_build_projection_failures_resolve_response(
-        server,
-        workspace_id=workspace_id,
-        workflow_instance_id=workflow_instance_id,
-        projection_type=projection_type,
-    )
-
-
-def build_runtime_introspection_response(
-    server: CtxLedgerServer,
-) -> RuntimeIntrospectionResponse:
-    return extracted_build_runtime_introspection_response(server)
-
-
-def build_runtime_routes_response(
-    server: CtxLedgerServer,
-) -> RuntimeIntrospectionResponse:
-    return extracted_build_runtime_routes_response(server)
-
-
-def build_runtime_tools_response(
-    server: CtxLedgerServer,
-) -> RuntimeIntrospectionResponse:
-    return extracted_build_runtime_tools_response(server)
-
-
-def build_workspace_resume_resource_response(
-    server: CtxLedgerServer,
-    workspace_id: UUID,
-) -> McpResourceResponse:
-    return extracted_build_workspace_resume_resource_response(server, workspace_id)
-
-
-def build_workflow_detail_resource_response(
-    server: CtxLedgerServer,
-    workspace_id: UUID,
-    workflow_instance_id: UUID,
-) -> McpResourceResponse:
-    return extracted_build_workflow_detail_resource_response(
-        server,
-        workspace_id,
-        workflow_instance_id,
-    )
-
-
-def _parse_required_uuid_argument(
-    arguments: dict[str, Any],
-    field_name: str,
-) -> UUID | McpToolResponse:
-    return parse_required_uuid_argument(arguments, field_name)
-
-
-def _parse_optional_projection_type_argument(
-    arguments: dict[str, Any],
-) -> ProjectionArtifactType | None | McpToolResponse:
-    return parse_optional_projection_type_argument(arguments)
-
-
-def parse_workflow_resume_request_path(path: str) -> UUID | None:
-    return extracted_parse_workflow_resume_request_path(path)
-
-
-def build_workflow_resume_http_handler(
-    server: CtxLedgerServer,
-):
-    return extracted_build_workflow_resume_http_handler(server)
-
-
-def parse_closed_projection_failures_request_path(path: str) -> UUID | None:
-    return extracted_parse_closed_projection_failures_request_path(path)
-
-
-def build_closed_projection_failures_http_handler(
-    server: CtxLedgerServer,
-):
-    return extracted_build_closed_projection_failures_http_handler(server)
-
-
-def build_projection_failures_ignore_http_handler(
-    server: CtxLedgerServer,
-):
-    return extracted_build_projection_failures_ignore_http_handler(server)
-
-
-def build_projection_failures_resolve_http_handler(
-    server: CtxLedgerServer,
-):
-    return extracted_build_projection_failures_resolve_http_handler(server)
-
-
-def build_runtime_introspection_http_handler(
-    server: CtxLedgerServer,
-):
-    return extracted_build_runtime_introspection_http_handler(server)
-
-
-def build_runtime_routes_http_handler(
-    server: CtxLedgerServer,
-):
-    return extracted_build_runtime_routes_http_handler(server)
-
-
-def build_runtime_tools_http_handler(
-    server: CtxLedgerServer,
-):
-    return extracted_build_runtime_tools_http_handler(server)
-
-
-def build_mcp_http_handler(
-    runtime: McpRuntimeProtocol,
-    server: CtxLedgerServer,
-):
-    return extracted_build_mcp_http_handler(runtime, server)
-
-
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
     return extracted_build_http_runtime_adapter(server)
 
@@ -782,47 +600,29 @@ __all__ = [
     "ServerRuntime",
     "WorkflowResumeResponse",
     "WorkflowServiceFactory",
-    "build_closed_projection_failures_http_handler",
-    "build_closed_projection_failures_response",
     "build_http_runtime_adapter",
     "build_mcp_error_response",
     "build_mcp_success_response",
-    "build_projection_failures_ignore_http_handler",
-    "build_projection_failures_ignore_response",
-    "build_projection_failures_resolve_http_handler",
-    "build_projection_failures_resolve_response",
     "build_memory_get_context_tool_handler",
-    "build_runtime_introspection_http_handler",
-    "build_runtime_introspection_response",
-    "build_runtime_routes_http_handler",
-    "build_runtime_routes_response",
-    "build_runtime_tools_http_handler",
-    "build_runtime_tools_response",
     "build_memory_remember_episode_tool_handler",
     "build_memory_search_tool_handler",
     "build_projection_failures_ignore_tool_handler",
     "build_projection_failures_resolve_tool_handler",
     "build_resume_workflow_tool_handler",
     "build_workspace_resume_resource_handler",
-    "build_workspace_resume_resource_response",
     "build_workflow_detail_resource_handler",
-    "build_workflow_detail_resource_response",
     "build_workspace_register_tool_handler",
     "build_workflow_checkpoint_tool_handler",
     "build_workflow_complete_tool_handler",
     "build_workflow_start_tool_handler",
     "collect_runtime_introspection",
     "_print_runtime_summary",
-    "build_workflow_resume_http_handler",
-    "build_workflow_resume_response",
     "build_workflow_service_factory",
     "create_runtime",
     "create_server",
     "dispatch_http_request",
-    "parse_closed_projection_failures_request_path",
     "parse_workspace_resume_resource_uri",
     "parse_workflow_detail_resource_uri",
-    "parse_workflow_resume_request_path",
     "run_server",
     "serialize_closed_projection_failures_history",
     "serialize_runtime_introspection",
