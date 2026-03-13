@@ -261,6 +261,15 @@ docs consistency cleanup:
 - `docs/specification.md` も最終横断チェックの一環で追従し、
   - Security section の `Bearer token authentication` を `Proxy-layer authentication` に更新しました。
 - `README.md` / `docs/workflow-model.md` は今回の確認範囲では proxy-only auth model と矛盾する明確な修正点は見当たりませんでした。
+- small pattern の operator-facing 手順を整理するため、`docs/small_auth_operator_runbook.md` を新規追加しました。
+  - startup
+  - health verification
+  - missing/invalid/valid token smoke verification
+  - client target `http://127.0.0.1:8091/mcp`
+  - shutdown with layered compose files
+  - common failure modes
+  を 1 枚にまとめています。
+- `README.md` の small Traefik auth pattern 節から、この runbook への参照も追加しました。
 - この cleanup により、large-pattern memo 追加後の docs 群はより一貫して **proxy-only auth / proxy-first security boundary** を前提に読める状態になっています。
 - なお `docs/imple_plan_0.1.0.md` は historical planning document 的な性格もあるため、今後さらに厳密に current-state aligned wording へ寄せるかどうかは別途判断余地があります。
 

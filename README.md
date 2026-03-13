@@ -730,6 +730,8 @@ This validates that the proxy-protected remote MCP server still supports:
 
 If you want to validate the small pattern described in `docs/plans/auth_proxy_scaling_plan.md`, run the stack with the Traefik/auth overlay.
 
+For a step-by-step operator procedure covering startup, auth verification, client targeting, shutdown, and common failure modes, see `docs/small_auth_operator_runbook.md`.
+
 This setup is intended to keep the MCP backend private behind the proxy:
 
 - `traefik` is the only host-exposed entrypoint
