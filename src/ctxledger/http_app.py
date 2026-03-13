@@ -9,6 +9,16 @@ from uuid import UUID
 from fastapi import FastAPI, Request, Response
 
 from .config import AppSettings
+from .runtime.http_handlers import (
+    build_closed_projection_failures_http_handler,
+    build_mcp_http_handler,
+    build_projection_failures_ignore_http_handler,
+    build_projection_failures_resolve_http_handler,
+    build_runtime_introspection_http_handler,
+    build_runtime_routes_http_handler,
+    build_runtime_tools_http_handler,
+    build_workflow_resume_http_handler,
+)
 from .server import CtxLedgerServer, create_server
 
 
@@ -72,27 +82,32 @@ def _request_body_text(body: bytes) -> str | None:
     return body.decode("utf-8")
 
 
+def _server_not_ready_response() -> Response:
+    return Response(
+        content=_encode_payload(
+            {
+                "error": {
+                    "code": "server_not_ready",
+                    "message": "runtime is not initialized",
+                }
+            }
+        ),
+        status_code=503,
+        media_type="application/json",
+    )
+
+
 def _build_get_route(
     server: CtxLedgerServer,
-    route_name: str,
+    handler_factory: Callable[[CtxLedgerServer], Callable[[str], Any]],
 ) -> Callable[[Request], Response]:
+    handler = handler_factory(server)
+
     async def _handler(request: Request) -> Response:
-        runtime = server.runtime
-        if runtime is None:
-            return Response(
-                content=_encode_payload(
-                    {
-                        "error": {
-                            "code": "server_not_ready",
-                            "message": "runtime is not initialized",
-                        }
-                    }
-                ),
-                status_code=503,
-                media_type="application/json",
-            )
+        if server.runtime is None:
+            return _server_not_ready_response()
         path = _full_path_with_query(request)
-        result = runtime.dispatch(route_name, path)
+        result = handler(path)
         return _response_from_runtime_result(result)
 
     return _handler
@@ -100,27 +115,17 @@ def _build_get_route(
 
 def _build_post_route(
     server: CtxLedgerServer,
-    route_name: str,
+    handler_factory: Callable[[Any, CtxLedgerServer], Callable[[str, str | None], Any]],
 ) -> Callable[[Request], Response]:
+    runtime = server.runtime
+    handler = None if runtime is None else handler_factory(runtime, server)
+
     async def _handler(request: Request) -> Response:
-        runtime = server.runtime
-        if runtime is None:
-            return Response(
-                content=_encode_payload(
-                    {
-                        "error": {
-                            "code": "server_not_ready",
-                            "message": "runtime is not initialized",
-                        }
-                    }
-                ),
-                status_code=503,
-                media_type="application/json",
-            )
+        if handler is None:
+            return _server_not_ready_response()
         body = await request.body()
         path = _full_path_with_query(request)
-        result = runtime.dispatch(
-            route_name,
+        result = handler(
             path,
             _request_body_text(body),
         )
@@ -141,42 +146,42 @@ def create_fastapi_app(server: CtxLedgerServer) -> FastAPI:
 
     app.add_api_route(
         mcp_path,
-        _build_post_route(server, "mcp_rpc"),
+        _build_post_route(server, build_mcp_http_handler),
         methods=["POST"],
     )
     app.add_api_route(
         "/debug/runtime",
-        _build_get_route(server, "runtime_introspection"),
+        _build_get_route(server, build_runtime_introspection_http_handler),
         methods=["GET"],
     )
     app.add_api_route(
         "/debug/routes",
-        _build_get_route(server, "runtime_routes"),
+        _build_get_route(server, build_runtime_routes_http_handler),
         methods=["GET"],
     )
     app.add_api_route(
         "/debug/tools",
-        _build_get_route(server, "runtime_tools"),
+        _build_get_route(server, build_runtime_tools_http_handler),
         methods=["GET"],
     )
     app.add_api_route(
         "/workflow-resume/{workflow_instance_id}",
-        _build_get_route(server, "workflow_resume"),
+        _build_get_route(server, build_workflow_resume_http_handler),
         methods=["GET"],
     )
     app.add_api_route(
         "/workflow-resume/{workflow_instance_id}/closed-projection-failures",
-        _build_get_route(server, "workflow_closed_projection_failures"),
+        _build_get_route(server, build_closed_projection_failures_http_handler),
         methods=["GET"],
     )
     app.add_api_route(
         "/projection_failures_ignore",
-        _build_get_route(server, "projection_failures_ignore"),
+        _build_get_route(server, build_projection_failures_ignore_http_handler),
         methods=["GET"],
     )
     app.add_api_route(
         "/projection_failures_resolve",
-        _build_get_route(server, "projection_failures_resolve"),
+        _build_get_route(server, build_projection_failures_resolve_http_handler),
         methods=["GET"],
     )
 
@@ -185,8 +190,6 @@ def create_fastapi_app(server: CtxLedgerServer) -> FastAPI:
 
 def create_fastapi_app_from_settings(settings: AppSettings) -> FastAPI:
     server = create_server(settings)
-    if server.runtime is not None and hasattr(server.runtime, "_server"):
-        server.runtime._server = server
     server.startup()
     return create_fastapi_app(server)
 

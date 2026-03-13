@@ -5,34 +5,40 @@
 - 追加で HTTP 側の `resources/list` / `resources/read` も実装済みで、workflow 系 resources も live Docker 上で確認済みです。
 - FastAPI ベースの `src/ctxledger/http_app.py` と Docker 起動導線は維持されています。
 - 認証有効 (`CTXLEDGER_REQUIRE_AUTH=true`) の remote MCP path でも workflow 系 + resource 系 E2E が通る状態は維持されています。
-- 今回の作業では、ユーザー方針に合わせて **stdio MCP サーバの残骸を削除** しました。
-- `src/ctxledger/config.py` から `StdioSettings`、`TransportMode.STDIO`、`TransportMode.BOTH`、`CTXLEDGER_ENABLE_STDIO` 依存を削除しました。
-- `AppSettings` は HTTP 専用 shape に整理し、`transport` は `http` のみを受ける前提に変更しました。
-- `src/ctxledger/runtime/orchestration.py` から `ctxledger.mcp.stdio` 参照、stdio runtime builder、stdio launch 分岐、stdio summary 出力を削除しました。
-- `tests/test_config.py` から stdio 前提の設定テストを削除し、HTTP 専用の設定期待値に更新しました。
-- `tests/test_cli.py` と `tests/test_server.py` の `StdioSettings` 依存を削除し、`AppSettings` 構築を HTTP 専用 shape に更新しました。
-- repository-wide の追加確認として、`README.md` と `docs/**/*.md` には `CTXLEDGER_ENABLE_STDIO` / `TransportMode.STDIO` / `TransportMode.BOTH` / `StdioSettings` の残骸は見当たらない前提で整理済みです。
-- Docker compose に残っていた `CTXLEDGER_ENABLE_STDIO: "false"` も削除済みです。
-- 一時的に入れてしまった「stdio fallback で import error を逃がす修正」は取り消し済みで、stdio を復活させる方向のコードは入っていません。
+- 以前の整理で stdio MCP サーバの残骸は削除済みで、HTTP 専用 shape に寄せています。
+
+今回の作業:
+- `docs/plans/http_fastapi_cleanup_plan.md` を新規作成し、HTTP MCP + FastAPI 導入後に残っている不要レイヤーの整理方針を文書化しました。
+- cleanup の第一段として、`src/ctxledger/http_app.py` を変更し、FastAPI route から `runtime.dispatch(route_name, ...)` に再委譲せず、`runtime.http_handlers` の具体ハンドラを直接束縛する形に変更しました。
+- これにより、FastAPI が HTTP route ownership を持ち、アプリ層の request flow が追いやすくなりました。
+- `src/ctxledger/http_app.py` から `server.runtime._server = server` の後付け代入を削除しました。
+- `src/ctxledger/runtime/http_runtime.py` を変更し、`HttpRuntimeAdapter` を `HttpRuntimeAdapter(server.settings, server=server)` で構築するようにして、runtime/server の依存関係を生成時に明示しました。
+- `src/ctxledger/server.py` の `HttpRuntimeAdapter.__init__` に `server` 引数を追加し、private field の後付け patch を不要にしました。
+- `src/ctxledger/server.py` の `build_http_runtime_adapter()` から `_server` の後付け代入を削除しました。
+- まだ `server.py` には compatibility wrapper や route registry ベースの仕組みが多く残っていますが、今回の変更で「FastAPI の上にもう一段 route dispatch がある」状態は app entrypoint 側では解消できています。
+- 今回は挙動互換を優先し、`HttpRuntimeAdapter.register_handler()` / `registered_routes()` / `dispatch_http_request()` などのテスト対象はまだ残しています。次段で `server.py` の薄い委譲関数や route registry の縮小を進める想定です。
 
 今回確認したテスト結果:
-- `pytest -q tests/test_config.py tests/test_cli.py tests/test_server.py`
-- 結果: `171 passed`
+- `pytest -q tests/test_server.py tests/test_mcp_modules.py`
+- 結果: `157 passed`
 
-今回のコミット:
-- `957768b` — `Remove leftover stdio runtime support`
-
-現時点で把握している未整理変更:
-- `src/ctxledger/runtime/server_responses.py`
+今回の未コミット変更:
+- `docs/plans/http_fastapi_cleanup_plan.md` を新規追加
+- `src/ctxledger/http_app.py`
+- `src/ctxledger/runtime/http_runtime.py`
 - `src/ctxledger/server.py`
-- これらは stdio cleanup commit には含めていない既存の別変更です
 
-現時点で残っていそうな確認対象:
-1. 上記 2 ファイルの未コミット変更が何かを確認する
-2. 必要なら全体テストを回して HTTP 専用化が他領域へ波及していないか確認する
-3. stdio cleanup 後の repo 状態に合わせて必要なら追加コミットを切る
+現時点での設計メモ:
+- `http_app.py` はかなり自然になった一方、`server.py` は依然として wrapper / re-export / thin delegation が多く、次の cleanup の主対象です。
+- `dispatch_http_request()` は現時点で主に既存テストと route registry ベースの runtime path を支えるために残しています。
+- `registered_routes()` は debug/introspection と既存テストで参照されているため、削除前に introspection の責務整理が必要です。
+- 設定面では `TransportMode` と `http.enabled` の二重性がまだ残っており、HTTP 専用化に合わせた簡素化余地があります。
+- FastAPI app は依然として import 時に `create_default_fastapi_app()` が走る shape なので、必要なら次段で lifespan 管理へ寄せる余地があります。
 
 次セッションで優先してやること:
-- `src/ctxledger/runtime/server_responses.py` と `src/ctxledger/server.py` の未整理変更内容を確認
-- 必要なら `pytest -q` などで全体テスト実行
-- 問題なければ最後の整理コミット
+1. `server.py` の thin wrapper / re-export の棚卸し
+2. テスト import を canonical module (`runtime.http_handlers`, `runtime.server_responses`) に寄せられる箇所から移行
+3. 使われなくなった `server.py` の wrapper を削除
+4. 必要なら `dispatch_http_request()` と route registry の責務を縮小
+5. 変更が一段落したら `pytest -q` で全体確認
+6. 問題なければ cleanup 用の descriptive commit を作成

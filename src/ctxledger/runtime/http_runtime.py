@@ -71,7 +71,7 @@ def build_http_runtime_adapter(
 ) -> HttpRuntimeAdapterProtocol:
     from ..server import HttpRuntimeAdapter
 
-    runtime = HttpRuntimeAdapter(server.settings)
+    runtime = HttpRuntimeAdapter(server.settings, server=server)
     return register_http_runtime_handlers(runtime, server)
 
 

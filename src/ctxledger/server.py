@@ -177,12 +177,13 @@ class HttpRuntimeAdapter:
     def __init__(
         self,
         settings: AppSettings,
+        server: CtxLedgerServer | None = None,
         handlers: dict[str, WorkflowHttpHandler] | None = None,
     ) -> None:
         self.settings = settings
         self._started = False
         self._handlers: dict[str, WorkflowHttpHandler] = handlers or {}
-        self._server: CtxLedgerServer | None = None
+        self._server: CtxLedgerServer | None = server
 
     def register_handler(self, route_name: str, handler: WorkflowHttpHandler) -> None:
         self._handlers[route_name] = handler
@@ -703,9 +704,7 @@ def build_mcp_http_handler(
 
 
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
-    runtime = extracted_build_http_runtime_adapter(server)
-    runtime._server = server
-    return runtime
+    return extracted_build_http_runtime_adapter(server)
 
 
 def build_workflow_service_factory(
