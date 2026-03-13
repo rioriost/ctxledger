@@ -551,7 +551,7 @@ These are **non-canonical projections** and can be regenerated from PostgreSQL.
 Recommended:
 
 - Reverse proxy
-- Bearer token authentication
+- Proxy-layer authentication
 - TLS
 
 ---
