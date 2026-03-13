@@ -19,21 +19,30 @@
 - `src/ctxledger/runtime/http_runtime.py` の `build_http_runtime_adapter()` から `..server` への runtime import 依存を削除しました。
 - `src/ctxledger/server.py` は `HttpRuntimeAdapter` を `ctxledger.runtime.http_runtime` から import する側へ回り、server module から concrete adapter 実装を取り除きました。
 - これにより、`server.py` の責務は一段と bootstrap / lifecycle / public entrypoint 側へ寄りました。
-- 今回さらに `tests/test_server.py` の `HttpRuntimeAdapter` import も `ctxledger.server` ではなく `ctxledger.runtime.http_runtime` から読む形へ変更しました。
+- さらに `tests/test_server.py` の `HttpRuntimeAdapter` import も `ctxledger.server` ではなく `ctxledger.runtime.http_runtime` から読む形へ変更しました。
 - この変更により、`tests/test_server.py` における `ctxledger.server` 依存は `CtxLedgerServer` と `create_server` のみに縮小しました。
-- `HttpRuntimeAdapter` は canonical import location が `ctxledger.runtime.http_runtime` に統一され、test 側でも `server.py` を経由しない import path に寄せられました。
-- session handoff 用の `last_session.md` を今回の内容で更新しました。
+- 続けて `src/ctxledger/server.py` の export surface を棚卸しし、`__all__` を意図的な public API のみに絞りました。
+- `src/ctxledger/server.py` の `__all__` は `CtxLedgerServer` / `create_server` / `run_server` のみを公開する shape に変更しました。
+- あわせて `server.py` から、もはや public surface として残す必要がない大量の import と再公開前提コードを削減しました。
+- この export slimming により、`ctxledger.server` は bootstrap / top-level entrypoint module としての性格がかなり明確になりました。
+- 上記 export slimming の影響で、`src/ctxledger/mcp/tool_handlers.py` に残っていた `from ..server import McpToolResponse` が壊れ、MCP error/success response 生成で `ImportError` が発生しました。
+- `src/ctxledger/mcp/tool_handlers.py` を修正し、`McpToolResponse` の canonical import 先を `ctxledger.runtime.types` に変更しました。
+- これにより、MCP tool response の生成は `server.py` を経由しない形に整理され、slimmed server exports と整合するようになりました。
+- `tests/test_server.py` と `tests/test_cli.py` を回して、export slimming と MCP response import 修正の回帰がないことを確認しました。
 
 今回確認したテスト結果:
 - `pytest -q tests/test_server.py`
 - 結果: `140 passed`
+- `pytest -q tests/test_server.py tests/test_cli.py`
+- 結果: `152 passed`
 
 今回の直近コミット:
 - `d316d74` — `Reduce server test imports to runtime modules`
 - `968499e` — `Trim remaining server test helper imports`
 - `b3a5b95` — `Inline HTTP adapter dispatch helper`
 - `0224852` — `Move HTTP runtime adapter into runtime module`
-- `tests/test_server.py` の `HttpRuntimeAdapter` import 移行変更は、まだ commit していません。
+- `93b472b` — `Import HTTP runtime adapter from canonical module in tests`
+- `server.py` export slimming と `mcp/tool_handlers.py` import fix は、まだ commit していません。
 
 現時点での設計メモ:
 - `server.py` から concrete HTTP adapter 実装が抜けたことで、bootstrap surface と runtime implementation の境界がかなり自然になりました。
@@ -41,15 +50,17 @@
 - `tests/test_server.py` から見た `ctxledger.server` の責務はかなり細ってきており、bootstrap と application server object の窓口に近づいています。
 - `create_runtime` と `print_runtime_summary` は `runtime.orchestration` 側が本来の公開位置として自然です。
 - `build_runtime_dispatch_result()` は削除済みで、HTTP dispatch の public surface は `HttpRuntimeAdapter.dispatch()` に一本化されました。
+- `server.py` の `__all__` は `CtxLedgerServer` / `create_server` / `run_server` のみに絞られ、意図しない compatibility barrel 的役割はかなり薄くなりました。
 - `create_server` はまだ `server.py` が自然な public 窓口です。CLI や app factory の import point としても扱いやすい状態です。
 - `tests/test_cli.py` では `ctxledger.server.run_server` を monkeypatch しているため、`run_server` は現時点では `server.py` の public surface に残しておく方が安全です。
 - `registered_routes()` は依然として debug/introspection で使われており、単純削除ではなく introspection responsibility とセットで整理すべきです。
-- `tests/test_server.py` 側で `HttpRuntimeAdapter` の canonical import への移行は完了したので、今後は `server.py` の再公開をさらに減らせる余地が見えやすくなっています。
+- `mcp/tool_handlers.py` 側の `McpToolResponse` 参照が canonical `runtime.types` に寄ったので、MCP response types の dependency direction はより自然になりました。
+- 今後 `server.py` 内で only internal に使う bridge helper (`build_http_runtime_adapter`, `create_runtime`, `_print_runtime_summary`, `build_workflow_service_factory`) をどう扱うかが、次の cleanup の論点になります。
 
 次セッションで優先してやること:
-1. 今回の `tests/test_server.py` の `HttpRuntimeAdapter` import 移行変更を descriptive commit にまとめる
-2. `server.py` に残っている public surface を棚卸しし、`create_server` と `run_server` と `CtxLedgerServer` 以外で移せるものがないか確認する
+1. 今回の `server.py` export slimming と `mcp/tool_handlers.py` import fix を descriptive commit にまとめる
+2. `server.py` に残っている internal bridge helper（`build_http_runtime_adapter`, `create_runtime`, `_print_runtime_summary`, `build_workflow_service_factory`）をさらに整理できるか確認する
 3. `registered_routes()` と debug/introspection surface の責務整理を進める
 4. 必要なら `tests/test_cli.py` や他の周辺 test も含めて import surface 変更の波及を確認する
 5. 変更がまとまった段階で `pytest -q` を全体実行して回帰確認する
-6. `tests/test_cli.py` の patch 対象も含め、`server.py` の public API をどこまで意図的に残すかを決める
+6. `tests/test_cli.py` の patch 対象も含め、`server.py` の public API をどこまで意図的に残すかを最終的に決める

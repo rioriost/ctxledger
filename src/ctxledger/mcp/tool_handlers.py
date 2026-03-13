@@ -23,11 +23,12 @@ from ..workflow.service import (
 )
 
 if TYPE_CHECKING:
-    from ..server import CtxLedgerServer, McpToolResponse
+    from ..runtime.types import McpToolResponse
+    from ..server import CtxLedgerServer
 
 
 def _mcp_tool_response_cls() -> type["McpToolResponse"]:
-    from ..server import McpToolResponse
+    from ..runtime.types import McpToolResponse
 
     return McpToolResponse
 
