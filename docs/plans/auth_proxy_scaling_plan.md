@@ -338,12 +338,29 @@ Recommended operator shape:
 ### Deliverable A — Auth service implementation
 A minimal service that supports Traefik ForwardAuth token validation.
 
+**Status:** implemented
+
+Current repository shape includes:
+- a lightweight custom auth service under `docker/auth_small/`
+- `GET /auth/verify` for bearer-token validation
+- `GET /healthz` for container health checking
+- optional identity headers returned on successful validation
+
 ### Deliverable B — Compose topology
 A compose configuration that includes:
 - Traefik
 - `auth-small`
 - `ctxledger`
 - PostgreSQL
+
+**Status:** implemented
+
+Current repository shape includes:
+- `docker/docker-compose.small-auth.yml`
+- a `traefik` service as the public entrypoint
+- an `auth-small` service for ForwardAuth
+- a private backend service shape for `ctxledger`
+- PostgreSQL on the internal compose network
 
 ### Deliverable C — Documentation
 README or deployment docs should show:
@@ -352,11 +369,27 @@ README or deployment docs should show:
 - how to point Zed / VS Code to the proxied MCP endpoint
 - how to validate the deployment
 
+**Status:** implemented
+
+Current repository documentation includes:
+- startup instructions for the small pattern
+- the shared-token environment variable shape
+- the proxy endpoint example
+- validation commands for rejection and allow paths
+
 ### Deliverable D — Smoke validation
 A small validation path should prove:
 - proxy rejects missing/invalid token
 - proxy allows valid token
 - MCP initialize/list/call works through the proxy
+
+**Status:** implemented and validated
+
+Validated shape:
+- missing bearer token is rejected before the request reaches `ctxledger`
+- invalid bearer token is rejected before the request reaches `ctxledger`
+- valid bearer token allows MCP traffic through Traefik
+- workflow-oriented MCP smoke, including resource reads, passes through the proxy
 
 ---
 
@@ -369,6 +402,18 @@ Phase 1 is complete when:
 - Zed / VS Code style clients can connect using a bearer token in headers
 - workflow-oriented MCP smoke passes through the proxy
 - the implementation requires no application-level auth logic inside `ctxledger`
+
+**Current assessment:** substantially complete
+
+What is already confirmed:
+- the small-pattern auth service exists and validates static bearer tokens
+- Traefik is wired in front of the private backend in the documented deployment shape
+- rejection of missing and invalid bearer tokens has been validated
+- successful MCP workflow/resource smoke through the proxy has been validated
+- the application continues to avoid taking on additional end-user auth flow complexity for this pattern
+
+Remaining practical consideration:
+- operator-facing polish and future deployment hardening may still evolve, but the core Phase 1 implementation target is now in place
 
 ---
 

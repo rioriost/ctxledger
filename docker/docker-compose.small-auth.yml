@@ -24,7 +24,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget -q -O - http://127.0.0.1:8091/ping >/dev/null 2>&1 || exit 1",
+          "wget -q -O - http://127.0.0.1:8091/ping/ >/dev/null 2>&1 || exit 1",
         ]
       interval: 10s
       timeout: 5s
