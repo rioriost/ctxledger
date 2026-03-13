@@ -5,6 +5,7 @@
 - 追加で HTTP 側の `resources/list` / `resources/read` も実装済みで、workflow 系 resources も live Docker 上で確認済みです。
 - 以前の整理で stdio MCP サーバの残骸は削除済みで、HTTP 専用 shape に寄せています。
 - `server.py` 依存の縮小、HTTP runtime adapter の canonical module への移動、debug/runtime introspection の serializer 整理など、HTTP-only cleanup の大きな pruning は完了済みです。
+- 直近の session では、small pattern / proxy-only auth 周辺の docs・compose・runbook 整理と、その live Docker re-validation を継続しました。
 
 前回までの cleanup 完了事項:
 - `server.py` 依存の縮小を継続し、tests と runtime modules の import を canonical location へ寄せる整理を進めました。
@@ -357,19 +358,6 @@ docs consistency cleanup:
 - この cleanup により、large-pattern memo 追加後の docs 群はより一貫して **proxy-only auth / proxy-first security boundary** を前提に読める状態になっています。
 - なお `docs/imple_plan_0.1.0.md` は historical planning document 的な性格もあるため、今後さらに厳密に current-state aligned wording へ寄せるかどうかは別途判断余地があります。
 - code / test / script 側には `CTXLEDGER_REQUIRE_AUTH` / `CTXLEDGER_AUTH_BEARER_TOKEN` / `AuthSettings` などの旧 app-layer auth 参照は今回の確認範囲では残っていませんでした。
-
-次 session への引き継ぎ候補:
-- `git status` を見て今回の docs/navigation 変更を確認する
-- repo ルールに従って、work loop の区切りで descriptive message 付きの `git commit` を行う
-  - 例: `Add large auth gateway decision record template`
-- 必要なら live Docker validation を再度流し、small-pattern runbook の手順と current operator path が引き続き一致することを確認する
-  - initialize probe を先に流して expected HTTP status を検証する flow
-- large-pattern design prep をさらに進めるなら、`docs/plans/auth_large_gateway_decision_record_template.md` を起点に、candidate evaluation memo から actual selection record へ移るときの ADR/decision-record 運用を整える
-- `README.md` の documentation index には auth/deployment guidance 導線として
-  - `docs/small_auth_operator_runbook.md`
-  - `docs/plans/auth_proxy_scaling_plan.md`
-  - `docs/plans/auth_large_gateway_evaluation_memo.md`
-  を追加済みであり、必要なら次は plans index や contributing guidance からの導線強化を検討する
 - auth/deployment planning materials の導線をさらに整理するため、`docs/plans/auth_planning_index.md` を新規追加しました。
   - current auth model
   - small vs large pattern
@@ -386,32 +374,21 @@ docs consistency cleanup:
   - small auth / proxy work で期待される validation flow
   - auth/deployment docs map
   を追記しました。
+- live Docker validation 後に `pytest -q` をそのまま実行すると、`tests/test_postgres_integration.py` の integration fixture 前提と live stack state が干渉して 6 件の error が出ることを確認しました。
+- 原因は docs 変更や code regression ではなく、small-pattern live validation 後に `ctxledger-postgres` / related Docker state が integration test setup と噛み合わなかったことです。
+- その後、`docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans` で small-pattern stack を明示的に落としてから `pytest -q` を再実行し、`246 passed` に復帰することを確認しました。
+- これにより、integration-test recovery 手順としては「live small-pattern validation 後に overlay stack を落としてから full pytest を流す」が有効だと確認できました。
+
+次 session への引き継ぎ候補:
+- `git status` を見て今回の docs/navigation 変更を確認する
+- repo ルールに従って、work loop の区切りで descriptive message 付きの `git commit` を行う
+  - 例: `Add auth planning index and contributing guide`
+- live Docker validation を再度流す場合は、終了後に
+  - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans`
+  を実行してから full `pytest -q` を流す
 - large-pattern design prep をさらに進めるなら、`docs/plans/auth_large_gateway_decision_record_template.md` を起点に、candidate evaluation memo から actual selection record へ移るときの ADR/decision-record 運用を整える
-- `README.md` の documentation index には auth/deployment guidance 導線として
-  - `docs/small_auth_operator_runbook.md`
-  - `docs/plans/auth_proxy_scaling_plan.md`
-  - `docs/plans/auth_large_gateway_evaluation_memo.md`
-  を追加済みであり、必要なら次は plans index や contributing guidance からの導線強化を検討する
-- 最初は proxy rejection 時に payload 内 `error` object を必須扱いしていましたが、ForwardAuth rejection body は JSON-RPC ではなく plain JSON/transport body でもよいので、この制約を外しました。
-- その結果、proxy rejection path と allow path の両方を同じ smoke script で確認できるようになりました。
-- README も更新しました。
-- small pattern section を追加・更新し、
-  - `docker/docker-compose.small-auth.yml`
-  - `CTXLEDGER_SMALL_AUTH_TOKEN`
-  - proxy port `8091`
-  - missing token `401`
-  - invalid token `401`
-  - valid token で workflow/resource smoke 通過
-  を明記しました。
-- `docs/plans/auth_proxy_scaling_plan.md` に small pattern 実装済み/検証済みの注記を追記しました。
-  - deliverables A-D の status
-  - exit criteria の current assessment
-  - current repository shape と validated shape
-- Traefik healthcheck は `/ping` / `/ping/` が `404` になっていたため、最終的に process-level probe へ変更しました。
-- その結果、small pattern stack 全体が healthy になりました。
-- 未使用だった `docker/auth_small/Dockerfile` は削除済みです。
-- current small pattern は source mount + `python:3.14-slim` + runtime install で一貫させています。
-- これにより、repo 上の auth-small artifact は actual compose runtime shape と一致するようになりました。
+- `README.md` の documentation index と `docs/plans/auth_planning_index.md` / `docs/CONTRIBUTING.md` の導線は追加済みなので、必要なら次は plans 間の相互リンクや auth index から MCP planning index への参照を強化する
+- integration-test recovery の観点では、small-pattern live validation 後に full test suite が失敗した場合、まず overlay stack を落としてから `pytest -q` を再実行する
 
 今回の作業:
 - small pattern をさらに進め、**proxy-only auth cleanup** を実施しました。

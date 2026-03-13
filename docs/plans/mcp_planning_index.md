@@ -4,6 +4,10 @@
 
 This document provides a single index and recommended reading order for the MCP transport rewrite planning materials in `ctxledger`.
 
+For authentication, proxy, and deployment-boundary planning materials, see also:
+
+- `docs/plans/auth_planning_index.md`
+
 It is intended to help a new contributor, reviewer, or future session quickly answer:
 
 1. What problem are we solving?
