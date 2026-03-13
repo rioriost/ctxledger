@@ -114,10 +114,6 @@ from .runtime.introspection import (
     RuntimeIntrospection,
     collect_runtime_introspection,
 )
-from .runtime.orchestration import (
-    create_runtime as create_runtime_orchestration,
-)
-from .runtime.orchestration import run_server
 from .runtime.protocols import (
     DatabaseHealthChecker,
     HttpRuntimeAdapterProtocol,
@@ -739,16 +735,13 @@ def create_runtime(
     settings: AppSettings,
     server: CtxLedgerServer | None = None,
 ) -> ServerRuntime | None:
-    http_runtime_builder = (
-        (lambda _: HttpRuntimeAdapter(settings))
-        if server is None
-        else build_http_runtime_adapter
-    )
-    return create_runtime_orchestration(
-        settings,
-        server,
-        http_runtime_builder=http_runtime_builder,
-    )
+    if not settings.http.enabled:
+        return None
+
+    if server is not None:
+        return build_http_runtime_adapter(server)
+
+    return HttpRuntimeAdapter(settings)
 
 
 def _print_runtime_summary(server: CtxLedgerServer) -> None:
@@ -771,6 +764,21 @@ def create_server(
         db_health_checker=db_health_checker,
         runtime=runtime,
         workflow_service_factory=workflow_service_factory,
+    )
+
+
+def run_server(
+    *,
+    transport: str | None = None,
+    host: str | None = None,
+    port: int | None = None,
+) -> int:
+    from .runtime.orchestration import run_server as extracted_run_server
+
+    return extracted_run_server(
+        transport=transport,
+        host=host,
+        port=port,
     )
 
 
