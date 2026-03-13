@@ -267,7 +267,23 @@ class HttpRuntimeAdapter:
         path: str,
         body: str | None = None,
     ) -> WorkflowResumeResponse | McpHttpResponse:
-        return build_runtime_dispatch_result(self, route_name, path, body).response
+        handler = self.handler(route_name)
+        if handler is None:
+            return WorkflowResumeResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "route_not_found",
+                        "message": f"no HTTP handler is registered for route '{route_name}'",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
+        if route_name == "mcp_rpc":
+            return handler(path, body)
+
+        return handler(path)
 
     def start(self) -> None:
         logger.info(
@@ -493,44 +509,6 @@ def _require_http_bearer_auth(
     return require_http_bearer_auth(server, path)
 
 
-def build_runtime_dispatch_result(
-    runtime: HttpRuntimeAdapter,
-    route_name: str,
-    path: str,
-    body: str | None = None,
-) -> RuntimeDispatchResult:
-    handler = runtime.handler(route_name)
-    if handler is None:
-        response = WorkflowResumeResponse(
-            status_code=404,
-            payload={
-                "error": {
-                    "code": "route_not_found",
-                    "message": f"no HTTP handler is registered for route '{route_name}'",
-                }
-            },
-            headers={"content-type": "application/json"},
-        )
-        return RuntimeDispatchResult(
-            transport="http",
-            target=route_name,
-            status="route_not_found",
-            response=response,
-        )
-
-    if route_name == "mcp_rpc":
-        response = handler(path, body)
-    else:
-        response = handler(path)
-
-    return RuntimeDispatchResult(
-        transport="http",
-        target=route_name,
-        status="ok" if response.status_code < 400 else "error",
-        response=response,
-    )
-
-
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
     return extracted_build_http_runtime_adapter(server)
 
@@ -600,7 +578,6 @@ __all__ = [
     "McpToolResponse",
     "ProjectionFailureHistoryResponse",
     "ReadinessStatus",
-    "RuntimeDispatchResult",
     "RuntimeIntrospection",
     "RuntimeIntrospectionResponse",
     "ServerBootstrapError",
@@ -627,7 +604,6 @@ __all__ = [
     "build_workflow_service_factory",
     "create_runtime",
     "create_server",
-    "build_runtime_dispatch_result",
     "parse_workspace_resume_resource_uri",
     "parse_workflow_detail_resource_uri",
     "run_server",
