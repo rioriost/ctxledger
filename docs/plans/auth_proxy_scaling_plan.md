@@ -438,6 +438,13 @@ Timeline note:
 - it should be scheduled **after roadmap `0.4`**, or later if product priorities shift
 - before beginning this phase, the project should re-check whether application-level user ownership and authorization semantics are needed in addition to proxy-layer authentication
 
+Current readiness note:
+
+- the small pattern is now in place as the reference proxy-layer architecture
+- that means large-pattern work no longer needs to prove the reverse-proxy shape itself
+- instead, large-pattern work should focus on identity model, gateway choice, client compatibility, and downstream authorization implications
+- roadmap `0.4` remains the earliest intended point for active implementation, not for immediate build-out now
+
 ---
 
 ## 10.2 Large Pattern Requirements
@@ -484,6 +491,17 @@ The selected auth layer must support:
 - organization identity verification
 - user-level access context
 - operational compatibility with non-browser MCP clients
+
+### Readiness gates before implementation
+Before choosing a concrete large-pattern gateway, the project should explicitly confirm:
+
+- which MCP clients must be supported in practice
+- whether those clients can reliably work with browser-assisted or token-exchange-heavy auth flows
+- whether downstream services need stable identity headers, JWT claims, or both
+- whether proxy-layer identity alone is sufficient for the next product phase
+- whether application-layer ownership, audit attribution, or authorization rules must be introduced at the same time
+
+This keeps large-pattern work tied to actual product requirements instead of adopting an identity stack too early.
 
 ---
 
@@ -554,6 +572,17 @@ The best path is:
 
 This avoids prematurely over-designing authorization inside `ctxledger`.
 
+### Practical readiness questions
+Before active implementation begins, the project should answer at least these questions:
+
+- do workflows need an explicit owner concept
+- do workspaces need organization or team scoping
+- do audit logs need to identify the initiating user rather than only the shared operator boundary
+- do mutation routes require different authorization semantics from read-style MCP access
+- does the product need tenant isolation, or only named-user attribution inside one trusted organization
+
+If the answer to these remains "not yet," then large-pattern work should stay focused on gateway-layer identity and defer deeper domain authorization.
+
 ---
 
 ## 10.8 Large Pattern Deployment Model
@@ -596,6 +625,13 @@ A shared deployment validation path should prove:
 - workflow/resource MCP flows remain correct through the proxy
 - identity-aware auth does not break MCP transport behavior
 
+### Deliverable E — Readiness decision record
+A short decision record should capture:
+- why the chosen gateway was selected
+- which client constraints were considered
+- whether app-layer authorization was intentionally deferred or explicitly included
+- what identity information is expected to cross the proxy boundary
+
 ---
 
 ## 10.10 Large Pattern Exit Criteria
@@ -619,9 +655,11 @@ The recommended implementation order is:
 3. validate small pattern end-to-end
 4. document IDE client configuration for proxied MCP access
 5. prepare a replaceable auth-service boundary in compose and docs
-6. evaluate large-pattern auth gateway candidates
-7. implement the chosen large-pattern auth layer
-8. validate multi-user deployment behavior
+6. record large-pattern readiness questions and constraints
+7. evaluate large-pattern auth gateway candidates
+8. decide whether app-layer authorization changes are required alongside gateway rollout
+9. implement the chosen large-pattern auth layer
+10. validate multi-user deployment behavior
 
 This sequence reduces risk because the small pattern proves the proxy architecture before organizational auth complexity is introduced.
 

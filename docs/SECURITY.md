@@ -14,6 +14,8 @@ This document describes the current security posture of `ctxledger` in `v0.1.0`,
 `ctxledger` is still in an early implementation phase.  
 The goal of this document is to make the present security boundary explicit, not to claim a fully mature security model.
 
+This document should be read together with the phased auth strategy in `docs/plans/auth_proxy_scaling_plan.md`, especially when comparing the current proxy-first small pattern with the deferred large-pattern direction.
+
 ---
 
 ## 2. Current Security Model
@@ -30,6 +32,20 @@ At a high level:
 - debug endpoint exposure is configurable
 - secrets are expected to be supplied through environment-based configuration
 - production deployments are expected to rely on reverse proxies and TLS
+
+The repository now also has a documented **proxy-first small pattern** in which:
+
+- Traefik is the externally exposed entrypoint
+- a lightweight forward-auth service validates a shared bearer token
+- the `ctxledger` backend remains private behind the proxy
+
+This is the currently implemented proxy-first deployment pattern.
+
+A future **large pattern** is still planned as a later phase. In that phase:
+
+- the reverse-proxy/auth-gateway layer should remain the primary authentication boundary
+- a more identity-aware auth layer should replace the small shared-token gate
+- application-level authorization requirements should be re-evaluated before claiming true multi-user safety
 
 ---
 
@@ -77,6 +93,16 @@ It does **not** currently imply:
 - audit-grade session management
 
 Operators should treat bearer auth as a basic gate in front of the service, not as a complete security architecture.
+
+This remains true even when the service is deployed behind a reverse proxy.
+
+In the implemented small pattern, the shared bearer token is enforced at the proxy/auth layer rather than only at the application layer, but the security semantics are still fundamentally:
+
+- a shared operator boundary
+- not a distinct-user identity model
+- not full multi-user authorization
+
+For the future large pattern, the security goal should be to improve the **identity layer at the proxy boundary first**, while avoiding premature claims that the application itself already enforces per-user ownership or authorization semantics.
 
 ---
 
@@ -157,6 +183,11 @@ If an operator has a strong reason to keep `/debug/*` enabled in production, the
 - behind a reverse proxy
 - restricted to trusted operators
 
+This recommendation is especially important for the documented proxy-first deployment patterns:
+
+- in the small pattern, `/debug/*` should remain behind the same Traefik + forward-auth gate as `/mcp`
+- in a future large pattern, `/debug/*` should remain behind the identity-aware proxy/gateway layer and should not become a casually exposed multi-user surface
+
 ## 4.4 HTTP Action Route Cautions
 
 `ctxledger` also exposes HTTP mutation routes for projection failure lifecycle handling.
@@ -227,6 +258,11 @@ Recommended production posture:
 - expose mutation routes only to trusted operators
 - place the service behind TLS and a reverse proxy
 - treat these routes as operational control surfaces rather than public integration endpoints
+
+For the current proxy-first direction, this should be read as:
+
+- small pattern: keep these routes behind the same shared-token proxy gate used for `/mcp`
+- large pattern: keep these routes behind the future identity-aware proxy layer unless and until application-level authorization semantics are explicitly designed and implemented
 
 ---
 

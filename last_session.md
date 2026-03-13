@@ -63,11 +63,10 @@
 - 最後に `pytest -q` を全体実行し、cleanup 一連の変更後も全体回帰がないことを確認しました。
 
 今回の作業:
-- `docs/plans/auth_proxy_scaling_plan.md` の方針に沿って、small pattern の実装と live validation を進めました。
-- small pattern の中心は、`ctxledger` 自身に auth logic を増やすのではなく、`Traefik -> auth-small -> private MCP backend` の proxy-centered topology を Docker Compose へ追加することです。
-- repository の現状確認として、`docker/docker-compose.yml`、`docker/docker-compose.auth.yml`、`src/ctxledger/config.py`、`src/ctxledger/http_app.py`、`src/ctxledger/runtime/http_handlers.py`、`scripts/mcp_http_smoke.py`、README 周辺を見直しました。
+- `docs/plans/auth_proxy_scaling_plan.md` の方針に沿って、small pattern の実装と live validation を完了しました。
+- small pattern の中心は、`ctxledger` 自身に auth logic を増やすのではなく、`Traefik -> auth-small -> private MCP backend` の proxy-centered topology を Docker Compose へ追加することでした。
 - `docker/auth_small/` と `docker/traefik/` の配置を作成しました。
-- `docker/auth_small/src/auth_small_app.py` を新規作成し、FastAPI ベースの lightweight auth service を追加しました。
+- `docker/auth_small/src/auth_small_app.py` を追加し、FastAPI ベースの lightweight auth service を実装しました。
 - この auth service は:
   - `AUTH_SMALL_BEARER_TOKEN` を必須設定として読む
   - `AUTH_SMALL_USER` / `AUTH_SMALL_MODE` を optional identity metadata として返す
@@ -76,9 +75,8 @@
   - missing/invalid token で `401` + `WWW-Authenticate`
   - valid token で `200` + `X-Auth-User` / `X-Auth-Mode`
   という small pattern plan どおりの最小 shape を持っています。
-- `docker/docker-compose.small-auth.yml` を新規作成しました。
-- initial overlay では base compose の `ctxledger` 公開 port が merge 後も残り、private backend にならない問題が見つかりました。
-- そのため small pattern 用には base `ctxledger` service を `profiles: [disabled]` で無効化し、代わりに `ctxledger-private` service を定義する構成へ変更しました。
+- `docker/docker-compose.small-auth.yml` を追加しました。
+- initial overlay では base compose の `ctxledger` 公開 port が merge 後も残り、private backend にならない問題があったため、small pattern 用には base `ctxledger` service を `profiles: [disabled]` で無効化し、代わりに `ctxledger-private` service を定義する構成へ変更しました。
 - `ctxledger-private` は:
   - `python:3.14-slim`
   - `uvicorn ctxledger.http_app:app`
@@ -86,10 +84,7 @@
   - `expose: 8080`
   - `CTXLEDGER_REQUIRE_AUTH=false`
   という proxy backend 専用 shape にしました。
-- Traefik も small pattern 用には専用 entrypoint port を使うように変更しました。
-- host 既存 `8080` と競合したため、small pattern の proxy 公開 port は `8091` に変更しました。
-- Traefik の Docker provider は今回の環境で Docker daemon metadata の取得に失敗し、router/service が組み上がらず `404 page not found` になる問題が出ました。
-- そのため Traefik は Docker labels ベースをやめ、`providers.file` を使う形へ切り替えました。
+- Traefik の Docker provider は今回の環境で Docker daemon metadata の取得に失敗し、router/service が組み上がらず `404 page not found` になる問題が出たため、Traefik は Docker labels ベースをやめ、`providers.file` を使う形へ切り替えました。
 - `docker/traefik/dynamic.yml` を追加し、以下を file provider で定義しました:
   - router `ctxledger-mcp`
   - middleware `ctxledger-forward-auth`
@@ -97,7 +92,7 @@
 - 途中で `docker/traefik/dynamic.yml` の root `http:` key が欠けた状態になっていたため修正しました。
 - 途中で `docker/auth_small/src/auth_small_app.py` に stray `}` が残っており、container 起動時に `SyntaxError: unmatched '}'` で落ちる問題もありました。
 - これも修正し、auth-small は healthy で起動する状態にしました。
-- `scripts/mcp_http_smoke.py` も small pattern validation 向けに拡張しました。
+- `scripts/mcp_http_smoke.py` を small pattern validation 向けに拡張しました。
 - 追加した内容:
   - `--expect-http-status`
   - `--expect-auth-failure`
@@ -117,14 +112,36 @@
   - deliverables A-D の status
   - exit criteria の current assessment
   - current repository shape と validated shape
-- `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml ps` で service state を確認しました。
-- `ctxledger-auth-small`、`ctxledger-server-private` は healthy、`ctxledger-traefik` は起動している一方で healthcheck 上は `starting` / `unhealthy` になるケースがありました。
-- Traefik log を見ると、`GET /ping` と `GET /ping/` が `404` を返しており、現在の healthcheck が実態に合っていないことを確認しました。
-- 実トラフィック自体は通っており、small pattern の smoke validation は成功しています。
-- よって現時点の remaining issue は、Traefik healthcheck の調整です。
-- さらに整理として、未使用だった `docker/auth_small/Dockerfile` は削除済みです。
+- Traefik healthcheck は `/ping` / `/ping/` が `404` になっていたため、最終的に process-level probe へ変更しました。
+- その結果、small pattern stack 全体が healthy になりました。
+- 未使用だった `docker/auth_small/Dockerfile` は削除済みです。
 - current small pattern は source mount + `python:3.14-slim` + runtime install で一貫させています。
-- この削除により、repo 上の auth-small artifact は actual compose runtime shape と一致するようになりました。
+- これにより、repo 上の auth-small artifact は actual compose runtime shape と一致するようになりました。
+
+large pattern documentation prep:
+- `docs/plans/auth_proxy_scaling_plan.md` の large pattern section を改めて見直し、現時点では「実装」ではなく「比較観点と着手条件の整理」に留める方針が自然だと確認しました。
+- roadmap 上、large pattern は **after roadmap `0.4`** の別フェーズであり、今すぐ compose や runtime に手を入れる対象ではありません。
+- 現時点で large pattern に入る前提条件として重要なのは:
+  - `docs/roadmap.md` 上の `0.4` 以後であること
+  - proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価すること
+  - MCP-capable IDE client と non-browser auth flow の両立性を first-class に扱うこと
+- candidate comparison の観点として、plan に既に書かれている以下が重要です:
+  - `Pomerium`
+  - `oauth2-proxy`
+  - another OIDC-aware gateway
+  - organization-standard identity gateway
+- 現時点の整理としては:
+  - `oauth2-proxy` は browser/cookie/redirect-heavy になりやすく、IDE UX との相性評価が必要
+  - `Pomerium` は policy-friendly で multi-user internal tool には合いそう
+  - ただし large pattern の最終選定は、client compatibility / operational fit / org standard の3軸で比較するのが自然
+- 次に large pattern documentation prep を進めるなら、`docs/plans/` 配下に「candidate evaluation memo」や「decision matrix」を 1 枚追加し、
+  - auth flow shape
+  - IDE compatibility
+  - identity propagation
+  - operator complexity
+  - future authorization extensibility
+  の観点で比較整理するのがよさそうです。
+- ただしこれは implementation 開始ではなく、phase gate を越える前の design prep として扱うべきです。
 
 今回確認したテスト結果:
 - `pytest -q`
@@ -137,12 +154,7 @@
   - `ctxledger-postgres` healthy
   - `ctxledger-auth-small` healthy
   - `ctxledger-server-private` healthy
-  - `ctxledger-traefik` started
-- `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml ps`
-- 結果:
-  - `ctxledger-auth-small` healthy
-  - `ctxledger-server-private` healthy
-  - `ctxledger-traefik` healthcheck は `starting` / `unhealthy` だが、proxy routing 自体は動作
+  - `ctxledger-traefik` healthy
 - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure`
 - 結果:
   - missing token path が `401`
@@ -188,6 +200,7 @@
 - small pattern 関連:
   - `feac2dd` — `Add Traefik small auth deployment pattern`
   - `b23389a` — `Refine small auth deployment verification notes`
+  - `289d700` — `Fix small auth Traefik healthcheck`
 
 現時点での設計メモ:
 - small pattern は app-layer auth の強化ではなく、proxy-layer auth への移行としてかなり自然に成立しています。
@@ -200,17 +213,27 @@
 - small pattern の documented proxy port は `8091` です。default local direct app port `8080` とは分けて扱う前提です。
 - README 上の small pattern section と actual compose/runtime shape は現在一致している状態です。
 - `docs/plans/auth_proxy_scaling_plan.md` にも、small pattern が実装済み/検証済みであることを反映済みです。
-- 残っている技術的な小タスクは Traefik healthcheck の調整です。
-- いまの `ctxledger-traefik` health は `/ping` / `/ping/` が `404` になることだけが原因で、routing 本体の failure ではありません。
-- 未使用 `docker/auth_small/Dockerfile` は削除したので、auth-small の repo shape と actual compose shape のズレは減っています。
+- small pattern は実装・検証ともに一区切りついたと見てよいです。
+- 次の本筋は large pattern の documentation prep ですが、これは implementation 開始ではなく、phase gate 前の candidate evaluation / decision memo 準備として扱うべきです。
+- large pattern 着手前には、`ctxledger` 自体が multi-user authorization をどこまで持つ必要があるかを再評価することが重要です。
+- `docs/SECURITY.md` の current security posture と `docs/roadmap.md` の `0.4` を踏まえると、large pattern は identity-aware proxy 選定だけでなく downstream authorization semantics の要否判断もセットで扱うべきです。
 
 次セッションで優先してやること:
-1. `docker/docker-compose.small-auth.yml` の Traefik healthcheck を本当に通る probe に置き換える
-   - `/ping` 系にこだわらず、Traefik process の liveness を確認できる方法へ寄せる
-   - あるいは small pattern 向けに実 routing を使った lightweight probe へ変える
-2. 修正後に `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate` と `ps` を再確認する
-3. 必要なら README に Traefik healthcheck の運用 caveat を少し追記する
-4. 問題なければ次の descriptive commit を作る
-   - 例: `Fix small auth Traefik healthcheck`
-5. large pattern はまだ着手しない
-6. large pattern 着手時には、proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価する
+1. large pattern documentation prep を進める
+   - `docs/plans/auth_proxy_scaling_plan.md` を起点にする
+   - 実装には入らず、candidate evaluation / decision memo の形で整理する
+2. 候補比較の観点を明文化する
+   - `Pomerium`
+   - `oauth2-proxy`
+   - org-standard identity gateway
+   - 必要なら others
+3. 比較軸として最低限整理したいもの:
+   - MCP-capable IDE compatibility
+   - non-browser auth flow fit
+   - ForwardAuth / Traefik integration fit
+   - identity propagation downstream
+   - operator complexity
+   - future authorization extensibility
+4. `docs/roadmap.md` の `0.4` 後という phase gate を崩さない
+5. large pattern 着手時には、proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価する
+6. documentation prep を形にしたら、必要に応じて次の descriptive commit を作る
