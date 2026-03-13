@@ -27,6 +27,8 @@
 - さらに `src/ctxledger/server.py` に `build_runtime_dispatch_result()` を追加し、`HttpRuntimeAdapter.dispatch()` の実体を `dispatch_http_request()` ではなくこの helper に寄せました。
 - `dispatch_http_request()` は互換維持の薄い wrapper として `build_runtime_dispatch_result()` を呼ぶだけの形になっていましたが、今回その最後の薄い wrapper 自体も削除しました。
 - `tests/test_server.py` の dispatch result 系テストはすでに `build_runtime_dispatch_result()` を直接使う形に切り替わっていたため、今回の wrapper 削除で追加の振る舞い変更は発生していません。
+- さらに `tests/test_server.py` で `RuntimeIntrospection` の import を `ctxledger.server` ではなく `ctxledger.runtime.introspection` から読む形へ変更しました。
+- これにより、runtime introspection 型の canonical import 先も tests 側で統一でき、`server.py` の export 依存をもう一段減らせています。
 - この段階で route registry はまだ残っていますが、dispatch の中心 helper は `build_runtime_dispatch_result()` に一本化され、`dispatch_http_request()` という移行用の名前は除去できました。
 - `server.py` はまだ完全に小さくはないものの、以前より compatibility surface はかなり減り、HTTP handler / server response の一次公開窓口としての役割はかなり薄くなっています。
 - 一方で、`HttpRuntimeAdapter.register_handler()`、`registered_routes()`、`RuntimeIntrospection` の公開位置などは依然として残っており、次段の整理対象です。
@@ -42,6 +44,7 @@
 - `6ef0808` — `Use runtime serializers directly in server tests`
 - `5d278e0` — `Add explicit HTTP runtime handler accessors`
 - `40eccdf` — `Extract runtime dispatch result helper`
+- `ef8f515` — `Remove obsolete dispatch_http_request wrapper`
 
 現時点での設計メモ:
 - `http_app.py` はかなり自然になり、FastAPI の route flow は直接的になっています。
@@ -53,6 +56,7 @@
 - FastAPI app は依然として import 時に `create_default_fastapi_app()` が走る shape なので、必要なら次段で lifespan 管理へ寄せる余地があります。
 - `tests/test_server.py` はまだ `CtxLedgerServer` / `HttpRuntimeAdapter` / `build_http_runtime_adapter` / `build_runtime_dispatch_result` などを `ctxledger.server` から import しており、ここが今後の `server.py` 縮小の境界になります。
 - serializer helper は `tests/test_server.py` 側では canonical module に寄せられたので、`server.py` からの再公開削減をさらに進めやすくなりました。
+- runtime introspection 型も tests 側では canonical module に寄せられたので、`server.py` から外せる export の候補がさらに明確になっています。
 - route registry 自体は残るが、handler lookup と dispatch helper の窓口が整理されたので、将来 `_handlers` の実体や dispatch の置き場所を変えても追従しやすくなっています。
 
 次セッションで優先してやること:
