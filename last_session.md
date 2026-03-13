@@ -19,33 +19,37 @@
 - `src/ctxledger/runtime/http_runtime.py` の `build_http_runtime_adapter()` から `..server` への runtime import 依存を削除しました。
 - `src/ctxledger/server.py` は `HttpRuntimeAdapter` を `ctxledger.runtime.http_runtime` から import する側へ回り、server module から concrete adapter 実装を取り除きました。
 - これにより、`server.py` の責務は一段と bootstrap / lifecycle / public entrypoint 側へ寄りました。
-- `tests/test_server.py` における `ctxledger.server` 依存は引き続き `CtxLedgerServer` / `HttpRuntimeAdapter` / `create_server` のみです。
-- `HttpRuntimeAdapter` は now canonical import location が `ctxledger.runtime.http_runtime` になり、将来 tests 側でもさらに import migration しやすい状態になりました。
+- 今回さらに `tests/test_server.py` の `HttpRuntimeAdapter` import も `ctxledger.server` ではなく `ctxledger.runtime.http_runtime` から読む形へ変更しました。
+- この変更により、`tests/test_server.py` における `ctxledger.server` 依存は `CtxLedgerServer` と `create_server` のみに縮小しました。
+- `HttpRuntimeAdapter` は canonical import location が `ctxledger.runtime.http_runtime` に統一され、test 側でも `server.py` を経由しない import path に寄せられました。
 - session handoff 用の `last_session.md` を今回の内容で更新しました。
 
 今回確認したテスト結果:
-- `pytest -q tests/test_server.py tests/test_postgres_integration.py`
-- 結果: `156 passed`
+- `pytest -q tests/test_server.py`
+- 結果: `140 passed`
 
 今回の直近コミット:
 - `d316d74` — `Reduce server test imports to runtime modules`
 - `968499e` — `Trim remaining server test helper imports`
 - `b3a5b95` — `Inline HTTP adapter dispatch helper`
-- `HttpRuntimeAdapter` の runtime module 移動変更は、まだ commit していません。
+- `0224852` — `Move HTTP runtime adapter into runtime module`
+- `tests/test_server.py` の `HttpRuntimeAdapter` import 移行変更は、まだ commit していません。
 
 現時点での設計メモ:
 - `server.py` から concrete HTTP adapter 実装が抜けたことで、bootstrap surface と runtime implementation の境界がかなり自然になりました。
 - `ctxledger.runtime.http_runtime` は naming 的にも責務的にも、`HttpRuntimeAdapter` の canonical home としてかなり妥当です。
-- `create_runtime` と `build_http_runtime_adapter` は現在 still bridge として `server.py` に残っていますが、実体は runtime module 側にあります。
+- `tests/test_server.py` から見た `ctxledger.server` の責務はかなり細ってきており、bootstrap と application server object の窓口に近づいています。
+- `create_runtime` と `print_runtime_summary` は `runtime.orchestration` 側が本来の公開位置として自然です。
+- `build_runtime_dispatch_result()` は削除済みで、HTTP dispatch の public surface は `HttpRuntimeAdapter.dispatch()` に一本化されました。
 - `create_server` はまだ `server.py` が自然な public 窓口です。CLI や app factory の import point としても扱いやすい状態です。
 - `tests/test_cli.py` では `ctxledger.server.run_server` を monkeypatch しているため、`run_server` は現時点では `server.py` の public surface に残しておく方が安全です。
 - `registered_routes()` は依然として debug/introspection で使われており、単純削除ではなく introspection responsibility とセットで整理すべきです。
-- 今後 `tests/test_server.py` 側でも `HttpRuntimeAdapter` を `ctxledger.runtime.http_runtime` から直接 import するように寄せれば、`server.py` の surface はさらに薄くできます。
+- `tests/test_server.py` 側で `HttpRuntimeAdapter` の canonical import への移行は完了したので、今後は `server.py` の再公開をさらに減らせる余地が見えやすくなっています。
 
 次セッションで優先してやること:
-1. 今回の `HttpRuntimeAdapter` の runtime module 移動変更を descriptive commit にまとめる
-2. `tests/test_server.py` の `HttpRuntimeAdapter` import を `ctxledger.server` から `ctxledger.runtime.http_runtime` へ移せるか確認する
-3. `server.py` に残っている public surface を棚卸しし、`create_server` と `run_server` 以外で移せるものがないか確認する
-4. `registered_routes()` と debug/introspection surface の責務整理を進める
+1. 今回の `tests/test_server.py` の `HttpRuntimeAdapter` import 移行変更を descriptive commit にまとめる
+2. `server.py` に残っている public surface を棚卸しし、`create_server` と `run_server` と `CtxLedgerServer` 以外で移せるものがないか確認する
+3. `registered_routes()` と debug/introspection surface の責務整理を進める
+4. 必要なら `tests/test_cli.py` や他の周辺 test も含めて import surface 変更の波及を確認する
 5. 変更がまとまった段階で `pytest -q` を全体実行して回帰確認する
 6. `tests/test_cli.py` の patch 対象も含め、`server.py` の public API をどこまで意図的に残すかを決める

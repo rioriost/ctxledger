@@ -48,7 +48,10 @@ from ctxledger.runtime.http_handlers import (
     parse_closed_projection_failures_request_path,
     parse_workflow_resume_request_path,
 )
-from ctxledger.runtime.http_runtime import build_http_runtime_adapter
+from ctxledger.runtime.http_runtime import (
+    HttpRuntimeAdapter,
+    build_http_runtime_adapter,
+)
 from ctxledger.runtime.introspection import (
     RuntimeIntrospection,
     collect_runtime_introspection,
@@ -76,7 +79,6 @@ from ctxledger.runtime.types import (
 )
 from ctxledger.server import (
     CtxLedgerServer,
-    HttpRuntimeAdapter,
     create_server,
 )
 from ctxledger.workflow.service import (
