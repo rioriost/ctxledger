@@ -7,10 +7,8 @@ from types import FrameType
 from typing import Protocol
 
 from ..config import AppSettings, get_settings
-from ..runtime.introspection import (
-    collect_runtime_introspection,
-    serialize_runtime_introspection_collection,
-)
+from ..runtime.introspection import collect_runtime_introspection
+from ..runtime.serializers import serialize_runtime_introspection_collection
 
 logger = logging.getLogger(__name__)
 

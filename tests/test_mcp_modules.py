@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from ctxledger.config import (
     AppSettings,
-    AuthSettings,
     DatabaseSettings,
     DebugSettings,
     HttpSettings,
@@ -38,8 +37,6 @@ def make_settings(
     database_url: str = "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger",
     host: str = "127.0.0.1",
     port: int = 8080,
-    auth_bearer_token: str | None = None,
-    require_auth: bool = False,
 ) -> AppSettings:
     return AppSettings(
         app_name="ctxledger",
@@ -54,10 +51,6 @@ def make_settings(
             host=host,
             port=port,
             path="/mcp",
-        ),
-        auth=AuthSettings(
-            bearer_token=auth_bearer_token,
-            require_auth=require_auth,
         ),
         debug=DebugSettings(
             enabled=True,

@@ -11,7 +11,6 @@ import pytest
 import ctxledger.__init__ as cli_module
 from ctxledger.config import (
     AppSettings,
-    AuthSettings,
     DatabaseSettings,
     DebugSettings,
     HttpSettings,
@@ -45,10 +44,6 @@ def make_settings(
             host="127.0.0.1",
             port=8080,
             path="/mcp",
-        ),
-        auth=AuthSettings(
-            bearer_token=None,
-            require_auth=False,
         ),
         debug=DebugSettings(enabled=True),
         projection=ProjectionSettings(

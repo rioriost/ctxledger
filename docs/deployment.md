@@ -146,8 +146,6 @@ Recommended environment variables include:
 - `CTXLEDGER_HOST`
 - `CTXLEDGER_PORT`
 - `CTXLEDGER_TRANSPORT`
-- `CTXLEDGER_REQUIRE_AUTH`
-- `CTXLEDGER_AUTH_BEARER_TOKEN`
 - `CTXLEDGER_ENABLE_HTTP`
 
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS`
@@ -172,16 +170,15 @@ See also:
 | `CTXLEDGER_HOST` | `0.0.0.0` | HTTP bind host | `0.0.0.0` is acceptable in containers/local networks | bind according to network policy, typically behind a reverse proxy |
 | `CTXLEDGER_PORT` | `8080` | HTTP listen port | `8080` is a reasonable default | set explicitly to match deployment and proxy routing |
 | `CTXLEDGER_HTTP_PATH` | `/mcp` | MCP HTTP endpoint path | keep default unless integration requires a different path | keep stable and document it for proxy configuration |
-| `CTXLEDGER_REQUIRE_AUTH` | `false` | requires bearer auth for protected HTTP endpoints | `false` is acceptable for isolated local development; prefer `true` in shared environments | `true` |
-| `CTXLEDGER_AUTH_BEARER_TOKEN` | none | expected bearer token when auth is required | set when `CTXLEDGER_REQUIRE_AUTH=true` | required when `CTXLEDGER_REQUIRE_AUTH=true`; inject as a secret |
 | `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS` | `true` | controls whether `/debug/*` routes are registered at all | `true` is acceptable for local/operator use | usually `false`; enable only for a clear operational need |
 | `CTXLEDGER_PROJECTION_ENABLED` | `true` | enables derived projection writing | `true` unless testing explicitly without projections | set according to operational need; does not replace canonical persistence |
 | `CTXLEDGER_LOG_LEVEL` | `info` | log verbosity | `info` or `debug` during development | `info` or stricter, depending on operational policy |
 
 Authentication and debug exposure expectations:
 
-- if `CTXLEDGER_REQUIRE_AUTH=true`, `CTXLEDGER_AUTH_BEARER_TOKEN` must also be set or startup validation fails
-- when HTTP bearer authentication is enabled, `/debug/*` follows the same authentication boundary as other protected HTTP endpoints
+- authentication is expected to be enforced at the reverse-proxy/auth-gateway layer rather than inside `ctxledger`
+- keep the `ctxledger` backend private behind the proxy in shared or internet-exposed deployments
+- when `/debug/*` is enabled, keep it behind the same proxy-layer authentication boundary as `/mcp`
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` removes `/debug/*` from the registered HTTP route surface instead of returning debug-specific responses from still-registered handlers
 
 Optional future variables may include:
@@ -201,7 +198,6 @@ Examples of critical configuration:
 
 - missing or invalid database URL
 - incompatible transport mode
-- malformed authentication configuration
 - invalid host/port configuration
 - invalid debug endpoint exposure configuration
 

@@ -51,52 +51,59 @@ A future **large pattern** is still planned as a later phase. In that phase:
 
 ## 3. Authentication
 
-## 3.1 Bearer Token Authentication
+## 3.1 Proxy-Only Authentication Model
 
-When HTTP authentication is enabled, `ctxledger` expects a configured bearer token.
+`ctxledger` should now be understood as operating under a **proxy-only authentication model**.
 
-Relevant configuration:
+In this model:
 
-- `CTXLEDGER_REQUIRE_AUTH`
-- `CTXLEDGER_AUTH_BEARER_TOKEN`
+- authentication is enforced at the reverse-proxy/auth-gateway layer
+- the application backend is kept private behind that proxy
+- external clients authenticate to the proxy, not directly to `ctxledger`
+- the backend focuses on MCP, workflow, memory, and persistence behavior rather than end-user auth flows
 
-Expected behavior:
+For the currently implemented small pattern, this means:
 
-- if `CTXLEDGER_REQUIRE_AUTH=true`, a bearer token must be configured
-- if authentication is enabled, protected HTTP endpoints require a valid bearer token
-- requests without a token should be rejected
-- requests with an invalid token should be rejected
-
-This is intended to provide a simple deployment-ready protection layer for operator-controlled environments.
+- Traefik is the externally exposed entrypoint
+- a lightweight forward-auth service validates a shared bearer token
+- requests without a valid token are rejected before they reach `ctxledger`
+- the backend itself does not own the bearer-token gate
 
 ## 3.2 Configuration Expectations
 
 Recommended configuration rules:
 
-1. set `CTXLEDGER_REQUIRE_AUTH=true` for any HTTP deployment that is not fully private
-2. set `CTXLEDGER_AUTH_BEARER_TOKEN` through environment or secret-management tooling
-3. do not store bearer tokens in tracked repository files
-4. rotate bearer tokens using your normal operational secret-rotation process
+1. treat the reverse proxy as the primary authentication boundary for any non-private deployment
+2. supply proxy-layer secrets through environment variables or secret-management tooling
+3. do not store real tokens or gateway credentials in tracked repository files
+4. rotate proxy-layer secrets using normal operational secret-rotation processes
+5. keep the `ctxledger` backend private and avoid direct public exposure
 
-If `CTXLEDGER_REQUIRE_AUTH=true` but `CTXLEDGER_AUTH_BEARER_TOKEN` is missing, startup validation should fail.
+This keeps the authentication boundary replaceable and avoids coupling the application core to a single auth mechanism.
 
 ## 3.3 Scope of the Current Auth Boundary
 
-The current authentication model should be understood as a **single shared access boundary** for protected HTTP routes.
+The current authentication model should still be understood as a **single shared access boundary**.
 
-It does **not** currently imply:
+What has changed is **where** that boundary is enforced:
 
-- per-user identity
+- previously, an operator might think about bearer auth at the application layer
+- now, the intended enforcement point is the proxy/auth layer in front of the application
+
+This model still does **not** imply:
+
+- per-user identity inside the application domain
 - per-workspace access control
 - role-based authorization
 - tenant isolation
 - audit-grade session management
 
-Operators should treat bearer auth as a basic gate in front of the service, not as a complete security architecture.
+Operators should therefore treat the current model as:
 
-This remains true even when the service is deployed behind a reverse proxy.
+- strong enough for proxy-gated operator or shared-trust use
+- not yet a complete multi-user authorization architecture
 
-In the implemented small pattern, the shared bearer token is enforced at the proxy/auth layer rather than only at the application layer, but the security semantics are still fundamentally:
+In the implemented small pattern, the shared bearer token is enforced entirely at the proxy/auth layer, but the security semantics are still fundamentally:
 
 - a shared operator boundary
 - not a distinct-user identity model
@@ -167,18 +174,22 @@ The preferred posture for disabled debug endpoints is to remove them from the ex
 
 ## 4.3 Interaction with Authentication
 
-When HTTP bearer authentication is enabled:
+Under the proxy-only authentication model:
 
-- `/debug/*` should follow the same authentication boundary as other protected HTTP endpoints
+- `/debug/*` should follow the same proxy-layer authentication boundary as other protected HTTP routes
+- these routes should not be exposed by bypassing the reverse proxy
+- operators should think of `/debug/*` as protected operational surfaces, not as client-facing endpoints
 
 Recommended production posture:
 
-- `CTXLEDGER_REQUIRE_AUTH=true`
-- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false`
+- keep `/debug/*` disabled unless there is a clear operator need
+- keep the backend private
+- place the service behind TLS and a reverse proxy
+- ensure `/debug/*` remains behind the same proxy auth gate as `/mcp` when enabled
 
 If an operator has a strong reason to keep `/debug/*` enabled in production, then those endpoints should remain:
 
-- behind bearer authentication
+- behind proxy-layer authentication
 - behind TLS
 - behind a reverse proxy
 - restricted to trusted operators
@@ -297,7 +308,8 @@ A reverse proxy is recommended for:
 
 Secrets may include:
 
-- `CTXLEDGER_AUTH_BEARER_TOKEN`
+- proxy-layer bearer tokens or gateway credentials
+- IdP client credentials for future large-pattern deployments
 - database credentials embedded in `CTXLEDGER_DATABASE_URL`
 
 Recommended handling:
@@ -324,8 +336,9 @@ Do not place real secrets in:
 
 A reasonable local posture is:
 
-- `CTXLEDGER_REQUIRE_AUTH=false`
-- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=true`
+- direct local development may run without proxy auth only in tightly controlled environments
+- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=true` can remain useful for local operator visibility
+- once the deployment is shared or exposed beyond a single trusted operator, prefer the documented proxy-first small pattern
 
 This is acceptable only when the environment is controlled and not broadly exposed.
 
@@ -333,21 +346,22 @@ This is acceptable only when the environment is controlled and not broadly expos
 
 For shared internal environments, prefer:
 
-- `CTXLEDGER_REQUIRE_AUTH=true`
+- proxy-layer authentication in front of the backend
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=true` only if operators need it
 - reverse proxy access controls where practical
+- private backend networking
 
 ## 7.3 Internet-Exposed Production
 
 For internet-exposed production deployments, prefer:
 
-- `CTXLEDGER_REQUIRE_AUTH=true`
-- a strong `CTXLEDGER_AUTH_BEARER_TOKEN`
+- proxy/gateway-enforced authentication
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false`
 - TLS termination
 - reverse proxy enforcement
 - secret-management-based configuration
 - minimal network exposure
+- private backend networking for `ctxledger`
 
 ---
 
@@ -395,11 +409,11 @@ Before deploying `ctxledger` beyond local development, verify at least the follo
 
 The core security guidance for `ctxledger` `v0.1.0` is:
 
-- use bearer authentication for non-private HTTP deployments
+- use proxy-layer authentication for non-private HTTP deployments
 - treat `/debug/*` as operationally sensitive
 - disable debug routes in internet-exposed production by default
 - use TLS and a reverse proxy
-- manage bearer tokens and database credentials as secrets
+- manage proxy credentials and database credentials as secrets
 - understand that the current model is authentication-first, not full authorization
 
 As the project evolves, this document should be extended to cover:

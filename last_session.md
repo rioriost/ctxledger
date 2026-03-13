@@ -3,8 +3,8 @@
 直近の進捗:
 - 以前の session までに、HTTP `/mcp` に対する最小 MCP 経路として `initialize` / `tools/list` / `tools/call` を実装済みでした。
 - 追加で HTTP 側の `resources/list` / `resources/read` も実装済みで、workflow 系 resources も live Docker 上で確認済みです。
-- 認証有効 (`CTXLEDGER_REQUIRE_AUTH=true`) の remote MCP path でも workflow 系 + resource 系 E2E が通る状態は維持されています。
 - 以前の整理で stdio MCP サーバの残骸は削除済みで、HTTP 専用 shape に寄せています。
+- `server.py` 依存の縮小、HTTP runtime adapter の canonical module への移動、debug/runtime introspection の serializer 整理など、HTTP-only cleanup の大きな pruning は完了済みです。
 
 前回までの cleanup 完了事項:
 - `server.py` 依存の縮小を継続し、tests と runtime modules の import を canonical location へ寄せる整理を進めました。
@@ -44,25 +44,8 @@
 - `src/ctxledger/runtime/protocols.py` の `HttpRuntimeAdapterProtocol` も `registered_routes()` ではなく `introspection_endpoints()` を要求する shape に更新しました。
 - `tests/test_server.py` で route registry を直接確認していた箇所も `registered_routes()` から `introspection_endpoints()` へ追従しました。
 - `test_http_runtime_adapter_introspect_returns_registered_routes()` では、固定 tuple 直書きではなく `runtime.introspection_endpoints()` と `introspection.routes` が一致することを確認する形に変更しました。
-- live Docker validation も実施しました。
-- `docker compose -f docker/docker-compose.yml up -d --build` で PostgreSQL と `ctxledger` サービスを起動しました。
-- `docker compose -f docker/docker-compose.yml ps` で `ctxledger-postgres` / `ctxledger-server` の両方が healthy になっていることを確認しました。
-- `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read` を実行し、live Docker 上で以下が通ることを確認しました。
-  - `initialize`
-  - `tools/list`
-  - `tools/call`
-  - `resources/list`
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_checkpoint`
-  - `workflow_resume`
-  - `resources/read` for workspace resume
-  - `resources/read` for workflow detail
-  - `workflow_complete`
-- これにより、HTTP-only cleanup 後の remote MCP server 実装が Docker Compose 経由でも end-to-end に動作することを確認しました。
-- 最後に `pytest -q` を全体実行し、cleanup 一連の変更後も全体回帰がないことを確認しました。
 
-今回の作業:
+small pattern 実装・検証完了事項:
 - `docs/plans/auth_proxy_scaling_plan.md` の方針に沿って、small pattern の実装と live validation を完了しました。
 - small pattern の中心は、`ctxledger` 自身に auth logic を増やすのではなく、`Traefik -> auth-small -> private MCP backend` の proxy-centered topology を Docker Compose へ追加することでした。
 - `docker/auth_small/` と `docker/traefik/` の配置を作成しました。
@@ -82,7 +65,6 @@
   - `uvicorn ctxledger.http_app:app`
   - host port 非公開
   - `expose: 8080`
-  - `CTXLEDGER_REQUIRE_AUTH=false`
   という proxy backend 専用 shape にしました。
 - Traefik の Docker provider は今回の環境で Docker daemon metadata の取得に失敗し、router/service が組み上がらず `404 page not found` になる問題が出たため、Traefik は Docker labels ベースをやめ、`providers.file` を使う形へ切り替えました。
 - `docker/traefik/dynamic.yml` を追加し、以下を file provider で定義しました:
@@ -118,6 +100,77 @@
 - current small pattern は source mount + `python:3.14-slim` + runtime install で一貫させています。
 - これにより、repo 上の auth-small artifact は actual compose runtime shape と一致するようになりました。
 
+今回の作業:
+- small pattern をさらに進め、**proxy-only auth cleanup** を実施しました。
+- 目的は、small pattern を「proxy layer が唯一の認証境界」で完結させ、`ctxledger` 本体から app-layer auth 実装を完全に外すことです。
+- `src/ctxledger/config.py` から app-layer auth 設定を削除しました。
+  - `AuthSettings` dataclass を削除
+  - `AppSettings.auth` を削除
+  - `CTXLEDGER_REQUIRE_AUTH`
+  - `CTXLEDGER_AUTH_BEARER_TOKEN`
+  に関する validation を削除
+  - `load_settings()` での auth 設定読み込みを削除
+- `src/ctxledger/runtime/http_handlers.py` から app-layer bearer auth 実装を削除しました。
+  - `extract_bearer_token()`
+  - `build_http_auth_error_response()`
+  - `require_http_bearer_auth()`
+  を削除
+- これにあわせて各 HTTP handler から auth gate 呼び出しを削除しました。
+  - `build_workflow_resume_http_handler()`
+  - `build_closed_projection_failures_http_handler()`
+  - `build_projection_failures_ignore_http_handler()`
+  - `build_projection_failures_resolve_http_handler()`
+  - `build_runtime_introspection_http_handler()`
+  - `build_runtime_routes_http_handler()`
+  - `build_runtime_tools_http_handler()`
+  - `build_mcp_http_handler()`
+- その結果、`ctxledger` application runtime は `/mcp` も debug routes も operator routes も、**app-layer bearer auth なし**で動く shape になりました。
+- `build_mcp_http_handler()` では `StreamableHttpEndpoint` の `auth_validator` を渡さない形へ変更しました。
+- `runtime/http_handlers.py` の `__all__` も auth helper の export を外し、canonical HTTP handler surface のみを残しました。
+- auth cleanup の途中で circular import が顕在化しました。
+  - `runtime.introspection` が serializer を re-export していた旧前提と
+  - `runtime.orchestration` / `runtime.server_responses` の import path
+  が噛み合わず、`serialize_runtime_introspection_collection` import で循環が起きました。
+- そのため:
+  - `src/ctxledger/runtime/introspection.py` から serializer re-export を削除
+  - `runtime.orchestration` は `serialize_runtime_introspection_collection` を canonical `runtime.serializers` から import
+  - `runtime.server_responses.build_runtime_introspection_response()` も serializer を canonical module から import
+  する形へ修正しました。
+- これにより、auth cleanup で表面化した introspection/serializer import cycle は解消しました。
+- `docker/docker-compose.auth.yml` は direct app-layer auth override としては廃止扱いにしました。
+- 現在の内容は compatibility stub コメントのみで、deprecated であること、認証は `docker/docker-compose.small-auth.yml` 側の proxy layer でやるべきことを明記しています。
+- `tests/test_config.py` から auth 設定前提のケースを削除・更新しました。
+  - `minimum_valid_env()` から `CTXLEDGER_REQUIRE_AUTH` を削除
+  - `settings.auth.is_enabled` assertion を削除
+  - auth-required validation test 群を削除
+- `tests/test_cli.py` から `AuthSettings` import と `AppSettings.auth` 生成を削除しました。
+- `tests/test_mcp_modules.py` から `AuthSettings` import と `make_settings()` の auth args を削除しました。
+- `tests/test_postgres_integration.py` の loaded settings fixture env から `CTXLEDGER_REQUIRE_AUTH` を削除しました。
+- `tests/test_server.py` も追従しました。
+  - top-level `AuthSettings` import を削除
+  - `make_settings()` から `auth_bearer_token` / `require_auth` args を削除
+  - `AppSettings.auth` 生成を削除
+  - HTTP route の bearer auth 必須を確認していた test 群を削除
+- これにより、server-side test suite から direct app auth 前提の coverage は除去されました。
+- なお、generic streamable HTTP unit test にある `auth_validator` 使用テストは、`build_streamable_http_endpoint()` 自体の generic capability test として残っているだけで、`ctxledger` app-layer auth の存在を意味しません。
+- README を proxy-only 前提へ更新しました。
+  - config list から `CTXLEDGER_REQUIRE_AUTH` / `CTXLEDGER_AUTH_BEARER_TOKEN` を削除
+  - direct app-layer authenticated smoke step を削除し、proxy-authenticated smoke step に置換
+  - production guidance を proxy-layer authentication 前提に書き換え
+  - security notes も proxy-layer bearer auth 前提へ修正
+- `docs/SECURITY.md` を proxy-only auth model 前提へ書き換えました。
+  - app-layer bearer auth 記述を削除
+  - proxy-only authentication model を明示
+  - config expectation を proxy/gateway secret 前提へ変更
+  - local/shared/prod deployment recommendations を proxy-first shape へ更新
+  - action routes / debug routes の保護境界も proxy-layer前提へ統一
+- `docs/deployment.md` も proxy-only auth 前提へ更新しました。
+  - recommended env vars から `CTXLEDGER_REQUIRE_AUTH` / `CTXLEDGER_AUTH_BEARER_TOKEN` を削除
+  - environment guidance table を proxy-layer auth 前提へ変更
+  - malformed authentication configuration 記述を削除
+- `docs/CHANGELOG.md` の production guidance note も proxy-only auth 前提へ更新しました。
+- この一連の変更により、**small pattern = proxy-only auth** が repo 全体でより一貫した形になっています。
+
 large pattern documentation prep:
 - `docs/plans/auth_proxy_scaling_plan.md` の large pattern section を改めて見直し、現時点では「実装」ではなく「比較観点と着手条件の整理」に留める方針が自然だと確認しました。
 - roadmap 上、large pattern は **after roadmap `0.4`** の別フェーズであり、今すぐ compose や runtime に手を入れる対象ではありません。
@@ -144,43 +197,48 @@ large pattern documentation prep:
 - ただしこれは implementation 開始ではなく、phase gate を越える前の design prep として扱うべきです。
 
 今回確認したテスト結果:
+- `pytest -q tests/test_config.py tests/test_mcp_modules.py tests/test_cli.py`
+- 結果: `44 passed`
+- `pytest -q tests/test_server.py`
+- 結果: `134 passed`
 - `pytest -q`
-- 結果: `254 passed`
+- 結果: `246 passed`
 
 今回確認した live Docker validation:
-- `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans`
-- `CTXLEDGER_SMALL_AUTH_TOKEN=smoke-small-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate`
-- 結果:
-  - `ctxledger-postgres` healthy
-  - `ctxledger-auth-small` healthy
-  - `ctxledger-server-private` healthy
-  - `ctxledger-traefik` healthy
-- `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure`
-- 結果:
-  - missing token path が `401`
-  - payload:
-    - `error: missing_bearer_token`
-    - `message: Authorization header must contain a bearer token`
-- `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure`
-- 結果:
-  - invalid token path が `401`
-  - payload:
-    - `error: invalid_bearer_token`
-    - `message: Bearer token is invalid`
-- `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token smoke-small-secret --scenario workflow --workflow-resource-read`
-- 結果:
-  - proxy 背後の small pattern 経由で以下が通過
-    - `initialize`
-    - `tools/list`
-    - `tools/call`
-    - `resources/list`
-    - `workspace_register`
-    - `workflow_start`
-    - `workflow_checkpoint`
-    - `workflow_resume`
-    - `resources/read` for workspace resume
-    - `resources/read` for workflow detail
-    - `workflow_complete`
+- previous confirmed small pattern validation は引き続き有効:
+  - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans`
+  - `CTXLEDGER_SMALL_AUTH_TOKEN=smoke-small-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate`
+  - 結果:
+    - `ctxledger-postgres` healthy
+    - `ctxledger-auth-small` healthy
+    - `ctxledger-server-private` healthy
+    - `ctxledger-traefik` healthy
+  - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure`
+  - 結果:
+    - missing token path が `401`
+    - payload:
+      - `error: missing_bearer_token`
+      - `message: Authorization header must contain a bearer token`
+  - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure`
+  - 結果:
+    - invalid token path が `401`
+    - payload:
+      - `error: invalid_bearer_token`
+      - `message: Bearer token is invalid`
+  - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token smoke-small-secret --scenario workflow --workflow-resource-read`
+  - 結果:
+    - proxy 背後の small pattern 経由で以下が通過
+      - `initialize`
+      - `tools/list`
+      - `tools/call`
+      - `resources/list`
+      - `workspace_register`
+      - `workflow_start`
+      - `workflow_checkpoint`
+      - `workflow_resume`
+      - `resources/read` for workspace resume
+      - `resources/read` for workflow detail
+      - `workflow_complete`
 
 今回の直近コミット:
 - 前回 session まで:
@@ -201,6 +259,8 @@ large pattern documentation prep:
   - `feac2dd` — `Add Traefik small auth deployment pattern`
   - `b23389a` — `Refine small auth deployment verification notes`
   - `289d700` — `Fix small auth Traefik healthcheck`
+- large pattern documentation prep:
+  - `0c7eec6` — `Document large auth readiness criteria`
 
 現時点での設計メモ:
 - small pattern は app-layer auth の強化ではなく、proxy-layer auth への移行としてかなり自然に成立しています。
@@ -211,29 +271,23 @@ large pattern documentation prep:
 - smoke script の rejection mode は、JSON-RPC error object を前提にせず transport-level 401 を確認する方が proxy auth には適切です。
 - small pattern deliverable D の smoke validation は、missing token / invalid token / valid token の 3 系統まで live Docker 上で確認済みです。
 - small pattern の documented proxy port は `8091` です。default local direct app port `8080` とは分けて扱う前提です。
-- README 上の small pattern section と actual compose/runtime shape は現在一致している状態です。
-- `docs/plans/auth_proxy_scaling_plan.md` にも、small pattern が実装済み/検証済みであることを反映済みです。
-- small pattern は実装・検証ともに一区切りついたと見てよいです。
-- 次の本筋は large pattern の documentation prep ですが、これは implementation 開始ではなく、phase gate 前の candidate evaluation / decision memo 準備として扱うべきです。
-- large pattern 着手前には、`ctxledger` 自体が multi-user authorization をどこまで持つ必要があるかを再評価することが重要です。
-- `docs/SECURITY.md` の current security posture と `docs/roadmap.md` の `0.4` を踏まえると、large pattern は identity-aware proxy 選定だけでなく downstream authorization semantics の要否判断もセットで扱うべきです。
+- README / SECURITY / deployment docs / small auth compose は、現在 proxy-only auth model にかなり揃ってきています。
+- **server.py 側だけでなく、config/runtime HTTP handlers からも app-layer auth は削除済み**です。
+- 現在の auth 境界は、documented deployment path 上では proxy layer のみです。
+- `ctxledger` 本体には multi-user authorization / tenant isolation / per-user ownership は依然としてありません。
+- large pattern を始める前には、identity-aware gateway 選定だけでなく downstream authorization semantics の要否判断もセットで扱うべきです。
 
 次セッションで優先してやること:
-1. large pattern documentation prep を進める
-   - `docs/plans/auth_proxy_scaling_plan.md` を起点にする
-   - 実装には入らず、candidate evaluation / decision memo の形で整理する
-2. 候補比較の観点を明文化する
-   - `Pomerium`
-   - `oauth2-proxy`
-   - org-standard identity gateway
-   - 必要なら others
-3. 比較軸として最低限整理したいもの:
-   - MCP-capable IDE compatibility
-   - non-browser auth flow fit
-   - ForwardAuth / Traefik integration fit
-   - identity propagation downstream
-   - operator complexity
-   - future authorization extensibility
-4. `docs/roadmap.md` の `0.4` 後という phase gate を崩さない
-5. large pattern 着手時には、proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価する
-6. documentation prep を形にしたら、必要に応じて次の descriptive commit を作る
+1. proxy-only auth cleanup の最終確認
+   - `README.md`
+   - `docs/SECURITY.md`
+   - `docs/deployment.md`
+   - `docker/docker-compose.auth.yml`
+   - `last_session.md`
+2. 可能なら small-pattern smoke をもう一度回して、docs cleanup 後も operator path が変わっていないことを確認する
+3. 問題なければ proxy-only auth cleanup を descriptive commit にまとめる
+   - 例: `Remove app-layer HTTP auth in favor of proxy auth`
+4. large pattern documentation prep はその次
+   - candidate evaluation memo / decision matrix 追加
+5. large pattern 実装そのものはまだ始めない
+6. large pattern 着手時には、proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価する

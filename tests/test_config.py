@@ -44,7 +44,6 @@ def minimum_valid_env() -> dict[str, str]:
         "CTXLEDGER_HOST": "0.0.0.0",
         "CTXLEDGER_PORT": "8080",
         "CTXLEDGER_HTTP_PATH": "/mcp",
-        "CTXLEDGER_REQUIRE_AUTH": "false",
         "CTXLEDGER_ENABLE_DEBUG_ENDPOINTS": "true",
         "CTXLEDGER_PROJECTION_ENABLED": "true",
         "CTXLEDGER_PROJECTION_DIRECTORY": ".agent",
@@ -80,7 +79,6 @@ def test_load_settings_with_minimum_valid_env(clean_ctxledger_env: None) -> None
     assert settings.http.path == "/mcp"
     assert settings.http.mcp_url == "http://0.0.0.0:8080/mcp"
     assert settings.logging.level == LogLevel.INFO
-    assert settings.auth.is_enabled is False
     assert settings.debug.enabled is True
     assert settings.projection.enabled is True
     assert settings.projection.directory_name == ".agent"
@@ -143,34 +141,6 @@ def test_invalid_port_raises_config_error(clean_ctxledger_env: None) -> None:
             ConfigError, match="CTXLEDGER_PORT must be between 1 and 65535"
         ):
             load_settings()
-
-
-def test_require_auth_without_token_raises_config_error(
-    clean_ctxledger_env: None,
-) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_REQUIRE_AUTH"] = "true"
-    env["CTXLEDGER_AUTH_BEARER_TOKEN"] = None
-
-    with patched_env(**env):
-        with pytest.raises(
-            ConfigError,
-            match="CTXLEDGER_AUTH_BEARER_TOKEN is required when CTXLEDGER_REQUIRE_AUTH is enabled",
-        ):
-            load_settings()
-
-
-def test_auth_enabled_with_token_is_valid(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_REQUIRE_AUTH"] = "true"
-    env["CTXLEDGER_AUTH_BEARER_TOKEN"] = "secret-token"
-
-    with patched_env(**env):
-        settings = load_settings()
-
-    assert settings.auth.require_auth is True
-    assert settings.auth.bearer_token == "secret-token"
-    assert settings.auth.is_enabled is True
 
 
 def test_debug_endpoints_enabled_by_default(clean_ctxledger_env: None) -> None:

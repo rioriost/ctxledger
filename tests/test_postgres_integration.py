@@ -1591,7 +1591,6 @@ def test_postgres_settings_can_build_uow_factory_from_loaded_settings(
         "CTXLEDGER_HOST": "127.0.0.1",
         "CTXLEDGER_PORT": "8080",
         "CTXLEDGER_HTTP_PATH": "/mcp",
-        "CTXLEDGER_REQUIRE_AUTH": "false",
         "CTXLEDGER_PROJECTION_ENABLED": "true",
         "CTXLEDGER_PROJECTION_DIRECTORY": ".agent",
         "CTXLEDGER_PROJECTION_WRITE_JSON": "true",

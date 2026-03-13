@@ -139,10 +139,11 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `/debug/tools`
 - `/debug/*` is intended for operational visibility and runtime verification, not general client use
 - production-oriented guidance now recommends:
-  - `CTXLEDGER_REQUIRE_AUTH=true`
+  - proxy-layer authentication in front of `ctxledger`
   - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false`
   - TLS termination and reverse-proxy deployment
-- local-oriented guidance now keeps auth disabled and debug endpoints enabled by default in sample configuration
+  - private backend networking for the application service
+- local-oriented guidance now keeps the direct local path simple, while the documented shared/internet-facing path uses proxy-only authentication
 - these surfaces do not replace canonical workflow state access through workflow tools and resources
 - projection failure lifecycle now distinguishes:
   - projection status such as `failed`

@@ -214,10 +214,8 @@ def build_projection_failures_resolve_response(
 def build_runtime_introspection_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
-    from .introspection import (
-        collect_runtime_introspection,
-        serialize_runtime_introspection_collection,
-    )
+    from .introspection import collect_runtime_introspection
+    from .serializers import serialize_runtime_introspection_collection
     from .types import RuntimeIntrospectionResponse
 
     introspections = collect_runtime_introspection(server.runtime)

@@ -63,7 +63,7 @@ You should also know the local MCP endpoint that the default Docker setup expose
 http://127.0.0.1:8080/mcp
 ```
 
-If you want to use authenticated access later, also prepare a bearer token and use the authenticated Docker Compose override described below.
+If you want to use authenticated access, prepare a bearer token for the proxy layer and use the small-pattern Traefik/auth deployment described below.
 
 ---
 
@@ -107,7 +107,7 @@ A representative configuration shape is:
 }
 ```
 
-If you are using bearer authentication, include the same bearer token that the server expects. A representative authenticated shape is:
+If you are using the proxy-protected deployment, include the bearer token expected by the proxy layer. A representative authenticated shape is:
 
 ```/dev/null/json#L1-11
 {
@@ -138,7 +138,7 @@ A representative configuration shape is:
 }
 ```
 
-If bearer authentication is enabled, provide the token in the request headers. A representative authenticated shape is:
+If you are using the proxy-protected deployment, provide the bearer token in the request headers. A representative authenticated shape is:
 
 ```/dev/null/json#L1-11
 {
@@ -538,8 +538,6 @@ Important environment variables include:
 - `CTXLEDGER_HOST`
 - `CTXLEDGER_PORT`
 - `CTXLEDGER_HTTP_PATH`
-- `CTXLEDGER_REQUIRE_AUTH`
-- `CTXLEDGER_AUTH_BEARER_TOKEN`
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS`
 - `CTXLEDGER_PROJECTION_ENABLED`
 - `CTXLEDGER_PROJECTION_DIRECTORY`
@@ -550,12 +548,9 @@ Important environment variables include:
 
 ### Configuration notes
 
-- `CTXLEDGER_REQUIRE_AUTH=true` enables bearer token authentication for protected HTTP endpoints
-- `CTXLEDGER_AUTH_BEARER_TOKEN` is required when `CTXLEDGER_REQUIRE_AUTH=true`
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` removes `/debug/*` routes from the HTTP runtime entirely
-- when bearer auth is enabled, `/debug/*` follows the same authentication boundary as other protected HTTP endpoints
 - for internet-exposed production deployments, prefer:
-  - `CTXLEDGER_REQUIRE_AUTH=true`
+  - proxy-layer authentication in front of `ctxledger`
   - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false`
 
 ### Typical local example
@@ -569,7 +564,6 @@ CTXLEDGER_ENABLE_HTTP=true
 CTXLEDGER_HOST=0.0.0.0
 CTXLEDGER_PORT=8080
 CTXLEDGER_HTTP_PATH=/mcp
-CTXLEDGER_REQUIRE_AUTH=false
 CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=true
 CTXLEDGER_PROJECTION_ENABLED=true
 CTXLEDGER_PROJECTION_DIRECTORY=.agent
@@ -589,8 +583,6 @@ CTXLEDGER_ENABLE_HTTP=true
 CTXLEDGER_HOST=0.0.0.0
 CTXLEDGER_PORT=8080
 CTXLEDGER_HTTP_PATH=/mcp
-CTXLEDGER_REQUIRE_AUTH=true
-CTXLEDGER_AUTH_BEARER_TOKEN=replace-me-with-a-strong-secret
 CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false
 CTXLEDGER_PROJECTION_ENABLED=true
 CTXLEDGER_PROJECTION_DIRECTORY=.agent
@@ -599,7 +591,7 @@ CTXLEDGER_PROJECTION_WRITE_MARKDOWN=true
 CTXLEDGER_LOG_LEVEL=info
 ```
 
-In production-like environments, also prefer TLS termination and reverse-proxy access in front of the HTTP service.
+In production-like environments, also prefer TLS termination and reverse-proxy access in front of the HTTP service, with authentication enforced at the proxy layer rather than inside `ctxledger`.
 
 ---
 
@@ -709,21 +701,23 @@ This extends the workflow validation with:
 - `resources/read` for `workspace://{workspace_id}/resume`
 - `resources/read` for `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-#### 7. Run authenticated smoke validation
+#### 7. Run the proxy-authenticated smoke validation
 
-If you want to validate the same remote MCP path with bearer authentication enabled, use the authenticated Docker Compose override:
+If you want to validate authenticated access, use the small-pattern Traefik/auth deployment. Authentication is expected to be enforced at the proxy layer rather than inside `ctxledger`.
 
-```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.auth.yml up -d --build --force-recreate
-```
-
-Then run the smoke client with the matching bearer token:
+Start the stack with a shared token for the proxy/auth layer:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --bearer-token smoke-test-secret-token --scenario workflow --workflow-resource-read
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
-This validates that the authenticated remote MCP server still supports:
+Then run the smoke client with the matching bearer token through the proxy endpoint:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+```
+
+This validates that the proxy-protected remote MCP server still supports:
 
 - `initialize`
 - `tools/list`
@@ -777,11 +771,11 @@ python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token
 
 Operational notes for this mode:
 
-- `ctxledger` app-layer bearer auth should stay disabled in this overlay
 - authentication happens at the proxy boundary, before requests reach the private MCP backend
 - the compose override is `docker/docker-compose.small-auth.yml`
 - the documented intent is a private backend service behind Traefik, not direct host exposure of the MCP backend itself
 - the lightweight auth service is expected to return `200` for valid tokens and `401` for missing or invalid tokens
+- `ctxledger` no longer relies on app-layer bearer authentication in the documented deployment path
 
 This small-pattern deployment is the recommended stepping stone for:
 
@@ -948,7 +942,7 @@ For production-like environments, the recommended topology is:
 
 - reverse proxy
 - TLS termination
-- bearer token authentication strategy
+- proxy-layer authentication strategy
 - `ctxledger`
 - PostgreSQL with durable storage
 
@@ -968,7 +962,7 @@ For security posture and exposure guidance, see `docs/SECURITY.md`.
 
 In `v0.1.0`, the primary formal security boundary is:
 
-- bearer token authentication
+- proxy-layer bearer token authentication
 
 Fine-grained authorization is intentionally deferred.
 
@@ -976,10 +970,10 @@ Recommended production posture:
 
 - put the service behind a reverse proxy
 - use TLS
-- set `CTXLEDGER_REQUIRE_AUTH=true` for HTTP deployments that are not fully private
-- provide `CTXLEDGER_AUTH_BEARER_TOKEN` through environment variables or secret-management tooling
+- enforce authentication at the proxy layer for HTTP deployments that are not fully private
+- provide proxy bearer tokens through environment variables or secret-management tooling
 - set `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` for internet-exposed production deployments unless operator access to `/debug/*` is explicitly required
-- if `/debug/*` must remain enabled in production, keep it behind the same bearer auth boundary and restrict access to trusted operators
+- if `/debug/*` must remain enabled in production, keep it behind the same proxy auth boundary and restrict access to trusted operators
 - do not hardcode credentials in repository files
 
 ---

@@ -6,7 +6,6 @@ from urllib.parse import parse_qs, urlparse
 from ..mcp.rpc import handle_mcp_rpc_request
 from ..mcp.streamable_http import (
     StreamableHttpRequest,
-    StreamableHttpResponse,
     build_streamable_http_endpoint,
 )
 
@@ -23,67 +22,6 @@ if TYPE_CHECKING:
         RuntimeIntrospectionResponse,
         WorkflowResumeResponse,
     )
-
-
-def extract_bearer_token(path: str) -> str | None:
-    normalized_path = path.strip()
-    if not normalized_path:
-        return None
-
-    parsed = urlparse(normalized_path)
-    authorization_values = parse_qs(parsed.query).get("authorization", [])
-    if not authorization_values:
-        return None
-
-    authorization = authorization_values[0].strip()
-    if not authorization:
-        return None
-
-    scheme, separator, token = authorization.partition(" ")
-    if separator == "" or scheme.lower() != "bearer":
-        return None
-
-    token = token.strip()
-    return token or None
-
-
-def build_http_auth_error_response(message: str) -> WorkflowResumeResponse:
-    from .types import WorkflowResumeResponse
-
-    return WorkflowResumeResponse(
-        status_code=401,
-        payload={
-            "error": {
-                "code": "authentication_error",
-                "message": message,
-            }
-        },
-        headers={
-            "content-type": "application/json",
-            "www-authenticate": 'Bearer realm="ctxledger"',
-        },
-    )
-
-
-def require_http_bearer_auth(
-    server: HttpHandlerFactoryServer,
-    path: str,
-) -> WorkflowResumeResponse | None:
-    if not server.settings.auth.is_enabled:
-        return None
-
-    expected_token = server.settings.auth.bearer_token
-    if expected_token is None:
-        return build_http_auth_error_response("bearer token is not configured")
-
-    presented_token = extract_bearer_token(path)
-    if presented_token is None:
-        return build_http_auth_error_response("missing bearer token")
-
-    if presented_token != expected_token:
-        return build_http_auth_error_response("invalid bearer token")
-
-    return None
 
 
 def parse_required_uuid_argument(
@@ -200,10 +138,6 @@ def build_workflow_resume_http_handler(
     from .types import WorkflowResumeResponse
 
     def _handler(path: str) -> WorkflowResumeResponse:
-        auth_error = require_http_bearer_auth(server, path)
-        if auth_error is not None:
-            return auth_error
-
         workflow_instance_id = parse_workflow_resume_request_path(path)
         if workflow_instance_id is None:
             return WorkflowResumeResponse(
@@ -232,14 +166,6 @@ def build_closed_projection_failures_http_handler(
     from .types import ProjectionFailureHistoryResponse
 
     def _handler(path: str) -> ProjectionFailureHistoryResponse:
-        auth_error = require_http_bearer_auth(server, path)
-        if auth_error is not None:
-            return ProjectionFailureHistoryResponse(
-                status_code=auth_error.status_code,
-                payload=auth_error.payload,
-                headers=auth_error.headers,
-            )
-
         workflow_instance_id = parse_closed_projection_failures_request_path(path)
         if workflow_instance_id is None:
             return ProjectionFailureHistoryResponse(
@@ -269,14 +195,6 @@ def build_projection_failures_ignore_http_handler(
     from .types import McpToolResponse, ProjectionFailureActionResponse
 
     def _handler(path: str) -> ProjectionFailureActionResponse:
-        auth_error = require_http_bearer_auth(server, path)
-        if auth_error is not None:
-            return ProjectionFailureActionResponse(
-                status_code=auth_error.status_code,
-                payload=auth_error.payload,
-                headers=auth_error.headers,
-            )
-
         parsed = urlparse(path)
         normalized_path = parsed.path.strip("/")
         if normalized_path != "projection_failures_ignore":
@@ -342,14 +260,6 @@ def build_projection_failures_resolve_http_handler(
     from .types import McpToolResponse, ProjectionFailureActionResponse
 
     def _handler(path: str) -> ProjectionFailureActionResponse:
-        auth_error = require_http_bearer_auth(server, path)
-        if auth_error is not None:
-            return ProjectionFailureActionResponse(
-                status_code=auth_error.status_code,
-                payload=auth_error.payload,
-                headers=auth_error.headers,
-            )
-
         parsed = urlparse(path)
         normalized_path = parsed.path.strip("/")
         if normalized_path != "projection_failures_resolve":
@@ -415,14 +325,6 @@ def build_runtime_introspection_http_handler(
     from .types import RuntimeIntrospectionResponse
 
     def _handler(path: str) -> RuntimeIntrospectionResponse:
-        auth_error = require_http_bearer_auth(server, path)
-        if auth_error is not None:
-            return RuntimeIntrospectionResponse(
-                status_code=auth_error.status_code,
-                payload=auth_error.payload,
-                headers=auth_error.headers,
-            )
-
         normalized_path = path.strip()
         path_without_query = normalized_path.split("?", 1)[0].strip("/")
         if path_without_query != "debug/runtime":
@@ -451,14 +353,6 @@ def build_runtime_routes_http_handler(
     from .types import RuntimeIntrospectionResponse
 
     def _handler(path: str) -> RuntimeIntrospectionResponse:
-        auth_error = require_http_bearer_auth(server, path)
-        if auth_error is not None:
-            return RuntimeIntrospectionResponse(
-                status_code=auth_error.status_code,
-                payload=auth_error.payload,
-                headers=auth_error.headers,
-            )
-
         normalized_path = path.strip()
         path_without_query = normalized_path.split("?", 1)[0].strip("/")
         if path_without_query != "debug/routes":
@@ -485,14 +379,6 @@ def build_runtime_tools_http_handler(
     from .types import RuntimeIntrospectionResponse
 
     def _handler(path: str) -> RuntimeIntrospectionResponse:
-        auth_error = require_http_bearer_auth(server, path)
-        if auth_error is not None:
-            return RuntimeIntrospectionResponse(
-                status_code=auth_error.status_code,
-                payload=auth_error.payload,
-                headers=auth_error.headers,
-            )
-
         normalized_path = path.strip()
         path_without_query = normalized_path.split("?", 1)[0].strip("/")
         if path_without_query != "debug/tools":
@@ -518,16 +404,6 @@ def build_mcp_http_handler(
 ):
     from .types import McpHttpResponse
 
-    def _validate_auth(path: str) -> StreamableHttpResponse | None:
-        auth_error = require_http_bearer_auth(server, path)
-        if auth_error is None:
-            return None
-        return StreamableHttpResponse(
-            status_code=auth_error.status_code,
-            payload=auth_error.payload,
-            headers=auth_error.headers,
-        )
-
     class _StreamableHttpRuntimeAdapter:
         def handle_rpc_request(
             self,
@@ -538,7 +414,6 @@ def build_mcp_http_handler(
     endpoint = build_streamable_http_endpoint(
         _StreamableHttpRuntimeAdapter(),
         mcp_path=server.settings.http.path,
-        auth_validator=_validate_auth,
     )
 
     def _handler(path: str, body: str | None = None) -> McpHttpResponse:
@@ -559,7 +434,6 @@ def build_mcp_http_handler(
 
 __all__ = [
     "build_closed_projection_failures_http_handler",
-    "build_http_auth_error_response",
     "build_mcp_http_handler",
     "build_projection_failures_ignore_http_handler",
     "build_projection_failures_resolve_http_handler",
@@ -567,10 +441,8 @@ __all__ = [
     "build_runtime_routes_http_handler",
     "build_runtime_tools_http_handler",
     "build_workflow_resume_http_handler",
-    "extract_bearer_token",
     "parse_closed_projection_failures_request_path",
     "parse_optional_projection_type_argument",
     "parse_required_uuid_argument",
     "parse_workflow_resume_request_path",
-    "require_http_bearer_auth",
 ]

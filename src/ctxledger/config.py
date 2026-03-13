@@ -113,16 +113,6 @@ class HttpSettings:
 
 
 @dataclass(frozen=True, slots=True)
-class AuthSettings:
-    bearer_token: str | None
-    require_auth: bool
-
-    @property
-    def is_enabled(self) -> bool:
-        return self.require_auth and self.bearer_token is not None
-
-
-@dataclass(frozen=True, slots=True)
 class DebugSettings:
     enabled: bool
 
@@ -148,7 +138,6 @@ class AppSettings:
     environment: str
     database: DatabaseSettings
     http: HttpSettings
-    auth: AuthSettings
     debug: DebugSettings
     projection: ProjectionSettings
     logging: LoggingSettings
@@ -163,11 +152,6 @@ class AppSettings:
             raise ConfigError("CTXLEDGER_PORT must be between 1 and 65535")
         if not self.http.path:
             raise ConfigError("CTXLEDGER_HTTP_PATH must not be empty")
-
-        if self.auth.require_auth and not self.auth.bearer_token:
-            raise ConfigError(
-                "CTXLEDGER_AUTH_BEARER_TOKEN is required when CTXLEDGER_REQUIRE_AUTH is enabled"
-            )
 
         if self.projection.directory_name == "":
             raise ConfigError("CTXLEDGER_PROJECTION_DIRECTORY must not be empty")
@@ -209,10 +193,6 @@ def load_settings() -> AppSettings:
             host=_get_env("CTXLEDGER_HOST", "0.0.0.0") or "0.0.0.0",
             port=_parse_int("CTXLEDGER_PORT", 8080),
             path=_get_env("CTXLEDGER_HTTP_PATH", "/mcp") or "/mcp",
-        ),
-        auth=AuthSettings(
-            bearer_token=_get_env("CTXLEDGER_AUTH_BEARER_TOKEN"),
-            require_auth=_parse_bool("CTXLEDGER_REQUIRE_AUTH", False),
         ),
         debug=DebugSettings(
             enabled=_parse_bool("CTXLEDGER_ENABLE_DEBUG_ENDPOINTS", True),
