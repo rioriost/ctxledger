@@ -341,6 +341,23 @@ This means a remote MCP client can, at minimum:
 
 This is the main acceptance surface for `v0.1.0`.
 
+### Acceptance boundary note
+
+At the current repository-evidence level, the confirmed HTTP MCP surface should be read as:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+
+This should be treated as the strongest current `v0.1.0` HTTP acceptance evidence.
+
+Broader HTTP MCP proof, such as explicit closeout evidence for:
+
+- `resources/list`
+- `resources/read`
+
+should be treated as a separate release-framing question rather than as behavior already implied by the minimal confirmed path.
+
 ### Supporting scope note
 
 The primary release evidence surface is the HTTP MCP path at `/mcp`.  
@@ -1618,11 +1635,11 @@ Memory APIs may exist in documented stub form until the corresponding subsystems
 
 ### Acceptance Evidence Note for Tool Schema Discoverability
 
-In the current repository state, tool schema discoverability should be treated as part of the practical public-surface evidence for stdio MCP interoperability.
+In the current repository state, tool schema discoverability should be treated as part of the practical public-surface evidence for HTTP MCP interoperability.
 
 Representative evidence includes:
 
-- stdio `tools/list` returns non-empty `inputSchema` payloads
+- HTTP `tools/list` returns non-empty `inputSchema` payloads
 - `workspace_register` exposes required fields:
   - `repo_url`
   - `canonical_path`
@@ -1638,7 +1655,7 @@ Representative evidence includes:
   - projection failure tools
   - memory stub tools
 
-This means `workspace_register` argument discovery is no longer dependent on runtime validation errors alone and should be counted as visible acceptance evidence for MCP server/client compatibility.
+This means `workspace_register` argument discovery is no longer dependent on runtime validation errors alone and should be counted as visible acceptance evidence for MCP server/client compatibility on the confirmed HTTP MCP path.
 
 ### Core Expectations
 A compliant `v0.1.0` implementation should ensure:
@@ -1649,4 +1666,8 @@ A compliant `v0.1.0` implementation should ensure:
 - composite resume assembly
 - normalized MCP-visible errors
 - projection-aware but projection-independent reads
-- machine-readable stdio MCP tool argument discovery through `tools/list`
+- machine-readable HTTP MCP tool argument discovery through `tools/list`
+- a minimally confirmed HTTP MCP path consisting of:
+  - `initialize`
+  - `tools/list`
+  - `tools/call`

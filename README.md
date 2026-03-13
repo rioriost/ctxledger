@@ -165,6 +165,15 @@ The currently evidenced minimal HTTP MCP path includes:
 
 This means repository evidence now supports the claim that a remote MCP client can reach `/mcp` and perform basic MCP session setup, tool discovery, and tool invocation over HTTP.
 
+Acceptance-boundary note for `v0.1.0`:
+
+- the minimal confirmed HTTP MCP path is:
+  - `initialize`
+  - `tools/list`
+  - `tools/call`
+- this minimal path should be treated as the strongest current release evidence surface
+- broader MCP coverage, such as additional resource-oriented protocol proof, should be treated as a separate closeout question rather than implied by this minimal confirmed path
+
 ### Workflow tools
 - `workspace_register`
 - `workflow_start`
@@ -188,6 +197,14 @@ This allows MCP clients to discover valid arguments before calling the tool inst
 
 At present, the strongest repository evidence is for the minimal HTTP MCP flow itself plus the concrete tool schema surface.  
 If stricter protocol-coverage claims are needed for release closeout, they should be stated separately from this minimal confirmed path.
+
+In other words, the current README should be read as claiming:
+
+- confirmed HTTP MCP initialization
+- confirmed HTTP MCP tool discovery
+- confirmed HTTP MCP tool invocation
+
+It should not be read as silently claiming full MCP surface completeness beyond what is explicitly evidenced.
 
 ### Memory tools
 - `memory_remember_episode`

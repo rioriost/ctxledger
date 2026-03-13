@@ -1,7 +1,12 @@
-Final HTTP acceptance and stdio removal closeout note.
+final acceptance-boundary framing note.
 
-このセッションでは、これまで進めてきた stdio removal と HTTP-only migration の流れを、**closeout 前提の最終整理**としてまとめます。  
-結論から言うと、**stdio removal 自体は実質完了**であり、現時点の主要論点は実装ではなく **`v0.1.0` acceptance boundary の表現整理** にあります。
+このセッションでは、stdio removal と HTTP-only migration の作業列を **release closeout 観点で最終整理** します。  
+現時点の結論はかなり明確です。
+
+- **stdio removal itself is effectively complete**
+- **HTTP-only semantics are the active project state**
+- **project-wide verification baseline is green**
+- 残る主要論点は実装ではなく、**`v0.1.0` acceptance boundary をどう表現するか** です
 
 ## 1. 現在の状態の要約
 
@@ -12,16 +17,17 @@ Final HTTP acceptance and stdio removal closeout note.
 - stdio concrete implementation は **source tree から削除済み**
 - public façade / runtime helper / config / CLI / main tests は **HTTP-only semantics に整合**
 - primary docs / env examples も **概ね HTTP-only wording に整合**
-- project-wide baseline は **green**
+- focused verification baseline は **204 passed**
+- project-wide verification baseline は **256 passed**
 
 言い換えると:
 
-- **stdio removal itself is effectively complete**
-- **HTTP-only semantics are the active project state**
-- remaining work is mainly
-  - acceptance wording
-  - release-evidence framing
+- stdio removal は、もはや active code path・active config model・active public surface のどれにも依存していない
+- release closeout に向けた残タスクは、transport removal ではなく
+  - historical wording sweep
+  - acceptance framing
   - optional broader HTTP MCP proof
+  の整理である
 
 ## 2. patch progression の最終整理
 
@@ -82,7 +88,7 @@ Final HTTP acceptance and stdio removal closeout note.
   - `pytest -q`
   - **256 passed**
 
-## 3. confirmed baseline
+## 3. confirmed verification baselines
 
 ### focused verification baseline
 - `tests/test_config.py`
@@ -108,7 +114,7 @@ Final HTTP acceptance and stdio removal closeout note.
 
 - stdio removal に伴う主要な regression は見えていない
 - focused migration area だけでなく repository 全体でも green を確認済み
-- handoff / closeout 時点の confidence は高い
+- closeout 時点の confidence は高い
 
 ## 4. 現在の architecture / transport interpretation
 
@@ -188,7 +194,45 @@ Final HTTP acceptance and stdio removal closeout note.
 
 したがって、今後の残作業は「stdio を消せるか」ではなく、「closeout をどう記述するか」の問題です。
 
-## 7. current open question
+## 7. final acceptance-boundary framing
+
+現時点の `v0.1.0` acceptance framing は次のように整理するのが自然です。
+
+### confirmed HTTP MCP path
+現時点で repository evidence が強いのは、`/mcp` における次の minimal path です。
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+
+この minimal path については、`v0.1.0` の **strongest current release evidence surface** として扱ってよいです。
+
+### what this means
+少なくとも次は確認済みとして表現できます。
+
+- remote MCP client can reach `/mcp`
+- MCP session initialization is confirmed
+- MCP tool discovery is confirmed
+- MCP tool invocation is confirmed
+- tool schema discoverability over HTTP is confirmed
+
+### what this does not automatically mean
+一方で、次は **minimal confirmed path から自動的には主張しない** 方がよいです。
+
+- full MCP surface completeness
+- broader protocol coverage beyond currently evidenced operations
+- automatic proof for:
+  - `resources/list`
+  - `resources/read`
+
+### recommended wording
+closeout wording としては、たとえば次の趣旨が自然です。
+
+- `v0.1.0` では minimal HTTP MCP path at `/mcp` is confirmed
+- broader HTTP MCP surface proof is a separate release-framing question
+- therefore remaining work is no longer transport migration, but acceptance-scope clarification
+
+## 8. current open question
 
 現時点の中心的な open question は stdio ではありません。
 
@@ -198,41 +242,12 @@ Final HTTP acceptance and stdio removal closeout note.
 
 という点です。
 
-現時点で強く言えること:
-
-- `/mcp` の minimal HTTP MCP path は repository evidence 上かなり強い
-  - `initialize`
-  - `tools/list`
-  - `tools/call`
-- workflow tool surface と tool schema publication は HTTP 側で成立している
-- release evidence は stdio-side maturity ではなく HTTP-side acceptance を中心に組み立てるべき
-
 もし追加で詰めるなら、焦点は次です。
 
 - `resources/list`
 - `resources/read`
 - broader MCP coverage
 - acceptance matrix
-
-## 8. recommended final framing
-
-現時点の closeout wording としては、次の表現が自然です。
-
-### implementation conclusion
-- stdio removal is effectively complete
-- the repository now operates with HTTP-only transport semantics
-- the active MCP surface is `/mcp`
-
-### verification conclusion
-- focused migration baseline: **204 passed**
-- project-wide baseline: **256 passed**
-
-### release evidence conclusion
-- the minimal HTTP MCP path is proven:
-  - `initialize`
-  - `tools/list`
-  - `tools/call`
-- broader HTTP MCP surface proof remains a release-framing question, not a stdio-removal blocker
 
 ## 9. remaining optional follow-up
 
