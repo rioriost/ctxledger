@@ -29,7 +29,6 @@
 - `src/ctxledger/server.py` に残っていた internal bridge helper も整理しました。
 - `server.py` から `build_http_runtime_adapter()` / `build_workflow_service_factory()` / `create_runtime()` / `_print_runtime_summary()` を削除しました。
 - `create_server()` は `runtime.server_factory.create_server()` への委譲をやめ、`CtxLedgerServer(...)` の構築、workflow service factory の選択、`build_http_runtime_adapter(server)` による runtime 装着を `server.py` 内で直接行う形に変更しました。
-- これにより、`server.py` の server bootstrap flow は一段短くなり、top-level entrypoint module として読んだときの初期化経路が追いやすくなりました。
 - `src/ctxledger/runtime/server_factory.py` を整理し、現在の `server.py` から使われなくなっていた `create_server()` helper を削除しました。
 - `src/ctxledger/runtime/server_factory.py` は `build_workflow_service_factory()` のみを持つ小さな factory module に縮小されました。
 - `runtime.server_factory` から不要になった type-only import と protocol import を削除し、module の責務に合わせて import surface を簡素化しました。
@@ -38,7 +37,6 @@
 - これにより、server response builder 群は response DTO 型について `server.py` を経由しない構成になり、response type の dependency direction もより自然になりました。
 - debug/introspection response の組み立てを serializer 側の表現へ寄せました。
 - `src/ctxledger/runtime/server_responses.py` の `build_runtime_routes_response()` と `build_runtime_tools_response()` は、生の introspection object から直接 dict を組み立てるのではなく、`serialize_runtime_introspection()` の出力を使って `transport` / `routes` / `tools` を切り出す形に変更しました。
-- これにより debug response も introspection serializer の表現と揃い、routes/tools/debug payload の shape 変更が将来入った場合でも追従点が減る形になりました。
 - `build_runtime_introspection_response()` はもともと `serialize_runtime_introspection_collection()` を通していたため、debug introspection family 全体の表現がより一貫しました。
 - route registry の naming を introspection responsibility に寄せました。
 - `src/ctxledger/runtime/http_runtime.py` の `registered_routes()` を `introspection_endpoints()` に改名しました。
@@ -46,8 +44,23 @@
 - `HttpRuntimeAdapter.start()` / `stop()` の logging extras も `registered_routes` ではなく `introspection_endpoints` キーで出す形に変更しました。
 - `src/ctxledger/runtime/protocols.py` の `HttpRuntimeAdapterProtocol` も `registered_routes()` ではなく `introspection_endpoints()` を要求する shape に更新しました。
 - `tests/test_server.py` で route registry を直接確認していた箇所も `registered_routes()` から `introspection_endpoints()` へ追従しました。
-- `test_http_runtime_adapter_introspect_returns_registered_routes()` では、固定 tuple 直書きではなく `runtime.introspection_endpoints()` と `introspection.routes` が一致することを確認する形に変更し、registry naming cleanup 後の意図に寄せました。
-- これにより route registry は、実装上は `_handlers` の key 集合を返しつつも、外向きには introspection/debug 用 surface であることがより明確になりました。
+- `test_http_runtime_adapter_introspect_returns_registered_routes()` では、固定 tuple 直書きではなく `runtime.introspection_endpoints()` と `introspection.routes` が一致することを確認する形に変更しました。
+- live Docker validation も実施しました。
+- `docker compose -f docker/docker-compose.yml up -d --build` で PostgreSQL と `ctxledger` サービスを起動しました。
+- `docker compose -f docker/docker-compose.yml ps` で `ctxledger-postgres` / `ctxledger-server` の両方が healthy になっていることを確認しました。
+- `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read` を実行し、live Docker 上で以下が通ることを確認しました。
+  - `initialize`
+  - `tools/list`
+  - `tools/call`
+  - `resources/list`
+  - `workspace_register`
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_resume`
+  - `resources/read` for workspace resume
+  - `resources/read` for workflow detail
+  - `workflow_complete`
+- これにより、HTTP-only cleanup 後の remote MCP server 実装が Docker Compose 経由でも end-to-end に動作することを確認しました。
 - 最後に `pytest -q` を全体実行し、cleanup 一連の変更後も全体回帰がないことを確認しました。
 
 今回確認したテスト結果:
@@ -59,6 +72,15 @@
 - 結果: `168 passed`
 - `pytest -q`
 - 結果: `254 passed`
+
+今回確認した live Docker validation:
+- `docker compose -f docker/docker-compose.yml up -d --build`
+- `docker compose -f docker/docker-compose.yml ps`
+- 結果:
+  - `ctxledger-postgres` healthy
+  - `ctxledger-server` healthy
+- `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read`
+- 結果: live Docker 上の remote MCP workflow/resource smoke が完走
 
 今回の直近コミット:
 - `d316d74` — `Reduce server test imports to runtime modules`
@@ -72,6 +94,8 @@
 - `0ad5419` — `Use runtime response types directly in server responses`
 - `1bfc34d` — `Align debug runtime responses with serializers`
 - `089bc2e` — `Clarify runtime route registry introspection role`
+- `c9e4a77` — `Record full cleanup verification status`
+- `5d8500b` — `Record cleanup plan completion status`
 
 現時点での設計メモ:
 - `server.py` から concrete HTTP adapter 実装が抜けたことで、bootstrap surface と runtime implementation の境界がかなり自然になりました。
@@ -88,12 +112,12 @@
 - `server.py` に残っていた internal bridge helper がなくなったことで、server bootstrap の責務と call graph はさらに単純化されました。
 - `runtime.server_factory.py` は `build_workflow_service_factory()` のみを提供する最小 module になり、server bootstrap helper の旧 layering artifact はさらに減りました。
 - `runtime.server_responses.py` からも remaining `server.py` 経由の response type import が外れ、debug routes/tools response も serializer ベースの表現へ揃ったため、runtime introspection 系の payload 変換責務は以前より一貫しています。
-- 現時点では HTTP-only cleanup の大きな pruning は一段落しており、以後は小さな責務整理か、新たな要件対応に進みやすい状態です。
+- 現時点では HTTP-only cleanup の大きな pruning は一段落しており、Docker Compose 上の live remote MCP validation まで通っているため、この cleanup スレッドは実質完了扱いでよい状態です。
 
 次セッションで優先してやること:
-1. `docs/plans/http_fastapi_cleanup_plan.md` と現在の実装を見比べて、未着手の cleanup 項目が残っているか確認する
-2. 必要なら `tests/test_cli.py` や他の周辺 test も含めて public API の残し方を最終確認する
+1. もし cleanup を正式にクローズするなら、`docs/plans/http_fastapi_cleanup_plan.md` に完了扱いの最終メモを加えるか検討する
+2. live Docker auth path (`docker/docker-compose.auth.yml`) でも必要なら追加 smoke を行う
 3. 新しい cleanup 候補がなければ、この HTTP-only cleanup スレッドは一区切りとして次の機能・改善タスクへ進む
-4. 追加変更を入れる場合は、変更後に `pytest -q` で全体回帰確認を維持する
+4. 追加変更を入れる場合は、変更後に `pytest -q` と必要な Docker smoke を再実行して回帰確認を維持する
 5. 問題なければ次の descriptive commit を作成する
 6. もし別トピックへ移るなら、この handoff を起点に新しい作業目標を定義する
