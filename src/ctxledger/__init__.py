@@ -113,7 +113,7 @@ def _apply_schema(args: argparse.Namespace) -> int:
 
         try:
             import psycopg
-        except ImportError as exc:
+        except ImportError:
             print(
                 "Failed to import PostgreSQL driver. Install psycopg[binary] first.",
                 file=sys.stderr,

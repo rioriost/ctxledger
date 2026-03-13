@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,7 +20,6 @@ from ctxledger.config import (
     ProjectionSettings,
     TransportMode,
 )
-from ctxledger.server import ServerBootstrapError
 from ctxledger.workflow.service import (
     CreateCheckpointInput,
     ProjectionArtifactType,
@@ -276,9 +276,6 @@ def test_main_write_resume_projection_wires_real_command_arguments(
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
 ) -> None:
-    workspace_id = uuid4()
-    workflow_instance_id = uuid4()
-
     from ctxledger.db import InMemoryStore, build_in_memory_uow_factory
     from ctxledger.projection.writer import ResumeProjectionWriter
     from ctxledger.workflow.service import ResumeWorkflowInput, WorkflowService
@@ -462,7 +459,7 @@ def test_main_resume_workflow_renders_text_output(
 
     captured = capsys.readouterr()
 
-    assert exit_code == 0
+    assert exit_code == 0, captured.err
     assert "Resume workflow" in captured.out
     assert f"Workflow: {workflow_instance_id}" in captured.out
     assert "Ticket: CLI-RESUME-1" in captured.out
@@ -587,7 +584,7 @@ def test_main_resume_workflow_renders_ignored_projection_warning_details(
 
     captured = capsys.readouterr()
 
-    assert exit_code == 0
+    assert exit_code == 0, captured.err
     assert "Warnings:" in captured.out
     assert (
         "- ignored_projection_failure: "
@@ -604,7 +601,6 @@ def test_main_resume_workflow_renders_json_output(
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
 ) -> None:
-    import json
 
     workflow_instance_id = uuid4()
     workspace_id = uuid4()
@@ -716,7 +712,7 @@ def test_main_resume_workflow_renders_json_output(
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
 
-    assert exit_code == 0
+    assert exit_code == 0, captured.err
     assert payload["workspace"]["workspace_id"] == str(workspace_id)
     assert payload["workflow"]["workflow_instance_id"] == str(workflow_instance_id)
     assert payload["attempt"]["attempt_id"] == str(attempt_id)
