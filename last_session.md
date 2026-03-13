@@ -277,6 +277,42 @@ docs consistency cleanup:
     に関する旧コメントと env 定義を削除しました。
   - `docker/docker-compose.small-auth.yml` の `ctxledger-private` から `CTXLEDGER_REQUIRE_AUTH: "false"` を削除しました。
 - これにより、compose 設定も current proxy-only auth model とより自然に一致する shape になりました。
+- small-pattern live Docker re-validation も compose cleanup 後に再実施しました。
+  - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans`
+  - `CTXLEDGER_SMALL_AUTH_TOKEN=smoke-small-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate`
+  - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml ps`
+  - 結果:
+    - `ctxledger-postgres` healthy
+    - `ctxledger-auth-small` healthy
+    - `ctxledger-server-private` healthy
+    - `ctxledger-traefik` healthy
+  - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure`
+  - 結果:
+    - missing token path が `401`
+    - payload:
+      - `error: missing_bearer_token`
+      - `message: Authorization header must contain a bearer token`
+  - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure`
+  - 結果:
+    - invalid token path が `401`
+    - payload:
+      - `error: invalid_bearer_token`
+      - `message: Bearer token is invalid`
+  - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token smoke-small-secret --scenario workflow --workflow-resource-read`
+  - 結果:
+    - proxy 背後の small pattern 経由で以下が再確認できました
+      - `initialize`
+      - `tools/list`
+      - `tools/call`
+      - `resources/list`
+      - `workspace_register`
+      - `workflow_start`
+      - `workflow_checkpoint`
+      - `workflow_resume`
+      - `resources/read` for workspace resume
+      - `resources/read` for workflow detail
+      - `workflow_complete`
+- この再確認により、runbook と compose cleanup 後の実運用手順は引き続き有効であることを確認しました。
 - この cleanup により、large-pattern memo 追加後の docs 群はより一貫して **proxy-only auth / proxy-first security boundary** を前提に読める状態になっています。
 - なお `docs/imple_plan_0.1.0.md` は historical planning document 的な性格もあるため、今後さらに厳密に current-state aligned wording へ寄せるかどうかは別途判断余地があります。
 - code / test / script 側には `CTXLEDGER_REQUIRE_AUTH` / `CTXLEDGER_AUTH_BEARER_TOKEN` / `AuthSettings` などの旧 app-layer auth 参照は今回の確認範囲では残っていませんでした。
@@ -285,7 +321,7 @@ docs consistency cleanup:
 - `git status` を見て今回の compose/doc 変更を確認する
 - repo ルールに従って、work loop の区切りで descriptive message 付きの `git commit` を行う
   - 例: `Remove deprecated auth envs from compose`
-- 必要なら small-pattern runbook の手順どおりに live Docker validation をもう一度流し、compose cleanup 後も operator path が変わっていないことを確認する
+- 必要なら live Docker validation を再度流し、small-pattern runbook の手順と compose cleanup 後の operator path が引き続き一致することを確認する
   - initialize probe を先に流して expected HTTP status を検証する flow
 - 最初は proxy rejection 時に payload 内 `error` object を必須扱いしていましたが、ForwardAuth rejection body は JSON-RPC ではなく plain JSON/transport body でもよいので、この制約を外しました。
 - その結果、proxy rejection path と allow path の両方を同じ smoke script で確認できるようになりました。
