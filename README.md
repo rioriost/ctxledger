@@ -581,7 +581,43 @@ This scenario performs:
 
 against the live server.
 
-#### 6. Shut down the local stack
+#### 6. Run workflow resource-read validation
+
+If you also want to validate workflow resource reads against the live server, enable resource reads in the workflow scenario:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read
+```
+
+This extends the workflow validation with:
+
+- `resources/read` for `workspace://{workspace_id}/resume`
+- `resources/read` for `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+#### 7. Run authenticated smoke validation
+
+If you want to validate the same remote MCP path with bearer authentication enabled, use the authenticated Docker Compose override:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.auth.yml up -d --build --force-recreate
+```
+
+Then run the smoke client with the matching bearer token:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --bearer-token smoke-test-secret-token --scenario workflow --workflow-resource-read
+```
+
+This validates that the authenticated remote MCP server still supports:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+- `resources/list`
+- `resources/read`
+- workflow mutation and resume flows
+
+#### 8. Shut down the local stack
 
 ```/dev/null/sh#L1-1
 docker compose -f docker/docker-compose.yml down
