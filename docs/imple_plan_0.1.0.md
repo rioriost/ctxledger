@@ -31,8 +31,7 @@ This plan is derived primarily from `docs/specification.md`, and aligned with th
 Version `0.1.0` should implement the following:
 
 1. **Remote MCP server skeleton**
-   - Streamable HTTP as the primary runtime mode
-   - stdio mode for development and local validation
+   - Streamable HTTP as the runtime mode
 
 2. **Workflow control layer (Layer 1 only)**
    - workspace registration
@@ -588,7 +587,6 @@ Also define:
 - `CTXLEDGER_PORT`
 - `CTXLEDGER_TRANSPORT`
 - `CTXLEDGER_AUTH_BEARER_TOKEN`
-- `CTXLEDGER_ENABLE_STDIO`
 - `CTXLEDGER_ENABLE_HTTP`
 - `CTXLEDGER_PROJECTION_ENABLED`
 
@@ -638,7 +636,7 @@ Use a typed settings pattern so config validation happens at startup.
 
 ### Design Guidance
 
-Keep this module free from transport-specific concerns. It should be reusable from both HTTP and stdio entry paths.
+Keep this module free from transport-specific concerns. It should be reusable from HTTP entry paths and any future transport boundary without embedding transport assumptions.
 
 ---
 
@@ -866,7 +864,7 @@ Target:
 1. bind service methods to MCP tools
 2. bind read-only resources
 3. standardize error responses
-4. validate stdio and HTTP operation
+4. validate HTTP operation
 
 ## Phase E — Projection and Ops
 
@@ -900,7 +898,7 @@ Keep memory services stubbed and focus delivery on Layer 1.
 
 ### Problem
 
-Supporting both streamable HTTP and stdio can expand implementation effort.
+Keeping transport concerns broader than the HTTP runtime contract can expand implementation effort.
 
 ### Mitigation
 

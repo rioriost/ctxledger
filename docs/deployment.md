@@ -139,7 +139,7 @@ Recommended environment variables include:
 - `CTXLEDGER_REQUIRE_AUTH`
 - `CTXLEDGER_AUTH_BEARER_TOKEN`
 - `CTXLEDGER_ENABLE_HTTP`
-- `CTXLEDGER_ENABLE_STDIO`
+
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS`
 - `CTXLEDGER_PROJECTION_ENABLED`
 - `CTXLEDGER_LOG_LEVEL`
@@ -157,9 +157,8 @@ See also:
 | Variable | Default | Purpose | Local / internal recommendation | Internet-exposed production recommendation |
 | --- | --- | --- | --- | --- |
 | `CTXLEDGER_DATABASE_URL` | none | PostgreSQL connection string for canonical state | set to local or shared development database | required; inject through secret management |
-| `CTXLEDGER_TRANSPORT` | `http` | selects enabled transport mode | `http` for Docker/local deployment; avoid `both` unless explicitly validating non-primary transport behavior | `http` for the `v0.1.0` release posture |
+| `CTXLEDGER_TRANSPORT` | `http` | selects the enabled transport mode | keep set to `http` for Docker/local deployment | keep set to `http` for the `v0.1.0` release posture |
 | `CTXLEDGER_ENABLE_HTTP` | derived from transport | enables HTTP transport | keep aligned with `CTXLEDGER_TRANSPORT`; expected `true` for normal local deployment | keep aligned with `CTXLEDGER_TRANSPORT`; expected `true` |
-| `CTXLEDGER_ENABLE_STDIO` | derived from transport | enables stdio transport | disable unless explicitly needed for internal development or comparison | usually `false`; not part of the primary `v0.1.0` deployment posture |
 | `CTXLEDGER_HOST` | `0.0.0.0` | HTTP bind host | `0.0.0.0` is acceptable in containers/local networks | bind according to network policy, typically behind a reverse proxy |
 | `CTXLEDGER_PORT` | `8080` | HTTP listen port | `8080` is a reasonable default | set explicitly to match deployment and proxy routing |
 | `CTXLEDGER_HTTP_PATH` | `/mcp` | MCP HTTP endpoint path | keep default unless integration requires a different path | keep stable and document it for proxy configuration |
@@ -238,7 +237,6 @@ Current implementation behavior:
 
 The payloads returned by `/debug/*` may reveal details such as:
 
-- enabled transports
 - registered HTTP routes such as:
   - `runtime_introspection`
   - `runtime_routes`
@@ -247,7 +245,6 @@ The payloads returned by `/debug/*` may reveal details such as:
   - `workflow_closed_projection_failures`
   - `projection_failures_ignore`
   - `projection_failures_resolve`
-- registered stdio tools
 - runtime wiring state
 
 These details are useful for diagnostics but increase observability exposure, so they should be treated as operationally sensitive.

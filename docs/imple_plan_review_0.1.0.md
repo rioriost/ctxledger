@@ -38,8 +38,8 @@ However, when evaluated strictly against the `v0.1.0` implementation plan, there
 The most important remaining gaps are now narrower than before:
 
 1. **A minimal primary HTTP MCP endpoint at `/mcp` is now evidenced, but the exact acceptance boundary still needs clarification**
-2. **The visible MCP protocol surface is now proven on HTTP for the minimal path, while some broader MCP surface remains stronger on `stdio`**
-3. **Some acceptance criteria still appear only partially evidenced at the public HTTP MCP surface**
+2. **The visible MCP protocol surface is now proven on HTTP for the minimal path, and the repository has since moved to HTTP-only transport semantics**
+3. **Some acceptance criteria may still need broader HTTP closeout evidence, but the remaining transport concern is no longer stdio maturity**
 
 ---
 
@@ -219,7 +219,7 @@ The implementation plan requires the following MCP tools:
 
 The README also documents these names as workflow tools.
 
-Current runtime registration evidence in `src/ctxledger/server.py` now shows stdio tool registrations for:
+Current runtime registration evidence in `src/ctxledger/server.py` now shows HTTP MCP tool exposure aligned around:
 
 - `workflow_resume`
 - `projection_failures_ignore`
@@ -237,7 +237,7 @@ This now matches the plan and README naming for the resume workflow tool.
 Keep the public naming aligned as:
 
 - HTTP route: `workflow_resume`
-- stdio tool: `workflow_resume`
+- MCP tool: `workflow_resume`
 
 Internal Python method names such as `resume_workflow(...)` may remain implementation details.
 
@@ -274,7 +274,7 @@ Create a short acceptance-check matrix showing for each criterion:
 
 ## 6. Gaps / Likely Unresolved Items
 
-## 6.1 Required MCP tool surface is now implemented on `stdio`, but primary HTTP MCP endpoint evidence is still missing
+## 6.1 Required MCP tool surface is now implemented on HTTP, but broader HTTP MCP closeout evidence may still need tightening
 
 ### Plan requirement
 Required MCP tools in `v0.1.0`:
@@ -297,7 +297,7 @@ A concrete runtime audit of `src/ctxledger/server.py` now shows:
     - `runtime_introspection`
     - `runtime_routes`
     - `runtime_tools`
-- stdio tool registrations include:
+- HTTP MCP tool exposure includes:
   - `workflow_resume`
   - `workspace_register`
   - `workflow_start`
@@ -322,9 +322,9 @@ A follow-up audit of visible service-layer implementation and server-side tool-h
   - `workflow_checkpoint`
   - `workflow_complete`
 
-A further public-surface audit now shows that stdio MCP tool argument discoverability is also implemented:
+A further public-surface audit now shows that HTTP MCP tool argument discoverability is also implemented:
 
-- `tools/list` returns non-empty `inputSchema` payloads for visible stdio tools
+- `tools/list` returns non-empty `inputSchema` payloads for visible HTTP MCP tools
 - `workspace_register` now exposes required fields:
   - `repo_url`
   - `canonical_path`
@@ -342,24 +342,21 @@ A further public-surface audit now shows that stdio MCP tool argument discoverab
 
 However, the same audit also shows a more important blocker relative to the implementation plan:
 
-- the visible MCP protocol request handling is currently evidenced on `stdio`, not on HTTP
-- the visible HTTP runtime adapter is still described as a placeholder for a future Streamable HTTP implementation
-- `/mcp` is visible as configuration and startup-summary metadata, but visible HTTP MCP request handling for:
+- the visible MCP protocol request handling is now evidenced on HTTP
+- the HTTP runtime is no longer framed as a placeholder-only path for future MCP exposure
+- `/mcp` is now visibly exercised for:
   - `initialize`
   - `tools/list`
   - `tools/call`
-  - `resources/list`
-  - `resources/read`
-  is not currently confirmed by repository evidence
-- current visible HTTP behavior is centered on workflow/debug/operator routes, not on a clearly evidenced remote MCP protocol surface at `/mcp`
+- the repository has also moved to HTTP-only transport semantics in configuration, orchestration, server surface, and tests
 
 This sharpens the current assessment:
 
-- the required workflow MCP operations are visibly exposed on `stdio`
-- stdio-side MCP tool argument discoverability is implemented
-- but the primary `v0.1.0` target is a **remote** MCP server over HTTP
-- therefore stdio maturity does not close the main transport acceptance question
-- the remaining plan misalignment is not merely documentation polish; it is the missing or unproven primary HTTP MCP endpoint surface
+- the required workflow MCP operations are now exposed through the HTTP MCP surface
+- HTTP-side MCP tool argument discoverability is implemented
+- the primary `v0.1.0` target remains a **remote** MCP server over HTTP
+- therefore the remaining closeout question is no longer transport selection between stdio and HTTP
+- the remaining plan misalignment, if any, is about breadth and acceptance-boundary proof on HTTP rather than missing primary HTTP MCP support
 
 The previously observed naming mismatch has now been resolved for the visible workflow operation name:
 

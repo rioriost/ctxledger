@@ -1105,7 +1105,6 @@ This boundary validates:
 - database configuration
 - transport settings
 - HTTP bind settings
-- stdio enablement
 - authentication configuration
 - projection behavior
 - logging behavior
@@ -1189,8 +1188,6 @@ These validate:
 - resource exposure
 - authentication boundary
 - error mapping
-- HTTP/stdio semantic parity
-
 ### 20.4 End-to-End and Smoke Tests
 
 These validate:
