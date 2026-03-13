@@ -15,18 +15,18 @@
 - `src/ctxledger/runtime/http_runtime.py` を変更し、`HttpRuntimeAdapter` を `HttpRuntimeAdapter(server.settings, server=server)` で構築するようにして、runtime/server の依存関係を生成時に明示しました。
 - `src/ctxledger/server.py` の `HttpRuntimeAdapter.__init__` に `server` 引数を追加し、private field の後付け patch を不要にしました。
 - `src/ctxledger/server.py` の `build_http_runtime_adapter()` から `_server` の後付け代入を削除しました。
-- まだ `server.py` には compatibility wrapper や route registry ベースの仕組みが多く残っていますが、今回の変更で「FastAPI の上にもう一段 route dispatch がある」状態は app entrypoint 側では解消できています。
+- 続けて test import cleanup を進め、`tests/test_server.py` の import を整理して、HTTP handler / server response / MCP tool/resource helper / response types の多くを `ctxledger.server` 経由ではなく canonical module から読む形へ変更しました。
+- `tests/test_mcp_modules.py` でも `McpResourceResponse` / `McpToolResponse` の import を `ctxledger.server` から `ctxledger.runtime.types` へ移しました。
+- この段階で、`tests` 側の `ctxledger.server` 依存はかなり減り、`server.py` の compatibility surface を次段で削りやすい状態になりました。
+- まだ `server.py` には compatibility wrapper や route registry ベースの仕組みが多く残っていますが、今回の変更で app entrypoint 側の二重 dispatch 解消と、test import の一部 canonicalization までは進められています。
 - 今回は挙動互換を優先し、`HttpRuntimeAdapter.register_handler()` / `registered_routes()` / `dispatch_http_request()` などのテスト対象はまだ残しています。次段で `server.py` の薄い委譲関数や route registry の縮小を進める想定です。
 
 今回確認したテスト結果:
 - `pytest -q tests/test_server.py tests/test_mcp_modules.py`
 - 結果: `157 passed`
 
-今回の未コミット変更:
-- `docs/plans/http_fastapi_cleanup_plan.md` を新規追加
-- `src/ctxledger/http_app.py`
-- `src/ctxledger/runtime/http_runtime.py`
-- `src/ctxledger/server.py`
+今回の直近コミット:
+- `4e00ba0` — `Simplify FastAPI HTTP routing path`
 
 現時点での設計メモ:
 - `http_app.py` はかなり自然になった一方、`server.py` は依然として wrapper / re-export / thin delegation が多く、次の cleanup の主対象です。
@@ -34,11 +34,12 @@
 - `registered_routes()` は debug/introspection と既存テストで参照されているため、削除前に introspection の責務整理が必要です。
 - 設定面では `TransportMode` と `http.enabled` の二重性がまだ残っており、HTTP 専用化に合わせた簡素化余地があります。
 - FastAPI app は依然として import 時に `create_default_fastapi_app()` が走る shape なので、必要なら次段で lifespan 管理へ寄せる余地があります。
+- `tests/test_server.py` はまだ `CtxLedgerServer` / `HttpRuntimeAdapter` / `build_http_runtime_adapter` / `dispatch_http_request` / serializer helpers などを `ctxledger.server` から import しており、ここが今後の `server.py` 縮小の境界になります。
 
 次セッションで優先してやること:
-1. `server.py` の thin wrapper / re-export の棚卸し
-2. テスト import を canonical module (`runtime.http_handlers`, `runtime.server_responses`) に寄せられる箇所から移行
-3. 使われなくなった `server.py` の wrapper を削除
-4. 必要なら `dispatch_http_request()` と route registry の責務を縮小
+1. `server.py` の thin wrapper / re-export の棚卸しを続ける
+2. `server.py` から削除可能な wrapper を特定する
+3. 必要なら `runtime.server_responses` 側の型 import ねじれも整理する
+4. `dispatch_http_request()` と route registry を本当に残すべきか再評価する
 5. 変更が一段落したら `pytest -q` で全体確認
-6. 問題なければ cleanup 用の descriptive commit を作成
+6. 問題なければ cleanup 用の次の descriptive commit を作成

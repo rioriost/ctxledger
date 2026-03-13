@@ -31,7 +31,7 @@ from ctxledger.mcp.streamable_http import (
     build_streamable_http_not_found_response,
     build_streamable_http_rpc_error_response,
 )
-from ctxledger.server import McpResourceResponse, McpToolResponse
+from ctxledger.runtime.types import McpResourceResponse, McpToolResponse
 
 
 def make_settings(
