@@ -42,6 +42,121 @@ In `v0.1.0`, the primary focus is the durable workflow control layer.
 
 ---
 
+## Prerequisites
+
+Before you start `ctxledger`, prepare the following:
+
+- Docker and Docker Compose
+- a local network port available for:
+  - PostgreSQL on `5432`
+  - `ctxledger` on `8080`
+- an MCP client that can connect to a remote HTTP MCP server, such as:
+  - VS Code
+  - Zed
+
+For the recommended local path, you do **not** need to install PostgreSQL separately.  
+The provided Docker Compose setup starts both PostgreSQL and the `ctxledger` server for you.
+
+You should also know the local MCP endpoint that the default Docker setup exposes:
+
+```/dev/null/txt#L1-1
+http://127.0.0.1:8080/mcp
+```
+
+If you want to use authenticated access later, also prepare a bearer token and use the authenticated Docker Compose override described below.
+
+---
+
+## Quick Start
+
+### 1. Start `ctxledger` with Docker Compose
+
+From the repository root, start PostgreSQL and the remote MCP server:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+After startup, the primary MCP endpoint is:
+
+```/dev/null/txt#L1-1
+http://127.0.0.1:8080/mcp
+```
+
+You can optionally verify that the local server is up by checking the runtime debug endpoint:
+
+```/dev/null/sh#L1-1
+curl http://127.0.0.1:8080/debug/runtime
+```
+
+### 2. Configure your MCP client to use `ctxledger`
+
+#### VS Code
+
+Add a remote MCP server entry in your VS Code MCP client configuration.
+
+A representative configuration shape is:
+
+```/dev/null/json#L1-8
+{
+  "mcpServers": {
+    "ctxledger": {
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  }
+}
+```
+
+If you are using bearer authentication, include the same bearer token that the server expects. A representative authenticated shape is:
+
+```/dev/null/json#L1-11
+{
+  "mcpServers": {
+    "ctxledger": {
+      "url": "http://127.0.0.1:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN_HERE"
+      }
+    }
+  }
+}
+```
+
+#### Zed
+
+Add a remote MCP server entry in your Zed MCP configuration.
+
+A representative configuration shape is:
+
+```/dev/null/json#L1-8
+{
+  "mcp_servers": {
+    "ctxledger": {
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  }
+}
+```
+
+If bearer authentication is enabled, provide the token in the request headers. A representative authenticated shape is:
+
+```/dev/null/json#L1-11
+{
+  "mcp_servers": {
+    "ctxledger": {
+      "url": "http://127.0.0.1:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN_HERE"
+      }
+    }
+  }
+}
+```
+
+Once configured, your MCP client should be able to reach `ctxledger` as a remote HTTP MCP server and use the workflow and memory tool surfaces exposed at `/mcp`.
+
+---
+
 ## Current Scope (`v0.1.0`)
 
 The initial release is centered on the workflow kernel.
@@ -617,7 +732,65 @@ This validates that the authenticated remote MCP server still supports:
 - `resources/read`
 - workflow mutation and resume flows
 
-#### 8. Shut down the local stack
+#### 8. Run the small Traefik auth pattern
+
+If you want to validate the small pattern described in `docs/plans/auth_proxy_scaling_plan.md`, run the stack with the Traefik/auth overlay.
+
+This setup is intended to keep the MCP backend private behind the proxy:
+
+- `traefik` is the only host-exposed entrypoint
+- `auth-small` validates `Authorization: Bearer <token>` with Traefik ForwardAuth
+- the private MCP backend service runs without direct host port exposure
+- PostgreSQL remains internal to the compose network
+
+Start the stack with a shared token for the proxy/auth layer:
+
+```/dev/null/sh#L1-1
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```
+
+Then point your MCP client or smoke client at the Traefik endpoint and send the same bearer token:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+```
+
+You can also validate proxy rejection behavior before the happy path.
+
+Missing token should be rejected by Traefik ForwardAuth with `401`:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure
+```
+
+An invalid token should also be rejected with `401`:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure
+```
+
+Then confirm that a valid token is allowed through the proxy and that the workflow/resource smoke still passes:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+```
+
+Operational notes for this mode:
+
+- `ctxledger` app-layer bearer auth should stay disabled in this overlay
+- authentication happens at the proxy boundary, before requests reach the private MCP backend
+- the compose override is `docker/docker-compose.small-auth.yml`
+- the documented intent is a private backend service behind Traefik, not direct host exposure of the MCP backend itself
+- the lightweight auth service is expected to return `200` for valid tokens and `401` for missing or invalid tokens
+
+This small-pattern deployment is the recommended stepping stone for:
+
+- one trusted operator
+- local development
+- a tightly controlled private environment
+- IDE clients such as Zed or VS Code that can send bearer headers
+
+#### 9. Shut down the local stack
 
 ```/dev/null/sh#L1-1
 docker compose -f docker/docker-compose.yml down

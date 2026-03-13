@@ -1,0 +1,24 @@
+http:
+  routers:
+    ctxledger-mcp:
+      entryPoints:
+        - web
+      rule: "PathPrefix(`/mcp`) || PathPrefix(`/debug/`) || PathPrefix(`/workflow-resume/`) || Path(`/projection_failures_ignore`) || Path(`/projection_failures_resolve`)"
+      service: ctxledger-backend
+      middlewares:
+        - ctxledger-forward-auth
+
+  middlewares:
+    ctxledger-forward-auth:
+      forwardAuth:
+        address: http://auth-small:8090/auth/verify
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Auth-User
+          - X-Auth-Mode
+
+  services:
+    ctxledger-backend:
+      loadBalancer:
+        servers:
+          - url: http://ctxledger-private:8080

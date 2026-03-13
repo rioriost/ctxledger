@@ -6,7 +6,7 @@
 - 認証有効 (`CTXLEDGER_REQUIRE_AUTH=true`) の remote MCP path でも workflow 系 + resource 系 E2E が通る状態は維持されています。
 - 以前の整理で stdio MCP サーバの残骸は削除済みで、HTTP 専用 shape に寄せています。
 
-今回の作業:
+前回までの cleanup 完了事項:
 - `server.py` 依存の縮小を継続し、tests と runtime modules の import を canonical location へ寄せる整理を進めました。
 - `tests/test_server.py` で `create_runtime` と `print_runtime_summary` の import を `ctxledger.runtime.orchestration` から読む形へ変更しました。
 - `tests/test_server.py` から `build_runtime_dispatch_result` への依存を外し、dispatch helper の代わりに `HttpRuntimeAdapter.dispatch()` の public surface を直接検証する形へ変更しました。
@@ -19,11 +19,10 @@
 - `src/ctxledger/runtime/http_runtime.py` の `build_http_runtime_adapter()` から `..server` への runtime import 依存を削除しました。
 - `src/ctxledger/server.py` は `HttpRuntimeAdapter` を `ctxledger.runtime.http_runtime` から import する側へ回り、server module から concrete adapter 実装を取り除きました。
 - `tests/test_server.py` の `HttpRuntimeAdapter` import も `ctxledger.server` ではなく `ctxledger.runtime.http_runtime` から読む形へ変更しました。
-- この変更により、`tests/test_server.py` における `ctxledger.server` 依存は `CtxLedgerServer` と `create_server` のみに縮小しました。
+- `tests/test_server.py` における `ctxledger.server` 依存は `CtxLedgerServer` と `create_server` のみに縮小しました。
 - `src/ctxledger/server.py` の export surface を棚卸しし、`__all__` を意図的な public API のみに絞りました。
 - `src/ctxledger/server.py` の `__all__` は `CtxLedgerServer` / `create_server` / `run_server` のみを公開する shape に変更しました。
 - あわせて `server.py` から、もはや public surface として残す必要がない大量の import と再公開前提コードを削減しました。
-- この export slimming により、`ctxledger.server` は bootstrap / top-level entrypoint module としての性格がかなり明確になりました。
 - `src/ctxledger/mcp/tool_handlers.py` に残っていた `from ..server import McpToolResponse` を修正し、`McpToolResponse` の canonical import 先を `ctxledger.runtime.types` に変更しました。
 - これにより、MCP tool response の生成は `server.py` を経由しない形に整理され、slimmed server exports と整合するようになりました。
 - `src/ctxledger/server.py` に残っていた internal bridge helper も整理しました。
@@ -63,71 +62,113 @@
 - これにより、HTTP-only cleanup 後の remote MCP server 実装が Docker Compose 経由でも end-to-end に動作することを確認しました。
 - 最後に `pytest -q` を全体実行し、cleanup 一連の変更後も全体回帰がないことを確認しました。
 
+今回の作業:
+- `docs/plans/auth_proxy_scaling_plan.md` の方針に沿って、small pattern の実装に着手しました。
+- 目的は `ctxledger` 自身に auth logic を増やすのではなく、`Traefik -> auth-small -> ctxledger(private)` の proxy-centered な front door を Compose に追加することです。
+- repository の現状確認として、`docker/docker-compose.yml`、`docker/docker-compose.auth.yml`、`src/ctxledger/config.py`、`src/ctxledger/http_app.py`、`src/ctxledger/runtime/http_handlers.py`、`scripts/mcp_http_smoke.py`、`tests/test_config.py`、README の local startup/authenticated smoke 周辺を見直しました。
+- 既存の app-layer auth は `CTXLEDGER_REQUIRE_AUTH` + `CTXLEDGER_AUTH_BEARER_TOKEN` による bearer validation で、small pattern ではこれを backend private network 化で置き換える想定が自然だと判断しました。
+- `docker/auth_small/` と `docker/traefik/` の配置を作成しました。
+- `docker/auth_small/src/auth_small_app.py` を新規作成し、FastAPI ベースの lightweight auth service のたたき台を追加しました。
+- この auth service は:
+  - `AUTH_SMALL_BEARER_TOKEN` を必須設定として読む
+  - `AUTH_SMALL_USER` / `AUTH_SMALL_MODE` を optional identity metadata として返す
+  - `GET /healthz` を持つ
+  - `GET /auth/verify` で `Authorization: Bearer <token>` を検証する
+  - missing/invalid token で `401` + `WWW-Authenticate`
+  - valid token で `200` + `X-Auth-User` / `X-Auth-Mode`
+  という small pattern plan どおりの最小 shape を持っています。
+- `docker/auth_small/Dockerfile` も追加しました。
+- `docker/docker-compose.small-auth.yml` を新規作成し、small pattern 用の compose overlay のたたき台を追加しました。
+- その overlay には以下を入れています:
+  - `traefik`
+  - `auth-small`
+  - `ctxledger` override
+- `traefik` は Docker provider を使い、`/mcp`・`/debug/*`・`/workflow-resume/*`・projection failure endpoints を forward auth 付きで backend に流す方針です。
+- `auth-small` は `python:3.14-slim` 上で source mount して `uvicorn auth_small_app:app` を起動する shape にしています。
+- `ctxledger` 側は small pattern overlay では `CTXLEDGER_REQUIRE_AUTH=false` にし、host port を公開せず `expose` のみへ寄せる方針にしました。
+- 途中で compose overlay と auth service の間に naming mismatch が見つかりました。
+  - 初期版では env 名が `AUTH_SMALL_EXPECTED_BEARER_TOKEN` / `AUTH_SMALL_IDENTITY_USER` / `AUTH_SMALL_IDENTITY_MODE`
+  - auth service 実装側は `AUTH_SMALL_BEARER_TOKEN` / `AUTH_SMALL_USER` / `AUTH_SMALL_MODE`
+  になっていたため、overlay を auth service 実装に揃える修正を入れました。
+- 同様に module 名も初期 compose では `auth_small:app` を起動していましたが、実ファイルは `auth_small_app.py` に寄せたため、compose command は `uvicorn auth_small_app:app --app-dir /app/src ...` に修正しました。
+- 途中で `docker/traefik/dynamic.yml` も一度追加しましたが、この段階では Traefik labels ベースで十分と判断し、dynamic file は削除しました。
+- ここまでの変更は small pattern の骨格追加までで、まだ validation までは到達していません。
+
+現時点で未完了 / 次にやること:
+1. `docker/docker-compose.small-auth.yml` を最終確認する
+   - auth service env 名
+   - `uvicorn` module path
+   - healthcheck quoting
+   - Traefik healthcheck
+   - `ctxledger` host port unpublish の挙動
+2. 必要なら `scripts/mcp_http_smoke.py` を拡張する
+   - missing token で proxy が `401`
+   - wrong token で proxy が `401`
+   - valid token で MCP workflow smoke が通る
+   を 1 コマンドまたは再現しやすい手順で確認できるようにする
+3. README に small pattern の compose 手順を追記する
+   - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build`
+   - `CTXLEDGER_SMALL_AUTH_TOKEN=...`
+   - IDE は Traefik の `http://127.0.0.1:8080/mcp` に bearer header 付きで接続
+4. 必要なら tests を追加する
+   - ただし auth-small は現時点では docker 専用 artifact なので、まずは smoke と compose validation を優先してよい
+5. Docker live validation を行う
+   - compose up
+   - compose ps
+   - missing token request
+   - invalid token request
+   - valid token 付き `scripts/mcp_http_smoke.py --scenario workflow --workflow-resource-read`
+6. 問題なければ `pytest -q` を再実行して回帰確認する
+7. `last_session.md` をこの進捗で更新した状態を維持する
+8. 最後に descriptive commit を作る
+
 今回確認したテスト結果:
-- `pytest -q tests/test_server.py`
-- 結果: `140 passed`
-- `pytest -q tests/test_server.py tests/test_cli.py`
-- 結果: `152 passed`
-- `pytest -q tests/test_server.py tests/test_cli.py tests/test_postgres_integration.py`
-- 結果: `168 passed`
-- `pytest -q`
-- 結果: `254 passed`
+- この session ではまだ新規テスト / 全体テストの再実行までは未着手
+- 前回 session の確認済み結果は維持:
+  - `pytest -q tests/test_server.py` → `140 passed`
+  - `pytest -q tests/test_server.py tests/test_cli.py` → `152 passed`
+  - `pytest -q tests/test_server.py tests/test_cli.py tests/test_postgres_integration.py` → `168 passed`
+  - `pytest -q` → `254 passed`
 
 今回確認した live Docker validation:
-- `docker compose -f docker/docker-compose.yml up -d --build`
-- `docker compose -f docker/docker-compose.yml ps`
-- 結果:
-  - `ctxledger-postgres` healthy
-  - `ctxledger-server` healthy
-- `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read`
-- 結果: live Docker 上の remote MCP workflow/resource smoke が完走
+- この session では small pattern 用 compose/Traefik/auth-small の live validation はまだ未実施
+- 前回 session までの authenticated direct-backend validation は確認済み:
+  - `docker compose -f docker/docker-compose.yml up -d --build`
+  - `docker compose -f docker/docker-compose.yml ps`
+  - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read`
 
 今回の直近コミット:
-- `d316d74` — `Reduce server test imports to runtime modules`
-- `968499e` — `Trim remaining server test helper imports`
-- `b3a5b95` — `Inline HTTP adapter dispatch helper`
-- `0224852` — `Move HTTP runtime adapter into runtime module`
-- `93b472b` — `Import HTTP runtime adapter from canonical module in tests`
-- `3181d7a` — `Slim server exports to public entrypoints`
-- `d7d2284` — `Inline server bootstrap helper flow`
-- `28de53a` — `Prune unused runtime server factory helper`
-- `0ad5419` — `Use runtime response types directly in server responses`
-- `1bfc34d` — `Align debug runtime responses with serializers`
-- `089bc2e` — `Clarify runtime route registry introspection role`
-- `c9e4a77` — `Record full cleanup verification status`
-- `5d8500b` — `Record cleanup plan completion status`
+- 前回 session まで:
+  - `d316d74` — `Reduce server test imports to runtime modules`
+  - `968499e` — `Trim remaining server test helper imports`
+  - `b3a5b95` — `Inline HTTP adapter dispatch helper`
+  - `0224852` — `Move HTTP runtime adapter into runtime module`
+  - `93b472b` — `Import HTTP runtime adapter from canonical module in tests`
+  - `3181d7a` — `Slim server exports to public entrypoints`
+  - `d7d2284` — `Inline server bootstrap helper flow`
+  - `28de53a` — `Prune unused runtime server factory helper`
+  - `0ad5419` — `Use runtime response types directly in server responses`
+  - `1bfc34d` — `Align debug runtime responses with serializers`
+  - `089bc2e` — `Clarify runtime route registry introspection role`
+  - `c9e4a77` — `Record full cleanup verification status`
+  - `5d8500b` — `Record cleanup plan completion status`
+- この session ではまだ commit 未作成
 
 現時点での設計メモ:
-- `server.py` から concrete HTTP adapter 実装が抜けたことで、bootstrap surface と runtime implementation の境界がかなり自然になりました。
-- `ctxledger.runtime.http_runtime` は naming 的にも責務的にも、`HttpRuntimeAdapter` の canonical home としてかなり妥当です。
-- `tests/test_server.py` から見た `ctxledger.server` の責務はかなり細ってきており、bootstrap と application server object の窓口に近づいています。
-- `create_runtime` と `print_runtime_summary` は `runtime.orchestration` 側が本来の公開位置として自然です。
-- `build_runtime_dispatch_result()` は削除済みで、HTTP dispatch の public surface は `HttpRuntimeAdapter.dispatch()` に一本化されました。
-- `server.py` の `__all__` は `CtxLedgerServer` / `create_server` / `run_server` のみに絞られ、意図しない compatibility barrel 的役割はかなり薄くなりました。
-- `create_server` はまだ `server.py` が自然な public 窓口です。CLI や app factory の import point としても扱いやすい状態です。
-- `tests/test_cli.py` では `ctxledger.server.run_server` を monkeypatch しているため、`run_server` は現時点では `server.py` の public surface に残しておく方が安全です。
-- `introspection_endpoints()` への rename により、旧 `registered_routes()` が曖昧に抱えていた責務はかなり整理されました。
-- route registry 自体は依然として `_handlers` の key 集合を返しており、runtime introspection がこれを `routes` として公開する設計は維持されています。
-- `mcp/tool_handlers.py` 側の `McpToolResponse` 参照が canonical `runtime.types` に寄ったので、MCP response types の dependency direction はより自然になりました。
-- `server.py` に残っていた internal bridge helper がなくなったことで、server bootstrap の責務と call graph はさらに単純化されました。
-- `runtime.server_factory.py` は `build_workflow_service_factory()` のみを提供する最小 module になり、server bootstrap helper の旧 layering artifact はさらに減りました。
-- `runtime.server_responses.py` からも remaining `server.py` 経由の response type import が外れ、debug routes/tools response も serializer ベースの表現へ揃ったため、runtime introspection 系の payload 変換責務は以前より一貫しています。
-- `docs/plans/auth_proxy_scaling_plan.md` に、認証・認可の段階的方針を記録しました。
-- その plan では:
-  - small pattern は Traefik + custom lightweight auth service を先に実装する
-  - large pattern は cloud / multi-user / identity-aware gateway 前提で扱う
-  - ただし large pattern は roadmap `0.4` の後以降に着手する
-  - 現時点の `ctxledger` は multi-user authorization をまだ中心に据えた設計ではない
-  という整理を明示しています。
-- 現時点では HTTP-only cleanup の大きな pruning は一段落しており、Docker Compose 上の live remote MCP validation まで通っているため、この cleanup スレッドは実質完了扱いでよい状態です。
+- small pattern の中心は app-layer auth の追加ではなく、proxy-layer auth への移行です。
+- 既存 `CTXLEDGER_REQUIRE_AUTH` は direct exposure 時の safety net として残しつつ、small pattern documented topology では `ctxledger` backend を private にするのが自然です。
+- `auth-small` は repo 内の tiny service として十分成立しそうで、small pattern deliverable A にかなり素直に沿っています。
+- `Traefik` は Docker labels だけでも今回の構成には十分そうで、dynamic config file は必須ではなさそうです。
+- proxy で守る endpoint 範囲としては、`/mcp` だけでなく debug/workflow resume/projection failure endpoints も揃えて保護する方が運用上自然です。
+- `scripts/mcp_http_smoke.py` はすでに bearer header を送れるので、proxy allow path の validation にはそのまま使えます。
+- ただし proxy reject path を再現しやすくするため、unauthorized expectation を扱うオプションを足すと small pattern smoke deliverable に合います。
+- small pattern が通ったら、README と `docs/plans/auth_proxy_scaling_plan.md` の deliverables/exit criteria と照らして完了度を整理するとよいです。
 
 次セッションで優先してやること:
-1. auth strategy については `docs/plans/auth_proxy_scaling_plan.md` を起点に進める
-2. 次の実装対象は small pattern:
-   - Traefik を front door に置く
-   - custom lightweight auth service を実装する
-   - `ctxledger` を proxy 背後の private backend として compose する
-3. large pattern は roadmap `0.4` の後以降の別フェーズとして扱う
-4. large pattern 着手時には、proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価する
-5. 追加変更を入れる場合は、変更後に `pytest -q` と必要な Docker smoke を再実行して回帰確認を維持する
-6. 問題なければ次の descriptive commit を作成する
+1. `docker/docker-compose.small-auth.yml` の整合性を仕上げる
+2. 必要に応じて smoke script を proxy rejection/allow validation 向けに拡張する
+3. README に small pattern の startup / token / validation 手順を書く
+4. `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build` で live validation
+5. missing / invalid / valid token の 3 系統を検証する
+6. `pytest -q` を回して回帰確認する
+7. 問題なければ descriptive commit を作る

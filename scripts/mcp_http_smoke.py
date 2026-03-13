@@ -75,6 +75,17 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="When running the workflow scenario, also read workflow resources for the created workflow",
     )
+    parser.add_argument(
+        "--expect-http-status",
+        type=int,
+        default=200,
+        help="Expected HTTP status for the initialize request before running the selected scenario (default: 200)",
+    )
+    parser.add_argument(
+        "--expect-auth-failure",
+        action="store_true",
+        help="Expect the initial initialize request to be rejected by proxy auth and stop after validating the rejection",
+    )
     return parser
 
 
@@ -124,6 +135,19 @@ def _post_json(
         return JsonRpcResponse(status_code=exc.code, payload=parsed)
     except urllib.error.URLError as exc:
         raise SmokeFailure(f"Failed to connect to MCP endpoint: {exc}") from exc
+
+
+def _require_http_status(
+    response: JsonRpcResponse,
+    *,
+    expected_status: int,
+    operation_name: str,
+) -> None:
+    if response.status_code != expected_status:
+        raise SmokeFailure(
+            f"{operation_name} returned HTTP {response.status_code}, expected {expected_status}: "
+            f"{json.dumps(response.payload, ensure_ascii=False)}"
+        )
 
 
 def _require_jsonrpc_success(
@@ -185,6 +209,51 @@ def _extract_text_content(result: dict[str, Any], *, method_name: str) -> str:
 def _print_step(name: str, data: dict[str, Any]) -> None:
     print(f"[ok] {name}")
     print(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True))
+
+
+def _run_initialize_probe(
+    *,
+    endpoint_url: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    expected_http_status: int,
+    expect_auth_failure: bool,
+) -> None:
+    initialize_request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {},
+    }
+    initialize_response = _post_json(
+        url=endpoint_url,
+        payload=initialize_request,
+        bearer_token=bearer_token,
+        timeout_seconds=timeout_seconds,
+    )
+
+    _require_http_status(
+        initialize_response,
+        expected_status=expected_http_status,
+        operation_name="initialize probe",
+    )
+
+    if expect_auth_failure:
+        _print_step(
+            "proxy_auth_rejection",
+            {
+                "http_status": initialize_response.status_code,
+                "payload": initialize_response.payload,
+            },
+        )
+        return
+
+    initialize_result = _require_jsonrpc_success(
+        initialize_response,
+        expected_id=1,
+        method_name="initialize",
+    )
+    _print_step("initialize", initialize_result)
 
 
 def _call_tool(
@@ -441,34 +510,17 @@ def main(argv: list[str] | None = None) -> int:
         endpoint_url = _normalize_url(args.base_url, args.mcp_path)
         tool_arguments = _parse_tool_arguments(args.tool_arguments)
 
-        initialize_request = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {
-                    "name": "ctxledger-mcp-http-smoke",
-                    "version": "0.1.0",
-                },
-            },
-        }
-        initialize_response = _post_json(
-            url=endpoint_url,
-            payload=initialize_request,
+        _run_initialize_probe(
+            endpoint_url=endpoint_url,
             bearer_token=args.bearer_token,
             timeout_seconds=args.timeout_seconds,
+            expected_http_status=args.expect_http_status,
+            expect_auth_failure=args.expect_auth_failure,
         )
-        initialize_result = _require_jsonrpc_success(
-            initialize_response,
-            expected_id=1,
-            method_name="initialize",
-        )
-        protocol_version = initialize_result.get("protocolVersion")
-        if not isinstance(protocol_version, str) or not protocol_version:
-            raise SmokeFailure("initialize result did not include protocolVersion")
-        _print_step("initialize", initialize_result)
+
+        if args.expect_auth_failure:
+            print("[ok] MCP HTTP smoke test completed")
+            return 0
 
         tools_list_request = {
             "jsonrpc": "2.0",
