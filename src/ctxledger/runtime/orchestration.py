@@ -7,47 +7,7 @@ from types import FrameType
 from typing import Protocol
 
 from ..config import AppSettings, TransportMode, get_settings
-from ..mcp.resource_handlers import (
-    build_workflow_detail_resource_handler,
-    build_workspace_resume_resource_handler,
-)
-from ..mcp.stdio import (
-    StdioRuntimeAdapter,
-    build_stdio_runtime,
-    run_stdio_runtime_if_present,
-)
-from ..mcp.stdio import (
-    build_stdio_runtime_adapter as build_extracted_stdio_runtime_adapter,
-)
-from ..mcp.tool_handlers import (
-    build_memory_get_context_tool_handler,
-    build_memory_remember_episode_tool_handler,
-    build_memory_search_tool_handler,
-    build_projection_failures_ignore_tool_handler,
-    build_projection_failures_resolve_tool_handler,
-    build_resume_workflow_tool_handler,
-    build_workflow_checkpoint_tool_handler,
-    build_workflow_complete_tool_handler,
-    build_workflow_start_tool_handler,
-    build_workspace_register_tool_handler,
-)
-from ..mcp.tool_schemas import (
-    MEMORY_GET_CONTEXT_TOOL_SCHEMA,
-    MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
-    MEMORY_SEARCH_TOOL_SCHEMA,
-    PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA,
-    PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA,
-    WORKFLOW_CHECKPOINT_TOOL_SCHEMA,
-    WORKFLOW_COMPLETE_TOOL_SCHEMA,
-    WORKFLOW_RESUME_TOOL_SCHEMA,
-    WORKFLOW_START_TOOL_SCHEMA,
-    WORKSPACE_REGISTER_TOOL_SCHEMA,
-)
-from ..memory.service import MemoryService
-from ..runtime.composite import CompositeRuntimeAdapter
-from ..runtime.http_runtime import build_http_runtime_adapter
 from ..runtime.introspection import (
-    RuntimeIntrospection,
     collect_runtime_introspection,
     serialize_runtime_introspection_collection,
 )
@@ -60,88 +20,16 @@ class ServerRuntime(Protocol):
     def stop(self) -> None: ...
 
 
-def build_stdio_runtime_adapter(server: CtxLedgerServer) -> StdioRuntimeAdapter:
-    memory_service = MemoryService()
-    return build_extracted_stdio_runtime_adapter(
-        server,
-        memory_service=memory_service,
-        workflow_resume_tool_handler_factory=lambda current_server: (
-            build_resume_workflow_tool_handler(current_server),
-            WORKFLOW_RESUME_TOOL_SCHEMA,
-        ),
-        workspace_register_tool_handler_factory=lambda current_server: (
-            build_workspace_register_tool_handler(current_server),
-            WORKSPACE_REGISTER_TOOL_SCHEMA,
-        ),
-        workflow_start_tool_handler_factory=lambda current_server: (
-            build_workflow_start_tool_handler(current_server),
-            WORKFLOW_START_TOOL_SCHEMA,
-        ),
-        workflow_checkpoint_tool_handler_factory=lambda current_server: (
-            build_workflow_checkpoint_tool_handler(current_server),
-            WORKFLOW_CHECKPOINT_TOOL_SCHEMA,
-        ),
-        workflow_complete_tool_handler_factory=lambda current_server: (
-            build_workflow_complete_tool_handler(current_server),
-            WORKFLOW_COMPLETE_TOOL_SCHEMA,
-        ),
-        projection_failures_ignore_tool_handler_factory=lambda current_server: (
-            build_projection_failures_ignore_tool_handler(current_server),
-            PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA,
-        ),
-        projection_failures_resolve_tool_handler_factory=lambda current_server: (
-            build_projection_failures_resolve_tool_handler(current_server),
-            PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA,
-        ),
-        memory_remember_episode_tool_handler_factory=lambda current_memory_service: (
-            build_memory_remember_episode_tool_handler(current_memory_service),
-            MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
-        ),
-        memory_search_tool_handler_factory=lambda current_memory_service: (
-            build_memory_search_tool_handler(current_memory_service),
-            MEMORY_SEARCH_TOOL_SCHEMA,
-        ),
-        memory_get_context_tool_handler_factory=lambda current_memory_service: (
-            build_memory_get_context_tool_handler(current_memory_service),
-            MEMORY_GET_CONTEXT_TOOL_SCHEMA,
-        ),
-        workspace_resume_resource_handler_factory=build_workspace_resume_resource_handler,
-        workflow_detail_resource_handler_factory=build_workflow_detail_resource_handler,
-    )
-
-
 def create_runtime(
     settings: AppSettings,
     server,
     *,
     http_runtime_builder,
 ) -> ServerRuntime | None:
-    runtimes: list[ServerRuntime] = []
-
-    if settings.http.enabled:
-        if server is not None:
-            http_runtime = build_http_runtime_adapter(server)
-        else:
-            from ..server import HttpRuntimeAdapter
-
-            http_runtime = HttpRuntimeAdapter(settings)
-        runtimes.append(http_runtime)
-
-    if settings.stdio.enabled:
-        stdio_runtime = build_stdio_runtime(
-            settings,
-            server=server,
-            runtime_builder=build_stdio_runtime_adapter,
-        )
-        runtimes.append(stdio_runtime)
-
-    if not runtimes:
+    if not settings.http.enabled:
         return None
 
-    if len(runtimes) == 1:
-        return runtimes[0]
-
-    return CompositeRuntimeAdapter(runtimes)
+    return http_runtime_builder(server)
 
 
 def apply_overrides(
@@ -156,22 +44,16 @@ def apply_overrides(
 
     transport_mode = settings.transport
     http_enabled = settings.http.enabled
-    stdio_enabled = settings.stdio.enabled
 
     if transport is not None:
         transport_mode = TransportMode(transport)
-        http_enabled = transport_mode in (TransportMode.HTTP, TransportMode.BOTH)
-        stdio_enabled = transport_mode in (TransportMode.STDIO, TransportMode.BOTH)
+        http_enabled = transport_mode is TransportMode.HTTP
 
     http_settings = type(settings.http)(
         enabled=http_enabled,
         host=host if host is not None else settings.http.host,
         port=port if port is not None else settings.http.port,
         path=settings.http.path,
-    )
-
-    stdio_settings = type(settings.stdio)(
-        enabled=stdio_enabled,
     )
 
     overridden = type(settings)(
@@ -181,7 +63,6 @@ def apply_overrides(
         transport=transport_mode,
         database=settings.database,
         http=http_settings,
-        stdio=stdio_settings,
         auth=settings.auth,
         debug=settings.debug,
         projection=settings.projection,
@@ -191,7 +72,7 @@ def apply_overrides(
     return overridden
 
 
-def install_signal_handlers(server: CtxLedgerServer) -> None:
+def install_signal_handlers(server) -> None:
     def _handle_signal(signum: int, frame: FrameType | None) -> None:
         logger.info(
             "Received shutdown signal",
@@ -207,7 +88,7 @@ def install_signal_handlers(server: CtxLedgerServer) -> None:
             logger.debug("Signal handler registration skipped", extra={"signal": sig})
 
 
-def print_runtime_summary(server: CtxLedgerServer) -> None:
+def print_runtime_summary(server) -> None:
     readiness = server.readiness()
     health = server.health()
     runtime_introspection = serialize_runtime_introspection_collection(
@@ -224,8 +105,6 @@ def print_runtime_summary(server: CtxLedgerServer) -> None:
 
     if server.settings.http.enabled:
         print(f"mcp_endpoint={server.settings.http.mcp_url}", file=sys.stderr)
-    if server.settings.stdio.enabled:
-        print("stdio_transport=enabled", file=sys.stderr)
 
 
 def run_server(
@@ -249,10 +128,6 @@ def run_server(
         install_signal_handlers(server)
         server.startup()
         print_runtime_summary(server)
-
-        if settings.stdio.enabled and run_stdio_runtime_if_present(server.runtime):
-            return 0
-
         return 0
     except ServerBootstrapError as exc:
         print(f"Startup failed: {exc}", file=sys.stderr)
@@ -265,7 +140,6 @@ def run_server(
 __all__ = [
     "ServerRuntime",
     "collect_runtime_introspection",
-    "build_stdio_runtime_adapter",
     "create_runtime",
     "apply_overrides",
     "install_signal_handlers",

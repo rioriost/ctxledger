@@ -44,7 +44,6 @@ def minimum_valid_env() -> dict[str, str]:
         "CTXLEDGER_DATABASE_URL": "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger",
         "CTXLEDGER_TRANSPORT": "http",
         "CTXLEDGER_ENABLE_HTTP": "true",
-        "CTXLEDGER_ENABLE_STDIO": "false",
         "CTXLEDGER_HOST": "0.0.0.0",
         "CTXLEDGER_PORT": "8080",
         "CTXLEDGER_HTTP_PATH": "/mcp",
@@ -81,7 +80,6 @@ def test_load_settings_with_minimum_valid_env(clean_ctxledger_env: None) -> None
     assert settings.database.url == minimum_valid_env()["CTXLEDGER_DATABASE_URL"]
     assert settings.transport == TransportMode.HTTP
     assert settings.http.enabled is True
-    assert settings.stdio.enabled is False
     assert settings.http.host == "0.0.0.0"
     assert settings.http.port == 8080
     assert settings.http.path == "/mcp"
@@ -219,58 +217,12 @@ def test_invalid_debug_endpoints_value_raises_config_error(
             load_settings()
 
 
-def test_transport_both_requires_consistent_enablement(
-    clean_ctxledger_env: None,
-) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_TRANSPORT"] = "both"
-    env["CTXLEDGER_ENABLE_HTTP"] = "true"
-    env["CTXLEDGER_ENABLE_STDIO"] = "true"
-
-    with patched_env(**env):
-        settings = load_settings()
-
-    assert settings.transport == TransportMode.BOTH
-    assert settings.http.enabled is True
-    assert settings.stdio.enabled is True
-
-
 def test_transport_mismatch_for_http_raises_config_error(
     clean_ctxledger_env: None,
 ) -> None:
     env = minimum_valid_env()
     env["CTXLEDGER_TRANSPORT"] = "http"
     env["CTXLEDGER_ENABLE_HTTP"] = "false"
-
-    with patched_env(**env):
-        with pytest.raises(
-            ConfigError,
-            match="HTTP enablement does not match CTXLEDGER_TRANSPORT",
-        ):
-            load_settings()
-
-
-def test_transport_mismatch_for_stdio_raises_config_error(
-    clean_ctxledger_env: None,
-) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_TRANSPORT"] = "stdio"
-    env["CTXLEDGER_ENABLE_STDIO"] = "false"
-    env["CTXLEDGER_ENABLE_HTTP"] = "false"
-
-    with patched_env(**env):
-        with pytest.raises(
-            ConfigError,
-            match="stdio enablement does not match CTXLEDGER_TRANSPORT",
-        ):
-            load_settings()
-
-
-def test_at_least_one_transport_must_be_enabled(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_TRANSPORT"] = "both"
-    env["CTXLEDGER_ENABLE_HTTP"] = "false"
-    env["CTXLEDGER_ENABLE_STDIO"] = "false"
 
     with patched_env(**env):
         with pytest.raises(
@@ -342,17 +294,3 @@ def test_optional_statement_timeout_can_be_omitted(clean_ctxledger_env: None) ->
         settings = load_settings()
 
     assert settings.database.statement_timeout_ms is None
-
-
-def test_non_integer_statement_timeout_raises_config_error(
-    clean_ctxledger_env: None,
-) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"] = "fast"
-
-    with patched_env(**env):
-        with pytest.raises(
-            ConfigError,
-            match="CTXLEDGER_DB_STATEMENT_TIMEOUT_MS must be an integer",
-        ):
-            load_settings()

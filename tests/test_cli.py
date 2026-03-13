@@ -17,7 +17,6 @@ from ctxledger.config import (
     LoggingSettings,
     LogLevel,
     ProjectionSettings,
-    StdioSettings,
     TransportMode,
 )
 from ctxledger.server import ServerBootstrapError
@@ -50,7 +49,6 @@ def make_settings(
             port=8080,
             path="/mcp",
         ),
-        stdio=StdioSettings(enabled=False),
         auth=AuthSettings(
             bearer_token=None,
             require_auth=False,
