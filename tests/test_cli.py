@@ -18,7 +18,6 @@ from ctxledger.config import (
     LoggingSettings,
     LogLevel,
     ProjectionSettings,
-    TransportMode,
 )
 from ctxledger.workflow.service import (
     CreateCheckpointInput,
@@ -37,14 +36,12 @@ def make_settings(
         app_name="ctxledger",
         app_version="0.1.0",
         environment="test",
-        transport=TransportMode.HTTP,
         database=DatabaseSettings(
             url=database_url,
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
         ),
         http=HttpSettings(
-            enabled=True,
             host="127.0.0.1",
             port=8080,
             path="/mcp",

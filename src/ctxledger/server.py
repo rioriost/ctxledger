@@ -451,7 +451,6 @@ class CtxLedgerServer:
         logger.info(
             "ctxledger startup complete",
             extra={
-                "http_enabled": self.settings.http.enabled,
                 "host": self.settings.http.host,
                 "port": self.settings.http.port,
                 "mcp_url": self.settings.http.mcp_url,
@@ -546,9 +545,6 @@ def create_runtime(
     settings: AppSettings,
     server: CtxLedgerServer | None = None,
 ) -> ServerRuntime | None:
-    if not settings.http.enabled:
-        return None
-
     if server is not None:
         return build_http_runtime_adapter(server)
 

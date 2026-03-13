@@ -12,7 +12,6 @@ from ctxledger.config import (
     LoggingSettings,
     LogLevel,
     ProjectionSettings,
-    TransportMode,
 )
 from ctxledger.mcp.lifecycle import (
     MCP_PROTOCOL_VERSION,
@@ -37,8 +36,6 @@ from ctxledger.runtime.types import McpResourceResponse, McpToolResponse
 def make_settings(
     *,
     database_url: str = "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger",
-    transport: TransportMode = TransportMode.HTTP,
-    http_enabled: bool = True,
     host: str = "127.0.0.1",
     port: int = 8080,
     auth_bearer_token: str | None = None,
@@ -48,14 +45,12 @@ def make_settings(
         app_name="ctxledger",
         app_version="0.1.0",
         environment="test",
-        transport=transport,
         database=DatabaseSettings(
             url=database_url,
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
         ),
         http=HttpSettings(
-            enabled=http_enabled,
             host=host,
             port=port,
             path="/mcp",

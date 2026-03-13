@@ -10,7 +10,6 @@ from ctxledger.config import (
     AppSettings,
     ConfigError,
     LogLevel,
-    TransportMode,
     get_settings,
     load_settings,
 )
@@ -42,8 +41,6 @@ def patched_env(**updates: str | None) -> Iterator[None]:
 def minimum_valid_env() -> dict[str, str]:
     return {
         "CTXLEDGER_DATABASE_URL": "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger",
-        "CTXLEDGER_TRANSPORT": "http",
-        "CTXLEDGER_ENABLE_HTTP": "true",
         "CTXLEDGER_HOST": "0.0.0.0",
         "CTXLEDGER_PORT": "8080",
         "CTXLEDGER_HTTP_PATH": "/mcp",
@@ -78,8 +75,6 @@ def test_load_settings_with_minimum_valid_env(clean_ctxledger_env: None) -> None
 
     assert isinstance(settings, AppSettings)
     assert settings.database.url == minimum_valid_env()["CTXLEDGER_DATABASE_URL"]
-    assert settings.transport == TransportMode.HTTP
-    assert settings.http.enabled is True
     assert settings.http.host == "0.0.0.0"
     assert settings.http.port == 8080
     assert settings.http.path == "/mcp"
@@ -111,21 +106,13 @@ def test_missing_database_url_raises_config_error(clean_ctxledger_env: None) -> 
 
 def test_invalid_boolean_value_raises_config_error(clean_ctxledger_env: None) -> None:
     env = minimum_valid_env()
-    env["CTXLEDGER_ENABLE_HTTP"] = "maybe"
+    env["CTXLEDGER_ENABLE_DEBUG_ENDPOINTS"] = "maybe"
 
     with patched_env(**env):
         with pytest.raises(
-            ConfigError, match="CTXLEDGER_ENABLE_HTTP must be a boolean value"
+            ConfigError,
+            match="CTXLEDGER_ENABLE_DEBUG_ENDPOINTS must be a boolean value",
         ):
-            load_settings()
-
-
-def test_invalid_transport_value_raises_config_error(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_TRANSPORT"] = "grpc"
-
-    with patched_env(**env):
-        with pytest.raises(ConfigError, match="CTXLEDGER_TRANSPORT must be one of"):
             load_settings()
 
 
@@ -138,6 +125,15 @@ def test_invalid_log_level_raises_config_error(clean_ctxledger_env: None) -> Non
             load_settings()
 
 
+def test_non_integer_port_raises_config_error(clean_ctxledger_env: None) -> None:
+    env = minimum_valid_env()
+    env["CTXLEDGER_PORT"] = "not-a-number"
+
+    with patched_env(**env):
+        with pytest.raises(ConfigError, match="CTXLEDGER_PORT must be an integer"):
+            load_settings()
+
+
 def test_invalid_port_raises_config_error(clean_ctxledger_env: None) -> None:
     env = minimum_valid_env()
     env["CTXLEDGER_PORT"] = "70000"
@@ -146,15 +142,6 @@ def test_invalid_port_raises_config_error(clean_ctxledger_env: None) -> None:
         with pytest.raises(
             ConfigError, match="CTXLEDGER_PORT must be between 1 and 65535"
         ):
-            load_settings()
-
-
-def test_non_integer_port_raises_config_error(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_PORT"] = "not-a-number"
-
-    with patched_env(**env):
-        with pytest.raises(ConfigError, match="CTXLEDGER_PORT must be an integer"):
             load_settings()
 
 
@@ -193,16 +180,6 @@ def test_debug_endpoints_enabled_by_default(clean_ctxledger_env: None) -> None:
     assert settings.debug.enabled is True
 
 
-def test_debug_endpoints_can_be_disabled(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_ENABLE_DEBUG_ENDPOINTS"] = "false"
-
-    with patched_env(**env):
-        settings = load_settings()
-
-    assert settings.debug.enabled is False
-
-
 def test_invalid_debug_endpoints_value_raises_config_error(
     clean_ctxledger_env: None,
 ) -> None:
@@ -217,19 +194,14 @@ def test_invalid_debug_endpoints_value_raises_config_error(
             load_settings()
 
 
-def test_transport_mismatch_for_http_raises_config_error(
-    clean_ctxledger_env: None,
-) -> None:
+def test_debug_endpoints_can_be_disabled(clean_ctxledger_env: None) -> None:
     env = minimum_valid_env()
-    env["CTXLEDGER_TRANSPORT"] = "http"
-    env["CTXLEDGER_ENABLE_HTTP"] = "false"
+    env["CTXLEDGER_ENABLE_DEBUG_ENDPOINTS"] = "false"
 
     with patched_env(**env):
-        with pytest.raises(
-            ConfigError,
-            match="HTTP enablement does not match CTXLEDGER_TRANSPORT",
-        ):
-            load_settings()
+        settings = load_settings()
+
+    assert settings.debug.enabled is False
 
 
 def test_projection_directory_must_not_be_empty(clean_ctxledger_env: None) -> None:
@@ -256,6 +228,32 @@ def test_projection_outputs_must_include_at_least_one_format(
         with pytest.raises(
             ConfigError,
             match="At least one projection output must be enabled when projections are enabled",
+        ):
+            load_settings()
+
+
+def test_db_connect_timeout_must_be_positive(clean_ctxledger_env: None) -> None:
+    env = minimum_valid_env()
+    env["CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS"] = "0"
+
+    with patched_env(**env):
+        with pytest.raises(
+            ConfigError,
+            match="CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS must be greater than 0",
+        ):
+            load_settings()
+
+
+def test_db_statement_timeout_must_be_positive_when_set(
+    clean_ctxledger_env: None,
+) -> None:
+    env = minimum_valid_env()
+    env["CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"] = "-1"
+
+    with patched_env(**env):
+        with pytest.raises(
+            ConfigError,
+            match="CTXLEDGER_DB_STATEMENT_TIMEOUT_MS must be greater than 0",
         ):
             load_settings()
 

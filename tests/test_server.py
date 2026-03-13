@@ -17,7 +17,6 @@ from ctxledger.config import (
     LoggingSettings,
     LogLevel,
     ProjectionSettings,
-    TransportMode,
 )
 from ctxledger.mcp.resource_handlers import (
     build_workflow_detail_resource_handler,
@@ -335,8 +334,6 @@ def make_resume_fixture(
 def make_settings(
     *,
     database_url: str = "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger",
-    transport: TransportMode = TransportMode.HTTP,
-    http_enabled: bool = True,
     host: str = "127.0.0.1",
     port: int = 8080,
     auth_bearer_token: str | None = None,
@@ -346,14 +343,12 @@ def make_settings(
         app_name="ctxledger",
         app_version="0.1.0",
         environment="test",
-        transport=transport,
         database=DatabaseSettings(
             url=database_url,
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
         ),
         http=HttpSettings(
-            enabled=http_enabled,
             host=host,
             port=port,
             path="/mcp",
@@ -525,8 +520,7 @@ def test_readiness_reports_not_started_before_startup() -> None:
 
 def test_startup_raises_for_invalid_configuration() -> None:
     settings = make_settings(
-        transport=TransportMode.HTTP,
-        http_enabled=False,
+        host="",
     )
     server = CtxLedgerServer(
         settings=settings,
@@ -539,10 +533,7 @@ def test_startup_raises_for_invalid_configuration() -> None:
 
 
 def test_create_runtime_returns_http_adapter_when_http_only() -> None:
-    settings = make_settings(
-        transport=TransportMode.HTTP,
-        http_enabled=True,
-    )
+    settings = make_settings()
 
     runtime = create_runtime(settings)
 
@@ -4808,7 +4799,6 @@ def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
         if message == "ctxledger startup complete"
     )
 
-    assert startup_complete_extra["http_enabled"] is True
     assert startup_complete_extra["host"] == settings.http.host
     assert startup_complete_extra["port"] == settings.http.port
     assert startup_complete_extra["mcp_url"] == settings.http.mcp_url

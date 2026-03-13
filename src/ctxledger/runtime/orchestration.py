@@ -6,7 +6,7 @@ import sys
 from types import FrameType
 from typing import Protocol
 
-from ..config import AppSettings, TransportMode, get_settings
+from ..config import AppSettings, get_settings
 from ..runtime.introspection import (
     collect_runtime_introspection,
     serialize_runtime_introspection_collection,
@@ -26,9 +26,6 @@ def create_runtime(
     *,
     http_runtime_builder,
 ) -> ServerRuntime | None:
-    if not settings.http.enabled:
-        return None
-
     return http_runtime_builder(server)
 
 
@@ -39,18 +36,13 @@ def apply_overrides(
     host: str | None = None,
     port: int | None = None,
 ) -> AppSettings:
+    if transport is not None and transport.lower() != "http":
+        raise ValueError("transport override must be 'http'")
+
     if transport is None and host is None and port is None:
         return settings
 
-    transport_mode = settings.transport
-    http_enabled = settings.http.enabled
-
-    if transport is not None:
-        transport_mode = TransportMode(transport)
-        http_enabled = transport_mode is TransportMode.HTTP
-
     http_settings = type(settings.http)(
-        enabled=http_enabled,
         host=host if host is not None else settings.http.host,
         port=port if port is not None else settings.http.port,
         path=settings.http.path,
@@ -60,7 +52,6 @@ def apply_overrides(
         app_name=settings.app_name,
         app_version=settings.app_version,
         environment=settings.environment,
-        transport=transport_mode,
         database=settings.database,
         http=http_settings,
         auth=settings.auth,
@@ -103,8 +94,7 @@ def print_runtime_summary(server) -> None:
     print(f"readiness={readiness.status}", file=sys.stderr)
     print(f"runtime={runtime_introspection}", file=sys.stderr)
 
-    if server.settings.http.enabled:
-        print(f"mcp_endpoint={server.settings.http.mcp_url}", file=sys.stderr)
+    print(f"mcp_endpoint={server.settings.http.mcp_url}", file=sys.stderr)
 
 
 def run_server(

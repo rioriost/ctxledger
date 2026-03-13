@@ -10,10 +10,6 @@ class ConfigError(ValueError):
     """Raised when runtime configuration is invalid."""
 
 
-class TransportMode(StrEnum):
-    HTTP = "http"
-
-
 class LogLevel(StrEnum):
     DEBUG = "debug"
     INFO = "info"
@@ -70,17 +66,6 @@ def _parse_optional_int(name: str) -> int | None:
         raise ConfigError(f"{name} must be an integer") from exc
 
 
-def _parse_transport(name: str, default: TransportMode) -> TransportMode:
-    raw = _get_env(name)
-    if raw is None:
-        return default
-    try:
-        return TransportMode(raw.lower())
-    except ValueError as exc:
-        expected = _format_expected_values(mode.value for mode in TransportMode)
-        raise ConfigError(f"{name} must be one of {expected}") from exc
-
-
 def _parse_log_level(name: str, default: LogLevel) -> LogLevel:
     raw = _get_env(name)
     if raw is None:
@@ -113,7 +98,6 @@ class DatabaseSettings:
 
 @dataclass(frozen=True, slots=True)
 class HttpSettings:
-    enabled: bool
     host: str
     port: int
     path: str
@@ -162,7 +146,6 @@ class AppSettings:
     app_name: str
     app_version: str
     environment: str
-    transport: TransportMode
     database: DatabaseSettings
     http: HttpSettings
     auth: AuthSettings
@@ -174,28 +157,17 @@ class AppSettings:
         if not self.database.url:
             raise ConfigError("CTXLEDGER_DATABASE_URL is required")
 
-        if not self.http.enabled:
-            raise ConfigError(
-                "HTTP enablement does not match CTXLEDGER_TRANSPORT; "
-                "set transport consistently with CTXLEDGER_ENABLE_HTTP"
-            )
-
         if not self.http.host:
-            raise ConfigError("CTXLEDGER_HOST must not be empty when HTTP is enabled")
+            raise ConfigError("CTXLEDGER_HOST must not be empty")
         if not (1 <= self.http.port <= 65535):
             raise ConfigError("CTXLEDGER_PORT must be between 1 and 65535")
         if not self.http.path:
-            raise ConfigError(
-                "CTXLEDGER_HTTP_PATH must not be empty when HTTP is enabled"
-            )
+            raise ConfigError("CTXLEDGER_HTTP_PATH must not be empty")
 
         if self.auth.require_auth and not self.auth.bearer_token:
             raise ConfigError(
                 "CTXLEDGER_AUTH_BEARER_TOKEN is required when CTXLEDGER_REQUIRE_AUTH is enabled"
             )
-
-        if self.transport is not TransportMode.HTTP:
-            raise ConfigError("CTXLEDGER_TRANSPORT must be one of 'http'")
 
         if self.projection.directory_name == "":
             raise ConfigError("CTXLEDGER_PROJECTION_DIRECTORY must not be empty")
@@ -220,13 +192,10 @@ class AppSettings:
 
 
 def load_settings() -> AppSettings:
-    transport = _parse_transport("CTXLEDGER_TRANSPORT", TransportMode.HTTP)
-
     settings = AppSettings(
         app_name=_get_env("CTXLEDGER_APP_NAME", "ctxledger") or "ctxledger",
         app_version=_get_env("CTXLEDGER_APP_VERSION", "0.1.0") or "0.1.0",
         environment=_get_env("CTXLEDGER_ENV", "development") or "development",
-        transport=transport,
         database=DatabaseSettings(
             url=_get_env("CTXLEDGER_DATABASE_URL", "") or "",
             connect_timeout_seconds=_parse_int(
@@ -237,7 +206,6 @@ def load_settings() -> AppSettings:
             ),
         ),
         http=HttpSettings(
-            enabled=_parse_bool("CTXLEDGER_ENABLE_HTTP", default=True),
             host=_get_env("CTXLEDGER_HOST", "0.0.0.0") or "0.0.0.0",
             port=_parse_int("CTXLEDGER_PORT", 8080),
             path=_get_env("CTXLEDGER_HTTP_PATH", "/mcp") or "/mcp",
