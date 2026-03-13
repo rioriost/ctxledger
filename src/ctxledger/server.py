@@ -241,6 +241,32 @@ class HttpRuntimeAdapter:
         }
         return tool_schemas.get(tool_name, DEFAULT_EMPTY_MCP_TOOL_SCHEMA)
 
+    def registered_resources(self) -> tuple[str, ...]:
+        return (
+            "workspace://{workspace_id}/resume",
+            "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+        )
+
+    def dispatch_resource(self, uri: str) -> McpResourceResponse:
+        workspace_resume_handler = build_workspace_resume_resource_handler(self._server)
+        workflow_detail_handler = build_workflow_detail_resource_handler(self._server)
+
+        if parse_workflow_detail_resource_uri(uri) is not None:
+            return workflow_detail_handler(uri)
+        if parse_workspace_resume_resource_uri(uri) is not None:
+            return workspace_resume_handler(uri)
+
+        return McpResourceResponse(
+            status_code=404,
+            payload={
+                "error": {
+                    "code": "resource_not_found",
+                    "message": f"unknown MCP resource '{uri}'",
+                }
+            },
+            headers={"content-type": "application/json"},
+        )
+
     def dispatch_tool(
         self,
         tool_name: str,
@@ -278,6 +304,8 @@ class HttpRuntimeAdapter:
         return RuntimeIntrospection(
             transport="http",
             routes=self.registered_routes(),
+            tools=self.registered_tools(),
+            resources=self.registered_resources(),
         )
 
     def dispatch(

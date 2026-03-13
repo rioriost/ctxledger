@@ -3943,6 +3943,112 @@ def test_http_mcp_rpc_tools_call_returns_workspace_register_success_payload() ->
     }
 
 
+def test_http_mcp_rpc_resources_list_returns_registered_resources() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+
+    response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp",
+        body=json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "resources/list",
+                "params": {},
+            }
+        ),
+    )
+
+    assert isinstance(response, McpHttpResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": {
+            "resources": [
+                {
+                    "uri": "workspace://{workspace_id}/resume",
+                    "name": "workspace://{workspace_id}/resume",
+                    "description": "workspace://{workspace_id}/resume resource",
+                },
+                {
+                    "uri": "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+                    "name": "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+                    "description": (
+                        "workspace://{workspace_id}/workflow/"
+                        "{workflow_instance_id} resource"
+                    ),
+                },
+            ]
+        },
+    }
+
+
+def test_http_mcp_rpc_resources_read_returns_workspace_resume_payload() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+
+    runtime = build_http_runtime_adapter(server)
+    server.startup()
+
+    uri = f"workspace://{resume.workspace.workspace_id}/resume"
+    response = runtime.dispatch(
+        "mcp_rpc",
+        "/mcp",
+        body=json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "resources/read",
+                "params": {
+                    "uri": uri,
+                },
+            }
+        ),
+    )
+
+    assert isinstance(response, McpHttpResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload == {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "result": {
+            "contents": [
+                {
+                    "uri": uri,
+                    "mimeType": "application/json",
+                    "text": json.dumps(
+                        {
+                            "uri": uri,
+                            "resource": serialize_workflow_resume(resume),
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+            ]
+        },
+    }
+
+
 def test_dispatch_http_request_returns_dispatch_result_for_success() -> None:
     settings = make_settings()
     resume = make_resume_fixture()
@@ -4044,7 +4150,22 @@ def test_http_runtime_adapter_introspect_returns_registered_routes() -> None:
     assert isinstance(introspection, RuntimeIntrospection)
     assert introspection.transport == "http"
     assert introspection.routes == ("workflow_resume",)
-    assert introspection.tools == ()
+    assert introspection.tools == (
+        "memory_get_context",
+        "memory_remember_episode",
+        "memory_search",
+        "projection_failures_ignore",
+        "projection_failures_resolve",
+        "workflow_checkpoint",
+        "workflow_complete",
+        "workflow_resume",
+        "workflow_start",
+        "workspace_register",
+    )
+    assert introspection.resources == (
+        "workspace://{workspace_id}/resume",
+        "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+    )
 
 
 def test_parse_workspace_resume_resource_uri_returns_workspace_id_for_valid_uri() -> (
@@ -4270,7 +4391,22 @@ def test_collect_runtime_introspection_returns_http_runtime_introspection() -> N
         RuntimeIntrospection(
             transport="http",
             routes=("workflow_resume",),
-            tools=(),
+            tools=(
+                "memory_get_context",
+                "memory_remember_episode",
+                "memory_search",
+                "projection_failures_ignore",
+                "projection_failures_resolve",
+                "workflow_checkpoint",
+                "workflow_complete",
+                "workflow_resume",
+                "workflow_start",
+                "workspace_register",
+            ),
+            resources=(
+                "workspace://{workspace_id}/resume",
+                "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+            ),
         ),
     )
 
@@ -4345,8 +4481,22 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
                     "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
-                "tools": [],
-                "resources": [],
+                "tools": [
+                    "memory_get_context",
+                    "memory_remember_episode",
+                    "memory_search",
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
+                    "workflow_checkpoint",
+                    "workflow_complete",
+                    "workflow_resume",
+                    "workflow_start",
+                    "workspace_register",
+                ],
+                "resources": [
+                    "workspace://{workspace_id}/resume",
+                    "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+                ],
             }
         ]
     }
@@ -4398,8 +4548,22 @@ def test_build_runtime_introspection_http_handler_returns_success_response() -> 
                     "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
-                "tools": [],
-                "resources": [],
+                "tools": [
+                    "memory_get_context",
+                    "memory_remember_episode",
+                    "memory_search",
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
+                    "workflow_checkpoint",
+                    "workflow_complete",
+                    "workflow_resume",
+                    "workflow_start",
+                    "workspace_register",
+                ],
+                "resources": [
+                    "workspace://{workspace_id}/resume",
+                    "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+                ],
             }
         ]
     }
@@ -4487,8 +4651,22 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
                     "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
-                "tools": [],
-                "resources": [],
+                "tools": [
+                    "memory_get_context",
+                    "memory_remember_episode",
+                    "memory_search",
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
+                    "workflow_checkpoint",
+                    "workflow_complete",
+                    "workflow_resume",
+                    "workflow_start",
+                    "workspace_register",
+                ],
+                "resources": [
+                    "workspace://{workspace_id}/resume",
+                    "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+                ],
             }
         ]
     }
@@ -4519,8 +4697,22 @@ def test_health_includes_runtime_summary_details_for_http_runtime() -> None:
                 "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
-            "tools": [],
-            "resources": [],
+            "tools": [
+                "memory_get_context",
+                "memory_remember_episode",
+                "memory_search",
+                "projection_failures_ignore",
+                "projection_failures_resolve",
+                "workflow_checkpoint",
+                "workflow_complete",
+                "workflow_resume",
+                "workflow_start",
+                "workspace_register",
+            ],
+            "resources": [
+                "workspace://{workspace_id}/resume",
+                "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+            ],
         }
     ]
 
@@ -4551,8 +4743,22 @@ def test_readiness_includes_runtime_summary_details_for_http_runtime() -> None:
                 "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
-            "tools": [],
-            "resources": [],
+            "tools": [
+                "memory_get_context",
+                "memory_remember_episode",
+                "memory_search",
+                "projection_failures_ignore",
+                "projection_failures_resolve",
+                "workflow_checkpoint",
+                "workflow_complete",
+                "workflow_resume",
+                "workflow_start",
+                "workspace_register",
+            ],
+            "resources": [
+                "workspace://{workspace_id}/resume",
+                "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+            ],
         }
     ]
 
@@ -4604,8 +4810,22 @@ def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
                 "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
-            "tools": [],
-            "resources": [],
+            "tools": [
+                "memory_get_context",
+                "memory_remember_episode",
+                "memory_search",
+                "projection_failures_ignore",
+                "projection_failures_resolve",
+                "workflow_checkpoint",
+                "workflow_complete",
+                "workflow_resume",
+                "workflow_start",
+                "workspace_register",
+            ],
+            "resources": [
+                "workspace://{workspace_id}/resume",
+                "workspace://{workspace_id}/workflow/{workflow_instance_id}",
+            ],
         }
     ]
 
@@ -4704,7 +4924,25 @@ def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
     assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
     assert response.status_code == 200
     assert response.headers == {"content-type": "application/json"}
-    assert response.payload == {"tools": []}
+    assert response.payload == {
+        "tools": [
+            {
+                "transport": "http",
+                "tools": [
+                    "memory_get_context",
+                    "memory_remember_episode",
+                    "memory_search",
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
+                    "workflow_checkpoint",
+                    "workflow_complete",
+                    "workflow_resume",
+                    "workflow_start",
+                    "workspace_register",
+                ],
+            }
+        ]
+    }
 
 
 def test_build_debug_tools_http_handler_returns_http_only_empty_tools() -> None:
@@ -4721,7 +4959,25 @@ def test_build_debug_tools_http_handler_returns_http_only_empty_tools() -> None:
     assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
     assert response.status_code == 200
     assert response.headers == {"content-type": "application/json"}
-    assert response.payload == {"tools": []}
+    assert response.payload == {
+        "tools": [
+            {
+                "transport": "http",
+                "tools": [
+                    "memory_get_context",
+                    "memory_remember_episode",
+                    "memory_search",
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
+                    "workflow_checkpoint",
+                    "workflow_complete",
+                    "workflow_resume",
+                    "workflow_start",
+                    "workspace_register",
+                ],
+            }
+        ]
+    }
 
 
 def test_build_debug_tools_http_handler_returns_not_found_for_invalid_path() -> None:
@@ -4793,36 +5049,14 @@ def test_print_runtime_summary_includes_http_runtime_introspection(
         "runtime=[{'transport': 'http', 'routes': ['mcp_rpc', "
         "'projection_failures_ignore', 'projection_failures_resolve', "
         "'runtime_introspection', 'runtime_routes', 'runtime_tools', "
-        "'workflow_closed_projection_failures', 'workflow_resume'], 'tools': [], "
-        "'resources': []}]" in captured.err
-    )
-    assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
-
-
-def test_print_runtime_summary_includes_http_runtime_introspection(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
-    )
-
-    server.startup()
-    _print_runtime_summary(server)
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "ctxledger 0.1.0 started" in captured.err
-    assert "health=ok" in captured.err
-    assert "readiness=ready" in captured.err
-    assert (
-        "runtime=[{'transport': 'http', 'routes': ['mcp_rpc', "
+        "'workflow_closed_projection_failures', 'workflow_resume'], 'tools': "
+        "['memory_get_context', 'memory_remember_episode', 'memory_search', "
         "'projection_failures_ignore', 'projection_failures_resolve', "
-        "'runtime_introspection', 'runtime_routes', 'runtime_tools', "
-        "'workflow_closed_projection_failures', 'workflow_resume'], 'tools': [], "
-        "'resources': []}]" in captured.err
+        "'workflow_checkpoint', 'workflow_complete', 'workflow_resume', "
+        "'workflow_start', 'workspace_register'], 'resources': "
+        "['workspace://{workspace_id}/resume', "
+        "'workspace://{workspace_id}/workflow/{workflow_instance_id}']}]"
+        in captured.err
     )
     assert f"mcp_endpoint={server.settings.http.mcp_url}" in captured.err
 
@@ -4878,4 +5112,22 @@ def test_http_runtime_adapter_dispatches_registered_debug_tools_handler() -> Non
     assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
     assert response.status_code == 200
     assert response.headers == {"content-type": "application/json"}
-    assert response.payload == {"tools": []}
+    assert response.payload == {
+        "tools": [
+            {
+                "transport": "http",
+                "tools": [
+                    "memory_get_context",
+                    "memory_remember_episode",
+                    "memory_search",
+                    "projection_failures_ignore",
+                    "projection_failures_resolve",
+                    "workflow_checkpoint",
+                    "workflow_complete",
+                    "workflow_resume",
+                    "workflow_start",
+                    "workspace_register",
+                ],
+            }
+        ]
+    }
