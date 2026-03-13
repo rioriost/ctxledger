@@ -32,7 +32,10 @@
 - `server.py` から `build_http_runtime_adapter()` / `build_workflow_service_factory()` / `create_runtime()` / `_print_runtime_summary()` を削除しました。
 - `create_server()` は `runtime.server_factory.create_server()` への委譲をやめ、`CtxLedgerServer(...)` の構築、workflow service factory の選択、`build_http_runtime_adapter(server)` による runtime 装着を `server.py` 内で直接行う形に変更しました。
 - これにより、`server.py` の server bootstrap flow は一段短くなり、top-level entrypoint module として読んだときの初期化経路が追いやすくなりました。
-- `tests/test_server.py` / `tests/test_cli.py` / `tests/test_postgres_integration.py` を回して、bridge helper 整理後も主要な server/bootstrap path が壊れていないことを確認しました。
+- さらに `src/ctxledger/runtime/server_factory.py` を整理し、現在の `server.py` から使われなくなっていた `create_server()` helper を削除しました。
+- `src/ctxledger/runtime/server_factory.py` は `build_workflow_service_factory()` のみを持つ小さな factory module に縮小されました。
+- あわせて `runtime.server_factory` から不要になった type-only import と protocol import を削除し、module の責務に合わせて import surface を簡素化しました。
+- `tests/test_server.py` / `tests/test_cli.py` / `tests/test_postgres_integration.py` を回して、runtime server factory helper pruning 後も主要な server/bootstrap path が壊れていないことを確認しました。
 
 今回確認したテスト結果:
 - `pytest -q tests/test_server.py`
@@ -49,7 +52,8 @@
 - `0224852` — `Move HTTP runtime adapter into runtime module`
 - `93b472b` — `Import HTTP runtime adapter from canonical module in tests`
 - `3181d7a` — `Slim server exports to public entrypoints`
-- `server.py` bridge helper の inline 整理変更は、まだ commit していません。
+- `d7d2284` — `Inline server bootstrap helper flow`
+- `runtime.server_factory.py` の unused helper pruning 変更は、まだ commit していません。
 
 現時点での設計メモ:
 - `server.py` から concrete HTTP adapter 実装が抜けたことで、bootstrap surface と runtime implementation の境界がかなり自然になりました。
@@ -63,12 +67,12 @@
 - `registered_routes()` は依然として debug/introspection で使われており、単純削除ではなく introspection responsibility とセットで整理すべきです。
 - `mcp/tool_handlers.py` 側の `McpToolResponse` 参照が canonical `runtime.types` に寄ったので、MCP response types の dependency direction はより自然になりました。
 - `server.py` に残っていた internal bridge helper がなくなったことで、server bootstrap の責務と call graph はさらに単純化されました。
-- 一方で `runtime.server_factory.py` には `create_server()` がまだ残っており、現在の `server.py` からは使われていない可能性が高いので、次はこの module の整理余地を確認する価値があります。
+- `runtime.server_factory.py` は now `build_workflow_service_factory()` のみを提供する最小 module になり、server bootstrap helper の旧 layering artifact はさらに減りました。
 
 次セッションで優先してやること:
-1. 今回の `server.py` bridge helper inline 整理変更を descriptive commit にまとめる
-2. `runtime.server_factory.py` の `create_server()` がまだ必要か、未使用なら縮小または削除できるか確認する
-3. `registered_routes()` と debug/introspection surface の責務整理を進める
-4. 必要なら `tests/test_cli.py` や他の周辺 test も含めて import surface 変更の波及を確認する
-5. 変更がまとまった段階で `pytest -q` を全体実行して回帰確認する
-6. `tests/test_cli.py` の patch 対象も含め、`server.py` の public API をどこまで意図的に残すかを最終的に決める
+1. 今回の `runtime.server_factory.py` の unused helper pruning 変更を descriptive commit にまとめる
+2. `registered_routes()` と debug/introspection surface の責務整理を進める
+3. 必要なら `tests/test_cli.py` や他の周辺 test も含めて import surface 変更の波及を確認する
+4. 変更がまとまった段階で `pytest -q` を全体実行して回帰確認する
+5. `tests/test_cli.py` の patch 対象も含め、`server.py` の public API をどこまで意図的に残すかを最終的に決める
+6. 問題なければ cleanup の次の descriptive commit を作成する
