@@ -1038,6 +1038,7 @@ Auth and deployment guidance:
 - `docs/plans/auth_planning_index.md`
 - `docs/plans/auth_proxy_scaling_plan.md`
 - `docs/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/plans/auth_large_gateway_shortlist_example.md`
 - `docs/CONTRIBUTING.md`
 
 ---

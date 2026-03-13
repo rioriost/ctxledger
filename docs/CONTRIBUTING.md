@@ -72,6 +72,7 @@ If your change affects authentication, reverse proxy behavior, protected routes,
 - `docs/small_auth_operator_runbook.md`
 - `docs/plans/auth_proxy_scaling_plan.md`
 - `docs/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/plans/auth_large_gateway_shortlist_example.md`
 
 If you are preparing a future large-pattern gateway selection record, also review:
 
@@ -264,6 +265,7 @@ Use this quick map when contributing around auth or deployment topics.
 
 ### Large pattern, design-prep only
 - `docs/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/plans/auth_large_gateway_shortlist_example.md`
 - `docs/plans/auth_large_gateway_decision_record_template.md`
 
 ### Current expectations

@@ -419,29 +419,45 @@ docs consistency cleanup:
   - `tests/test_cli.py`
   - `tests/test_server.py`
   を実行し、`178 passed` を確認しました。
-- 次に large-pattern design prep をさらに進めるなら、scoring rubric を使った **example scorecard / mock shortlist** を 1 枚追加するのが自然です。
-- その artifact では:
+- large-pattern design prep の次段として、`docs/plans/auth_large_gateway_shortlist_example.md` を新規追加しました。
+- この artifact は:
+  - final gateway decision ではなく
+  - provisional / illustrative / non-binding な
+  - **example scorecard / mock shortlist**
+  です。
+- 例として:
   - `Pomerium`
   - `oauth2-proxy`
   - organization-standard gateway
   - other OIDC-aware gateway
   を provisional に比較し、
   - MCP IDE compatibility
+  - identity quality
   - operational fit
   - identity propagation readiness
   - architecture alignment
-  の観点で例示的に shortlisting するのがよさそうです。
-- ただしそれは final gateway decision ではなく、future decision record に進む前の design-prep material として扱うべきです。
+  などの観点で weighted score を付ける worked example を記録しました。
+- score の example outcome としては:
+  - `Pomerium`
+  - organization-standard gateway
+  - `oauth2-proxy`
+  - other OIDC-aware gateway
+  の順で provisional ranking を示しています。
+- ただしこれは final gateway decision ではなく、future decision record に進む前の design-prep material として扱うべきです。
+- `docs/plans/auth_planning_index.md` にも追記し、
+  - scoring rubric だけでなく
+  - `docs/plans/auth_large_gateway_shortlist_example.md`
+  も shortlist preparation の reading path に含める形へ更新しました。
+- `README.md` の documentation index と `docs/CONTRIBUTING.md` の auth/deployment docs map にも、この shortlist example への導線を追加しました。
 
 次 session への引き継ぎ候補:
 - `git status` を見て今回の docs/navigation 変更を確認する
 - repo ルールに従って、work loop の区切りで descriptive message 付きの `git commit` を行う
-  - 例: `Document auth planning navigation and test recovery`
+  - 例: `Add large auth gateway shortlist example`
 - live Docker validation を再度流す場合は、終了後に
   - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans`
   を実行してから full `pytest -q` を流す
-- large-pattern design prep をさらに進めるなら、`docs/plans/auth_large_gateway_decision_record_template.md` を起点に、candidate evaluation memo から actual selection record へ移るときの ADR/decision-record 運用を整える
-- `docs/plans/auth_large_gateway_evaluation_memo.md` の scoring rubric を使って、candidate shortlisting の example scorecard や filled example を 1 枚追加するのも自然
+- large-pattern design prep をさらに進めるなら、`docs/plans/auth_large_gateway_decision_record_template.md` を起点に、candidate evaluation memo と shortlist example から actual selection record へ移るときの ADR/decision-record 運用を整える
 - `README.md` の documentation index と `docs/plans/auth_planning_index.md` / `docs/CONTRIBUTING.md` / `docs/plans/mcp_planning_index.md` の導線は追加済みなので、必要なら次は plans 間の相互リンクや auth index から具体 plans への cross-reference をもう一段強化する
 - integration-test recovery の観点では、small-pattern live validation 後に full test suite が失敗した場合、まず overlay stack を落としてから `pytest -q` を再実行する
 - large-pattern design prep の次段として、candidate shortlisting 用の example scorecard / mock shortlist artifact を 1 枚追加するのが自然
