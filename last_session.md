@@ -7,79 +7,30 @@
 - 以前の整理で stdio MCP サーバの残骸は削除済みで、HTTP 専用 shape に寄せています。
 
 今回の作業:
-- `docs/plans/http_fastapi_cleanup_plan.md` を新規作成し、HTTP MCP + FastAPI 導入後に残っている不要レイヤーの整理方針を文書化しました。
-- cleanup の第一段として、`src/ctxledger/http_app.py` を変更し、FastAPI route から `runtime.dispatch(route_name, ...)` に再委譲せず、`runtime.http_handlers` の具体ハンドラを直接束縛する形に変更しました。
-- これにより、FastAPI が HTTP route ownership を持ち、アプリ層の request flow が追いやすくなりました。
-- `src/ctxledger/http_app.py` から `server.runtime._server = server` の後付け代入を削除しました。
-- `src/ctxledger/runtime/http_runtime.py` を変更し、`HttpRuntimeAdapter` を `HttpRuntimeAdapter(server.settings, server=server)` で構築するようにして、runtime/server の依存関係を生成時に明示しました。
-- `src/ctxledger/server.py` の `HttpRuntimeAdapter.__init__` に `server` 引数を追加し、private field の後付け patch を不要にしました。
-- `src/ctxledger/server.py` の `build_http_runtime_adapter()` から `_server` の後付け代入を削除しました。
-- 続けて test import cleanup を進め、`tests/test_server.py` の import を整理して、HTTP handler / server response / MCP tool/resource helper / response types の多くを `ctxledger.server` 経由ではなく canonical module から読む形へ変更しました。
-- `tests/test_mcp_modules.py` でも `McpResourceResponse` / `McpToolResponse` の import を `ctxledger.server` から `ctxledger.runtime.types` へ移しました。
-- さらに `src/ctxledger/server.py` から、未使用になっていた HTTP handler wrapper・response wrapper・path parser wrapper などの compatibility 関数をまとめて削除しました。
-- pruning の途中で、`CtxLedgerServer.build_workspace_resume_resource_response()` と `CtxLedgerServer.build_workflow_detail_resource_response()` が削除した module-level wrapper を呼んでいたため resource read 系で `NameError` が発生しました。
-- 上記 2 メソッドは `runtime.server_responses` をメソッド内で直接 import して呼ぶ形に修正し、resource path の挙動を回復させました。
-- `tests/test_server.py` の serializer import を `ctxledger.server` から `ctxledger.runtime.serializers` に移し、`server.py` への依存をさらに減らしました。
-- `HttpRuntimeAdapter` に `handler(route_name)` / `require_handler(route_name)` を追加し、内部の `_handlers` dict へ直接触れずに registered handler を扱える accessor を用意しました。
-- `tests/test_server.py` の debug/runtime route まわりも `_handlers[...]` 直参照ではなく `handler(...)` / `require_handler(...)` 経由へ変更しました。
-- `src/ctxledger/server.py` に `build_runtime_dispatch_result()` を追加し、runtime dispatch の中心 helper を一本化しました。
-- 旧 `dispatch_http_request()` wrapper は削除済みで、dispatch result 生成は `build_runtime_dispatch_result()` に統一されています。
-- `tests/test_server.py` で `RuntimeIntrospection` の import を `ctxledger.server` ではなく `ctxledger.runtime.introspection` から読む形へ変更しました。
-- `src/ctxledger/http_app.py` を修正し、FastAPI app の startup/shutdown を import 時ではなく lifespan で管理する形へ移行しました。
-- `create_fastapi_app()` は `lifespan` を持つ `FastAPI(...)` を返すようになり、`server.startup()` は app factory 内で即時実行しない構成になっています。
-- `create_fastapi_app_from_settings()` も `create_server(settings)` 後に直接 startup せず、server を束縛した app を返すだけの形へ変更しました。
-- `src/ctxledger/server.py` から `serialize_runtime_introspection()` / `serialize_runtime_introspection_collection()` の再公開を削除しました。
-- `tests/test_server.py` はすでに `ctxledger.runtime.serializers` を直接使っていたため、この export cleanup でも挙動差分は出ていません。
-- `server.startup()` の runtime summary logging は `runtime.serializers.serialize_runtime_introspection_collection()` を直接使う形に整理済みです。
-- 今回さらに HTTP-only 方針に合わせて config simplification を進めました。
-- `src/ctxledger/config.py` から `TransportMode` と `_parse_transport()` を削除しました。
-- `AppSettings` から `transport` フィールドを削除しました。
-- `HttpSettings` から `enabled` フィールドを削除しました。
-- `AppSettings.validate()` から `CTXLEDGER_TRANSPORT` / `CTXLEDGER_ENABLE_HTTP` 整合チェックを削除し、HTTP 固定前提の validation に整理しました。
-- `load_settings()` から `CTXLEDGER_TRANSPORT` / `CTXLEDGER_ENABLE_HTTP` の読み込みを削除しました。
-- `src/ctxledger/runtime/orchestration.py` を更新し、`TransportMode` 依存、`http.enabled` 依存、transport→http enablement 変換を削除しました。
-- `apply_overrides()` は `transport` override が来た場合でも `'http'` 以外は拒否する最小互換形に変更し、host/port override だけを `HttpSettings` へ反映するよう整理しました。
-- `print_runtime_summary()` は `http.enabled` 分岐なしで `mcp_endpoint` を出力する形に単純化しました。
-- `src/ctxledger/server.py` の `create_runtime()` から `settings.http.enabled` 分岐を削除しました。
-- `src/ctxledger/server.py` の startup complete log から `http_enabled` フィールドを削除しました。
-- `src/ctxledger/runtime/status.py` の readiness details から `http_enabled` を削除しました。
-- `tests/test_config.py` を HTTP-only config shape に合わせて更新し、`CTXLEDGER_TRANSPORT` / `CTXLEDGER_ENABLE_HTTP` / `TransportMode` 前提の検証を削除しました。
-- `tests/test_cli.py` の `AppSettings` 構築を新しい shape に更新しました。
-- `tests/test_server.py` の `make_settings()` と invalid configuration test を新しい shape に更新し、旧 `transport` / `http_enabled` 前提を削除しました。
-- `tests/test_mcp_modules.py` の `make_settings()` も新しい shape に更新しました。
-- この段階で config は実質 HTTP-only product shape になり、transport abstraction の名残はかなり減りました。
+- `docs/plans/http_fastapi_cleanup_plan.md` を基準に、`server.py` 依存の棚卸しをさらに進めました。
+- `tests/test_server.py` の import を追加整理し、`build_database_health_checker` を `ctxledger.runtime.database_health` から、`ServerBootstrapError` を `ctxledger.runtime.errors` から、`build_http_runtime_adapter` を `ctxledger.runtime.http_runtime` から読む形へ変更しました。
+- これにより、`tests/test_server.py` で `ctxledger.server` に残している依存は `CtxLedgerServer` / `HttpRuntimeAdapter` / `_print_runtime_summary` / `build_runtime_dispatch_result` / `create_runtime` / `create_server` にさらに絞られました。
+- `server.py` はこの session では実装変更していませんが、canonical module への import 移行が一段進み、`server.py` を bootstrap + runtime adapter の境界として縮小していく方向がより明確になりました。
+- 波及確認として `tests/test_postgres_integration.py` を今回の対象に含めて実行し、HTTP-only config simplification 後も周辺 integration test が壊れていないことを確認しました。
 
 今回確認したテスト結果:
-- `pytest -q tests/test_config.py tests/test_cli.py tests/test_server.py tests/test_mcp_modules.py`
-- 結果: `186 passed`
-
-今回の直近コミット:
-- `4e00ba0` — `Simplify FastAPI HTTP routing path`
-- `33c8815` — `Move tests to canonical runtime modules`
-- `9cd5f9e` — `Prune obsolete server compatibility wrappers`
-- `6ef0808` — `Use runtime serializers directly in server tests`
-- `5d278e0` — `Add explicit HTTP runtime handler accessors`
-- `40eccdf` — `Extract runtime dispatch result helper`
-- `ef8f515` — `Remove obsolete dispatch_http_request wrapper`
-- `b661907` — `Import runtime introspection directly in tests`
-- `4c74f23` — `Use FastAPI lifespan for server startup`
+- `pytest -q tests/test_server.py tests/test_postgres_integration.py`
+- 結果: `156 passed`
 
 現時点での設計メモ:
-- `http_app.py` はかなり自然になり、FastAPI の route flow は直接的になっています。
-- FastAPI app lifecycle は import-time startup ではなく lifespan 管理へ移行済みです。
-- config は HTTP-only shape に整理され、`TransportMode` と `HttpSettings.enabled` の二重性は解消済みです。
-- `server.py` の module-level wrapper はかなり減ったが、まだ bootstrap と runtime adapter と legacy-friendly export が混在しています。
-- `CtxLedgerServer` の resource response メソッドは `runtime.server_responses` を遅延 import する形になっており、循環を避けつつ現状を保つための暫定バランスです。
-- `build_runtime_dispatch_result()` が runtime dispatch の唯一の中心 helper になりました。
-- `registered_routes()` は debug/introspection と既存テストで参照されているため、削除前に introspection の責務整理が必要です。
-- `tests/test_server.py` はまだ `CtxLedgerServer` / `HttpRuntimeAdapter` / `build_http_runtime_adapter` / `build_runtime_dispatch_result` などを `ctxledger.server` から import しており、ここが今後の `server.py` 縮小の境界になります。
-- serializer helper と runtime introspection 型は tests 側で canonical module に寄せられたので、`server.py` から外せる export の候補はさらに明確になっています。
-- route registry 自体は残るが、handler lookup と dispatch helper の窓口が整理されたので、将来 `_handlers` の実体や dispatch の置き場所を変えても追従しやすくなっています。
+- `http_app.py` はすでに FastAPI が直接 route ownership を持つ構成になっており、HTTP flow はかなり自然です。
+- config は HTTP-only shape に整理済みで、transport abstraction の名残は主に import surface と `server.py` の公開境界に寄っています。
+- `server.py` の module-level compatibility surface は以前よりかなり小さくなりましたが、まだ runtime adapter 本体、bootstrap helper、dispatch helper、legacy-friendly import 窓口が混在しています。
+- `tests/test_server.py` の依存先整理により、`server.py` から切り離せる公開物と、まだ central surface として残す必要があるものの境界が見えやすくなりました。
+- `registered_routes()` は引き続き debug/introspection surface の一部として使われており、単純削除よりも introspection responsibility の再配置を先に考えるべき状態です。
+- `build_runtime_dispatch_result()` は依然として runtime dispatch の中心 helper ですが、FastAPI app path では直接 handler binding を使うため、今後この helper をどこまで public に保つかは再検討余地があります。
+
+今回の直近コミット:
+- この session ではまだ commit は作成していません。
 
 次セッションで優先してやること:
-1. `server.py` にまだ残っている re-export / helper 群の棚卸しを続ける
-2. `registered_routes()` を introspection 用の責務へさらに限定できるか考える
-3. `RuntimeIntrospection` や他の公開位置を見直し、`server.py` から外せるものを外す
-4. 必要なら `tests/test_postgres_integration.py` など今回未実行の周辺テストも回して、HTTP-only config simplification の波及確認をする
-5. 変更が一段落したら `pytest -q` で全体確認する
-6. 問題なければ cleanup 用の次の descriptive commit を作成
+1. `server.py` に残っている re-export / helper / public surface を棚卸しし、canonical module へ寄せられるものをさらに切り出す
+2. `tests/test_server.py` でまだ `ctxledger.server` から読んでいる `create_runtime` / `build_runtime_dispatch_result` / `_print_runtime_summary` などの公開位置を再検討する
+3. `registered_routes()` の責務を introspection/debug 用 surface としてどう残すか、あるいは別 module に寄せるかを整理する
+4. 変更がまとまった段階で `pytest -q` を全体実行して回帰確認する
+5. 問題なければ cleanup 用の descriptive commit を作成する
