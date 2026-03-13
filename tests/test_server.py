@@ -48,6 +48,11 @@ from ctxledger.runtime.http_handlers import (
     parse_workflow_resume_request_path,
 )
 from ctxledger.runtime.introspection import collect_runtime_introspection
+from ctxledger.runtime.serializers import (
+    serialize_runtime_introspection,
+    serialize_runtime_introspection_collection,
+    serialize_workflow_resume,
+)
 from ctxledger.runtime.server_responses import (
     build_closed_projection_failures_response,
     build_runtime_introspection_response,
@@ -74,9 +79,6 @@ from ctxledger.server import (
     create_runtime,
     create_server,
     dispatch_http_request,
-    serialize_runtime_introspection,
-    serialize_runtime_introspection_collection,
-    serialize_workflow_resume,
 )
 from ctxledger.workflow.service import (
     CompleteWorkflowInput,

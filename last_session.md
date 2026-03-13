@@ -20,8 +20,9 @@
 - さらに `src/ctxledger/server.py` から、未使用になっていた HTTP handler wrapper・response wrapper・path parser wrapper などの compatibility 関数をまとめて削除しました。
 - pruning の途中で、`CtxLedgerServer.build_workspace_resume_resource_response()` と `CtxLedgerServer.build_workflow_detail_resource_response()` が削除した module-level wrapper を呼んでいたため resource read 系で `NameError` が発生しました。
 - 上記 2 メソッドは `runtime.server_responses` をメソッド内で直接 import して呼ぶ形に修正し、resource path の挙動を回復させました。
+- 追加で `tests/test_server.py` の serializer import を `ctxledger.server` から `ctxledger.runtime.serializers` に移し、`server.py` への依存をさらに減らしました。
 - この段階で `server.py` はまだ完全に小さくはないものの、以前より compatibility surface はかなり減り、HTTP handler / server response の一次公開窓口としての役割は薄くなっています。
-- 一方で、`dispatch_http_request()`、`HttpRuntimeAdapter.register_handler()`、`registered_routes()`、serializer helper 再公開などは依然として残っており、次段の整理対象です。
+- 一方で、`dispatch_http_request()`、`HttpRuntimeAdapter.register_handler()`、`registered_routes()` などは依然として残っており、次段の整理対象です。
 
 今回確認したテスト結果:
 - `pytest -q tests/test_server.py tests/test_mcp_modules.py`
@@ -30,6 +31,7 @@
 今回の直近コミット:
 - `4e00ba0` — `Simplify FastAPI HTTP routing path`
 - `33c8815` — `Move tests to canonical runtime modules`
+- `9cd5f9e` — `Prune obsolete server compatibility wrappers`
 
 現時点での設計メモ:
 - `http_app.py` はかなり自然になり、FastAPI の route flow は直接的になっています。
@@ -39,12 +41,13 @@
 - `registered_routes()` は debug/introspection と既存テストで参照されているため、削除前に introspection の責務整理が必要です。
 - 設定面では `TransportMode` と `http.enabled` の二重性がまだ残っており、HTTP 専用化に合わせた簡素化余地があります。
 - FastAPI app は依然として import 時に `create_default_fastapi_app()` が走る shape なので、必要なら次段で lifespan 管理へ寄せる余地があります。
-- `tests/test_server.py` はまだ `CtxLedgerServer` / `HttpRuntimeAdapter` / `build_http_runtime_adapter` / `dispatch_http_request` / serializer helpers などを `ctxledger.server` から import しており、ここが今後の `server.py` 縮小の境界になります。
+- `tests/test_server.py` はまだ `CtxLedgerServer` / `HttpRuntimeAdapter` / `build_http_runtime_adapter` / `dispatch_http_request` などを `ctxledger.server` から import しており、ここが今後の `server.py` 縮小の境界になります。
+- serializer helper は `tests/test_server.py` 側では canonical module に寄せられたので、`server.py` からの再公開削減をさらに進めやすくなりました。
 
 次セッションで優先してやること:
 1. `server.py` にまだ残っている re-export / helper 群の棚卸しを続ける
 2. `dispatch_http_request()` と route registry を本当に残すべきか再評価する
-3. `RuntimeIntrospection` / serializer helper の公開位置を見直し、`server.py` から外せるものを外す
+3. `RuntimeIntrospection` や他の公開位置を見直し、`server.py` から外せるものを外す
 4. 可能なら FastAPI lifespan 管理への移行可否を確認する
 5. 変更が一段落したら `pytest -q` で全体確認する
 6. 問題なければ cleanup 用の次の descriptive commit を作成
