@@ -20,7 +20,7 @@
 - pruning の途中で、`CtxLedgerServer.build_workspace_resume_resource_response()` と `CtxLedgerServer.build_workflow_detail_resource_response()` が削除した module-level wrapper を呼んでいたため resource read 系で `NameError` が発生しました。
 - 上記 2 メソッドは `runtime.server_responses` をメソッド内で直接 import して呼ぶ形に修正し、resource path の挙動を回復させました。
 - 追加で `tests/test_server.py` の serializer import を `ctxledger.server` から `ctxledger.runtime.serializers` に移し、`server.py` への依存をさらに減らしました。
-- さらに `HttpRuntimeAdapter` に `handler(route_name)` / `require_handler(route_name)` を追加し、内部の `_handlers` dict へ直接触れずに registered handler を扱える accessor を用意しました。
+- `HttpRuntimeAdapter` に `handler(route_name)` / `require_handler(route_name)` を追加し、内部の `_handlers` dict へ直接触れずに registered handler を扱える accessor を用意しました。
 - `tests/test_server.py` の debug/runtime route まわりも `_handlers[...]` 直参照ではなく `handler(...)` / `require_handler(...)` 経由へ変更しました。
 - `src/ctxledger/server.py` に `build_runtime_dispatch_result()` を追加し、runtime dispatch の中心 helper を一本化しました。
 - 旧 `dispatch_http_request()` wrapper は削除済みで、dispatch result 生成は `build_runtime_dispatch_result()` に統一されています。
@@ -29,6 +29,9 @@
 - `create_fastapi_app()` は `lifespan` を持つ `FastAPI(...)` を返すようになり、`server.startup()` は app factory 内で即時実行しない構成になっています。
 - `create_fastapi_app_from_settings()` も `create_server(settings)` 後に直接 startup せず、server を束縛した app を返すだけの形へ変更しました。
 - これにより import-time side effect が減り、ASGI/FastAPI のライフサイクルにより整合した構成へ一歩進みました。
+- さらに `src/ctxledger/server.py` から `serialize_runtime_introspection()` / `serialize_runtime_introspection_collection()` の再公開を削除しました。
+- `tests/test_server.py` はすでに `ctxledger.runtime.serializers` を直接使っていたため、この export cleanup でも挙動差分は出ていません。
+- `server.startup()` の runtime summary logging は `runtime.serializers.serialize_runtime_introspection_collection()` を直接使う形に整理済みです。
 - この段階で route registry はまだ残っていますが、dispatch の中心 helper は `build_runtime_dispatch_result()` に一本化され、FastAPI app lifecycle も framework-aligned になっています。
 - `server.py` はまだ完全に小さくはないものの、以前より compatibility surface はかなり減り、HTTP handler / server response の一次公開窓口としての役割はかなり薄くなっています。
 - 一方で、`HttpRuntimeAdapter.register_handler()`、`registered_routes()`、`RuntimeIntrospection` の公開位置、設定の HTTP-only simplification などは依然として残っており、次段の整理対象です。
@@ -45,6 +48,8 @@
 - `5d278e0` — `Add explicit HTTP runtime handler accessors`
 - `40eccdf` — `Extract runtime dispatch result helper`
 - `ef8f515` — `Remove obsolete dispatch_http_request wrapper`
+- `b661907` — `Import runtime introspection directly in tests`
+- `4c74f23` — `Use FastAPI lifespan for server startup`
 
 現時点での設計メモ:
 - `http_app.py` はかなり自然になり、FastAPI の route flow は直接的になっています。

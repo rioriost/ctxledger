@@ -69,6 +69,7 @@ from .runtime.protocols import (
 )
 from .runtime.serializers import (
     serialize_closed_projection_failures_history,
+    serialize_runtime_introspection_collection,
     serialize_stub_response,
     serialize_workflow_resume,
 )
@@ -635,24 +636,6 @@ __all__ = [
     "parse_workflow_detail_resource_uri",
     "run_server",
     "serialize_closed_projection_failures_history",
-    "serialize_runtime_introspection",
-    "serialize_runtime_introspection_collection",
     "serialize_stub_response",
     "serialize_workflow_resume",
 ]
-
-
-def serialize_runtime_introspection(introspection: RuntimeIntrospection):
-    from .runtime.serializers import serialize_runtime_introspection as extracted
-
-    return extracted(introspection)
-
-
-def serialize_runtime_introspection_collection(
-    introspections: tuple[RuntimeIntrospection, ...],
-):
-    from .runtime.serializers import (
-        serialize_runtime_introspection_collection as extracted,
-    )
-
-    return extracted(introspections)
