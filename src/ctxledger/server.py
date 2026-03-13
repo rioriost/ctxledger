@@ -10,9 +10,7 @@ from .runtime.database_health import (
 from .runtime.errors import ServerBootstrapError
 from .runtime.http_runtime import (
     HttpRuntimeAdapter,
-)
-from .runtime.http_runtime import (
-    build_http_runtime_adapter as extracted_build_http_runtime_adapter,
+    build_http_runtime_adapter,
 )
 from .runtime.introspection import (
     collect_runtime_introspection,
@@ -26,10 +24,7 @@ from .runtime.serializers import (
     serialize_runtime_introspection_collection,
 )
 from .runtime.server_factory import (
-    build_workflow_service_factory as extracted_build_workflow_service_factory,
-)
-from .runtime.server_factory import (
-    create_server as extracted_create_server,
+    build_workflow_service_factory,
 )
 from .runtime.server_responses import (
     build_closed_projection_failures_response as extracted_build_closed_projection_failures_response,
@@ -254,47 +249,26 @@ class CtxLedgerServer:
         return build_readiness_status(self)
 
 
-def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
-    return extracted_build_http_runtime_adapter(server)
-
-
-def build_workflow_service_factory(
-    settings: AppSettings,
-) -> WorkflowServiceFactory | None:
-    return extracted_build_workflow_service_factory(settings)
-
-
-def create_runtime(
-    settings: AppSettings,
-    server: CtxLedgerServer | None = None,
-) -> ServerRuntime | None:
-    if server is not None:
-        return build_http_runtime_adapter(server)
-
-    return HttpRuntimeAdapter(settings)
-
-
-def _print_runtime_summary(server: CtxLedgerServer) -> None:
-    from .runtime.orchestration import print_runtime_summary
-
-    print_runtime_summary(server)
-
-
 def create_server(
     settings: AppSettings,
     db_health_checker: DatabaseHealthChecker | None = None,
     runtime: ServerRuntime | None = None,
     workflow_service_factory: WorkflowServiceFactory | None = None,
 ) -> CtxLedgerServer:
-    return extracted_create_server(
-        settings,
-        server_class=CtxLedgerServer,
-        create_runtime=create_runtime,
-        build_database_health_checker=build_database_health_checker,
+    server = CtxLedgerServer(
+        settings=settings,
         db_health_checker=db_health_checker,
-        runtime=runtime,
-        workflow_service_factory=workflow_service_factory,
+        runtime=None,
+        workflow_service_factory=(
+            workflow_service_factory
+            if workflow_service_factory is not None
+            else build_workflow_service_factory(settings)
+        ),
     )
+    server.runtime = (
+        runtime if runtime is not None else build_http_runtime_adapter(server)
+    )
+    return server
 
 
 def run_server(
