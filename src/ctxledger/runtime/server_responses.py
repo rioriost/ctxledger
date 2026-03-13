@@ -234,6 +234,7 @@ def build_runtime_routes_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
     from .introspection import collect_runtime_introspection
+    from .serializers import serialize_runtime_introspection
     from .types import RuntimeIntrospectionResponse
 
     introspections = collect_runtime_introspection(server.runtime)
@@ -242,11 +243,14 @@ def build_runtime_routes_response(
         payload={
             "routes": [
                 {
-                    "transport": introspection.transport,
-                    "routes": list(introspection.routes),
+                    "transport": serialized["transport"],
+                    "routes": serialized["routes"],
                 }
-                for introspection in introspections
-                if introspection.routes
+                for serialized in (
+                    serialize_runtime_introspection(introspection)
+                    for introspection in introspections
+                )
+                if serialized["routes"]
             ],
         },
         headers={"content-type": "application/json"},
@@ -257,6 +261,7 @@ def build_runtime_tools_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
     from .introspection import collect_runtime_introspection
+    from .serializers import serialize_runtime_introspection
     from .types import RuntimeIntrospectionResponse
 
     introspections = collect_runtime_introspection(server.runtime)
@@ -265,11 +270,14 @@ def build_runtime_tools_response(
         payload={
             "tools": [
                 {
-                    "transport": introspection.transport,
-                    "tools": list(introspection.tools),
+                    "transport": serialized["transport"],
+                    "tools": serialized["tools"],
                 }
-                for introspection in introspections
-                if introspection.tools
+                for serialized in (
+                    serialize_runtime_introspection(introspection)
+                    for introspection in introspections
+                )
+                if serialized["tools"]
             ],
         },
         headers={"content-type": "application/json"},
