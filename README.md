@@ -1022,6 +1022,7 @@ This validates the core promise of the system:
 
 ## Documentation Index
 
+Core docs:
 - `docs/specification.md`
 - `docs/architecture.md`
 - `docs/workflow-model.md`
@@ -1031,6 +1032,11 @@ This validates the core promise of the system:
 - `docs/SECURITY.md`
 - `docs/design-principles.md`
 - `docs/roadmap.md`
+
+Auth and deployment guidance:
+- `docs/small_auth_operator_runbook.md`
+- `docs/plans/auth_proxy_scaling_plan.md`
+- `docs/plans/auth_large_gateway_evaluation_memo.md`
 
 ---
 

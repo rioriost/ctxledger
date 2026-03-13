@@ -261,6 +261,47 @@ docs consistency cleanup:
 - `docs/specification.md` も最終横断チェックの一環で追従し、
   - Security section の `Bearer token authentication` を `Proxy-layer authentication` に更新しました。
 - `README.md` / `docs/workflow-model.md` は今回の確認範囲では proxy-only auth model と矛盾する明確な修正点は見当たりませんでした。
+- large pattern の次段 documentation prep として、`docs/plans/auth_large_gateway_decision_record_template.md` を新規追加しました。
+  - decision status
+  - phase gate confirmation
+  - candidate comparison matrix
+  - MCP client compatibility notes
+  - identity propagation decision
+  - app-layer authorization decision
+  - trust boundary
+  - validation requirements
+  - migration notes
+  - final decision statement
+  を埋めるための template です。
+- `docs/plans/auth_large_gateway_evaluation_memo.md` にも追記し、design-prep memo から actual gateway selection 時にはこの decision-record template を使う流れを明記しました。
+- `README.md` の documentation index も軽く改善し、auth/deployment guidance として
+  - `docs/small_auth_operator_runbook.md`
+  - `docs/plans/auth_proxy_scaling_plan.md`
+  - `docs/plans/auth_large_gateway_evaluation_memo.md`
+  への導線を追加しました。
+- これにより、small pattern の operator guidance、large pattern の evaluation memo、そして future decision record template の3層が docs navigation 上でも辿りやすくなっています。
+- `docs/specification.md` も最終横断チェックの一環で追従し、
+  - Security section の `Bearer token authentication` を `Proxy-layer authentication` に更新しました。
+- `README.md` / `docs/workflow-model.md` は今回の確認範囲では proxy-only auth model と矛盾する明確な修正点は見当たりませんでした。
+- large pattern の次段 documentation prep として、`docs/plans/auth_large_gateway_decision_record_template.md` を新規追加しました。
+  - decision status
+  - phase gate confirmation
+  - candidate comparison matrix
+  - MCP client compatibility notes
+  - identity propagation decision
+  - app-layer authorization decision
+  - trust boundary
+  - validation requirements
+  - migration notes
+  - final decision statement
+  を埋めるための template です。
+- `docs/plans/auth_large_gateway_evaluation_memo.md` にも追記し、design-prep memo から actual gateway selection 時にはこの decision-record template を使う流れを明記しました。
+- `README.md` の documentation index も軽く改善し、auth/deployment guidance として
+  - `docs/small_auth_operator_runbook.md`
+  - `docs/plans/auth_proxy_scaling_plan.md`
+  - `docs/plans/auth_large_gateway_evaluation_memo.md`
+  への導線を追加しました。
+- これにより、small pattern の operator guidance、large pattern の evaluation memo、そして future decision record template の3層が docs navigation 上でも辿りやすくなっています。
 - small pattern の operator-facing 手順を整理するため、`docs/small_auth_operator_runbook.md` を新規追加しました。
   - startup
   - health verification
@@ -318,11 +359,23 @@ docs consistency cleanup:
 - code / test / script 側には `CTXLEDGER_REQUIRE_AUTH` / `CTXLEDGER_AUTH_BEARER_TOKEN` / `AuthSettings` などの旧 app-layer auth 参照は今回の確認範囲では残っていませんでした。
 
 次 session への引き継ぎ候補:
-- `git status` を見て今回の compose/doc 変更を確認する
+- `git status` を見て今回の docs/navigation 変更を確認する
 - repo ルールに従って、work loop の区切りで descriptive message 付きの `git commit` を行う
-  - 例: `Remove deprecated auth envs from compose`
-- 必要なら live Docker validation を再度流し、small-pattern runbook の手順と compose cleanup 後の operator path が引き続き一致することを確認する
+  - 例: `Add large auth gateway decision record template`
+- 必要なら live Docker validation を再度流し、small-pattern runbook の手順と current operator path が引き続き一致することを確認する
   - initialize probe を先に流して expected HTTP status を検証する flow
+- large-pattern design prep をさらに進めるなら、`docs/plans/auth_large_gateway_decision_record_template.md` を起点に、candidate evaluation memo から actual selection record へ移るときの ADR/decision-record 運用を整える
+- `README.md` の documentation index には auth/deployment guidance 導線として
+  - `docs/small_auth_operator_runbook.md`
+  - `docs/plans/auth_proxy_scaling_plan.md`
+  - `docs/plans/auth_large_gateway_evaluation_memo.md`
+  を追加済みであり、必要なら次は plans index や contributing guidance からの導線強化を検討する
+- large-pattern design prep をさらに進めるなら、`docs/plans/auth_large_gateway_decision_record_template.md` を起点に、candidate evaluation memo から actual selection record へ移るときの ADR/decision-record 運用を整える
+- `README.md` の documentation index には auth/deployment guidance 導線として
+  - `docs/small_auth_operator_runbook.md`
+  - `docs/plans/auth_proxy_scaling_plan.md`
+  - `docs/plans/auth_large_gateway_evaluation_memo.md`
+  を追加済みであり、必要なら次は plans index や contributing guidance からの導線強化を検討する
 - 最初は proxy rejection 時に payload 内 `error` object を必須扱いしていましたが、ForwardAuth rejection body は JSON-RPC ではなく plain JSON/transport body でもよいので、この制約を外しました。
 - その結果、proxy rejection path と allow path の両方を同じ smoke script で確認できるようになりました。
 - README も更新しました。
