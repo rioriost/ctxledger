@@ -76,7 +76,6 @@
   - missing/invalid token で `401` + `WWW-Authenticate`
   - valid token で `200` + `X-Auth-User` / `X-Auth-Mode`
   という small pattern plan どおりの最小 shape を持っています。
-- `docker/auth_small/Dockerfile` を追加しました。
 - `docker/docker-compose.small-auth.yml` を新規作成しました。
 - initial overlay では base compose の `ctxledger` 公開 port が merge 後も残り、private backend にならない問題が見つかりました。
 - そのため small pattern 用には base `ctxledger` service を `profiles: [disabled]` で無効化し、代わりに `ctxledger-private` service を定義する構成へ変更しました。
@@ -91,7 +90,7 @@
 - host 既存 `8080` と競合したため、small pattern の proxy 公開 port は `8091` に変更しました。
 - Traefik の Docker provider は今回の環境で Docker daemon metadata の取得に失敗し、router/service が組み上がらず `404 page not found` になる問題が出ました。
 - そのため Traefik は Docker labels ベースをやめ、`providers.file` を使う形へ切り替えました。
-- `docker/traefik/dynamic.yml` を復活させ、以下を file provider で定義しました:
+- `docker/traefik/dynamic.yml` を追加し、以下を file provider で定義しました:
   - router `ctxledger-mcp`
   - middleware `ctxledger-forward-auth`
   - service `ctxledger-backend -> http://ctxledger-private:8080`
@@ -114,14 +113,18 @@
   - invalid token `401`
   - valid token で workflow/resource smoke 通過
   を明記しました。
-- あわせて `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml ps` で service state を確認しました。
-- `ctxledger-auth-small`、`ctxledger-server-private` は healthy、`ctxledger-traefik` は起動している一方で healthcheck 上は `unhealthy` のままでした。
-- Traefik log を見ると、`GET /ping` が `404` を返しており、現在の healthcheck が実態に合っていないことを確認しました。
+- `docs/plans/auth_proxy_scaling_plan.md` に small pattern 実装済み/検証済みの注記を追記しました。
+  - deliverables A-D の status
+  - exit criteria の current assessment
+  - current repository shape と validated shape
+- `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml ps` で service state を確認しました。
+- `ctxledger-auth-small`、`ctxledger-server-private` は healthy、`ctxledger-traefik` は起動している一方で healthcheck 上は `starting` / `unhealthy` になるケースがありました。
+- Traefik log を見ると、`GET /ping` と `GET /ping/` が `404` を返しており、現在の healthcheck が実態に合っていないことを確認しました。
 - 実トラフィック自体は通っており、small pattern の smoke validation は成功しています。
 - よって現時点の remaining issue は、Traefik healthcheck の調整です。
-- 具体的には、`/ping` を file-provider routing と independent に正しく返す shapeへ寄せるか、healthcheck 自体を router 経由ではない確認方法へ変える必要があります。
-- plan 文書 (`docs/plans/auth_proxy_scaling_plan.md`) 自体にはまだ「small pattern 実装済み/検証済み」の状態追記は入れていません。
-- 次にやるなら、この healthcheck 整理と plan への進捗反映が自然です。
+- さらに整理として、未使用だった `docker/auth_small/Dockerfile` は削除済みです。
+- current small pattern は source mount + `python:3.14-slim` + runtime install で一貫させています。
+- この削除により、repo 上の auth-small artifact は actual compose runtime shape と一致するようになりました。
 
 今回確認したテスト結果:
 - `pytest -q`
@@ -139,7 +142,7 @@
 - 結果:
   - `ctxledger-auth-small` healthy
   - `ctxledger-server-private` healthy
-  - `ctxledger-traefik` unhealthy
+  - `ctxledger-traefik` healthcheck は `starting` / `unhealthy` だが、proxy routing 自体は動作
 - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure`
 - 結果:
   - missing token path が `401`
@@ -182,8 +185,9 @@
   - `089bc2e` — `Clarify runtime route registry introspection role`
   - `c9e4a77` — `Record full cleanup verification status`
   - `5d8500b` — `Record cleanup plan completion status`
-- この session の作成済みコミット:
+- small pattern 関連:
   - `feac2dd` — `Add Traefik small auth deployment pattern`
+  - `b23389a` — `Refine small auth deployment verification notes`
 
 現時点での設計メモ:
 - small pattern は app-layer auth の強化ではなく、proxy-layer auth への移行としてかなり自然に成立しています。
@@ -195,21 +199,18 @@
 - small pattern deliverable D の smoke validation は、missing token / invalid token / valid token の 3 系統まで live Docker 上で確認済みです。
 - small pattern の documented proxy port は `8091` です。default local direct app port `8080` とは分けて扱う前提です。
 - README 上の small pattern section と actual compose/runtime shape は現在一致している状態です。
+- `docs/plans/auth_proxy_scaling_plan.md` にも、small pattern が実装済み/検証済みであることを反映済みです。
 - 残っている技術的な小タスクは Traefik healthcheck の調整です。
-- いまの `ctxledger-traefik` unhealthy は `GET /ping` が `404` のためで、routing 本体の failure ではありません。
-- 次に plan 文書へ「small pattern 実装済み/検証済み」の反映を入れると、roadmap 上の位置づけもより明確になります。
+- いまの `ctxledger-traefik` health は `/ping` / `/ping/` が `404` になることだけが原因で、routing 本体の failure ではありません。
+- 未使用 `docker/auth_small/Dockerfile` は削除したので、auth-small の repo shape と actual compose shape のズレは減っています。
 
 次セッションで優先してやること:
-1. `docker/docker-compose.small-auth.yml` の Traefik healthcheck を修正する
-   - `GET /ping` で 404 にならない shapeにするか
-   - あるいは別の確実な liveness/readiness probe に変える
+1. `docker/docker-compose.small-auth.yml` の Traefik healthcheck を本当に通る probe に置き換える
+   - `/ping` 系にこだわらず、Traefik process の liveness を確認できる方法へ寄せる
+   - あるいは small pattern 向けに実 routing を使った lightweight probe へ変える
 2. 修正後に `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate` と `ps` を再確認する
-3. `docs/plans/auth_proxy_scaling_plan.md` に small pattern 実装済み/検証済みの注記を追記する
-   - deliverables A-D の実装状況
-   - exit criteria の到達状況
-   - remaining issue は Traefik healthcheck のみ、という整理
-4. 必要なら README に small pattern stack の `ps` / operational caveat を少し追記する
-5. 問題なければ次の descriptive commit を作る
+3. 必要なら README に Traefik healthcheck の運用 caveat を少し追記する
+4. 問題なければ次の descriptive commit を作る
    - 例: `Fix small auth Traefik healthcheck`
-6. large pattern はまだ着手しない
-7. large pattern 着手時には、proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価する
+5. large pattern はまだ着手しない
+6. large pattern 着手時には、proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価する
