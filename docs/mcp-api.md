@@ -218,10 +218,10 @@ Implemented request shape for these HTTP action routes:
   - `workspace_id`
   - `workflow_instance_id`
   - `projection_type` (optional)
-  - `authorization` (when HTTP auth is enabled)
+- when these routes are exposed through the documented deployment path, authentication is expected at the reverse-proxy/auth-gateway boundary
 - requests using the wrong path shape should be treated as `404 not_found` rather than as valid action requests with only query validation
 
-Representative HTTP request examples when authentication is enabled:
+Representative HTTP request examples through a proxy-protected deployment:
 
 ```/dev/null/http#L1-2
 GET /projection_failures_ignore?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222&projection_type=resume_json
@@ -233,7 +233,7 @@ GET /projection_failures_resolve?workspace_id=11111111-1111-1111-1111-1111111111
 Authorization: Bearer example-token
 ```
 
-Representative HTTP request examples when authentication is disabled:
+Representative HTTP request examples on a trusted direct local path without proxy auth:
 
 ```/dev/null/http#L1-1
 GET /projection_failures_ignore?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222&projection_type=resume_md
@@ -819,7 +819,7 @@ Implemented HTTP action behavior also includes:
   - `404` / `not_found`
   - `400` / `invalid_request`
   - `500` / `server_error`
-- reuse of the existing HTTP bearer-auth error contract for `401` responses when auth is enabled
+- reuse of the existing proxy-auth rejection shape for `401` responses when these routes are exposed through the documented proxy-protected deployment path
 
 Representative HTTP success response example:
 
@@ -1527,9 +1527,9 @@ Examples:
 ### Authentication Errors
 Examples:
 
-- missing bearer token
-- invalid bearer token
-- unsupported auth mode
+- missing proxy-layer bearer token
+- invalid proxy-layer bearer token
+- unsupported proxy/auth-gateway mode
 
 ### Not Found Errors
 Examples:

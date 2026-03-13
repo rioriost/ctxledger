@@ -237,10 +237,35 @@ docs consistency cleanup:
 - この cleanup により、large-pattern memo 追加後の docs 群はより一貫して **proxy-only auth / proxy-first security boundary** を前提に読める状態になっています。
 - なお `docs/imple_plan_0.1.0.md` は historical planning document 的な性格もあるため、今後さらに厳密に current-state aligned wording へ寄せるかどうかは別途判断余地があります。
 
+docs consistency cleanup:
+- large-pattern memo 追加後の wording 整合性を追加確認しました。
+- `docs/SECURITY.md` を再調整し、
+  - current security boundary を app-layer bearer auth ではなく proxy-layer auth と明記
+  - projection failure action routes の保護・観測の説明を proxy-layer wording に統一
+  - security review guidance を `bearer auth` / `bearer token` ではなく `proxy-layer authentication` / `proxy-layer secrets or gateway credentials` に更新しました。
+- `docs/deployment.md` を再調整し、
+  - recommended production topology の auth 表現を proxy-layer authentication handling strategy に更新
+  - projection failure action routes の保護説明を bearer-auth boundary ではなく proxy-layer authentication boundary に更新
+  - deployment/security セクション全体が proxy-only auth model と矛盾しないよう整合性を取りました。
+- `docs/CHANGELOG.md` の unreleased note も追従し、
+  - `/debug/*` route protection の説明を proxy-layer authentication boundary に更新しました。
+- `docs/imple_plan_0.1.0.md` に残っていた旧 auth wording も軽く整理し、
+  - `config.py` responsibilities の auth token configuration を proxy/auth-gateway integration expectations に更新
+  - recommended env vars の bearer token 固定記述を proxy-layer auth secret / gateway credential 方向へ更新
+  - security plan の minimum security を reverse-proxy or auth-gateway enforcement 前提に更新
+  - task breakdown の `auth hook` を `proxy/auth boundary integration` に更新しました。
+- `docs/mcp-api.md` も追従し、
+  - HTTP operator action route examples を app-layer HTTP auth wording ではなく proxy-protected deployment / trusted direct local path という説明に更新
+  - `401` の説明を HTTP bearer-auth contract ではなく proxy-auth rejection shape に更新
+  - authentication error examples を `missing/invalid bearer token` ではなく `missing/invalid proxy-layer bearer token` と `unsupported proxy/auth-gateway mode` に更新しました。
+- この cleanup により、large-pattern memo 追加後の docs 群はより一貫して **proxy-only auth / proxy-first security boundary** を前提に読める状態になっています。
+- なお `docs/imple_plan_0.1.0.md` は historical planning document 的な性格もあるため、今後さらに厳密に current-state aligned wording へ寄せるかどうかは別途判断余地があります。
+
 次 session への引き継ぎ候補:
-- `last_session.md` 自体の更新を実ファイルへ反映する
 - `git status` を見て今回の doc 変更を確認する
 - repo ルールに従って、work loop の区切りで descriptive message 付きの `git commit` を行う
+  - 例: `Align docs with proxy-only auth model`
+- 必要なら `README.md` / `docs/specification.md` / `docs/workflow-model.md` も横断して、proxy-only auth wording の最終棚卸しを行う
   - initialize probe を先に流して expected HTTP status を検証する flow
 - 最初は proxy rejection 時に payload 内 `error` object を必須扱いしていましたが、ForwardAuth rejection body は JSON-RPC ではなく plain JSON/transport body でもよいので、この制約を外しました。
 - その結果、proxy rejection path と allow path の両方を同じ smoke script で確認できるようになりました。

@@ -393,8 +393,8 @@ A secure production posture depends not only on `ctxledger` configuration, but a
 
 Before deploying `ctxledger` beyond local development, verify at least the following:
 
-1. bearer auth is enabled where appropriate
-2. bearer token is provided securely and not committed to source control
+1. proxy-layer authentication is enabled where appropriate
+2. proxy-layer secrets or gateway credentials are provided securely and not committed to source control
 3. `/debug/*` exposure matches the intended environment
 4. production deployments disable unnecessary debug routes
 5. HTTP traffic is protected by TLS
