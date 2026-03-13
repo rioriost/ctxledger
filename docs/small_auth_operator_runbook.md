@@ -46,6 +46,11 @@ Primary files for this mode:
 - `docker/auth_small/src/auth_small_app.py`
 - `scripts/mcp_http_smoke.py`
 
+Note:
+
+- the compose files no longer carry deprecated direct-backend auth environment variables for `ctxledger`
+- proxy-layer authentication for this mode is owned by `auth-small` and Traefik
+
 Primary externally used port:
 
 - `8091` for the Traefik entrypoint
@@ -271,6 +276,11 @@ Check:
   - and `docker/docker-compose.small-auth.yml`
 - whether the test target is `8091` instead of `8080`
 
+Also confirm the compose files themselves are in the cleaned-up shape:
+
+- the backend service should not rely on deprecated direct auth environment variables
+- proxy enforcement in this mode should come from Traefik plus `auth-small`
+
 Operational intent for the small pattern is:
 
 - Traefik exposed
@@ -316,6 +326,7 @@ Important current design notes:
 
 - authentication is expected at the proxy boundary, not inside `ctxledger`
 - `ctxledger` no longer relies on app-layer bearer authentication in the documented deployment path
+- the compose configuration for this mode has also been cleaned up to remove deprecated direct-backend auth environment variables
 - the small pattern is intentionally a shared-token model
 - this is acceptable for one trusted operator or a tightly controlled small environment
 - this is not yet a distinct-user or full multi-user authorization model

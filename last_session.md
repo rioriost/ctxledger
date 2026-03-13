@@ -270,14 +270,22 @@ docs consistency cleanup:
   - common failure modes
   を 1 枚にまとめています。
 - `README.md` の small Traefik auth pattern 節から、この runbook への参照も追加しました。
+- compose 側の軽い棚卸しも行い、deprecated app-layer auth env の残骸を整理しました。
+  - `docker/docker-compose.yml` から
+    - `CTXLEDGER_REQUIRE_AUTH`
+    - `CTXLEDGER_AUTH_BEARER_TOKEN`
+    に関する旧コメントと env 定義を削除しました。
+  - `docker/docker-compose.small-auth.yml` の `ctxledger-private` から `CTXLEDGER_REQUIRE_AUTH: "false"` を削除しました。
+- これにより、compose 設定も current proxy-only auth model とより自然に一致する shape になりました。
 - この cleanup により、large-pattern memo 追加後の docs 群はより一貫して **proxy-only auth / proxy-first security boundary** を前提に読める状態になっています。
 - なお `docs/imple_plan_0.1.0.md` は historical planning document 的な性格もあるため、今後さらに厳密に current-state aligned wording へ寄せるかどうかは別途判断余地があります。
+- code / test / script 側には `CTXLEDGER_REQUIRE_AUTH` / `CTXLEDGER_AUTH_BEARER_TOKEN` / `AuthSettings` などの旧 app-layer auth 参照は今回の確認範囲では残っていませんでした。
 
 次 session への引き継ぎ候補:
-- `git status` を見て今回の doc 変更を確認する
+- `git status` を見て今回の compose/doc 変更を確認する
 - repo ルールに従って、work loop の区切りで descriptive message 付きの `git commit` を行う
-  - 例: `Refine proxy auth wording in API docs`
-- 必要なら `README.md` / `docs/workflow-model.md` / `docs/specification.md` をもう一度軽く横断し、proxy-only auth wording の見落としがないか最終確認する
+  - 例: `Remove deprecated auth envs from compose`
+- 必要なら small-pattern runbook の手順どおりに live Docker validation をもう一度流し、compose cleanup 後も operator path が変わっていないことを確認する
   - initialize probe を先に流して expected HTTP status を検証する flow
 - 最初は proxy rejection 時に payload 内 `error` object を必須扱いしていましたが、ForwardAuth rejection body は JSON-RPC ではなく plain JSON/transport body でもよいので、この制約を外しました。
 - その結果、proxy rejection path と allow path の両方を同じ smoke script で確認できるようになりました。
