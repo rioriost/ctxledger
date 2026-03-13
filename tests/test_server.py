@@ -4302,12 +4302,6 @@ def test_serialize_runtime_introspection_collection_returns_json_ready_payloads(
             tools=(),
             resources=(),
         ),
-        RuntimeIntrospection(
-            transport="stdio",
-            routes=(),
-            tools=("workflow_resume",),
-            resources=("workspace://{workspace_id}/resume",),
-        ),
     )
 
     payload = serialize_runtime_introspection_collection(introspections)
@@ -4318,12 +4312,6 @@ def test_serialize_runtime_introspection_collection_returns_json_ready_payloads(
             "routes": ["workflow_resume"],
             "tools": [],
             "resources": [],
-        },
-        {
-            "transport": "stdio",
-            "routes": [],
-            "tools": ["workflow_resume"],
-            "resources": ["workspace://{workspace_id}/resume"],
         },
     ]
 

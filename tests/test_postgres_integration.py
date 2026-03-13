@@ -1588,7 +1588,6 @@ def test_postgres_settings_can_build_uow_factory_from_loaded_settings(
         "CTXLEDGER_DATABASE_URL": postgres_database_url,
         "CTXLEDGER_TRANSPORT": "http",
         "CTXLEDGER_ENABLE_HTTP": "true",
-        "CTXLEDGER_ENABLE_STDIO": "false",
         "CTXLEDGER_HOST": "127.0.0.1",
         "CTXLEDGER_PORT": "8080",
         "CTXLEDGER_HTTP_PATH": "/mcp",
