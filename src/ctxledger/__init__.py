@@ -20,7 +20,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     serve_parser.add_argument(
         "--transport",
-        choices=("http", "stdio"),
+        choices=("http",),
         help="Transport mode to run",
     )
     serve_parser.add_argument(

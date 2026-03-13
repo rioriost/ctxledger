@@ -36,7 +36,6 @@ def build_readiness_status(server: Any) -> ReadinessStatus:
         "started": server._started,
         "database_configured": bool(server.settings.database.url),
         "http_enabled": server.settings.http.enabled,
-        "stdio_enabled": server.settings.stdio.enabled,
         "workflow_service_initialized": server.workflow_service is not None,
         "runtime": serialize_runtime_introspection_collection(runtime_introspection),
     }

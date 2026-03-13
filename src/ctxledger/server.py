@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from .config import AppSettings
-from .memory.service import StubResponse
+from .memory.service import MemoryService, StubResponse
 from .workflow.service import (
     CompleteWorkflowInput,
     CreateCheckpointInput,
@@ -33,12 +33,6 @@ from .mcp.resource_handlers import (
     build_workspace_resume_resource_response,
     parse_workflow_detail_resource_uri,
     parse_workspace_resume_resource_uri,
-)
-from .mcp.stdio import (
-    StdioRpcServer,
-    StdioRuntimeAdapter,
-    dispatch_mcp_resource,
-    dispatch_mcp_tool,
 )
 from .mcp.tool_handlers import (
     build_mcp_error_response,
@@ -121,12 +115,9 @@ from .runtime.introspection import (
     collect_runtime_introspection,
 )
 from .runtime.orchestration import (
-    build_stdio_runtime_adapter,
-    run_server,
-)
-from .runtime.orchestration import (
     create_runtime as create_runtime_orchestration,
 )
+from .runtime.orchestration import run_server
 from .runtime.protocols import (
     DatabaseHealthChecker,
     HttpRuntimeAdapterProtocol,
@@ -213,12 +204,75 @@ class HttpRuntimeAdapter:
         self.settings = settings
         self._started = False
         self._handlers: dict[str, WorkflowHttpHandler] = handlers or {}
+        self._server: CtxLedgerServer | None = None
 
     def register_handler(self, route_name: str, handler: WorkflowHttpHandler) -> None:
         self._handlers[route_name] = handler
 
     def registered_routes(self) -> tuple[str, ...]:
         return tuple(sorted(self._handlers.keys()))
+
+    def registered_tools(self) -> tuple[str, ...]:
+        return (
+            "memory_get_context",
+            "memory_remember_episode",
+            "memory_search",
+            "projection_failures_ignore",
+            "projection_failures_resolve",
+            "workflow_checkpoint",
+            "workflow_complete",
+            "workflow_resume",
+            "workflow_start",
+            "workspace_register",
+        )
+
+    def tool_schema(self, tool_name: str) -> McpToolSchema:
+        tool_schemas = {
+            "memory_get_context": MEMORY_GET_CONTEXT_TOOL_SCHEMA,
+            "memory_remember_episode": MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
+            "memory_search": MEMORY_SEARCH_TOOL_SCHEMA,
+            "projection_failures_ignore": PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA,
+            "projection_failures_resolve": PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA,
+            "workflow_checkpoint": WORKFLOW_CHECKPOINT_TOOL_SCHEMA,
+            "workflow_complete": WORKFLOW_COMPLETE_TOOL_SCHEMA,
+            "workflow_resume": WORKFLOW_RESUME_TOOL_SCHEMA,
+            "workflow_start": WORKFLOW_START_TOOL_SCHEMA,
+            "workspace_register": WORKSPACE_REGISTER_TOOL_SCHEMA,
+        }
+        return tool_schemas.get(tool_name, DEFAULT_EMPTY_MCP_TOOL_SCHEMA)
+
+    def dispatch_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> McpToolResponse:
+        tool_handlers = {
+            "memory_get_context": build_memory_get_context_tool_handler(
+                MemoryService()
+            ),
+            "memory_remember_episode": build_memory_remember_episode_tool_handler(
+                MemoryService()
+            ),
+            "memory_search": build_memory_search_tool_handler(MemoryService()),
+            "projection_failures_ignore": build_projection_failures_ignore_tool_handler(
+                self._server
+            ),
+            "projection_failures_resolve": build_projection_failures_resolve_tool_handler(
+                self._server
+            ),
+            "workflow_checkpoint": build_workflow_checkpoint_tool_handler(self._server),
+            "workflow_complete": build_workflow_complete_tool_handler(self._server),
+            "workflow_resume": build_resume_workflow_tool_handler(self._server),
+            "workflow_start": build_workflow_start_tool_handler(self._server),
+            "workspace_register": build_workspace_register_tool_handler(self._server),
+        }
+        handler = tool_handlers.get(tool_name)
+        if handler is None:
+            return build_mcp_error_response(
+                code="tool_not_found",
+                message=f"unknown MCP tool '{tool_name}'",
+            )
+        return handler(arguments)
 
     def introspect(self) -> RuntimeIntrospection:
         return RuntimeIntrospection(
@@ -408,7 +462,6 @@ class CtxLedgerServer:
             "ctxledger startup complete",
             extra={
                 "http_enabled": self.settings.http.enabled,
-                "stdio_enabled": self.settings.stdio.enabled,
                 "host": self.settings.http.host,
                 "port": self.settings.http.port,
                 "mcp_url": self.settings.http.mcp_url,
@@ -643,7 +696,9 @@ def build_mcp_http_handler(
 
 
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
-    return extracted_build_http_runtime_adapter(server)
+    runtime = extracted_build_http_runtime_adapter(server)
+    runtime._server = server
+    return runtime
 
 
 def build_workflow_service_factory(
@@ -707,8 +762,6 @@ __all__ = [
     "RuntimeIntrospectionResponse",
     "ServerBootstrapError",
     "ServerRuntime",
-    "StdioRpcServer",
-    "StdioRuntimeAdapter",
     "WorkflowResumeResponse",
     "WorkflowServiceFactory",
     "build_closed_projection_failures_http_handler",
@@ -740,7 +793,6 @@ __all__ = [
     "build_workflow_checkpoint_tool_handler",
     "build_workflow_complete_tool_handler",
     "build_workflow_start_tool_handler",
-    "build_stdio_runtime_adapter",
     "collect_runtime_introspection",
     "_print_runtime_summary",
     "build_workflow_resume_http_handler",
@@ -749,8 +801,6 @@ __all__ = [
     "create_runtime",
     "create_server",
     "dispatch_http_request",
-    "dispatch_mcp_resource",
-    "dispatch_mcp_tool",
     "parse_closed_projection_failures_request_path",
     "parse_workspace_resume_resource_uri",
     "parse_workflow_detail_resource_uri",

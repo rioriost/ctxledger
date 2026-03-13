@@ -12,7 +12,6 @@ from ctxledger.config import (
     LoggingSettings,
     LogLevel,
     ProjectionSettings,
-    StdioSettings,
     TransportMode,
 )
 from ctxledger.mcp.lifecycle import (
@@ -32,15 +31,14 @@ from ctxledger.mcp.streamable_http import (
     build_streamable_http_not_found_response,
     build_streamable_http_rpc_error_response,
 )
-from ctxledger.server import McpResourceResponse, McpToolResponse, StdioRuntimeAdapter
+from ctxledger.server import McpResourceResponse, McpToolResponse
 
 
 def make_settings(
     *,
     database_url: str = "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger",
-    transport: TransportMode = TransportMode.STDIO,
-    http_enabled: bool = False,
-    stdio_enabled: bool = True,
+    transport: TransportMode = TransportMode.HTTP,
+    http_enabled: bool = True,
     host: str = "127.0.0.1",
     port: int = 8080,
     auth_bearer_token: str | None = None,
@@ -61,9 +59,6 @@ def make_settings(
             host=host,
             port=port,
             path="/mcp",
-        ),
-        stdio=StdioSettings(
-            enabled=stdio_enabled,
         ),
         auth=AuthSettings(
             bearer_token=auth_bearer_token,
@@ -87,7 +82,18 @@ def make_settings(
 
 def test_build_initialize_result_returns_expected_payload() -> None:
     settings = make_settings()
-    runtime = StdioRuntimeAdapter(settings)
+
+    class FakeLifecycleRuntime:
+        def __init__(self, settings: AppSettings) -> None:
+            self.settings = settings
+
+        def registered_tools(self) -> tuple[str, ...]:
+            return ()
+
+        def registered_resources(self) -> tuple[str, ...]:
+            return ()
+
+    runtime = FakeLifecycleRuntime(settings)
 
     result = build_initialize_result(runtime).serialize()
 
@@ -106,7 +112,18 @@ def test_build_initialize_result_returns_expected_payload() -> None:
 
 def test_dispatch_lifecycle_method_records_initialize_protocol_version() -> None:
     settings = make_settings()
-    runtime = StdioRuntimeAdapter(settings)
+
+    class FakeLifecycleRuntime:
+        def __init__(self, settings: AppSettings) -> None:
+            self.settings = settings
+
+        def registered_tools(self) -> tuple[str, ...]:
+            return ()
+
+        def registered_resources(self) -> tuple[str, ...]:
+            return ()
+
+    runtime = FakeLifecycleRuntime(settings)
     state = McpLifecycleState()
 
     result = dispatch_lifecycle_method(runtime, state, "initialize", {})
@@ -128,7 +145,18 @@ def test_dispatch_lifecycle_method_records_initialize_protocol_version() -> None
 
 def test_dispatch_lifecycle_method_marks_initialized_for_notification_method() -> None:
     settings = make_settings()
-    runtime = StdioRuntimeAdapter(settings)
+
+    class FakeLifecycleRuntime:
+        def __init__(self, settings: AppSettings) -> None:
+            self.settings = settings
+
+        def registered_tools(self) -> tuple[str, ...]:
+            return ()
+
+        def registered_resources(self) -> tuple[str, ...]:
+            return ()
+
+    runtime = FakeLifecycleRuntime(settings)
     state = McpLifecycleState()
 
     result = dispatch_lifecycle_method(
@@ -362,8 +390,9 @@ class FakeRpcRuntime:
         return ("workspace://{workspace_id}/resume",)
 
     def tool_schema(self, tool_name: str):  # type: ignore[no-untyped-def]
-        runtime = StdioRuntimeAdapter(self.settings)
-        return runtime.tool_schema(tool_name)
+        from ctxledger.mcp.tool_schemas import DEFAULT_EMPTY_MCP_TOOL_SCHEMA
+
+        return DEFAULT_EMPTY_MCP_TOOL_SCHEMA
 
     def dispatch_tool(
         self,

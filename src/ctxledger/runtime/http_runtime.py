@@ -22,9 +22,7 @@ def register_http_runtime_handlers(
     runtime: HttpRuntimeAdapterProtocol,
     server: HttpHandlerFactoryServer,
 ) -> HttpRuntimeAdapterProtocol:
-    from .orchestration import build_stdio_runtime_adapter
-
-    mcp_runtime = build_stdio_runtime_adapter(server)
+    mcp_runtime = runtime
     debug_settings = getattr(server.settings, "debug", None)
     debug_http_endpoints_enabled = (
         True if debug_settings is None else getattr(debug_settings, "enabled", True)
