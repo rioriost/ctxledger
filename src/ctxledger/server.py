@@ -531,15 +531,6 @@ def build_runtime_dispatch_result(
     )
 
 
-def dispatch_http_request(
-    runtime: HttpRuntimeAdapter,
-    route_name: str,
-    path: str,
-    body: str | None = None,
-) -> RuntimeDispatchResult:
-    return build_runtime_dispatch_result(runtime, route_name, path, body)
-
-
 def build_http_runtime_adapter(server: CtxLedgerServer) -> HttpRuntimeAdapter:
     return extracted_build_http_runtime_adapter(server)
 
@@ -640,7 +631,6 @@ __all__ = [
     "create_runtime",
     "create_server",
     "build_runtime_dispatch_result",
-    "dispatch_http_request",
     "parse_workspace_resume_resource_uri",
     "parse_workflow_detail_resource_uri",
     "run_server",
