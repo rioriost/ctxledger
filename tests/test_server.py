@@ -53,6 +53,7 @@ from ctxledger.runtime.introspection import (
     RuntimeIntrospection,
     collect_runtime_introspection,
 )
+from ctxledger.runtime.orchestration import create_runtime, print_runtime_summary
 from ctxledger.runtime.serializers import (
     serialize_runtime_introspection,
     serialize_runtime_introspection_collection,
@@ -76,9 +77,6 @@ from ctxledger.runtime.types import (
 from ctxledger.server import (
     CtxLedgerServer,
     HttpRuntimeAdapter,
-    _print_runtime_summary,
-    build_runtime_dispatch_result,
-    create_runtime,
     create_server,
 )
 from ctxledger.workflow.service import (
@@ -535,7 +533,11 @@ def test_startup_raises_for_invalid_configuration() -> None:
 def test_create_runtime_returns_http_adapter_when_http_only() -> None:
     settings = make_settings()
 
-    runtime = create_runtime(settings)
+    runtime = create_runtime(
+        settings,
+        server=None,
+        http_runtime_builder=lambda server: HttpRuntimeAdapter(settings),
+    )
 
     assert runtime is not None
     assert runtime.__class__.__name__ == "HttpRuntimeAdapter"
@@ -4070,38 +4072,28 @@ def test_dispatch_http_request_returns_dispatch_result_for_success() -> None:
 
     server.startup()
 
-    result = build_runtime_dispatch_result(
-        runtime,
+    result = runtime.dispatch(
         "workflow_resume",
         f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}",
     )
 
-    assert isinstance(result, RuntimeDispatchResult)
-    assert result.transport == "http"
-    assert result.target == "workflow_resume"
-    assert result.status == "ok"
-    assert isinstance(result.response, WorkflowResumeResponse)
-    assert result.response.status_code == 200
-    assert result.response.payload == serialize_workflow_resume(resume)
+    assert isinstance(result, WorkflowResumeResponse)
+    assert result.status_code == 200
+    assert result.payload == serialize_workflow_resume(resume)
 
 
 def test_dispatch_http_request_returns_route_not_found_result() -> None:
     settings = make_settings()
     runtime = HttpRuntimeAdapter(settings)
 
-    result = build_runtime_dispatch_result(
-        runtime,
+    result = runtime.dispatch(
         "missing_route",
         f"/workflow-resume/{uuid4()}",
     )
 
-    assert isinstance(result, RuntimeDispatchResult)
-    assert result.transport == "http"
-    assert result.target == "missing_route"
-    assert result.status == "route_not_found"
-    assert isinstance(result.response, WorkflowResumeResponse)
-    assert result.response.status_code == 404
-    assert result.response.payload == {
+    assert isinstance(result, WorkflowResumeResponse)
+    assert result.status_code == 404
+    assert result.payload == {
         "error": {
             "code": "route_not_found",
             "message": "no HTTP handler is registered for route 'missing_route'",
@@ -4120,19 +4112,14 @@ def test_dispatch_http_request_returns_error_result_for_handler_error_response()
     )
     runtime = build_http_runtime_adapter(server)
 
-    result = build_runtime_dispatch_result(
-        runtime,
+    result = runtime.dispatch(
         "workflow_resume",
         f"/workflow-resume/{uuid4()}",
     )
 
-    assert isinstance(result, RuntimeDispatchResult)
-    assert result.transport == "http"
-    assert result.target == "workflow_resume"
-    assert result.status == "error"
-    assert isinstance(result.response, WorkflowResumeResponse)
-    assert result.response.status_code == 503
-    assert result.response.payload == {
+    assert isinstance(result, WorkflowResumeResponse)
+    assert result.status_code == 503
+    assert result.payload == {
         "error": {
             "code": "server_not_ready",
             "message": "workflow service is not initialized",
@@ -5044,7 +5031,7 @@ def test_print_runtime_summary_includes_http_runtime_introspection(
     )
 
     server.startup()
-    _print_runtime_summary(server)
+    print_runtime_summary(server)
 
     captured = capsys.readouterr()
     assert captured.out == ""
