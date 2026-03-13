@@ -357,6 +357,56 @@ The following matrix is intentionally qualitative.
 
 This matrix is not a final scorecard. It exists to structure the next round of evaluation.
 
+## 8.1 Suggested Scoring Rubric
+
+When the project is ready to narrow candidates more concretely, use a lightweight weighted rubric rather than relying only on prose comparison.
+
+Suggested scoring scale:
+
+- `1` = poor fit
+- `2` = weak fit
+- `3` = acceptable fit
+- `4` = strong fit
+- `5` = excellent fit
+
+Suggested evaluation categories and default weights:
+
+| Category | Weight | Why it matters |
+| --- | --- | --- |
+| MCP IDE compatibility | `5` | This is the highest-priority constraint because the gateway must work for remote MCP clients rather than only browser apps. |
+| Identity quality | `4` | The large pattern exists to improve user identity, revocation, and organization-managed access posture. |
+| Operational fit | `4` | A theoretically strong gateway is still a poor choice if the team cannot operate it comfortably. |
+| Identity propagation readiness | `3` | Future audit attribution, ownership, or downstream authorization may depend on stable identity signals. |
+| Authorization extensibility | `3` | The gateway should not block future policy or app-layer authorization work if product needs evolve. |
+| Architecture alignment | `4` | The gateway should preserve the proxy-first model and avoid pulling login logic back into `ctxledger`. |
+| Organization-standard alignment | `2` | Existing platform standards matter, but should not override MCP compatibility or core security fit. |
+
+Suggested scoring formula:
+
+```/dev/null/txt#L1-1
+weighted_score = sum(category_score * category_weight) / sum(category_weight)
+```
+
+This should be treated as a decision-support tool, not as an automatic chooser. A candidate with a slightly lower numeric score may still be preferable if it avoids a critical MCP-client failure mode or fits organizational realities much better.
+
+## 8.2 Example Scoring Worksheet Template
+
+Use a worksheet like the following when narrowing the shortlist:
+
+| Candidate | MCP IDE compatibility (x5) | Identity quality (x4) | Operational fit (x4) | Identity propagation (x3) | Authorization extensibility (x3) | Architecture alignment (x4) | Org-standard alignment (x2) | Weighted summary |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `Pomerium` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<calculate>` |
+| `oauth2-proxy` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<calculate>` |
+| Other OIDC-aware gateway | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<calculate>` |
+| Organization-standard gateway | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<fill>` | `<calculate>` |
+
+Recommended use:
+
+1. score each candidate independently
+2. record short notes explaining any score below `3` or above `4`
+3. call out any hard blockers separately from numeric scores
+4. carry the final reasoning into the later decision record rather than relying on the table alone
+
 ---
 
 ## 9. Identity Propagation Considerations
@@ -382,6 +432,20 @@ Current posture:
 - `ctxledger` does not yet require this
 - large-pattern gateway selection should avoid blocking it
 - identity propagation should remain optional until product requirements make it necessary
+
+---
+
+## 9.1 Scoring Guardrails
+
+The scoring rubric should not be used mechanically.
+
+Important guardrails:
+
+- a gateway with a browser-only flow that materially harms MCP IDE usability should usually be treated as blocked, even if its operational or standards score is high
+- organizational familiarity should inform the decision, but should not outweigh an actual client-compatibility failure
+- if future app-layer authorization is clearly required in the same phase, that should be treated as a separate architectural decision input, not hidden inside a gateway score
+- unknowns should not be scored optimistically; when evidence is missing, prefer lower-confidence or provisional scoring notes
+- the later decision record should still include prose rationale, tradeoffs, and validation evidence
 
 ---
 

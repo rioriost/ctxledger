@@ -1035,8 +1035,10 @@ Core docs:
 
 Auth and deployment guidance:
 - `docs/small_auth_operator_runbook.md`
+- `docs/plans/auth_planning_index.md`
 - `docs/plans/auth_proxy_scaling_plan.md`
 - `docs/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/CONTRIBUTING.md`
 
 ---
 

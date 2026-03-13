@@ -5,7 +5,7 @@
 - 追加で HTTP 側の `resources/list` / `resources/read` も実装済みで、workflow 系 resources も live Docker 上で確認済みです。
 - 以前の整理で stdio MCP サーバの残骸は削除済みで、HTTP 専用 shape に寄せています。
 - `server.py` 依存の縮小、HTTP runtime adapter の canonical module への移動、debug/runtime introspection の serializer 整理など、HTTP-only cleanup の大きな pruning は完了済みです。
-- 直近の session では、small pattern / proxy-only auth 周辺の docs・compose・runbook 整理と、その live Docker re-validation を継続しました。
+- 直近の session では、small pattern / proxy-only auth 周辺の docs・compose・runbook 整理、その live Docker re-validation、さらに large-pattern design-prep の decision-template / scoring-rubric / navigation 補強を継続しました。
 
 前回までの cleanup 完了事項:
 - `server.py` 依存の縮小を継続し、tests と runtime modules の import を canonical location へ寄せる整理を進めました。
@@ -279,8 +279,21 @@ docs consistency cleanup:
   - `docs/small_auth_operator_runbook.md`
   - `docs/plans/auth_proxy_scaling_plan.md`
   - `docs/plans/auth_large_gateway_evaluation_memo.md`
-  への導線を追加しました。
-- これにより、small pattern の operator guidance、large pattern の evaluation memo、そして future decision record template の3層が docs navigation 上でも辿りやすくなっています。
+    への導線を追加しました。
+  - `docs/plans/auth_large_gateway_evaluation_memo.md` に、large-pattern gateway 候補を narrowing するときの **weighted scoring rubric** も追記しました。
+    - scoring scale `1-5`
+    - default weights
+      - MCP IDE compatibility = `5`
+      - identity quality = `4`
+      - operational fit = `4`
+      - identity propagation readiness = `3`
+      - authorization extensibility = `3`
+      - architecture alignment = `4`
+      - organization-standard alignment = `2`
+    - weighted score の式
+    - worksheet template
+    - scoring guardrails
+  - これにより、small pattern の operator guidance、large pattern の evaluation memo、future decision record template、そして candidate scoring の4層が docs navigation 上でも辿りやすくなっています。
 - `docs/specification.md` も最終横断チェックの一環で追従し、
   - Security section の `Bearer token authentication` を `Proxy-layer authentication` に更新しました。
 - `README.md` / `docs/workflow-model.md` は今回の確認範囲では proxy-only auth model と矛盾する明確な修正点は見当たりませんでした。
@@ -378,16 +391,45 @@ docs consistency cleanup:
 - 原因は docs 変更や code regression ではなく、small-pattern live validation 後に `ctxledger-postgres` / related Docker state が integration test setup と噛み合わなかったことです。
 - その後、`docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans` で small-pattern stack を明示的に落としてから `pytest -q` を再実行し、`246 passed` に復帰することを確認しました。
 - これにより、integration-test recovery 手順としては「live small-pattern validation 後に overlay stack を落としてから full pytest を流す」が有効だと確認できました。
+- code / test / script 側には `CTXLEDGER_REQUIRE_AUTH` / `CTXLEDGER_AUTH_BEARER_TOKEN` / `AuthSettings` などの旧 app-layer auth 参照は今回の確認範囲では残っていませんでした。
+- auth/deployment planning materials の導線をさらに整理するため、`docs/plans/auth_planning_index.md` を新規追加しました。
+  - current auth model
+  - small vs large pattern
+  - operator runbook
+  - evaluation memo
+  - future decision-record template
+  の reading order と quick reference を 1 枚にまとめています。
+- `docs/CONTRIBUTING.md` も実質的な guide に拡張し、
+  - core docs
+  - MCP planning docs
+  - auth/deployment docs
+  の recommended reading order
+  - proxy-first auth model を壊さないための caution
+  - small auth / proxy work で期待される validation flow
+  - auth/deployment docs map
+  を追記しました。
+- `docs/plans/mcp_planning_index.md` からも `docs/plans/auth_planning_index.md` への参照を追加し、MCP planning set と auth/deployment planning set の相互導線を強化しました。
+- live Docker validation 後に `pytest -q` をそのまま実行すると、`tests/test_postgres_integration.py` の integration fixture 前提と live stack state が干渉して 6 件の error が出ることを確認しました。
+- 原因は docs 変更や code regression ではなく、small-pattern live validation 後に `ctxledger-postgres` / related Docker state が integration test setup と噛み合わなかったことです。
+- その後、`docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans` で small-pattern stack を明示的に落としてから `pytest -q` を再実行し、`246 passed` に復帰することを確認しました。
+- これにより、integration-test recovery 手順としては「live small-pattern validation 後に overlay stack を落としてから full pytest を流す」が有効だと確認できました。
+- `docs/plans/auth_large_gateway_evaluation_memo.md` の scoring-rubric 追記後も、code-adjacent scope として
+  - `tests/test_config.py`
+  - `tests/test_mcp_modules.py`
+  - `tests/test_cli.py`
+  - `tests/test_server.py`
+  を実行し、`178 passed` を確認しました。
 
 次 session への引き継ぎ候補:
 - `git status` を見て今回の docs/navigation 変更を確認する
 - repo ルールに従って、work loop の区切りで descriptive message 付きの `git commit` を行う
-  - 例: `Add auth planning index and contributing guide`
+  - 例: `Document auth planning navigation and test recovery`
 - live Docker validation を再度流す場合は、終了後に
   - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans`
   を実行してから full `pytest -q` を流す
 - large-pattern design prep をさらに進めるなら、`docs/plans/auth_large_gateway_decision_record_template.md` を起点に、candidate evaluation memo から actual selection record へ移るときの ADR/decision-record 運用を整える
-- `README.md` の documentation index と `docs/plans/auth_planning_index.md` / `docs/CONTRIBUTING.md` の導線は追加済みなので、必要なら次は plans 間の相互リンクや auth index から MCP planning index への参照を強化する
+- `docs/plans/auth_large_gateway_evaluation_memo.md` の scoring rubric を使って、candidate shortlisting の example scorecard や filled example を 1 枚追加するのも自然
+- `README.md` の documentation index と `docs/plans/auth_planning_index.md` / `docs/CONTRIBUTING.md` / `docs/plans/mcp_planning_index.md` の導線は追加済みなので、必要なら次は plans 間の相互リンクや auth index から具体 plans への cross-reference をもう一段強化する
 - integration-test recovery の観点では、small-pattern live validation 後に full test suite が失敗した場合、まず overlay stack を落としてから `pytest -q` を再実行する
 
 今回の作業:

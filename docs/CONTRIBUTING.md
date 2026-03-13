@@ -68,6 +68,7 @@ Then follow the linked planning documents from there.
 ### Auth, proxy, or deployment-boundary work
 If your change affects authentication, reverse proxy behavior, protected routes, or deployment guidance, read:
 
+- `docs/plans/auth_planning_index.md`
 - `docs/small_auth_operator_runbook.md`
 - `docs/plans/auth_proxy_scaling_plan.md`
 - `docs/plans/auth_large_gateway_evaluation_memo.md`
