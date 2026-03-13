@@ -93,12 +93,19 @@ docs/navigation の current state:
 
 テストの current state:
 - 通常状態では `pytest -q` は `246 passed` です。
+- coverage 付きで `pytest --cov=src/ctxledger --cov-report=term-missing` を実行し、`246 passed` / `TOTAL 82%` を確認済みです。
+- 主要な coverage gap:
+  - `src/ctxledger/http_app.py` = `0%`
+  - `src/ctxledger/db/memory_uow.py` = `0%`
+  - `src/ctxledger/runtime/database_health.py` = `43%`
+  - `src/ctxledger/runtime/orchestration.py` = `44%`
+  - `src/ctxledger/runtime/server_factory.py` = `50%`
 - `tests/test_config.py` / `tests/test_mcp_modules.py` / `tests/test_cli.py` / `tests/test_server.py` は `178 passed` を確認済みです。
 - 注意点:
-  - small-pattern live Docker validation の直後に full `pytest -q` を流すと、`tests/test_postgres_integration.py` の integration fixture と live Docker state が干渉して失敗することがあります。
+  - small-pattern live Docker validation の直後に full `pytest -q` や coverage 実行を流すと、`tests/test_postgres_integration.py` の integration fixture と live Docker state が干渉して失敗することがあります。
   - recovery 手順は:
     - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans`
-    - その後に `pytest -q`
+    - その後に `pytest -q` または `pytest --cov=src/ctxledger --cov-report=term-missing`
   です。
 
 現在の直近コミット群:
