@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urlencode
 from uuid import UUID
@@ -135,9 +136,18 @@ def _build_post_route(
 
 
 def create_fastapi_app(server: CtxLedgerServer) -> FastAPI:
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        server.startup()
+        try:
+            yield
+        finally:
+            server.shutdown()
+
     app = FastAPI(
         title=server.settings.app_name,
         version=server.settings.app_version,
+        lifespan=_lifespan,
     )
 
     mcp_path = server.settings.http.path
@@ -190,7 +200,6 @@ def create_fastapi_app(server: CtxLedgerServer) -> FastAPI:
 
 def create_fastapi_app_from_settings(settings: AppSettings) -> FastAPI:
     server = create_server(settings)
-    server.startup()
     return create_fastapi_app(server)
 
 
