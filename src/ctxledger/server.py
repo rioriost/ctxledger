@@ -9,7 +9,6 @@ from .runtime.database_health import (
 )
 from .runtime.errors import ServerBootstrapError
 from .runtime.http_runtime import (
-    HttpRuntimeAdapter,
     build_http_runtime_adapter,
 )
 from .runtime.introspection import (

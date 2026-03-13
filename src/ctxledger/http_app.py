@@ -5,7 +5,6 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urlencode
-from uuid import UUID
 
 from fastapi import FastAPI, Request, Response
 
