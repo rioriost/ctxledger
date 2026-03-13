@@ -12,6 +12,29 @@ from .config import AppSettings
 from .server import CtxLedgerServer, create_server
 
 
+def _authorization_query_value(request: Request) -> str | None:
+    authorization = request.headers.get("authorization")
+    if authorization is None:
+        return None
+
+    normalized = authorization.strip()
+    if not normalized:
+        return None
+
+    return normalized
+
+
+def _query_items_with_authorization(request: Request) -> list[tuple[str, str]]:
+    items = list(request.query_params.multi_items())
+    authorization = _authorization_query_value(request)
+    if authorization is None:
+        return items
+
+    return [item for item in items if item[0] != "authorization"] + [
+        ("authorization", authorization)
+    ]
+
+
 def _encode_payload(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
@@ -30,9 +53,10 @@ def _response_from_runtime_result(result: Any) -> Response:
 
 
 def _query_string_from_request(request: Request) -> str:
-    if not request.query_params:
+    items = _query_items_with_authorization(request)
+    if not items:
         return ""
-    return urlencode(list(request.query_params.multi_items()))
+    return urlencode(items)
 
 
 def _full_path_with_query(request: Request) -> str:

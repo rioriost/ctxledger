@@ -13,6 +13,8 @@
 - Git コミット:
   - `6df3f5f` — `Add FastAPI MCP runtime smoke validation`
   - `3525158` — `Document MCP smoke workflow validation`
+  - `0af6a4b` — `Add MCP resource read acceptance evidence`
+  - `b8a4cb8` — `Document MCP HTTP runtime operations`
 
 確認済みのE2E結果:
 1. basic smoke validation
@@ -42,6 +44,28 @@
      - `resources/read` for `workspace://{workspace_id}/workflow/{workflow_instance_id}`
    - 実在する workflow/workspace データに対して、resource read が live Docker server 上で成功することを確認済み
 
+4. authenticated MCP smoke validation
+   - `docker/docker-compose.auth.yml` を追加し、認証有効の Docker override を用意した
+   - FastAPI wrapper 側で `Authorization: Bearer ...` ヘッダを、既存認証ロジックが読める query 形式へ橋渡しするよう調整した
+   - `scripts/mcp_http_smoke.py` 側でも workflow シナリオの workspace 登録が毎回衝突しないよう、`repo_url` / `canonical_path` にランダム suffix を使うよう改善した
+   - 実行コマンド:
+     - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.auth.yml down`
+     - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.auth.yml up -d --build --force-recreate`
+     - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --bearer-token smoke-test-secret-token --scenario workflow --workflow-resource-read`
+   - 認証有効状態で成功確認:
+     - `initialize`
+     - `tools/list`
+     - `tools/call(memory_get_context)`
+     - `resources/list`
+     - `workspace_register`
+     - `workflow_start`
+     - `workflow_checkpoint`
+     - `workflow_resume`
+     - `resources/read workspace resume`
+     - `resources/read workflow detail`
+     - `workflow_complete`
+   - これにより、認証有効 (`CTXLEDGER_REQUIRE_AUTH=true`) の remote MCP path でも、workflow 系 + resource 系を含む live Docker E2E が通ることを確認済み
+
 README の更新内容:
 - FastAPI + uvicorn ベースの Docker 起動手順を反映
 - `/debug/runtime` による runtime wiring 確認手順を追加
@@ -59,20 +83,26 @@ docs の更新内容:
   - workflow tools と workflow resources の HTTP MCP E2E確認を反映
   - `resources/list` / `resources/read` の confirmed 扱いを反映
   - Docker local deployment works を Confirmed に寄せる更新を反映
+- `docs/mcp-api.md`
+  - `/mcp` で現在確認済みの HTTP MCP operations を更新
+  - FastAPI / uvicorn / Docker による remote runtime shape を反映
+  - smoke validation 手順を追記
+  - workflow tool / workflow resource の live validation evidence を反映
 
 到達点:
 - Docker 上で remote MCP server として起動可能
 - minimum MCP client で `initialize` / `tools/list` / `tools/call` / `resources/list` / `resources/read` を確認済み
 - workflow 系 (`workspace_register`, `workflow_start`, `workflow_checkpoint`, `workflow_resume`, `workflow_complete`) も Docker + 実DB で確認済み
+- auth 有効 (`CTXLEDGER_REQUIRE_AUTH=true`) の状態でも、workflow 系 + resource 系を含む remote MCP E2E が確認済み
 - これにより、`v0.1.0` の remote MCP closeout に必要な最小確認ラインはかなり満たせている
 
 まだ残っていること:
-1. `docs/deployment.md` と `docs/v0.1.0_acceptance_evidence.md` の変更をコミットに含める
-2. 必要なら `docs/mcp-api.md` にも FastAPI / smoke validation の実運用手順を反映する
-3. 必要なら auth 有効時 (`CTXLEDGER_REQUIRE_AUTH=true`) の smoke validation も追加で確認する
-4. 作業区切りとして追加コミットする
+1. `docs/specification.md` と `docker/docker-compose.auth.yml` の変更をコミットに含める
+2. 必要なら `README.md` / `docs/deployment.md` / `docs/mcp-api.md` に auth 有効時の smoke validation 手順を明示的に追記する
+3. 必要なら `.gitignore` 以外の作業中変更を整理して最終コミットする
+4. closeout 時点でどこまでを `v0.1.0` の confirmed surface と表現するかを最終確認する
 
 次セッションで優先してやること:
-- deployment / acceptance docs の変更を最終確認
-- auth 有効パスの E2E を必要に応じて追加
-- `last_session.md` を再確認してコミット
+- `docs/specification.md` と `docker/docker-compose.auth.yml` を含む追加コミット
+- auth 有効時の README / deployment 手順の最終反映
+- 作業ツリーの未整理変更を確認して仕上げ

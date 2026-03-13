@@ -8,7 +8,8 @@ This project provides a **remote MCP server** implementing:
 2. **Multi-layer Agent Memory**
 3. **PostgreSQL-backed canonical state**
 4. **[MCP 2025-03-26](https://modelcontextprotocol.io/specification/2025-03-26) compatible interface**
-5. **Docker deployment**
+5. **FastAPI + uvicorn based HTTP runtime**
+6. **Docker deployment**
 
 The system is designed for AI agent editors (Zed and other MCP-compatible tools)
 to reliably execute long-running development workflows with persistent memory.
@@ -30,8 +31,8 @@ Responsibilities:
 
 Transport:
 
-- Streamable HTTP (primary)
-- stdio (development)
+- Streamable HTTP
+- FastAPI application wrapper served by `uvicorn` for the current remote HTTP runtime path
 
 ---
 
@@ -54,6 +55,13 @@ docker-compose
 services:
   mcp-server
   postgres
+
+Current local deployment/runtime shape:
+
+- FastAPI application wrapper
+- `uvicorn` process
+- PostgreSQL container with persistent volume
+- MCP HTTP endpoint exposed at `/mcp`
 
 PostgreSQL volume persistence is required.
 
