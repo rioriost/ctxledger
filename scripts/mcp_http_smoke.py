@@ -49,6 +49,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="HTTP timeout in seconds (default: 10.0)",
     )
     parser.add_argument(
+        "--scenario",
+        choices=("basic", "workflow"),
+        default="basic",
+        help="Smoke scenario to run (default: basic)",
+    )
+    parser.add_argument(
         "--tool-name",
         default="memory_get_context",
         help="Tool name to call during the smoke test (default: memory_get_context)",
@@ -175,6 +181,184 @@ def _print_step(name: str, data: dict[str, Any]) -> None:
     print(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True))
 
 
+def _call_tool(
+    *,
+    endpoint_url: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+    request_id: int,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    tools_call_request = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments,
+        },
+    }
+    tools_call_response = _post_json(
+        url=endpoint_url,
+        payload=tools_call_request,
+        bearer_token=bearer_token,
+        timeout_seconds=timeout_seconds,
+    )
+    tools_call_result = _require_jsonrpc_success(
+        tools_call_response,
+        expected_id=request_id,
+        method_name="tools/call",
+    )
+    tool_text = _extract_text_content(tools_call_result, method_name="tools/call")
+    try:
+        parsed_tool_payload = json.loads(tool_text)
+    except json.JSONDecodeError:
+        parsed_tool_payload = {"raw_text": tool_text}
+    if not isinstance(parsed_tool_payload, dict):
+        raise SmokeFailure(
+            f"tools/call for '{tool_name}' did not return a JSON object payload"
+        )
+    return parsed_tool_payload
+
+
+def _require_tool_success(
+    tool_payload: dict[str, Any],
+    *,
+    tool_name: str,
+) -> dict[str, Any]:
+    if tool_payload.get("ok") is not True:
+        raise SmokeFailure(
+            f"{tool_name} did not succeed: {json.dumps(tool_payload, ensure_ascii=False)}"
+        )
+    result = tool_payload.get("result")
+    if not isinstance(result, dict):
+        raise SmokeFailure(f"{tool_name} result was not an object")
+    return result
+
+
+def _run_workflow_scenario(
+    *,
+    endpoint_url: str,
+    bearer_token: str | None,
+    timeout_seconds: float,
+) -> None:
+    workspace_result = _require_tool_success(
+        _call_tool(
+            endpoint_url=endpoint_url,
+            bearer_token=bearer_token,
+            timeout_seconds=timeout_seconds,
+            request_id=10,
+            tool_name="workspace_register",
+            arguments={
+                "repo_url": "https://example.com/ctxledger-smoke.git",
+                "canonical_path": "/tmp/ctxledger-smoke",
+                "default_branch": "main",
+                "metadata": {
+                    "scenario": "workflow",
+                    "source": "mcp_http_smoke",
+                },
+            },
+        ),
+        tool_name="workspace_register",
+    )
+    workspace_id = workspace_result.get("workspace_id")
+    if not isinstance(workspace_id, str) or not workspace_id:
+        raise SmokeFailure("workspace_register did not return workspace_id")
+    _print_step("workspace_register", workspace_result)
+
+    workflow_start_result = _require_tool_success(
+        _call_tool(
+            endpoint_url=endpoint_url,
+            bearer_token=bearer_token,
+            timeout_seconds=timeout_seconds,
+            request_id=11,
+            tool_name="workflow_start",
+            arguments={
+                "workspace_id": workspace_id,
+                "ticket_id": "SMOKE-CTXLEDGER-001",
+                "metadata": {
+                    "scenario": "workflow",
+                    "source": "mcp_http_smoke",
+                },
+            },
+        ),
+        tool_name="workflow_start",
+    )
+    workflow_instance_id = workflow_start_result.get("workflow_instance_id")
+    attempt_id = workflow_start_result.get("attempt_id")
+    if not isinstance(workflow_instance_id, str) or not workflow_instance_id:
+        raise SmokeFailure("workflow_start did not return workflow_instance_id")
+    if not isinstance(attempt_id, str) or not attempt_id:
+        raise SmokeFailure("workflow_start did not return attempt_id")
+    _print_step("workflow_start", workflow_start_result)
+
+    workflow_checkpoint_result = _require_tool_success(
+        _call_tool(
+            endpoint_url=endpoint_url,
+            bearer_token=bearer_token,
+            timeout_seconds=timeout_seconds,
+            request_id=12,
+            tool_name="workflow_checkpoint",
+            arguments={
+                "workflow_instance_id": workflow_instance_id,
+                "attempt_id": attempt_id,
+                "step_name": "smoke_validation",
+                "summary": "Created by MCP smoke workflow scenario",
+                "checkpoint_json": {
+                    "next_action": "complete_workflow",
+                    "scenario": "workflow",
+                },
+                "verify_status": "passed",
+                "verify_report": {
+                    "status": "passed",
+                    "checks": ["mcp_http_smoke"],
+                },
+            },
+        ),
+        tool_name="workflow_checkpoint",
+    )
+    _print_step("workflow_checkpoint", workflow_checkpoint_result)
+
+    workflow_resume_result = _require_tool_success(
+        _call_tool(
+            endpoint_url=endpoint_url,
+            bearer_token=bearer_token,
+            timeout_seconds=timeout_seconds,
+            request_id=13,
+            tool_name="workflow_resume",
+            arguments={
+                "workflow_instance_id": workflow_instance_id,
+            },
+        ),
+        tool_name="workflow_resume",
+    )
+    _print_step("workflow_resume", workflow_resume_result)
+
+    workflow_complete_result = _require_tool_success(
+        _call_tool(
+            endpoint_url=endpoint_url,
+            bearer_token=bearer_token,
+            timeout_seconds=timeout_seconds,
+            request_id=14,
+            tool_name="workflow_complete",
+            arguments={
+                "workflow_instance_id": workflow_instance_id,
+                "attempt_id": attempt_id,
+                "workflow_status": "completed",
+                "summary": "Completed by MCP smoke workflow scenario",
+                "verify_status": "passed",
+                "verify_report": {
+                    "status": "passed",
+                    "checks": ["mcp_http_smoke"],
+                },
+            },
+        ),
+        tool_name="workflow_complete",
+    )
+    _print_step("workflow_complete", workflow_complete_result)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -249,31 +433,14 @@ def main(argv: list[str] | None = None) -> int:
             },
         )
 
-        tools_call_request = {
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
-            "params": {
-                "name": args.tool_name,
-                "arguments": tool_arguments,
-            },
-        }
-        tools_call_response = _post_json(
-            url=endpoint_url,
-            payload=tools_call_request,
+        parsed_tool_payload = _call_tool(
+            endpoint_url=endpoint_url,
             bearer_token=args.bearer_token,
             timeout_seconds=args.timeout_seconds,
+            request_id=3,
+            tool_name=args.tool_name,
+            arguments=tool_arguments,
         )
-        tools_call_result = _require_jsonrpc_success(
-            tools_call_response,
-            expected_id=3,
-            method_name="tools/call",
-        )
-        tool_text = _extract_text_content(tools_call_result, method_name="tools/call")
-        try:
-            parsed_tool_payload = json.loads(tool_text)
-        except json.JSONDecodeError:
-            parsed_tool_payload = {"raw_text": tool_text}
         _print_step(
             "tools/call",
             {
@@ -345,6 +512,13 @@ def main(argv: list[str] | None = None) -> int:
                     "resources/read first content item was not an object"
                 )
             _print_step("resources/read", first)
+
+        if args.scenario == "workflow":
+            _run_workflow_scenario(
+                endpoint_url=endpoint_url,
+                bearer_token=args.bearer_token,
+                timeout_seconds=args.timeout_seconds,
+            )
 
         print("[ok] MCP HTTP smoke test completed")
         return 0

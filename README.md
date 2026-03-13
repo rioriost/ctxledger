@@ -512,6 +512,81 @@ Expected local MCP endpoint:
 http://localhost:8080/mcp
 ```
 
+The Docker Compose path now runs `ctxledger` as a FastAPI application served by `uvicorn`, while preserving the existing MCP and debug dispatch behavior.
+
+#### 3. Verify runtime wiring
+
+You can verify that the server is up and exposing the expected HTTP surface:
+
+```/dev/null/sh#L1-1
+curl http://localhost:8080/debug/runtime
+```
+
+A typical response shape is:
+
+```/dev/null/json#L1-18
+{
+  "runtime": [
+    {
+      "transport": "http",
+      "routes": [
+        "mcp_rpc",
+        "projection_failures_ignore",
+        "projection_failures_resolve",
+        "runtime_introspection",
+        "runtime_routes",
+        "runtime_tools",
+        "workflow_closed_projection_failures",
+        "workflow_resume"
+      ],
+      "tools": ["memory_get_context", "memory_remember_episode", "memory_search", "projection_failures_ignore", "projection_failures_resolve", "workflow_checkpoint", "workflow_complete", "workflow_resume", "workflow_start", "workspace_register"],
+      "resources": ["workspace://{workspace_id}/resume", "workspace://{workspace_id}/workflow/{workflow_instance_id}"]
+    }
+  ]
+}
+```
+
+#### 4. Run the minimum MCP smoke validation
+
+A repository-provided smoke client is available for remote MCP validation:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --tool-name memory_get_context
+```
+
+This validates the minimum confirmed HTTP MCP path for `v0.1.0`:
+
+- `initialize`
+- `tools/list`
+- `tools/call`
+- `resources/list`
+
+The default smoke call uses `memory_get_context`, which is currently a safe stubbed memory tool in `v0.1.0`. The call itself succeeds over MCP HTTP even though the underlying feature remains intentionally unimplemented.
+
+#### 5. Run workflow-oriented smoke validation
+
+If you also want to validate the workflow tool path against the real Dockerized PostgreSQL instance, use the workflow scenario:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow
+```
+
+This scenario performs:
+
+- `workspace_register`
+- `workflow_start`
+- `workflow_checkpoint`
+- `workflow_resume`
+- `workflow_complete`
+
+against the live server.
+
+#### 6. Shut down the local stack
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml down
+```
+
 ### Option B: Dockerfile-based startup
 
 You can also build and run the application image directly from the repository root.
@@ -554,6 +629,12 @@ Example shape:
 docker run --rm -p 8080:8080 -e CTXLEDGER_DATABASE_URL=postgresql://ctxledger:ctxledger@host.docker.internal:5432/ctxledger -e CTXLEDGER_TRANSPORT=http -e CTXLEDGER_ENABLE_HTTP=true -e CTXLEDGER_HOST=0.0.0.0 -e CTXLEDGER_PORT=8080 -e CTXLEDGER_HTTP_PATH=/mcp ctxledger:local
 ```
 
+If you are running the image directly with the current repository layout, make sure the container starts the FastAPI app through `uvicorn`. A typical command shape is:
+
+```/dev/null/sh#L1-1
+uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080
+```
+
 If your Docker environment does not support `host.docker.internal`, use an address appropriate for your host networking setup.
 
 #### 5. Verify endpoint availability
@@ -572,7 +653,7 @@ A typical startup summary shape is:
 ctxledger 0.1.0 started
 health=ok
 readiness=ready
-runtime=[{'transport': 'http', 'routes': ['runtime_introspection', 'runtime_routes', 'runtime_tools', 'workflow_resume', 'workflow_closed_projection_failures'], 'tools': []}]
+runtime=[{'transport': 'http', 'routes': ['mcp_rpc', 'projection_failures_ignore', 'projection_failures_resolve', 'runtime_introspection', 'runtime_routes', 'runtime_tools', 'workflow_closed_projection_failures', 'workflow_resume'], 'tools': ['memory_get_context', 'memory_remember_episode', 'memory_search', 'projection_failures_ignore', 'projection_failures_resolve', 'workflow_checkpoint', 'workflow_complete', 'workflow_resume', 'workflow_start', 'workspace_register'], 'resources': ['workspace://{workspace_id}/resume', 'workspace://{workspace_id}/workflow/{workflow_instance_id}']}]
 mcp_endpoint=http://localhost:8080/mcp
 ```
 
@@ -584,11 +665,13 @@ You can then inspect the same runtime wiring through:
 
 ### Option C: Python direct startup
 
-If you are running from Python directly, a typical command shape is:
+If you are running from Python directly, the simplest current path is to run the FastAPI app with `uvicorn`:
 
 ```/dev/null/sh#L1-1
-python -m ctxledger serve
+uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080
 ```
+
+The older CLI bootstrap path is still useful for package-level operations, but the FastAPI + `uvicorn` path is the current documented route for real remote HTTP MCP serving.
 
 You can also inspect the schema path from the CLI:
 

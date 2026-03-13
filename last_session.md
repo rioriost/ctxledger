@@ -9,29 +9,49 @@
 - `pyproject.toml` に `fastapi` と `uvicorn[standard]` を追加しました。
 - minimum MCP client として `scripts/mcp_http_smoke.py` を追加しました。
 - Docker 上で `ctxledger` と `postgres` を起動し、`/debug/runtime` が応答することを確認しました。
-- さらに `scripts/mcp_http_smoke.py` で、実際に以下のE2E確認を行いました:
-  1. `initialize`
-  2. `tools/list`
-  3. `tools/call` (`memory_get_context`)
-  4. `resources/list`
-- `tools/call(memory_get_context)` は `ok: true` で応答し、`implemented: false` の stub として返ることを確認しました。
 - 現在のテスト結果は `169 passed` です。
+- Git コミット:
+  - `6df3f5f` — `Add FastAPI MCP runtime smoke validation`
 
-確認済みのE2E結果の要点:
-- FastAPI + uvicorn + Docker 構成で `http://127.0.0.1:8080/mcp` が remote MCP endpoint として到達可能
-- `initialize` は `protocolVersion: 2024-11-05` を返す
-- `tools/list` は 10 個の tool を返す
-- `resources/list` は 2 個の resource URI を返す
-- `memory_get_context` は v0.1.0 では未実装stubだが、HTTP MCP経由での呼び出し自体は成功している
+確認済みのE2E結果:
+1. basic smoke validation
+   - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --tool-name memory_get_context`
+   - 成功確認:
+     - `initialize`
+     - `tools/list`
+     - `tools/call(memory_get_context)`
+     - `resources/list`
+   - `memory_get_context` は `v0.1.0` では未実装stubだが、HTTP MCP経由の呼び出し自体は成功している
+
+2. workflow smoke validation
+   - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow`
+   - 成功確認:
+     - `workspace_register`
+     - `workflow_start`
+     - `workflow_checkpoint`
+     - `workflow_resume`
+     - `workflow_complete`
+   - 実Docker上の PostgreSQL に対して、workflow 系の最小E2Eが通ることを確認済み
+   - `workflow_complete` まで成功し、attempt は `succeeded`、workflow は `completed` になった
+
+README の更新内容:
+- FastAPI + uvicorn ベースの Docker 起動手順を反映
+- `/debug/runtime` による runtime wiring 確認手順を追加
+- `scripts/mcp_http_smoke.py` の basic / workflow シナリオの使い方を追記
+- Python 直接起動の推奨手順を `uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080` に更新
+
+到達点:
+- Docker 上で remote MCP server として起動可能
+- minimum MCP client で `initialize` / `tools/list` / `tools/call` / `resources/list` を確認済み
+- workflow 系 (`workspace_register`, `workflow_start`, `workflow_checkpoint`, `workflow_resume`, `workflow_complete`) も Docker + 実DB で確認済み
+- これにより、`v0.1.0` の remote MCP closeout に必要な最小確認ラインはかなり満たせている
 
 まだ残っていること:
-1. README / docs に FastAPI ベースの実起動手順と smoke test 手順を反映する
-2. 必要なら `resources/read` のE2Eも、実在する workflow/workspace データを使って確認する
-3. 可能なら `workspace_register` など workflow 系 tool のE2Eも、Docker上の実DBに対して追加で確認する
-4. 作業がまとまったら `git commit` する
+1. 必要なら `resources/read` を workflow scenario で実在する workflow/workspace に対して確認する
+2. 必要なら docs/deployment.md や docs/v0.1.0_acceptance_evidence.md に FastAPI / smoke validation の結果を反映する
+3. 作業区切りとして追加コミットする
 
 次セッションで優先してやること:
-- README の local / Docker startup 手順を FastAPI + uvicorn ベースに更新
-- `scripts/mcp_http_smoke.py` の使い方を docs に追記
-- 必要なら workflow 系の実データを投入して `workspace_register` / `workflow_*` のE2Eを追加
-- `last_session.md` を最新化したうえでコミット
+- `resources/read` の実在データE2E確認
+- deployment / acceptance docs の更新
+- `last_session.md` を再確認してコミット

@@ -161,6 +161,8 @@ def create_fastapi_app(server: CtxLedgerServer) -> FastAPI:
 
 def create_fastapi_app_from_settings(settings: AppSettings) -> FastAPI:
     server = create_server(settings)
+    if server.runtime is not None and hasattr(server.runtime, "_server"):
+        server.runtime._server = server
     server.startup()
     return create_fastapi_app(server)
 
