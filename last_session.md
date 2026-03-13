@@ -1,10 +1,11 @@
-final HTTP-only sweep の続きとして、今回は **session handoff 用に最終状態を簡潔に記録するメモ** を残します。patch 1A の config/orchestration HTTP-only 化、patch 1B の server/module/CLI cleanup、patch 1C の legacy stdio module 削除、patch 1D の protocol/introspection/docs cleanup、patch 1E の planning/review docs 整理を土台にして、現時点では **stdio removal は実質完了、残りは final acceptance framing と必要なら broader MCP proof の整理** という段階です。
+stdio removal closeout の最終メモとして、この session note を残します。patch 1A の config/orchestration HTTP-only 化、patch 1B の server/module/CLI cleanup、patch 1C の legacy stdio module 削除、patch 1D の protocol/introspection/docs cleanup、patch 1E の plan/review/API wording 整理を前提にして、現時点では **stdio removal は実質完了、残る論点は release-evidence framing と broader HTTP MCP acceptance scope の確認** です。
 
 このセッション終端で引き継ぐべき要点:
 
 - active runtime / transport semantics は HTTP-only
 - stdio concrete implementation は source tree から削除済み
 - main source / tests / primary docs は HTTP-only wording と behavior にほぼ整合
+- `.env.example` / `.env.production.example` からも `CTXLEDGER_ENABLE_STDIO` を削除済み
 - review / implementation-plan docs もかなり HTTP-only 現状へ寄せた
 - 直近の確認済み baseline は:
   - `tests/test_config.py`
@@ -14,8 +15,8 @@ final HTTP-only sweep の続きとして、今回は **session handoff 用に最
   - `tests/test_postgres_integration.py`
   - **204 passed**
 - 現在の open question は stdio removal そのものではなく、
-  - minimal HTTP MCP path で `v0.1.0` acceptance として十分か
-  - `resources/list` / `resources/read` など broader HTTP MCP surface proof が必要か
+  - already-proven minimal HTTP MCP path が `v0.1.0` acceptance として十分か
+  - `resources/list` / `resources/read` を含む broader HTTP MCP surface proof が必要か
   の整理
 
 ## 1. patch progression の最終整理
@@ -60,6 +61,9 @@ final HTTP-only sweep の続きとして、今回は **session handoff 用に最
 - `docs/imple_plan_0.1.0.md` を HTTP-only runtime direction に寄せた
 - `docs/imple_plan_review_0.1.0.md` の review narrative を HTTP-only 現状に合わせて整理
 - `docs/mcp-api.md` の stdio-centric explanation をかなり除去
+- `.env.example`
+- `.env.production.example`
+  から `CTXLEDGER_ENABLE_STDIO=false` を削除
 - baseline は引き続き **204 passed**
 
 ## 2. confirmed baseline
@@ -137,19 +141,19 @@ final HTTP-only sweep の続きとして、今回は **session handoff 用に最
 - `docs/imple_plan_review_0.1.0.md`
 - `docs/mcp-api.md`
 
+### config/example artifacts updated
+- `.env.example`
+- `.env.production.example`
+
 ## 5. まだ見てよい final sweep 対象
 
-source / main tests の stdio removal はかなり終わっています。ここから見る価値があるのは主に residual docs と final acceptance framing です。
+source / main tests / primary docs の stdio removal はかなり終わっています。ここから見る価値があるのは主に residual docs と final acceptance framing です。
 
 ### likely residual historical docs
 - `docs/workflow-model.md`
 - `docs/memory-model.md`
 - `docs/design-principles.md`
 - `docs/roadmap.md`
-
-### config/example artifacts
-- `.env.example`
-- `.env.production.example`
 
 ### possible residual wording categories
 - historical “stdio support”
@@ -163,9 +167,9 @@ source / main tests の stdio removal はかなり終わっています。ここ
 ここから先はもう大きな transport refactor ではなく、主に:
 
 1. residual wording sweep
-2. example/config alignment check
-3. final project-wide verification
-4. completion memo synthesis
+2. final project-wide verification
+3. completion memo synthesis
+4. acceptance boundary clarification
 
 が中心です。
 
@@ -211,32 +215,42 @@ source / main tests の stdio removal はかなり終わっています。ここ
    - `TransportMode.BOTH`
    を最終探索
 2. `docs/workflow-model.md`, `docs/memory-model.md`, `docs/design-principles.md`, `docs/roadmap.md` の residual wording を必要なら更新
-3. `.env.example` / `.env.production.example` の実内容が README examples と一致しているか最終確認
-4. 可能なら project-wide test run で final baseline を確定
-5. `v0.1.0` acceptance boundary を短く整理
+3. 可能なら project-wide test run で final baseline を確定
+4. `v0.1.0` acceptance boundary を短く整理
    - minimal HTTP MCP path confirmed
    - broader HTTP MCP coverage status
    - resource coverage status
-6. stdio removal 完了判定メモを `last_session.md` に残す
+5. stdio removal 完了判定メモを `last_session.md` に残す
 
-## 9. conclusions for handoff
+## 9. closeout status
+
+現時点では次のように表現してよいです。
+
+- **stdio removal itself is effectively complete**
+- **HTTP-only semantics are the active project state**
+- **major verification baseline is green**
+- remaining work is primarily
+  - residual historical docs cleanup
+  - final acceptance-evidence framing
+  - optional broader HTTP MCP proof
+
+## 10. conclusions for handoff
 
 今回の handoff 向け結論:
 
 - stdio removal は **final closeout / verification phase** に入っている
 - active runtime / transport semantics は HTTP-only
 - stdio concrete implementation は source tree から削除済み
-- public façade / helper layers / main docs もかなり HTTP-only に整理済み
+- public façade / helper layers / main docs / env examples もかなり HTTP-only に整理済み
 - major verified baseline は **204 passed**
 - remaining work is primarily:
   - historical/residual docs cleanup
-  - example/env alignment
   - final release-evidence framing
   - optional broader HTTP MCP proof
 - `docs/specification.md` は引き続き触らない
 - まだ compliance claim はしない
 
-## 10. suggested commit message candidates for the next loop
+## 11. suggested commit message candidates for the next loop
 
 次ループで final sweep や closeout note まで進んだ場合の commit 候補例:
 
