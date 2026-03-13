@@ -472,6 +472,72 @@ def test_apply_overrides_reflects_current_auth_field_regression() -> None:
         )
 
 
+def test_run_server_passes_override_arguments_through_apply_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings()
+    fake_server = SimpleNamespace(
+        startup=lambda: None,
+        settings=settings,
+        runtime=None,
+        health=lambda: SimpleNamespace(status="ok"),
+        readiness=lambda: SimpleNamespace(status="ready"),
+    )
+    override_calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.orchestration.get_settings",
+        lambda: settings,
+    )
+
+    def fake_apply_overrides(
+        received_settings: AppSettings,
+        *,
+        transport: str | None = None,
+        host: str | None = None,
+        port: int | None = None,
+    ) -> AppSettings:
+        override_calls.append(
+            {
+                "settings": received_settings,
+                "transport": transport,
+                "host": host,
+                "port": port,
+            }
+        )
+        return settings
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.orchestration.apply_overrides",
+        fake_apply_overrides,
+    )
+    monkeypatch.setattr("ctxledger.server.create_server", lambda _settings: fake_server)
+    monkeypatch.setattr(
+        "ctxledger.runtime.orchestration.install_signal_handlers",
+        lambda _server: None,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.orchestration.print_runtime_summary",
+        lambda _server: None,
+    )
+
+    exit_code = run_server(
+        transport="http",
+        host="0.0.0.0",
+        port=9090,
+    )
+
+    assert exit_code == 0
+    assert override_calls == [
+        {
+            "settings": settings,
+            "transport": "http",
+            "host": "0.0.0.0",
+            "port": 9090,
+        }
+    ]
+
+
 def test_create_runtime_uses_http_runtime_builder() -> None:
     settings = make_settings()
     sentinel_runtime = object()
@@ -518,6 +584,29 @@ def test_install_signal_handlers_skips_value_error(
     install_signal_handlers(server=object())
 
     assert calls == [signal.SIGINT, signal.SIGTERM]
+
+
+def test_install_signal_handlers_registered_handler_shuts_down_server_and_exits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registered: dict[signal.Signals, object] = {}
+    shutdown_calls: list[str] = []
+
+    class FakeServer:
+        def shutdown(self) -> None:
+            shutdown_calls.append("shutdown")
+
+    def fake_signal(sig: signal.Signals, handler: object) -> None:
+        registered[sig] = handler
+
+    monkeypatch.setattr(signal, "signal", fake_signal)
+
+    install_signal_handlers(server=FakeServer())
+
+    with pytest.raises(SystemExit, match="0"):
+        registered[signal.SIGINT](int(signal.SIGINT), None)
+
+    assert shutdown_calls == ["shutdown"]
 
 
 def test_print_runtime_summary_writes_expected_lines(
@@ -1233,6 +1322,82 @@ def test_http_app_create_fastapi_app_registers_expected_routes(
     assert "/projection_failures_resolve" in paths
 
 
+def test_http_app_request_helpers_cover_missing_authorization_and_default_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    http_app = _load_http_app_module(monkeypatch)
+
+    request = SimpleNamespace(
+        headers={"authorization": "   "},
+        query_params=SimpleNamespace(multi_items=lambda: [("x", "1")]),
+        url=SimpleNamespace(path="/debug/runtime"),
+    )
+
+    assert http_app._authorization_query_value(request) is None
+    assert http_app._query_items_with_authorization(request) == [("x", "1")]
+    assert http_app._query_string_from_request(request) == "x=1"
+    assert http_app._full_path_with_query(request) == "/debug/runtime?x=1"
+
+    response = http_app._response_from_runtime_result(
+        SimpleNamespace(
+            payload={"ok": True},
+            status_code=200,
+            headers=None,
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert json.loads(response.body.decode("utf-8")) == {"ok": True}
+
+
+def test_http_app_build_get_and_post_routes_return_server_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    http_app = _load_http_app_module(monkeypatch)
+    server = make_server(runtime=None)
+
+    def get_factory(_server: object):
+        def handler(path: str) -> object:
+            raise AssertionError("get handler should not be called")
+
+        return handler
+
+    def post_factory(_runtime: object, _server: object):
+        def handler(path: str, body: str | None) -> object:
+            raise AssertionError("post handler should not be called")
+
+        return handler
+
+    get_route = http_app._build_get_route(server, get_factory)
+    post_route = http_app._build_post_route(server, post_factory)
+
+    request = SimpleNamespace(
+        headers={},
+        query_params=SimpleNamespace(multi_items=lambda: []),
+        url=SimpleNamespace(path="/mcp"),
+        body=lambda: None,
+    )
+
+    get_response = asyncio.run(get_route(request))
+    post_response = asyncio.run(post_route(request))
+
+    assert get_response.status_code == 503
+    assert post_response.status_code == 503
+    assert json.loads(get_response.body.decode("utf-8")) == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "runtime is not initialized",
+        }
+    }
+    assert json.loads(post_response.body.decode("utf-8")) == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "runtime is not initialized",
+        }
+    }
+
+
 def test_http_handlers_parse_required_uuid_argument_success() -> None:
     from ctxledger.runtime.http_handlers import parse_required_uuid_argument
 
@@ -1438,6 +1603,50 @@ def test_http_handlers_build_runtime_debug_handlers_return_404_for_wrong_paths()
     assert build_runtime_introspection_http_handler(server)("/wrong").status_code == 404
     assert build_runtime_routes_http_handler(server)("/wrong").status_code == 404
     assert build_runtime_tools_http_handler(server)("/wrong").status_code == 404
+
+
+def test_http_handlers_build_runtime_debug_handlers_accept_query_string() -> None:
+    from ctxledger.runtime.http_handlers import (
+        build_runtime_introspection_http_handler,
+        build_runtime_routes_http_handler,
+        build_runtime_tools_http_handler,
+    )
+
+    runtime = types.SimpleNamespace(
+        introspect=lambda: RuntimeIntrospection(
+            transport="http",
+            routes=("workflow_resume",),
+            tools=("workflow_resume",),
+            resources=("workspace://{workspace_id}/resume",),
+        )
+    )
+    server = make_server(runtime=runtime)
+
+    introspection_response = build_runtime_introspection_http_handler(server)(
+        "/debug/runtime?verbose=1"
+    )
+    routes_response = build_runtime_routes_http_handler(server)("/debug/routes?x=1")
+    tools_response = build_runtime_tools_http_handler(server)("/debug/tools?x=1")
+
+    assert introspection_response.status_code == 200
+    assert introspection_response.payload == {
+        "runtime": [
+            {
+                "transport": "http",
+                "routes": ["workflow_resume"],
+                "tools": ["workflow_resume"],
+                "resources": ["workspace://{workspace_id}/resume"],
+            }
+        ]
+    }
+    assert routes_response.status_code == 200
+    assert routes_response.payload == {
+        "routes": [{"transport": "http", "routes": ["workflow_resume"]}]
+    }
+    assert tools_response.status_code == 200
+    assert tools_response.payload == {
+        "tools": [{"transport": "http", "tools": ["workflow_resume"]}]
+    }
 
 
 def test_http_handlers_build_mcp_http_handler_adapts_streamable_http_endpoint() -> None:
@@ -2180,6 +2389,47 @@ def test_build_workflow_detail_resource_response_uow_branch_returns_not_found() 
         "error": {
             "code": "not_found",
             "message": f"workflow '{workflow_instance_id}' was not found",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_detail_resource_response_uow_branch_returns_invalid_request_on_workspace_mismatch() -> (
+    None
+):
+    workspace_id = uuid4()
+    other_workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    class FakeUow:
+        def __init__(self) -> None:
+            self.workflow_instances = SimpleNamespace(
+                get_by_id=lambda _workflow_instance_id: SimpleNamespace(
+                    workflow_instance_id=workflow_instance_id,
+                    workspace_id=other_workspace_id,
+                )
+            )
+
+        def __enter__(self) -> "FakeUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    server = make_server()
+    server.workflow_service = SimpleNamespace(_uow_factory=lambda: FakeUow())
+
+    response = build_workflow_detail_resource_response(
+        server,
+        workspace_id,
+        workflow_instance_id,
+    )
+
+    assert response.status_code == 400
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow instance does not belong to workspace",
         }
     }
     assert response.headers == {"content-type": "application/json"}
@@ -3729,6 +3979,50 @@ def test_http_runtime_build_http_runtime_adapter_returns_registered_runtime() ->
     assert runtime.handler("workflow_resume") is not None
     assert runtime.handler("projection_failures_ignore") is not None
     assert runtime.handler("projection_failures_resolve") is not None
+
+
+def test_build_runtime_routes_and_tools_responses_include_multiple_non_empty_introspections() -> (
+    None
+):
+    runtime = types.SimpleNamespace(
+        _runtimes=[
+            types.SimpleNamespace(
+                introspect=lambda: RuntimeIntrospection(
+                    transport="http",
+                    routes=("workflow_resume",),
+                    tools=("workflow_resume",),
+                    resources=(),
+                )
+            ),
+            types.SimpleNamespace(
+                introspect=lambda: RuntimeIntrospection(
+                    transport="mcp",
+                    routes=("runtime_introspection",),
+                    tools=("tool_a", "tool_b"),
+                    resources=(),
+                )
+            ),
+        ]
+    )
+    server = make_server(runtime=runtime)
+
+    routes_response = build_runtime_routes_response(server)
+    tools_response = build_runtime_tools_response(server)
+
+    assert routes_response.status_code == 200
+    assert routes_response.payload == {
+        "routes": [
+            {"transport": "http", "routes": ["workflow_resume"]},
+            {"transport": "mcp", "routes": ["runtime_introspection"]},
+        ]
+    }
+    assert tools_response.status_code == 200
+    assert tools_response.payload == {
+        "tools": [
+            {"transport": "http", "tools": ["workflow_resume"]},
+            {"transport": "mcp", "tools": ["tool_a", "tool_b"]},
+        ]
+    }
 
 
 def test_server_methods_delegate_to_extracted_response_builders() -> None:

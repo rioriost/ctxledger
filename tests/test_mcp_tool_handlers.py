@@ -1223,6 +1223,286 @@ def test_build_projection_failures_resolve_tool_handler_returns_success_without_
     ]
 
 
+def test_build_workspace_register_tool_handler_rejects_missing_repo_url() -> None:
+    handler = build_workspace_register_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler(
+        {
+            "canonical_path": "/tmp/repo",
+            "default_branch": "main",
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "repo_url must be a non-empty string",
+            "details": {"field": "repo_url"},
+        },
+    }
+
+
+def test_build_workspace_register_tool_handler_rejects_missing_canonical_path() -> None:
+    handler = build_workspace_register_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler(
+        {
+            "repo_url": "https://example.com/repo.git",
+            "default_branch": "main",
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "canonical_path must be a non-empty string",
+            "details": {"field": "canonical_path"},
+        },
+    }
+
+
+def test_build_workspace_register_tool_handler_rejects_missing_default_branch() -> None:
+    handler = build_workspace_register_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler(
+        {
+            "repo_url": "https://example.com/repo.git",
+            "canonical_path": "/tmp/repo",
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "default_branch must be a non-empty string",
+            "details": {"field": "default_branch"},
+        },
+    }
+
+
+def test_build_workflow_start_tool_handler_rejects_missing_workspace_id() -> None:
+    handler = build_workflow_start_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler({"ticket_id": "T-1"})
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workspace_id must be a non-empty string",
+            "details": {"field": "workspace_id"},
+        },
+    }
+
+
+def test_build_workflow_start_tool_handler_rejects_missing_ticket_id() -> None:
+    handler = build_workflow_start_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler({"workspace_id": str(uuid4())})
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "ticket_id must be a non-empty string",
+            "details": {"field": "ticket_id"},
+        },
+    }
+
+
+def test_build_workflow_checkpoint_tool_handler_rejects_missing_workflow_instance_id() -> (
+    None
+):
+    handler = build_workflow_checkpoint_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler(
+        {
+            "attempt_id": str(uuid4()),
+            "step_name": "implement",
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_instance_id must be a non-empty string",
+            "details": {"field": "workflow_instance_id"},
+        },
+    }
+
+
+def test_build_workflow_checkpoint_tool_handler_rejects_missing_attempt_id() -> None:
+    handler = build_workflow_checkpoint_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "step_name": "implement",
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "attempt_id must be a non-empty string",
+            "details": {"field": "attempt_id"},
+        },
+    }
+
+
+def test_build_workflow_checkpoint_tool_handler_rejects_missing_step_name() -> None:
+    handler = build_workflow_checkpoint_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "attempt_id": str(uuid4()),
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "step_name must be a non-empty string",
+            "details": {"field": "step_name"},
+        },
+    }
+
+
+def test_build_workflow_complete_tool_handler_rejects_missing_workflow_instance_id() -> (
+    None
+):
+    handler = build_workflow_complete_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler(
+        {
+            "attempt_id": str(uuid4()),
+            "workflow_status": "completed",
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_instance_id must be a non-empty string",
+            "details": {"field": "workflow_instance_id"},
+        },
+    }
+
+
+def test_build_workflow_complete_tool_handler_rejects_missing_attempt_id() -> None:
+    handler = build_workflow_complete_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "workflow_status": "completed",
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "attempt_id must be a non-empty string",
+            "details": {"field": "attempt_id"},
+        },
+    }
+
+
+def test_build_workflow_complete_tool_handler_rejects_missing_workflow_status() -> None:
+    handler = build_workflow_complete_tool_handler(
+        make_server(workflow_service=FakeWorkflowService())
+    )
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "attempt_id": str(uuid4()),
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "workflow_status must be a non-empty string",
+            "details": {"field": "workflow_status"},
+        },
+    }
+
+
+def test_build_projection_failures_ignore_tool_handler_requires_service() -> None:
+    handler = build_projection_failures_ignore_tool_handler(
+        make_server(workflow_service=None)
+    )
+
+    response = handler(
+        {
+            "workspace_id": str(uuid4()),
+            "workflow_instance_id": str(uuid4()),
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+            "details": {},
+        },
+    }
+
+
+def test_build_projection_failures_resolve_tool_handler_requires_service() -> None:
+    handler = build_projection_failures_resolve_tool_handler(
+        make_server(workflow_service=None)
+    )
+
+    response = handler(
+        {
+            "workspace_id": str(uuid4()),
+            "workflow_instance_id": str(uuid4()),
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+            "details": {},
+        },
+    }
+
+
 @dataclass
 class FakeMemoryService:
     remember_result: object | None = None

@@ -21,13 +21,18 @@ from ctxledger.workflow.service import (
     RecordProjectionStateInput,
     RegisterWorkspaceInput,
     ResumableStatus,
+    ResumeIssue,
     ResumeWorkflowInput,
     StartWorkflowInput,
+    ValidationError,
+    VerifyReport,
     VerifyStatus,
     WorkflowAttempt,
     WorkflowAttemptMismatchError,
     WorkflowAttemptStatus,
+    WorkflowCheckpoint,
     WorkflowCompleteResult,
+    WorkflowInstance,
     WorkflowInstanceStatus,
     WorkflowNotFoundError,
     WorkflowResume,
@@ -1378,3 +1383,551 @@ def test_ignore_resume_projection_failures_raises_when_projection_repository_is_
         assert "projection failure repository is not available" in str(exc)
     else:
         raise AssertionError("Expected PersistenceError")
+
+
+def test_record_resume_projection_normalizes_input_before_persisting() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="NORMALIZE-PROJECTION",
+        )
+    )
+
+    recorded = service.record_resume_projection(
+        RecordProjectionStateInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FRESH,
+            target_path="  .agent/resume.json  ",
+            last_successful_write_at=datetime(2024, 1, 1, tzinfo=UTC),
+            last_canonical_update_at=datetime(2024, 1, 2, tzinfo=UTC),
+        )
+    )
+
+    assert recorded.target_path == "  .agent/resume.json  "
+    assert recorded.last_successful_write_at == datetime(2024, 1, 1, tzinfo=UTC)
+    assert recorded.last_canonical_update_at == datetime(2024, 1, 2, tzinfo=UTC)
+
+
+def test_record_resume_projection_failure_rejects_empty_target_path() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="EMPTY-TARGET-PATH",
+        )
+    )
+
+    with pytest.raises(ValidationError, match="target_path must not be empty"):
+        service.record_resume_projection_failure(
+            RecordProjectionFailureInput(
+                workspace_id=workspace.workspace_id,
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                target_path="   ",
+                error_message="write failed",
+            )
+        )
+
+
+def test_record_resume_projection_failure_rejects_workflow_from_another_workspace() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+    first_workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-a.git",
+            canonical_path="/tmp/repo-a",
+            default_branch="main",
+        )
+    )
+    second_workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-b.git",
+            canonical_path="/tmp/repo-b",
+            default_branch="main",
+        )
+    )
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=first_workspace.workspace_id,
+            ticket_id="FAILURE-MISMATCH",
+        )
+    )
+
+    with pytest.raises(
+        WorkflowAttemptMismatchError,
+        match="workflow does not belong to workspace",
+    ):
+        service.record_resume_projection_failure(
+            RecordProjectionFailureInput(
+                workspace_id=second_workspace.workspace_id,
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                target_path=".agent/resume.json",
+                error_message="write failed",
+            )
+        )
+
+
+def test_resolve_resume_projection_failures_rejects_workflow_from_another_workspace() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+    first_workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-a.git",
+            canonical_path="/tmp/repo-a",
+            default_branch="main",
+        )
+    )
+    second_workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-b.git",
+            canonical_path="/tmp/repo-b",
+            default_branch="main",
+        )
+    )
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=first_workspace.workspace_id,
+            ticket_id="RESOLVE-MISMATCH",
+        )
+    )
+
+    with pytest.raises(
+        WorkflowAttemptMismatchError,
+        match="workflow does not belong to workspace",
+    ):
+        service.resolve_resume_projection_failures(
+            workspace_id=second_workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+        )
+
+
+def test_ignore_resume_projection_failures_rejects_workflow_from_another_workspace() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+    first_workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-a.git",
+            canonical_path="/tmp/repo-a",
+            default_branch="main",
+        )
+    )
+    second_workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-b.git",
+            canonical_path="/tmp/repo-b",
+            default_branch="main",
+        )
+    )
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=first_workspace.workspace_id,
+            ticket_id="IGNORE-MISMATCH",
+        )
+    )
+
+    with pytest.raises(
+        WorkflowAttemptMismatchError,
+        match="workflow does not belong to workspace",
+    ):
+        service.ignore_resume_projection_failures(
+            workspace_id=second_workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+        )
+
+
+def test_reconcile_resume_projection_resolves_each_projection_once_and_records_failures() -> (
+    None
+):
+    resolve_calls: list[tuple[object, object, object]] = []
+    record_calls: list[RecordProjectionStateInput] = []
+    failure_calls: list[RecordProjectionFailureInput] = []
+
+    success_json = RecordProjectionStateInput(
+        workspace_id=uuid4(),
+        workflow_instance_id=uuid4(),
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        status=ProjectionStatus.FRESH,
+        target_path=".agent/resume.json",
+    )
+    success_md_first = RecordProjectionStateInput(
+        workspace_id=success_json.workspace_id,
+        workflow_instance_id=success_json.workflow_instance_id,
+        projection_type=ProjectionArtifactType.RESUME_MD,
+        status=ProjectionStatus.STALE,
+        target_path=".agent/resume.md",
+    )
+    success_md_second = RecordProjectionStateInput(
+        workspace_id=success_json.workspace_id,
+        workflow_instance_id=success_json.workflow_instance_id,
+        projection_type=ProjectionArtifactType.RESUME_MD,
+        status=ProjectionStatus.FRESH,
+        target_path=".agent/resume.md",
+    )
+    failure = RecordProjectionFailureInput(
+        workspace_id=success_json.workspace_id,
+        workflow_instance_id=success_json.workflow_instance_id,
+        attempt_id=uuid4(),
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        target_path=".agent/resume.json",
+        error_message="write failed",
+    )
+
+    service = WorkflowService(lambda: None)
+
+    def fake_resolve_resume_projection_failures(
+        *,
+        workspace_id,
+        workflow_instance_id,
+        projection_type=None,
+    ) -> int:
+        resolve_calls.append((workspace_id, workflow_instance_id, projection_type))
+        return 1
+
+    def fake_record_resume_projection(
+        data: RecordProjectionStateInput,
+    ) -> ProjectionInfo:
+        record_calls.append(data)
+        return ProjectionInfo(
+            projection_type=data.projection_type,
+            status=data.status,
+            target_path=data.target_path,
+            last_successful_write_at=data.last_successful_write_at,
+            last_canonical_update_at=data.last_canonical_update_at,
+            open_failure_count=0,
+        )
+
+    def fake_record_resume_projection_failure(
+        data: RecordProjectionFailureInput,
+    ) -> ProjectionFailureInfo:
+        failure_calls.append(data)
+        return ProjectionFailureInfo(
+            projection_type=data.projection_type,
+            error_code=data.error_code,
+            error_message=data.error_message,
+            target_path=data.target_path,
+            attempt_id=data.attempt_id,
+            open_failure_count=1,
+            retry_count=0,
+            status="open",
+        )
+
+    service.resolve_resume_projection_failures = (  # type: ignore[method-assign]
+        fake_resolve_resume_projection_failures
+    )
+    service.record_resume_projection = fake_record_resume_projection  # type: ignore[method-assign]
+    service.record_resume_projection_failure = (  # type: ignore[method-assign]
+        fake_record_resume_projection_failure
+    )
+
+    reconciled = service.reconcile_resume_projection(
+        success_updates=(success_json, success_md_first, success_md_second),
+        failure_updates=(failure,),
+    )
+
+    assert [projection.projection_type for projection in reconciled] == [
+        ProjectionArtifactType.RESUME_JSON,
+        ProjectionArtifactType.RESUME_MD,
+        ProjectionArtifactType.RESUME_MD,
+    ]
+    assert resolve_calls == [
+        (
+            success_json.workspace_id,
+            success_json.workflow_instance_id,
+            ProjectionArtifactType.RESUME_JSON,
+        ),
+        (
+            success_md_first.workspace_id,
+            success_md_first.workflow_instance_id,
+            ProjectionArtifactType.RESUME_MD,
+        ),
+    ]
+    assert record_calls == [success_json, success_md_first, success_md_second]
+    assert failure_calls == [failure]
+
+
+def test_complete_workflow_without_verify_status_preserves_attempt_verify_status() -> (
+    None
+):
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(workspace_id=workspace.workspace_id, ticket_id="KEEP-VERIFY")
+    )
+
+    attempt_with_verify = WorkflowAttempt(
+        attempt_id=started.attempt.attempt_id,
+        workflow_instance_id=started.attempt.workflow_instance_id,
+        attempt_number=started.attempt.attempt_number,
+        status=started.attempt.status,
+        failure_reason=started.attempt.failure_reason,
+        verify_status=VerifyStatus.SKIPPED,
+        started_at=started.attempt.started_at,
+        finished_at=started.attempt.finished_at,
+        created_at=started.attempt.created_at,
+        updated_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    uow.attempts_by_id[attempt_with_verify.attempt_id] = attempt_with_verify
+
+    result = service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.FAILED,
+            failure_reason="tests failed",
+        )
+    )
+
+    assert result.attempt.verify_status == VerifyStatus.SKIPPED
+    assert result.attempt.failure_reason == "tests failed"
+    assert result.verify_report is None
+
+
+def test_build_resume_warnings_adds_open_and_ignored_projection_failure_variants() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+
+    workflow = WorkflowInstance(
+        workflow_instance_id=uuid4(),
+        workspace_id=uuid4(),
+        ticket_id="WARN-1",
+        status=WorkflowInstanceStatus.RUNNING,
+    )
+    attempt = WorkflowAttempt(
+        attempt_id=uuid4(),
+        workflow_instance_id=workflow.workflow_instance_id,
+        attempt_number=1,
+        status=WorkflowAttemptStatus.RUNNING,
+        verify_status=VerifyStatus.PASSED,
+        started_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    latest_checkpoint = WorkflowCheckpoint(
+        checkpoint_id=uuid4(),
+        workflow_instance_id=workflow.workflow_instance_id,
+        attempt_id=attempt.attempt_id,
+        step_name="resume",
+        created_at=datetime(2024, 1, 2, tzinfo=UTC),
+    )
+    latest_verify_report = VerifyReport(
+        verify_id=uuid4(),
+        attempt_id=attempt.attempt_id,
+        status=VerifyStatus.PASSED,
+        created_at=datetime(2024, 1, 3, tzinfo=UTC),
+    )
+    projections = (
+        ProjectionInfo(
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FAILED,
+            target_path=".agent/resume.json",
+            open_failure_count=2,
+        ),
+    )
+    open_projection_failures = [
+        ProjectionFailureInfo(
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            error_code="io_error",
+            error_message="open failure",
+            target_path=".agent/resume.json",
+            attempt_id=attempt.attempt_id,
+            occurred_at=datetime(2024, 1, 4, tzinfo=UTC),
+            open_failure_count=2,
+            retry_count=1,
+            status="open",
+        )
+    ]
+    closed_projection_failures = [
+        ProjectionFailureInfo(
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            error_code="ignore_error",
+            error_message="ignored failure",
+            target_path=".agent/resume.json",
+            attempt_id=attempt.attempt_id,
+            occurred_at=datetime(2024, 1, 5, tzinfo=UTC),
+            resolved_at=datetime(2024, 1, 6, tzinfo=UTC),
+            open_failure_count=0,
+            retry_count=2,
+            status="ignored",
+        )
+    ]
+
+    warnings = service._build_resume_warnings(
+        workflow,
+        attempt,
+        latest_checkpoint,
+        latest_verify_report,
+        projections,
+        open_projection_failures,
+        closed_projection_failures,
+    )
+
+    open_warning = next(
+        warning for warning in warnings if warning.code == "open_projection_failure"
+    )
+
+    assert open_warning.details["projection_type"] == "resume_json"
+    assert open_warning.details["open_failure_count"] == 2
+    assert open_warning.details["failures"][0]["status"] == "open"
+
+
+def test_build_resume_warnings_adds_ignored_projection_failure_variant() -> None:
+    service, _ = make_service_and_uow()
+
+    workflow = WorkflowInstance(
+        workflow_instance_id=uuid4(),
+        workspace_id=uuid4(),
+        ticket_id="WARN-IGNORED-1",
+        status=WorkflowInstanceStatus.RUNNING,
+    )
+    attempt = WorkflowAttempt(
+        attempt_id=uuid4(),
+        workflow_instance_id=workflow.workflow_instance_id,
+        attempt_number=1,
+        status=WorkflowAttemptStatus.RUNNING,
+        verify_status=VerifyStatus.PASSED,
+        started_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    latest_checkpoint = WorkflowCheckpoint(
+        checkpoint_id=uuid4(),
+        workflow_instance_id=workflow.workflow_instance_id,
+        attempt_id=attempt.attempt_id,
+        step_name="resume",
+        created_at=datetime(2024, 1, 2, tzinfo=UTC),
+    )
+    latest_verify_report = VerifyReport(
+        verify_id=uuid4(),
+        attempt_id=attempt.attempt_id,
+        status=VerifyStatus.PASSED,
+        created_at=datetime(2024, 1, 3, tzinfo=UTC),
+    )
+    projections = (
+        ProjectionInfo(
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FAILED,
+            target_path=".agent/resume.json",
+            open_failure_count=0,
+        ),
+    )
+    closed_projection_failures = [
+        ProjectionFailureInfo(
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            error_code="ignore_error",
+            error_message="ignored failure",
+            target_path=".agent/resume.json",
+            attempt_id=attempt.attempt_id,
+            occurred_at=datetime(2024, 1, 5, tzinfo=UTC),
+            resolved_at=datetime(2024, 1, 6, tzinfo=UTC),
+            open_failure_count=0,
+            retry_count=2,
+            status="ignored",
+        )
+    ]
+
+    warnings = service._build_resume_warnings(
+        workflow,
+        attempt,
+        latest_checkpoint,
+        latest_verify_report,
+        projections,
+        [],
+        closed_projection_failures,
+    )
+
+    ignored_warning = next(
+        warning for warning in warnings if warning.code == "ignored_projection_failure"
+    )
+
+    assert ignored_warning.details["projection_type"] == "resume_json"
+    assert ignored_warning.details["open_failure_count"] == 0
+    assert ignored_warning.details["failures"][0]["status"] == "ignored"
+
+
+def test_classify_resumable_status_returns_resumable_for_projection_warnings() -> None:
+    service, _ = make_service_and_uow()
+
+    workflow = WorkflowInstance(
+        workflow_instance_id=uuid4(),
+        workspace_id=uuid4(),
+        ticket_id="CLASSIFY-1",
+        status=WorkflowInstanceStatus.RUNNING,
+    )
+    attempt = WorkflowAttempt(
+        attempt_id=uuid4(),
+        workflow_instance_id=workflow.workflow_instance_id,
+        attempt_number=1,
+        status=WorkflowAttemptStatus.RUNNING,
+        started_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    latest_checkpoint = WorkflowCheckpoint(
+        checkpoint_id=uuid4(),
+        workflow_instance_id=workflow.workflow_instance_id,
+        attempt_id=attempt.attempt_id,
+        step_name="resume",
+        created_at=datetime(2024, 1, 2, tzinfo=UTC),
+    )
+
+    stale_status = service._classify_resumable_status(
+        workflow,
+        attempt,
+        latest_checkpoint,
+        [ResumeIssue(code="stale_projection", message="stale")],
+    )
+    open_failure_status = service._classify_resumable_status(
+        workflow,
+        attempt,
+        latest_checkpoint,
+        [ResumeIssue(code="open_projection_failure", message="open failure")],
+    )
+
+    assert stale_status == ResumableStatus.RESUMABLE
+    assert open_failure_status == ResumableStatus.RESUMABLE
+
+
+def test_derive_next_hint_covers_inconsistent_and_blocked_without_checkpoint() -> None:
+    service, _ = make_service_and_uow()
+
+    workflow = WorkflowInstance(
+        workflow_instance_id=uuid4(),
+        workspace_id=uuid4(),
+        ticket_id="HINT-1",
+        status=WorkflowInstanceStatus.RUNNING,
+    )
+    running_attempt = WorkflowAttempt(
+        attempt_id=uuid4(),
+        workflow_instance_id=workflow.workflow_instance_id,
+        attempt_number=1,
+        status=WorkflowAttemptStatus.RUNNING,
+        started_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+
+    inconsistent_hint = service._derive_next_hint(
+        workflow,
+        None,
+        None,
+        ResumableStatus.INCONSISTENT,
+    )
+    blocked_without_checkpoint_hint = service._derive_next_hint(
+        workflow,
+        running_attempt,
+        None,
+        ResumableStatus.BLOCKED,
+    )
+
+    assert (
+        inconsistent_hint
+        == "No attempt is available. Inspect workflow consistency before continuing."
+    )
+    assert (
+        blocked_without_checkpoint_hint
+        == "Create an initial checkpoint to establish resumable state."
+    )
