@@ -21,7 +21,11 @@
 - pruning の途中で、`CtxLedgerServer.build_workspace_resume_resource_response()` と `CtxLedgerServer.build_workflow_detail_resource_response()` が削除した module-level wrapper を呼んでいたため resource read 系で `NameError` が発生しました。
 - 上記 2 メソッドは `runtime.server_responses` をメソッド内で直接 import して呼ぶ形に修正し、resource path の挙動を回復させました。
 - 追加で `tests/test_server.py` の serializer import を `ctxledger.server` から `ctxledger.runtime.serializers` に移し、`server.py` への依存をさらに減らしました。
-- この段階で `server.py` はまだ完全に小さくはないものの、以前より compatibility surface はかなり減り、HTTP handler / server response の一次公開窓口としての役割は薄くなっています。
+- さらに `HttpRuntimeAdapter` に `handler(route_name)` / `require_handler(route_name)` を追加し、内部の `_handlers` dict へ直接触れずに registered handler を扱える accessor を用意しました。
+- `dispatch_http_request()` は `_handlers.get(...)` ではなく `runtime.handler(route_name)` を使うように変更しました。
+- `tests/test_server.py` の debug/runtime route まわりも `_handlers[...]` 直参照ではなく `handler(...)` / `require_handler(...)` 経由へ変更しました。
+- この段階で route registry はまだ残っていますが、internal dict 直叩き箇所は減り、次段で registry の縮小や差し替えをしやすい形になっています。
+- `server.py` はまだ完全に小さくはないものの、以前より compatibility surface はかなり減り、HTTP handler / server response の一次公開窓口としての役割はかなり薄くなっています。
 - 一方で、`dispatch_http_request()`、`HttpRuntimeAdapter.register_handler()`、`registered_routes()` などは依然として残っており、次段の整理対象です。
 
 今回確認したテスト結果:
@@ -32,6 +36,7 @@
 - `4e00ba0` — `Simplify FastAPI HTTP routing path`
 - `33c8815` — `Move tests to canonical runtime modules`
 - `9cd5f9e` — `Prune obsolete server compatibility wrappers`
+- `6ef0808` — `Use runtime serializers directly in server tests`
 
 現時点での設計メモ:
 - `http_app.py` はかなり自然になり、FastAPI の route flow は直接的になっています。
@@ -43,6 +48,7 @@
 - FastAPI app は依然として import 時に `create_default_fastapi_app()` が走る shape なので、必要なら次段で lifespan 管理へ寄せる余地があります。
 - `tests/test_server.py` はまだ `CtxLedgerServer` / `HttpRuntimeAdapter` / `build_http_runtime_adapter` / `dispatch_http_request` などを `ctxledger.server` から import しており、ここが今後の `server.py` 縮小の境界になります。
 - serializer helper は `tests/test_server.py` 側では canonical module に寄せられたので、`server.py` からの再公開削減をさらに進めやすくなりました。
+- route registry 自体は残るが、handler lookup の窓口が accessor に寄ったので、将来 `_handlers` の実体を変えても追従しやすくなっています。
 
 次セッションで優先してやること:
 1. `server.py` にまだ残っている re-export / helper 群の棚卸しを続ける

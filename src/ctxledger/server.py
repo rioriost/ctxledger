@@ -152,6 +152,15 @@ class HttpRuntimeAdapter:
     def register_handler(self, route_name: str, handler: WorkflowHttpHandler) -> None:
         self._handlers[route_name] = handler
 
+    def handler(self, route_name: str) -> WorkflowHttpHandler | None:
+        return self._handlers.get(route_name)
+
+    def require_handler(self, route_name: str) -> WorkflowHttpHandler:
+        handler = self.handler(route_name)
+        if handler is None:
+            raise KeyError(route_name)
+        return handler
+
     def registered_routes(self) -> tuple[str, ...]:
         return tuple(sorted(self._handlers.keys()))
 
@@ -490,7 +499,7 @@ def dispatch_http_request(
     path: str,
     body: str | None = None,
 ) -> RuntimeDispatchResult:
-    handler = runtime._handlers.get(route_name)
+    handler = runtime.handler(route_name)
     if handler is None:
         response = WorkflowResumeResponse(
             status_code=404,

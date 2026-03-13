@@ -1722,6 +1722,7 @@ def test_http_runtime_adapter_dispatches_registered_workflow_resume_handler() ->
     assert response.status_code == 200
     assert response.payload == serialize_workflow_resume(resume)
     assert response.headers == {"content-type": "application/json"}
+    assert runtime.handler("workflow_resume") is not None
     assert runtime.registered_routes() == ("workflow_resume",)
 
 
@@ -4621,7 +4622,7 @@ def test_build_http_runtime_adapter_omits_runtime_introspection_route_when_debug
     )
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
-    assert "runtime_introspection" not in server.runtime._handlers
+    assert server.runtime.handler("runtime_introspection") is None
     assert server.runtime.registered_routes() == (
         "mcp_rpc",
         "projection_failures_ignore",
@@ -4851,7 +4852,7 @@ def test_build_debug_routes_http_handler_returns_runtime_routes_only() -> None:
         workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
     )
 
-    handler = server.runtime._handlers["runtime_routes"]
+    handler = server.runtime.require_handler("runtime_routes")
     response = handler("/debug/routes")
 
     assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
@@ -4884,7 +4885,7 @@ def test_build_debug_routes_http_handler_returns_not_found_for_invalid_path() ->
         workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
     )
 
-    handler = server.runtime._handlers["runtime_routes"]
+    handler = server.runtime.require_handler("runtime_routes")
     response = handler("/debug/runtime")
 
     assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
@@ -4913,7 +4914,7 @@ def test_build_http_runtime_adapter_omits_runtime_routes_handler_when_debug_endp
     )
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
-    assert "runtime_routes" not in server.runtime._handlers
+    assert server.runtime.handler("runtime_routes") is None
     assert server.runtime.registered_routes() == (
         "mcp_rpc",
         "projection_failures_ignore",
@@ -4931,7 +4932,7 @@ def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
         workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
     )
 
-    handler = server.runtime._handlers["runtime_tools"]
+    handler = server.runtime.require_handler("runtime_tools")
     response = handler("/debug/tools")
 
     assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
@@ -4966,7 +4967,7 @@ def test_build_debug_tools_http_handler_returns_http_only_empty_tools() -> None:
         workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
     )
 
-    handler = server.runtime._handlers["runtime_tools"]
+    handler = server.runtime.require_handler("runtime_tools")
     response = handler("/debug/tools")
 
     assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
@@ -5001,7 +5002,7 @@ def test_build_debug_tools_http_handler_returns_not_found_for_invalid_path() -> 
         workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
     )
 
-    handler = server.runtime._handlers["runtime_tools"]
+    handler = server.runtime.require_handler("runtime_tools")
     response = handler("/debug/routes")
 
     assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
@@ -5030,7 +5031,7 @@ def test_build_http_runtime_adapter_omits_runtime_tools_handler_when_debug_endpo
     )
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
-    assert "runtime_tools" not in server.runtime._handlers
+    assert server.runtime.handler("runtime_tools") is None
     assert server.runtime.registered_routes() == (
         "mcp_rpc",
         "projection_failures_ignore",
