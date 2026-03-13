@@ -1,26 +1,29 @@
-stdio removal patch 1E の続きとして、今回は **final stdio residual sweep の進捗を記録するための session note 更新** を行う前提で整理します。patch 1A の config/orchestration HTTP-only 化、patch 1B の server/module/CLI cleanup、patch 1C の legacy stdio module 削除、patch 1D の protocol/introspection/docs cleanup を土台にして、現時点では **residual reference の最終探索と project-wide verification を進める段階** に入っています。
+stdio removal patch 1E の続きとして、今回は **final verification sweep の状態を引き継ぐための最終メモ** を残します。patch 1A の config/orchestration HTTP-only 化、patch 1B の server/module/CLI cleanup、patch 1C の legacy stdio module 削除、patch 1D の residual protocol/introspection/docs cleanup を前提に、現時点では **HTTP-only migration はほぼ完了、残タスクは closeout wording と release-evidence 整理が中心** という段階です。
 
-このセッションで残すべき要点:
+このセッション終端での要点:
 
-- source tree の stdio concrete implementation は削除済み
-- active runtime surface は HTTP-only
-- runtime protocol / introspection helper / public facade / README / deployment/security/architecture docs もかなり HTTP-only に寄っている
-- 直近の確認済み test baseline は:
+- active runtime / transport semantics は HTTP-only
+- stdio concrete implementation は source tree から削除済み
+- public facade / runtime helpers / README / deployment/security/architecture docs の主要面は HTTP-only に寄っている
+- planning / review docs 側の historical wording もかなり整理された
+- 直近の確認済み baseline は:
   - `tests/test_config.py`
   - `tests/test_server.py`
   - `tests/test_mcp_modules.py`
   - `tests/test_cli.py`
   - `tests/test_postgres_integration.py`
   - **204 passed**
-- residual `stdio` wording は主に historical / planning / review docs に残る可能性がある
-- final closeout は「source behavior の cleanup」よりも「documentation residual sweep と final verification」の比重が高い
+- 現在の未解決点は「stdio removal そのもの」より、
+  - final HTTP acceptance wording
+  - release evidence framing
+  - 必要なら broader MCP resource proof
+  の整理
 
-## 1. ここまでの patch progression
-stdio removal の流れは現時点で次のように整理できます。
+## 1. ここまでの patch progression の最終整理
 
 ### patch 1A
-- `config.py` を HTTP-only semantics に変更
-- `runtime/orchestration.py` を HTTP-only semantics に変更
+- `src/ctxledger/config.py` を HTTP-only semantics に変更
+- `src/ctxledger/runtime/orchestration.py` を HTTP-only semantics に変更
 - `tests/test_config.py` を追従
 - `tests/test_config.py` は **21 passed**
 
@@ -52,10 +55,17 @@ stdio removal の流れは現時点で次のように整理できます。
 - `docs/deployment.md`
 - `docs/SECURITY.md`
 を HTTP-only wording に寄せた
-- 再確認で **204 passed** を維持
+- baseline は **204 passed** を維持
+
+### patch 1E
+- `docs/imple_plan_0.1.0.md` を HTTP-only runtime direction に寄せた
+- `docs/imple_plan_review_0.1.0.md` の review narrative を HTTP-only 現状に合わせて大きく整理
+- deployment / architecture docs に残っていた stale `stdio` references をさらに削除
+- baseline は引き続き **204 passed**
 
 ## 2. 現時点の confirmed baseline
-現時点で session handoff 向けに明示してよい baseline は次の通りです。
+
+現時点で handoff 向けに明示してよい baseline:
 
 - `tests/test_config.py`
 - `tests/test_server.py`
@@ -64,16 +74,17 @@ stdio removal の流れは現時点で次のように整理できます。
 - `tests/test_postgres_integration.py`
 - **204 passed**
 
-この baseline は、
-- config semantics
-- server/runtime façade
-- MCP module behavior
-- CLI surface
-- PostgreSQL integration
-の主要な HTTP-only 追従が成立していることを示す基準として扱ってよいです。
+この baseline は少なくとも次を示す基準として扱ってよいです:
 
-## 3. いまの architecture / runtime interpretation
-現時点の runtime / transport 解釈は次の理解で問題ありません。
+- config semantics が HTTP-only で成立
+- server/runtime façade が HTTP-only に寄っている
+- MCP module behavior が HTTP-only runtime shape と整合
+- CLI surface が HTTP-only
+- PostgreSQL integration でも stale stdio env 前提が除去済み
+
+## 3. 現在の architecture / transport interpretation
+
+現時点の runtime / transport 解釈は次で問題ありません。
 
 ### active transport
 - `http` のみ
@@ -101,7 +112,6 @@ stdio removal の流れは現時点で次のように整理できます。
 - transport/runtime selection orchestration: `runtime/orchestration.py`
 
 ## 4. すでに整合しているもの
-以下は HTTP-only semantics とかなり整合済みと見てよいです。
 
 ### source
 - `src/ctxledger/config.py`
@@ -126,9 +136,12 @@ stdio removal の流れは現時点で次のように整理できます。
 - `docs/architecture.md`
 - `docs/deployment.md`
 - `docs/SECURITY.md`
+- `docs/imple_plan_0.1.0.md`
+- `docs/imple_plan_review_0.1.0.md`
 
-## 5. まだ final sweep 対象になりうるもの
-最終 closeout 前提で、まだ見ておきたい対象は次の通りです。
+## 5. まだ見てよい final sweep 対象
+
+source / main tests の stdio removal はかなり終わっています。ここから見る価値があるのは主に residual docs と final acceptance framing です。
 
 ### likely residual historical docs
 - `docs/mcp-api.md`
@@ -136,8 +149,6 @@ stdio removal の流れは現時点で次のように整理できます。
 - `docs/memory-model.md`
 - `docs/design-principles.md`
 - `docs/roadmap.md`
-- `docs/imple_plan_0.1.0.md`
-- `docs/imple_plan_review_0.1.0.md`
 
 ### config/example artifacts
 - `.env.example`
@@ -151,7 +162,8 @@ stdio removal の流れは現時点で次のように整理できます。
 - startup summary references like `stdio_transport=enabled`
 
 ## 6. practical interpretation of remaining work
-ここから先は、もう大きな transport refactor というより:
+
+ここから先はもう大きな transport refactor ではなく、主に:
 
 1. residual wording sweep
 2. example/config alignment check
@@ -160,45 +172,78 @@ stdio removal の流れは現時点で次のように整理できます。
 
 が中心です。
 
-つまり、
+つまり整理としては:
+
 - source-level removal はほぼ完了
 - behavior-level migration も主要面は完了
 - 残タスクは mostly documentation / evidence / verification
+- 「stdio removal ができるか」ではなく「どこまで final closeout evidence を整えるか」の段階
 
-と整理してよいです。
+## 7. current open question
 
-## 7. next natural work items
-次の自然な一手は次です。
+現時点の中心的な open question はもう stdio ではありません。
 
-### patch 1E / final verification sweep
+いまの中心は:
+
+**already-proven minimal HTTP MCP path at `/mcp` が `v0.1.0` acceptance として十分か、それとも broader HTTP MCP surface proof が必要か**
+
+という点です。
+
+現時点で強く言えること:
+
+- `/mcp` の minimal HTTP MCP path は repository evidence 上かなり強い
+  - `initialize`
+  - `tools/list`
+  - `tools/call`
+- workflow tool surface と tool schema publication は HTTP 側で成立している
+- release evidence はもう stdio-side maturity ではなく HTTP-side acceptance を中心に組み立てるべき
+- もし追加で詰めるなら、焦点は:
+  - `resources/list`
+  - `resources/read`
+  - broader MCP coverage
+  - acceptance matrix
+  のどこまでを `v0.1.0` closeout に含めるか
+
+## 8. next natural work items
+
+### patch 1F / final acceptance & verification sweep
 1. project-wide で residual
    - `stdio`
    - `CTXLEDGER_ENABLE_STDIO`
    - `TransportMode.STDIO`
    - `TransportMode.BOTH`
    を最終探索
-2. planning/review docs を必要なら HTTP-only wording に更新
+2. `docs/mcp-api.md` など未確認 docs の HTTP-only wording を必要なら更新
 3. `.env.example` / `.env.production.example` の実内容が README examples と一致しているか確認
-4. project-wide test run を回して final baseline を確定
-5. stdio removal 完了判定メモを `last_session.md` に残す
+4. 可能なら project-wide test run で final baseline を確定
+5. `v0.1.0` acceptance boundary を短く整理
+   - minimal HTTP MCP path confirmed
+   - broader HTTP MCP coverage status
+   - resource coverage status
+6. stdio removal 完了判定メモを `last_session.md` に残す
 
-## 8. conclusions for handoff
-今回の handoff 向け結論は次の通りです。
+## 9. conclusions for handoff
 
-- stdio removal は **final residual sweep phase** に入っている
+今回の handoff 向け結論:
+
+- stdio removal は **final closeout / verification phase** に入っている
 - active runtime / transport semantics は HTTP-only
-- source-level stdio concrete implementation は削除済み
-- major tests are green with **204 passed**
+- stdio concrete implementation は source tree から削除済み
+- public façade / helper layers / main docs もかなり HTTP-only に整理済み
+- major verified baseline は **204 passed**
 - remaining work is primarily:
   - historical/residual docs cleanup
   - example/env alignment
-  - final project-wide verification
+  - final release-evidence framing
+  - optional broader HTTP MCP proof
 - `docs/specification.md` は引き続き触らない
 - まだ compliance claim はしない
 
-## 9. suggested commit message candidates for the next loop
-次ループで final sweep まで進んだ場合の commit 候補例:
+## 10. suggested commit message candidates for the next loop
+
+次ループで final sweep や closeout note まで進んだ場合の commit 候補例:
 
 - `Finish final stdio residual sweep`
 - `Complete HTTP-only stdio removal cleanup`
 - `Finalize stdio removal documentation and verification`
+- `Clarify final HTTP MCP acceptance boundary`

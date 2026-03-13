@@ -39,7 +39,7 @@ The most important remaining gaps are now narrower than before:
 
 1. **A minimal primary HTTP MCP endpoint at `/mcp` is now evidenced, but the exact acceptance boundary still needs clarification**
 2. **The visible MCP protocol surface is now proven on HTTP for the minimal path, and the repository has since moved to HTTP-only transport semantics**
-3. **Some acceptance criteria may still need broader HTTP closeout evidence, but the remaining transport concern is no longer stdio maturity**
+3. **Some acceptance criteria may still need broader HTTP closeout evidence, but the remaining concern is no longer transport selection**
 
 ---
 
@@ -361,14 +361,14 @@ This sharpens the current assessment:
 The previously observed naming mismatch has now been resolved for the visible workflow operation name:
 
 - HTTP route: `workflow_resume`
-- stdio tool: `workflow_resume`
+- MCP tool: `workflow_resume`
 
 ### Why this matters
 This item is no longer primarily about whether workflow tools exist somewhere in the repository.  
 It is about whether the **required remote HTTP MCP transport** exposes those tools in a usable MCP-compatible way.
 
-The visible stdio MCP surface now publishes concrete tool schemas, which is useful for local validation.  
-But that does not, by itself, satisfy the implementation-plan requirement for a minimum usable remote MCP server over HTTP.
+The visible HTTP MCP surface now publishes concrete tool schemas, which is useful for release validation.  
+That materially strengthens the implementation-plan evidence for a minimum usable remote MCP server over HTTP.
 
 ### Status
 **Partially aligned / blocked by missing HTTP MCP endpoint evidence**
@@ -376,16 +376,15 @@ But that does not, by itself, satisfy the implementation-plan requirement for a 
 ### Remaining follow-up
 The highest-priority follow-up is now:
 
-- prove that `/mcp` is a usable HTTP MCP endpoint
-- or implement the missing HTTP MCP protocol surface
+- tighten the HTTP acceptance boundary for `/mcp`
+- confirm whether additional MCP resource operations are required for final closeout
+- keep release evidence centered on the HTTP MCP surface
 
-Only after that should schema-discovery evidence be counted as strong release evidence.
-
-If `stdio` is removed from `v0.1.0` scope, documentation, tests, and changelog entries should also be updated so they no longer imply that stdio-side MCP maturity materially closes the remote HTTP acceptance question.
+Schema-discovery evidence can now be counted as part of the HTTP release story, but broader acceptance proof may still need an explicit matrix.
 
 ---
 
-## 6.2 Required MCP resources are now implemented on the stdio runtime
+## 6.2 Required MCP resources remain a follow-up question for HTTP closeout
 
 ### Plan requirement
 Required resources:
@@ -394,16 +393,10 @@ Required resources:
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
 ### Current visible evidence
-A current implementation audit now shows explicit stdio runtime resource support in `src/ctxledger/server.py`, including:
+Current repository evidence strongly confirms the workflow read model and resource-oriented payload building behavior, including:
 
 - resource response type:
   - `McpResourceResponse`
-- stdio runtime resource registration support:
-  - `register_resource_handler(...)`
-  - `registered_resources()`
-  - `dispatch_resource(...)`
-- resource dispatch support:
-  - `dispatch_mcp_resource(...)`
 - resource URI parsers:
   - `parse_workspace_resume_resource_uri(...)`
   - `parse_workflow_detail_resource_uri(...)`
@@ -414,36 +407,29 @@ A current implementation audit now shows explicit stdio runtime resource support
   - `build_workspace_resume_resource_response(...)`
   - `build_workflow_detail_resource_response(...)`
 
-Visible stdio runtime resource registrations now include:
-
-- `workspace://{workspace_id}/resume`
-- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-
-Associated server tests now also exist in `tests/test_server.py`, including coverage for:
+Associated server tests also exist in `tests/test_server.py`, including coverage for:
 
 - valid and invalid resource URI parsing
 - resource handler success payloads
 - `server_not_ready`
 - `resource_not_found`
-- stdio runtime introspection including `resources`
-- composite runtime introspection including stdio resource visibility
 
 ### Why this matters
 These resources were explicitly listed as required in the implementation plan, so visible implementation and test evidence materially improves `v0.1.0` closeout confidence.
 
-However, current evidence reflects stdio MCP resource support.  
-It does not, by itself, prove a usable primary HTTP MCP transport at `/mcp`.
+The remaining question is not whether the underlying workflow resource behavior exists.  
+It is whether final `v0.1.0` closeout requires explicit HTTP MCP resource-surface proof in addition to the currently evidenced minimal HTTP MCP path.
 
 ### Status
-**Confirmed aligned on `stdio`, but not sufficient to close the primary HTTP transport question**
+**Partially aligned / needs explicit HTTP acceptance clarification**
 
 ### Remaining follow-up
-Keep documentation and acceptance evidence aligned with the implemented stdio resource surface:
+Confirm whether final release evidence must include HTTP MCP handling for:
 
-- `workspace://{workspace_id}/resume`
-- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+- `resources/list`
+- `resources/read`
 
-At the same time, avoid treating those stdio resource proofs as if they were evidence that the remote HTTP MCP endpoint is already acceptable.
+If the release boundary remains the currently evidenced minimal HTTP MCP path, keep these items documented as follow-up surface expansion rather than as blockers.
 
 ---
 
@@ -486,33 +472,36 @@ Current tests strongly cover:
 
 - workflow service
 - workflow/debug/operator HTTP routes
-- stdio MCP handling
+- HTTP MCP handling
 - projection writer
 - postgres integration
 - config
 - CLI
 
-But current visible evidence does **not** yet confirm a usable HTTP MCP protocol surface at `/mcp`.
+Current visible evidence now confirms a usable minimal HTTP MCP protocol surface at `/mcp`.
 
-Specifically, repository evidence does not yet confirm HTTP handling for:
+Specifically, repository evidence confirms HTTP handling for:
 
 - `initialize`
 - `tools/list`
 - `tools/call`
+
+The remaining question is whether final release acceptance must also require:
+
 - `resources/list`
 - `resources/read`
 
 ### Status
-**Gap / major implementation blocker**
+**Confirmed aligned for the minimal HTTP MCP path; broader HTTP surface may still need explicit acceptance clarification**
 
 ### Task
-Confirm and, if necessary, implement HTTP MCP handling at `/mcp` for at least:
+Keep the release proof centered on the currently evidenced minimal HTTP MCP surface:
 
 - `initialize`
 - `tools/list`
 - `tools/call`
 
-And, if required by the planned resource surface:
+If required by the planned resource surface, add an explicit follow-up decision or proof case for:
 
 - `resources/list`
 - `resources/read`
@@ -539,7 +528,7 @@ The repository contains significant implementation work, but the public interfac
 - debug/runtime introspection
 - memory stubs
 - docs that may be ahead of runtime wiring
-- stronger visible MCP behavior on `stdio` than on the primary HTTP MCP transport
+- a minimal HTTP MCP path that is now proven and should anchor the acceptance story
 
 This means the project needs a one-pass public interface audit that is explicitly **HTTP-centered**.
 
@@ -569,47 +558,43 @@ Create a definitive matrix of:
 ### Task A — Implement the primary HTTP MCP endpoint at `/mcp`
 Concrete runtime audit result:
 
-- confirmed visible stdio MCP request handling for:
+- confirmed visible HTTP MCP request handling for:
   - `initialize`
   - `tools/list`
   - `tools/call`
-  - `resources/list`
-  - `resources/read`
 - confirmed visible HTTP route registrations for workflow/debug/operator surfaces
-- confirmed visible HTTP runtime adapter is still described as a placeholder for future Streamable HTTP implementation
-- confirmed visible `/mcp` evidence is currently configuration- and summary-level, not protocol-handler-level
+- confirmed `/mcp` is now part of the active, tested HTTP MCP surface
 
 Interpretation:
-- the repository has MCP semantics on `stdio`
-- but the primary remote HTTP MCP endpoint is not yet proven usable
-- this is now the main blocker, not a secondary cleanup issue
+- the repository now has MCP semantics on HTTP
+- the primary remote HTTP MCP endpoint is proven usable for the minimal path
+- the remaining work is no longer a transport implementation blocker
 
 Next step:
-- implement or confirm HTTP MCP request handling at `/mcp`
-- make HTTP MCP the primary release evidence surface
+- keep HTTP MCP as the primary release evidence surface
+- decide whether broader HTTP MCP resource coverage is required for final closeout
 
-### Task B — Remove `stdio` from `v0.1.0` release scope
+### Task B — Finalize HTTP-only release scope wording
 Concrete scope result:
 
-- `stdio` is visible in current runtime/config/test/docs surfaces
-- but the release target is a remote HTTP MCP server
-- therefore `stdio` now adds more confusion than release value for `v0.1.0`
+- the active runtime/config/test surface is HTTP-only
+- historical planning/review docs may still mention stdio
+- remaining cleanup is mostly documentation and acceptance-boundary clarification
 
 Next step:
-- remove `stdio` from implementation scope, release evidence, and release-facing docs for `v0.1.0`
+- remove or reframe stale historical stdio acceptance language where it implies active release scope
 
 ### Task C — Reconcile required MCP resources against the HTTP-first release target
 Concrete implementation audit result:
 
-- visible stdio resource registration and dispatch wiring now exists
 - visible workflow resource parsers, handlers, and response builders now exist
-- visible required workflow resource registrations now include:
+- visible required workflow resource concepts still include:
   - `workspace://{workspace_id}/resume`
   - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
 Next step:
 - decide whether these resources must also be exposed through the HTTP MCP transport for `v0.1.0`
-- avoid counting stdio resource support alone as sufficient evidence for remote HTTP acceptance
+- keep resource acceptance evidence explicitly separated from the already-proven minimal HTTP MCP path
 
 ---
 
@@ -684,23 +669,25 @@ The following areas appear healthy enough that they should not be reworked unles
 
 The central question is now:
 
-**Does the repository actually expose a usable remote HTTP MCP endpoint at `/mcp`, or has visible MCP protocol behavior remained concentrated on `stdio` while HTTP is still limited to workflow/debug/operator routes?**
+**Does the repository’s already-proven minimal HTTP MCP endpoint at `/mcp` provide enough acceptance evidence for `v0.1.0`, or is broader HTTP MCP surface proof still required?**
 
 Current concrete audit findings sharpen that question:
 
-- `workflow_resume` is visible as both an HTTP route and a stdio tool
-- `workspace_register`, `workflow_start`, `workflow_checkpoint`, and `workflow_complete` are visibly registered in the inspected stdio runtime wiring
+- `workflow_resume` is visible as both an HTTP route and an HTTP MCP tool
+- `workspace_register`, `workflow_start`, `workflow_checkpoint`, and `workflow_complete` are visibly exposed through the HTTP MCP tool surface
 - corresponding workflow service methods and visible MCP tool-handler definitions for those operations are present
-- required stdio workflow resources are visibly implemented:
+- required workflow resource concepts are visibly implemented:
   - `workspace://{workspace_id}/resume`
   - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-- corresponding resource parsers, handlers, response builders, dispatch wiring, and tests are present
-- but visible MCP protocol request handling remains evidenced on `stdio`, not on HTTP `/mcp`
-- visible HTTP behavior is still centered on workflow/debug/operator routes
-- visible HTTP runtime code still describes the MCP Streamable HTTP adapter as a placeholder
+- corresponding resource parsers, handlers, response builders, and tests are present
+- visible MCP protocol request handling is evidenced on HTTP `/mcp` for:
+  - `initialize`
+  - `tools/list`
+  - `tools/call`
+- visible HTTP behavior still includes workflow/debug/operator routes alongside the HTTP MCP surface
 
-This means the main blocker is no longer a missing stdio surface question.  
-It is the missing or unproven **primary HTTP MCP endpoint** required by the remote-server goal.
+This means the main blocker is no longer a missing or unproven **primary HTTP MCP endpoint**.  
+The remaining question is whether broader HTTP MCP surface proof is required beyond the already-confirmed minimal path.
 
 ---
 
@@ -710,12 +697,12 @@ The current repository is not a minimal skeleton anymore; it contains substantia
 
 But relative to `docs/imple_plan_0.1.0.md`, the following still need resolution:
 
-- primary HTTP MCP endpoint implementation or proof at `/mcp`
+- whether the already-proven minimal HTTP MCP path at `/mcp` is sufficient for final acceptance
 - HTTP-centered acceptance evidence / public surface matrix
 - final documentation alignment for the actual HTTP-first transport surface
 - explicit public-surface alignment should be maintained as implementation evolves
 
-Until those are resolved or formally reconciled, `v0.1.0` should be treated as **blocked on the primary HTTP MCP transport**, not merely as closeout polish work.
+Until those are resolved or formally reconciled, `v0.1.0` should be treated as **needing final HTTP acceptance clarification**, not as blocked on missing primary HTTP MCP transport implementation.
 
 ---
 
@@ -723,7 +710,7 @@ Until those are resolved or formally reconciled, `v0.1.0` should be treated as *
 
 Start from the concrete audit findings already established:
 
-1. treat the currently confirmed stdio MCP surface as **non-authoritative for `v0.1.0` acceptance**
+1. treat the currently confirmed minimal HTTP MCP surface as **authoritative for `v0.1.0` transport evidence**
 2. treat the currently confirmed HTTP workflow/ops route set as including:
    - `workflow_resume`
    - `workflow_closed_projection_failures`
@@ -731,17 +718,17 @@ Start from the concrete audit findings already established:
    - `projection_failures_resolve`
    - optional debug routes
 3. treat the current `/mcp` state as:
-   - configured and documented
-   - but not yet evidenced as a usable HTTP MCP protocol endpoint
+   - configured
+   - documented
+   - evidenced as a usable minimal HTTP MCP protocol endpoint
 4. treat the next unresolved public-surface questions as:
-   - whether `/mcp` actually supports MCP initialization
-   - whether `/mcp` actually supports HTTP tool discovery
-   - whether `/mcp` actually supports HTTP tool invocation
+   - whether the minimal `/mcp` path is sufficient for final acceptance
    - whether required resources must also be exposed through the HTTP MCP transport
+   - whether any broader MCP operations still need explicit proof
 5. compare all of the above against:
    - `docs/imple_plan_0.1.0.md`
    - `docs/specification.md`
    - `README.md`
    - `docs/mcp-api.md`
 
-Then convert the result directly into HTTP MCP implementation, scope cleanup, and acceptance-evidence correction tasks rather than continuing stdio-centered closeout optimism.
+Then convert the result directly into acceptance-evidence clarification, final docs cleanup, and any remaining HTTP-surface proof tasks.
