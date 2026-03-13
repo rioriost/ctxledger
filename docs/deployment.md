@@ -67,7 +67,7 @@ Recommended production topology:
 
 - reverse proxy
 - TLS termination
-- bearer token authentication handling strategy
+- proxy-layer authentication handling strategy
 - `ctxledger` application container/process
 - PostgreSQL with persistent storage
 - optional future background workers for embeddings/summaries/indexing
@@ -333,7 +333,7 @@ In addition to `/debug/*`, operators should also treat HTTP projection failure a
 
 Operational guidance for these routes:
 
-- protect them with the same bearer-auth boundary as other protected HTTP endpoints
+- protect them with the same proxy-layer authentication boundary as other protected HTTP endpoints
 - expose them only to trusted operators or trusted automation
 - prefer TLS termination and reverse-proxy access control when the HTTP surface is network-accessible
 - require the strict implemented path shape for each action route:

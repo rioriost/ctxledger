@@ -22,13 +22,13 @@ This document should be read together with the phased auth strategy in `docs/pla
 
 In `v0.1.0`, the primary formal security boundary is:
 
-- bearer token authentication for protected HTTP endpoints
+- proxy-layer authentication in front of protected HTTP endpoints
 
 This means the current model is centered on **coarse-grained transport access control**, not fine-grained authorization.
 
 At a high level:
 
-- authentication is available at the HTTP boundary
+- authentication is expected at the reverse-proxy or auth-gateway boundary
 - debug endpoint exposure is configurable
 - secrets are expected to be supplied through environment-based configuration
 - production deployments are expected to rely on reverse proxies and TLS
@@ -220,7 +220,7 @@ Requests sent to unexpected path shapes should be treated as `404 not_found` rat
 Operational cautions:
 
 1. treat these routes as state-changing operator actions, even though their current HTTP contract may be invoked through query-parameter-based requests
-2. protect them with the same bearer-auth boundary as other protected HTTP endpoints whenever HTTP auth is enabled
+2. protect them with the same proxy-layer authentication boundary as other protected HTTP endpoints whenever they are exposed
 3. avoid exposing them to untrusted callers, because a successful request can change whether open projection failures remain operationally visible
 4. prefer routing them only through trusted operator paths such as an authenticated reverse proxy, VPN, private network, or equivalent internal access boundary
 5. do not treat `projection_failures_ignore` as a repair mechanism; it closes visibility of matching open failures without claiming successful projection recovery
@@ -233,7 +233,7 @@ Operational cautions:
 Representative observability guidance includes:
 
 - log which exact action path was requested
-- log whether bearer authentication succeeded or failed
+- log whether proxy-layer authentication succeeded or failed
 - log the HTTP response status returned for the action request
 - treat `workspace_id`, `workflow_instance_id`, and optional `projection_type` as sensitive operational identifiers that may appear in access logs
 - prefer structured logs or proxy fields that make operator-triggered closure events easy to correlate during incident review
@@ -250,7 +250,7 @@ forwarded_host=ctxledger.internal request_id=req_123 operator.subject=ops-user-7
 This kind of logging should make it possible to distinguish at least:
 
 - successful operator-triggered ignore/resolve actions
-- rejected requests caused by bearer-auth failure
+- rejected requests caused by proxy-auth failure
 - invalid-path `404 not_found` responses caused by proxy or caller path mismatch
 - validation-driven `400 invalid_request` responses caused by malformed or missing selector fields
 

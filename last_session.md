@@ -217,6 +217,26 @@ large pattern documentation prep:
   - implementation sequence における design-prep baseline
   を明記しました。
 
+docs consistency cleanup:
+- large-pattern memo 追加後の wording 整合性を追加確認しました。
+- `docs/SECURITY.md` を再調整し、
+  - current security boundary を app-layer bearer auth ではなく proxy-layer auth と明記
+  - projection failure action routes の保護・観測の説明を proxy-layer wording に統一
+  - security review guidance も proxy-first 前提へ寄せる方向を確認しました。
+- `docs/deployment.md` を再調整し、
+  - recommended production topology の auth 表現を proxy-layer authentication handling strategy に更新
+  - projection failure action routes の保護説明を bearer-auth boundary ではなく proxy-layer authentication boundary に更新
+  - deployment/security セクション全体が proxy-only auth model と矛盾しないよう整合性を取りました。
+- `docs/CHANGELOG.md` の unreleased note も追従し、
+  - `/debug/*` route protection の説明を proxy-layer authentication boundary に更新しました。
+- `docs/imple_plan_0.1.0.md` に残っていた旧 auth wording も軽く整理し、
+  - `config.py` responsibilities の auth token configuration を proxy/auth-gateway integration expectations に更新
+  - recommended env vars の bearer token 固定記述を proxy-layer auth secret / gateway credential 方向へ更新
+  - security plan の minimum security を reverse-proxy or auth-gateway enforcement 前提に更新
+  - task breakdown の `auth hook` を `proxy/auth boundary integration` に更新しました。
+- この cleanup により、large-pattern memo 追加後の docs 群はより一貫して **proxy-only auth / proxy-first security boundary** を前提に読める状態になっています。
+- なお `docs/imple_plan_0.1.0.md` は historical planning document 的な性格もあるため、今後さらに厳密に current-state aligned wording へ寄せるかどうかは別途判断余地があります。
+
 次 session への引き継ぎ候補:
 - `last_session.md` 自体の更新を実ファイルへ反映する
 - `git status` を見て今回の doc 変更を確認する

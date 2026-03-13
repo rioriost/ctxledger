@@ -101,7 +101,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `workflow_closed_projection_failures`
   - `projection_failures_ignore`
   - `projection_failures_resolve`
-- `/debug/*` routes now follow the same bearer-auth boundary as other protected HTTP endpoints when HTTP auth is enabled
+- `/debug/*` routes now follow the same proxy-layer authentication boundary as other protected HTTP endpoints in the documented proxy-only auth model
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` now removes `/debug/*` from HTTP route registration entirely rather than relying on handler-level fallback behavior
 - documentation updated in:
   - `README.md`

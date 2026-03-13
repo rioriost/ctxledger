@@ -576,7 +576,7 @@ Also define:
 - application settings object
 - database connection settings
 - server host/port settings
-- auth token configuration
+- proxy/auth-gateway integration expectations
 - projection toggle/config
 - log level
 
@@ -586,7 +586,7 @@ Also define:
 - `CTXLEDGER_HOST`
 - `CTXLEDGER_PORT`
 - `CTXLEDGER_TRANSPORT`
-- `CTXLEDGER_AUTH_BEARER_TOKEN`
+- proxy-layer auth secret or gateway credential configuration
 - `CTXLEDGER_ENABLE_HTTP`
 - `CTXLEDGER_PROJECTION_ENABLED`
 
@@ -765,8 +765,8 @@ After startup, the documented MCP endpoint should be available at:
 
 Implement at least:
 
-- bearer-token authentication hook or middleware
-- configuration-driven token
+- reverse-proxy or auth-gateway enforcement in front of non-private HTTP deployments
+- configuration that supports proxy-layer secret or gateway credential management
 - disabled-by-default or explicit-dev-mode behavior only for local development
 
 ## 13.2 Deferred Security
@@ -1001,7 +1001,7 @@ The first merge should prioritize a **correct, durable workflow kernel**.
 - Docker Compose completion
 - health checks
 - logging
-- auth hook
+- proxy/auth boundary integration
 
 ### Task Group 7 — Quality
 - unit tests
