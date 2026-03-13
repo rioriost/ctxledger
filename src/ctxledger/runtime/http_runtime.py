@@ -96,7 +96,7 @@ class HttpRuntimeAdapter:
             raise KeyError(route_name)
         return handler
 
-    def registered_routes(self) -> tuple[str, ...]:
+    def introspection_endpoints(self) -> tuple[str, ...]:
         return tuple(sorted(self._handlers.keys()))
 
     def registered_tools(self) -> tuple[str, ...]:
@@ -192,7 +192,7 @@ class HttpRuntimeAdapter:
     def introspect(self) -> RuntimeIntrospection:
         return RuntimeIntrospection(
             transport="http",
-            routes=self.registered_routes(),
+            routes=self.introspection_endpoints(),
             tools=self.registered_tools(),
             resources=self.registered_resources(),
         )
@@ -232,7 +232,7 @@ class HttpRuntimeAdapter:
                 "port": self.settings.http.port,
                 "path": self.settings.http.path,
                 "mcp_url": self.settings.http.mcp_url,
-                "registered_routes": list(self.registered_routes()),
+                "introspection_endpoints": list(self.introspection_endpoints()),
             },
         )
         self._started = True
@@ -247,7 +247,7 @@ class HttpRuntimeAdapter:
                 "transport": "http",
                 "host": self.settings.http.host,
                 "port": self.settings.http.port,
-                "registered_routes": list(self.registered_routes()),
+                "introspection_endpoints": list(self.introspection_endpoints()),
             },
         )
         self._started = False

@@ -1720,7 +1720,7 @@ def test_http_runtime_adapter_dispatches_registered_workflow_resume_handler() ->
     assert response.payload == serialize_workflow_resume(resume)
     assert response.headers == {"content-type": "application/json"}
     assert runtime.handler("workflow_resume") is not None
-    assert runtime.registered_routes() == ("workflow_resume",)
+    assert runtime.introspection_endpoints() == ("workflow_resume",)
 
 
 def test_http_runtime_adapter_returns_404_for_unregistered_route() -> None:
@@ -1753,7 +1753,7 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
     runtime = build_http_runtime_adapter(server)
 
     assert isinstance(runtime, HttpRuntimeAdapter)
-    assert runtime.registered_routes() == (
+    assert runtime.introspection_endpoints() == (
         "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
@@ -2133,7 +2133,7 @@ def test_http_workflow_resume_route_requires_bearer_token_when_auth_is_enabled()
     runtime = build_http_runtime_adapter(server)
 
     assert isinstance(runtime, HttpRuntimeAdapter)
-    assert runtime.registered_routes() == (
+    assert runtime.introspection_endpoints() == (
         "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
@@ -2702,7 +2702,7 @@ def test_http_debug_routes_require_bearer_token_when_auth_is_enabled() -> None:
     )
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
-    assert server.runtime.registered_routes() == (
+    assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
@@ -2788,7 +2788,7 @@ def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
     )
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
-    assert server.runtime.registered_routes() == (
+    assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
@@ -4145,7 +4145,7 @@ def test_http_runtime_adapter_introspect_returns_registered_routes() -> None:
 
     assert isinstance(introspection, RuntimeIntrospection)
     assert introspection.transport == "http"
-    assert introspection.routes == ("workflow_resume",)
+    assert introspection.routes == runtime.introspection_endpoints()
     assert introspection.tools == (
         "memory_get_context",
         "memory_remember_episode",
@@ -4605,7 +4605,7 @@ def test_build_http_runtime_adapter_omits_runtime_introspection_route_when_debug
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert server.runtime.handler("runtime_introspection") is None
-    assert server.runtime.registered_routes() == (
+    assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
@@ -4896,7 +4896,7 @@ def test_build_http_runtime_adapter_omits_runtime_routes_handler_when_debug_endp
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert server.runtime.handler("runtime_routes") is None
-    assert server.runtime.registered_routes() == (
+    assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",
@@ -5013,7 +5013,7 @@ def test_build_http_runtime_adapter_omits_runtime_tools_handler_when_debug_endpo
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert server.runtime.handler("runtime_tools") is None
-    assert server.runtime.registered_routes() == (
+    assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
         "projection_failures_ignore",
         "projection_failures_resolve",

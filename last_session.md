@@ -38,11 +38,19 @@
 - さらに `src/ctxledger/runtime/server_responses.py` に残っていた `server.py` への response type backref を整理しました。
 - `build_workspace_resume_resource_response()` と `build_workflow_detail_resource_response()` が `from ..server import McpResourceResponse` を使っていたため、これを canonical な `ctxledger.runtime.types.McpResourceResponse` 参照へ変更しました。
 - これにより、server response builder 群は response DTO 型について `server.py` を経由しない構成になり、response type の dependency direction もより自然になりました。
-- 今回さらに debug/introspection response の組み立てを serializer 側の表現へ寄せました。
+- さらに debug/introspection response の組み立てを serializer 側の表現へ寄せました。
 - `src/ctxledger/runtime/server_responses.py` の `build_runtime_routes_response()` と `build_runtime_tools_response()` は、生の introspection object から直接 dict を組み立てるのではなく、`serialize_runtime_introspection()` の出力を使って `transport` / `routes` / `tools` を切り出す形に変更しました。
 - これにより debug response も introspection serializer の表現と揃い、routes/tools/debug payload の shape 変更が将来入った場合でも追従点が減る形になりました。
 - `build_runtime_introspection_response()` はもともと `serialize_runtime_introspection_collection()` を通していたため、今回の変更で debug introspection family 全体の表現がより一貫しました。
-- `tests/test_server.py` を再実行し、この serializer alignment 後も debug/runtime response の既存期待値が維持されていることを確認しました。
+- 今回さらに route registry の naming を introspection responsibility に寄せました。
+- `src/ctxledger/runtime/http_runtime.py` の `registered_routes()` を `introspection_endpoints()` に改名しました。
+- `HttpRuntimeAdapter.introspect()` は `routes=self.introspection_endpoints()` を返す形へ更新され、route registry が「HTTP dispatch 全般の公開 API」ではなく「runtime introspection に載せる endpoint 集合」であることがメソッド名から明確になりました。
+- `HttpRuntimeAdapter.start()` / `stop()` の logging extras も `registered_routes` ではなく `introspection_endpoints` キーで出す形に変更しました。
+- `src/ctxledger/runtime/protocols.py` の `HttpRuntimeAdapterProtocol` も `registered_routes()` ではなく `introspection_endpoints()` を要求する shape に更新しました。
+- `tests/test_server.py` で route registry を直接確認していた箇所も `registered_routes()` から `introspection_endpoints()` へ追従しました。
+- `test_http_runtime_adapter_introspect_returns_registered_routes()` では、固定 tuple 直書きではなく `runtime.introspection_endpoints()` と `introspection.routes` が一致することを確認する形に変更し、registry naming cleanup 後の意図に寄せました。
+- これにより route registry は、実装上は `_handlers` の key 集合を返しつつも、外向きには introspection/debug 用 surface であることがより明確になりました。
+- `tests/test_server.py` を再実行し、この naming/責務整理後も既存の debug/runtime/introspection 挙動が維持されていることを確認しました。
 
 今回確認したテスト結果:
 - `pytest -q tests/test_server.py`
@@ -62,7 +70,7 @@
 - `d7d2284` — `Inline server bootstrap helper flow`
 - `28de53a` — `Prune unused runtime server factory helper`
 - `0ad5419` — `Use runtime response types directly in server responses`
-- debug/runtime response の serializer alignment 変更は、まだ commit していません。
+- route registry の introspection-oriented rename 変更は、まだ commit していません。
 
 現時点での設計メモ:
 - `server.py` から concrete HTTP adapter 実装が抜けたことで、bootstrap surface と runtime implementation の境界がかなり自然になりました。
@@ -73,17 +81,17 @@
 - `server.py` の `__all__` は `CtxLedgerServer` / `create_server` / `run_server` のみに絞られ、意図しない compatibility barrel 的役割はかなり薄くなりました。
 - `create_server` はまだ `server.py` が自然な public 窓口です。CLI や app factory の import point としても扱いやすい状態です。
 - `tests/test_cli.py` では `ctxledger.server.run_server` を monkeypatch しているため、`run_server` は現時点では `server.py` の public surface に残しておく方が安全です。
-- `registered_routes()` は依然として debug/introspection で使われており、単純削除ではなく introspection responsibility とセットで整理すべきです。
+- 旧 `registered_routes()` は introspection/debug 用責務を示しきれていなかったため、`introspection_endpoints()` への rename により意図はかなり明確になりました。
+- route registry 自体は依然として `_handlers` の key 集合を返しており、runtime introspection がこれを `routes` として公開する設計は維持されています。
 - `mcp/tool_handlers.py` 側の `McpToolResponse` 参照が canonical `runtime.types` に寄ったので、MCP response types の dependency direction はより自然になりました。
-- `server.py` に残っていた internal bridge helperがなくなったことで、server bootstrap の責務と call graph はさらに単純化されました。
+- `server.py` に残っていた internal bridge helper がなくなったことで、server bootstrap の責務と call graph はさらに単純化されました。
 - `runtime.server_factory.py` は `build_workflow_service_factory()` のみを提供する最小 module になり、server bootstrap helper の旧 layering artifact はさらに減りました。
-- `runtime.server_responses.py` からも remaining `server.py` 経由の response type import が外れたため、response DTO layer の canonical location は `runtime.types` にほぼ揃いました。
-- debug routes/tools response も serializer ベースの表現へ揃ったため、runtime introspection 系の payload 変換責務は以前より一貫しています。
+- `runtime.server_responses.py` からも remaining `server.py` 経由の response type import が外れ、debug routes/tools response も serializer ベースの表現へ揃ったため、runtime introspection 系の payload 変換責務は以前より一貫しています。
 
 次セッションで優先してやること:
-1. 今回の debug/runtime response の serializer alignment 変更を descriptive commit にまとめる
-2. `registered_routes()` と debug/introspection surface の責務整理を進める
-3. 必要なら `tests/test_cli.py` や他の周辺 test も含めて import surface 変更の波及を確認する
-4. 変更がまとまった段階で `pytest -q` を全体実行して回帰確認する
-5. `tests/test_cli.py` の patch 対象も含め、`server.py` の public API をどこまで意図的に残すかを最終的に決める
-6. 問題なければ cleanup の次の descriptive commit を作成する
+1. 今回の route registry の introspection-oriented rename 変更を descriptive commit にまとめる
+2. 必要なら `tests/test_cli.py` や他の周辺 test も含めて naming 変更の波及を確認する
+3. 変更がまとまった段階で `pytest -q` を全体実行して回帰確認する
+4. `tests/test_cli.py` の patch 対象も含め、`server.py` の public API をどこまで意図的に残すかを最終的に決める
+5. 問題なければ cleanup の次の descriptive commit を作成する
+6. その後、HTTP-only cleanup の残タスクがあれば `docs/plans/http_fastapi_cleanup_plan.md` と照らして次の pruning 候補を決める
