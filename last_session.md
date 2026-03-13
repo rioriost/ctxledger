@@ -370,6 +370,22 @@ docs consistency cleanup:
   - `docs/plans/auth_proxy_scaling_plan.md`
   - `docs/plans/auth_large_gateway_evaluation_memo.md`
   を追加済みであり、必要なら次は plans index や contributing guidance からの導線強化を検討する
+- auth/deployment planning materials の導線をさらに整理するため、`docs/plans/auth_planning_index.md` を新規追加しました。
+  - current auth model
+  - small vs large pattern
+  - operator runbook
+  - evaluation memo
+  - future decision-record template
+  の reading order と quick reference を 1 枚にまとめています。
+- `docs/CONTRIBUTING.md` も実質的な guide に拡張し、
+  - core docs
+  - MCP planning docs
+  - auth/deployment docs
+  の recommended reading order
+  - proxy-first auth model を壊さないための caution
+  - small auth / proxy work で期待される validation flow
+  - auth/deployment docs map
+  を追記しました。
 - large-pattern design prep をさらに進めるなら、`docs/plans/auth_large_gateway_decision_record_template.md` を起点に、candidate evaluation memo から actual selection record へ移るときの ADR/decision-record 運用を整える
 - `README.md` の documentation index には auth/deployment guidance 導線として
   - `docs/small_auth_operator_runbook.md`
