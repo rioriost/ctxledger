@@ -12,6 +12,8 @@ This plan is intentionally focused on cleanup and simplification. It does not pr
 
 ## 2. Current Situation
 
+**Progress note:** Much of the cleanup described in this plan has now been implemented. The main remaining follow-up is to review whether any further simplification is needed around runtime introspection/debug surface naming and to confirm the plan is fully reflected by the final public API shape.
+
 At a high level, the current implementation has these relevant parts:
 
 - `src/ctxledger/http_app.py`
@@ -96,6 +98,10 @@ That is likely unnecessary now.
 
 Move route ownership to FastAPI and call concrete handler functions directly from the app layer.
 
+### Status
+
+Implemented. FastAPI now owns direct HTTP route execution, and the earlier route-name dispatch path is no longer the primary FastAPI execution flow.
+
 ---
 
 ## 5.2 `server.py` has become a compatibility-heavy surface
@@ -129,6 +135,16 @@ Reduce `server.py` to the true application surface:
 
 Move callers to import handler/response helpers from their real modules.
 
+### Status
+
+Largely implemented. `server.py` has been reduced to a much smaller bootstrap/entrypoint surface, and most callers/tests now import canonical runtime modules directly. The intended public surface is now close to:
+
+- `CtxLedgerServer`
+- `create_server`
+- `run_server`
+
+Remaining follow-up: confirm whether this surface should be treated as final and whether any additional internal helpers should move again in future work.
+
 ---
 
 ## 5.3 Runtime adapter responsibilities are mixed
@@ -159,6 +175,14 @@ Retain only the responsibilities that are still useful after FastAPI directly ow
 
 Remove internal HTTP route-table dispatch if no longer needed.
 
+### Status
+
+Mostly implemented. The runtime adapter is no longer acting as the main FastAPI router, and its concrete implementation now lives in `runtime/http_runtime.py`. Internal dispatch scaffolding has been reduced.
+
+Follow-up remains around introspection naming and semantics:
+- the old `registered_routes()` naming has been tightened toward an introspection-oriented meaning
+- further review may still be useful to decide whether the current introspection endpoint registry should remain exactly as-is
+
 ---
 
 ## 5.4 Server binding is performed through private attribute mutation
@@ -174,6 +198,10 @@ There is currently logic that assigns a server object to the runtime through a p
 ### Cleanup direction
 
 Construct the runtime with the dependencies it actually needs instead of patching them in afterward.
+
+### Status
+
+Implemented. Private post-construction patching was removed and runtime/server wiring is now explicit at construction time.
 
 ---
 
@@ -196,6 +224,10 @@ When only one transport is supported, carrying both concepts is likely unnecessa
 
 Simplify configuration toward a single HTTP-only shape.
 
+### Status
+
+Implemented. The settings model has been simplified to reflect HTTP-only operation.
+
 ---
 
 ## 5.6 Import-time application startup should be reviewed
@@ -213,6 +245,10 @@ If startup work such as logging setup, database ping, or schema validation happe
 ### Cleanup direction
 
 Prefer an explicit FastAPI lifespan-managed startup/shutdown flow if practical.
+
+### Status
+
+Implemented. Startup and shutdown were moved away from import-time behavior and aligned with explicit FastAPI lifespan management.
 
 ---
 
@@ -283,6 +319,10 @@ Document the intended cleanup so further changes move toward simplification rath
 - cleanup direction is documented
 - implementation work can proceed in small PR-sized steps
 
+### Status
+
+Completed.
+
 ---
 
 ## Workstream 2 — Remove duplicate HTTP route dispatch
@@ -307,6 +347,10 @@ An app layer where FastAPI routes directly invoke MCP and workflow HTTP handlers
 - HTTP requests no longer require a second route table
 - route behavior remains equivalent from the client point of view
 
+### Status
+
+Completed.
+
 ---
 
 ## Workstream 3 — Shrink `server.py`
@@ -330,6 +374,10 @@ A smaller `server.py` with clearer ownership boundaries.
 
 - most HTTP helper imports no longer come from `ctxledger.server`
 - `server.py` mainly contains server lifecycle and assembly code
+
+### Status
+
+Completed in practice, with a small final follow-up to confirm the intended long-term public API shape.
 
 ---
 
@@ -356,6 +404,10 @@ A runtime adapter whose responsibilities match its actual purpose.
 - the adapter is no longer a second HTTP router
 - remaining methods represent real runtime behavior, not compatibility scaffolding
 
+### Status
+
+Mostly completed. The adapter is no longer the main FastAPI router. Remaining follow-up is limited to introspection/debug responsibility review rather than major structural cleanup.
+
 ---
 
 ## Workstream 5 — Remove private runtime patching
@@ -378,6 +430,10 @@ A runtime/server relationship that is explicit during construction.
 
 - no private field patching is needed to finish server wiring
 - initialization order is easy to follow
+
+### Status
+
+Completed.
 
 ---
 
@@ -404,6 +460,10 @@ A cleaner HTTP-only settings model.
 - configuration does not express unsupported transport complexity
 - validation logic is simpler and clearer
 
+### Status
+
+Completed.
+
 ---
 
 ## Workstream 7 — Align startup with FastAPI lifecycle
@@ -427,6 +487,10 @@ A FastAPI app whose operational lifecycle is explicit and framework-aligned.
 
 - startup is not hidden in module import side effects unless intentionally preserved
 - shutdown is also handled explicitly
+
+### Status
+
+Completed.
 
 ---
 
@@ -519,6 +583,8 @@ Do not remove the route table until introspection behavior is accounted for.
 
 ## 11. Expected End State
 
+**Current assessment:** The codebase appears to be very close to this intended end state. The main remaining work is not broad architectural cleanup anymore, but validating whether the current runtime introspection/debug surface naming and final public API boundaries should be considered stable.
+
 After this cleanup, the codebase should have these properties:
 
 - FastAPI routes are straightforward to trace
@@ -532,9 +598,9 @@ After this cleanup, the codebase should have these properties:
 
 ## 12. Immediate Next Actions
 
-1. add this plan document
-2. refactor `http_app.py` so FastAPI routes call concrete HTTP handler functions directly
-3. update tests away from `ctxledger.server` compatibility wrappers where practical
-4. remove the first batch of dead or thin delegating functions from `server.py`
-5. run the focused server and HTTP test suites
-6. iterate on runtime simplification once direct route execution is stable
+1. compare this plan with the current implementation and confirm no major cleanup workstreams remain open
+2. decide whether the current runtime introspection/debug surface naming should be kept as the long-term shape
+3. confirm the intended public API boundary of `server.py`
+4. run the full test suite after any final cleanup touch-ups
+5. if no new cleanup items are found, treat this HTTP-only cleanup stream as substantially complete
+6. move on to the next feature or maintenance task
