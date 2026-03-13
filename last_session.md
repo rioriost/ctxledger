@@ -1,11 +1,11 @@
-stdio removal patch 1E の続きとして、今回は **final verification sweep の状態を引き継ぐための最終メモ** を残します。patch 1A の config/orchestration HTTP-only 化、patch 1B の server/module/CLI cleanup、patch 1C の legacy stdio module 削除、patch 1D の residual protocol/introspection/docs cleanup を前提に、現時点では **HTTP-only migration はほぼ完了、残タスクは closeout wording と release-evidence 整理が中心** という段階です。
+final HTTP-only sweep の続きとして、今回は **session handoff 用に最終状態を簡潔に記録するメモ** を残します。patch 1A の config/orchestration HTTP-only 化、patch 1B の server/module/CLI cleanup、patch 1C の legacy stdio module 削除、patch 1D の protocol/introspection/docs cleanup、patch 1E の planning/review docs 整理を土台にして、現時点では **stdio removal は実質完了、残りは final acceptance framing と必要なら broader MCP proof の整理** という段階です。
 
-このセッション終端での要点:
+このセッション終端で引き継ぐべき要点:
 
 - active runtime / transport semantics は HTTP-only
 - stdio concrete implementation は source tree から削除済み
-- public facade / runtime helpers / README / deployment/security/architecture docs の主要面は HTTP-only に寄っている
-- planning / review docs 側の historical wording もかなり整理された
+- main source / tests / primary docs は HTTP-only wording と behavior にほぼ整合
+- review / implementation-plan docs もかなり HTTP-only 現状へ寄せた
 - 直近の確認済み baseline は:
   - `tests/test_config.py`
   - `tests/test_server.py`
@@ -13,13 +13,12 @@ stdio removal patch 1E の続きとして、今回は **final verification sweep
   - `tests/test_cli.py`
   - `tests/test_postgres_integration.py`
   - **204 passed**
-- 現在の未解決点は「stdio removal そのもの」より、
-  - final HTTP acceptance wording
-  - release evidence framing
-  - 必要なら broader MCP resource proof
+- 現在の open question は stdio removal そのものではなく、
+  - minimal HTTP MCP path で `v0.1.0` acceptance として十分か
+  - `resources/list` / `resources/read` など broader HTTP MCP surface proof が必要か
   の整理
 
-## 1. ここまでの patch progression の最終整理
+## 1. patch progression の最終整理
 
 ### patch 1A
 - `src/ctxledger/config.py` を HTTP-only semantics に変更
@@ -35,7 +34,7 @@ stdio removal patch 1E の続きとして、今回は **final verification sweep
 - `tests/test_server.py`
 - `tests/test_mcp_modules.py`
 - `tests/test_cli.py`
-を HTTP-only semantics に追従
+  を HTTP-only semantics に追従
 - これらは **167 passed**
 
 ### patch 1C
@@ -54,16 +53,16 @@ stdio removal patch 1E の続きとして、今回は **final verification sweep
 - `docs/architecture.md`
 - `docs/deployment.md`
 - `docs/SECURITY.md`
-を HTTP-only wording に寄せた
+  を HTTP-only wording に寄せた
 - baseline は **204 passed** を維持
 
 ### patch 1E
 - `docs/imple_plan_0.1.0.md` を HTTP-only runtime direction に寄せた
-- `docs/imple_plan_review_0.1.0.md` の review narrative を HTTP-only 現状に合わせて大きく整理
-- deployment / architecture docs に残っていた stale `stdio` references をさらに削除
+- `docs/imple_plan_review_0.1.0.md` の review narrative を HTTP-only 現状に合わせて整理
+- `docs/mcp-api.md` の stdio-centric explanation をかなり除去
 - baseline は引き続き **204 passed**
 
-## 2. 現時点の confirmed baseline
+## 2. confirmed baseline
 
 現時点で handoff 向けに明示してよい baseline:
 
@@ -83,8 +82,6 @@ stdio removal patch 1E の続きとして、今回は **final verification sweep
 - PostgreSQL integration でも stale stdio env 前提が除去済み
 
 ## 3. 現在の architecture / transport interpretation
-
-現時点の runtime / transport 解釈は次で問題ありません。
 
 ### active transport
 - `http` のみ
@@ -138,13 +135,13 @@ stdio removal patch 1E の続きとして、今回は **final verification sweep
 - `docs/SECURITY.md`
 - `docs/imple_plan_0.1.0.md`
 - `docs/imple_plan_review_0.1.0.md`
+- `docs/mcp-api.md`
 
 ## 5. まだ見てよい final sweep 対象
 
 source / main tests の stdio removal はかなり終わっています。ここから見る価値があるのは主に residual docs と final acceptance framing です。
 
 ### likely residual historical docs
-- `docs/mcp-api.md`
 - `docs/workflow-model.md`
 - `docs/memory-model.md`
 - `docs/design-principles.md`
@@ -213,8 +210,8 @@ source / main tests の stdio removal はかなり終わっています。ここ
    - `TransportMode.STDIO`
    - `TransportMode.BOTH`
    を最終探索
-2. `docs/mcp-api.md` など未確認 docs の HTTP-only wording を必要なら更新
-3. `.env.example` / `.env.production.example` の実内容が README examples と一致しているか確認
+2. `docs/workflow-model.md`, `docs/memory-model.md`, `docs/design-principles.md`, `docs/roadmap.md` の residual wording を必要なら更新
+3. `.env.example` / `.env.production.example` の実内容が README examples と一致しているか最終確認
 4. 可能なら project-wide test run で final baseline を確定
 5. `v0.1.0` acceptance boundary を短く整理
    - minimal HTTP MCP path confirmed

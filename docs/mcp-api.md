@@ -69,7 +69,7 @@ Examples:
 
 Tool argument discovery is implemented through `tools/list`, which now returns concrete `inputSchema` payloads for the visible tool surface.
 
-The strongest current repository evidence is for this discovery flow over the primary HTTP MCP path at `/mcp`, with stdio remaining useful as a supporting and development-oriented surface.
+The strongest current repository evidence is for this discovery flow over the primary HTTP MCP path at `/mcp`.
 
 Representative `tools/list` response fragment:
 
@@ -141,7 +141,7 @@ Implemented in the current repository runtime surface as supporting MCP resource
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-These resources are currently more strongly evidenced on the stdio side than on the primary HTTP MCP path.
+These resources are currently implemented as workflow-oriented read surfaces alongside the primary HTTP MCP path.
 
 Not yet implemented and still future-facing/stubbed as resources:
 
@@ -343,8 +343,8 @@ This is the main acceptance surface for `v0.1.0`.
 
 ### Supporting scope note
 
-The repository still contains stdio MCP support and stdio-visible tool/resource coverage.  
-That support remains useful for development and internal validation, but it should be treated as supporting scope rather than as the primary release evidence surface.
+The primary release evidence surface is the HTTP MCP path at `/mcp`.  
+Any broader MCP coverage should be evaluated as additional HTTP acceptance evidence rather than as a separate transport story.
 
 ---
 
@@ -364,7 +364,7 @@ Tool
 - reject ambiguous path or repository URL conflicts
 
 ### Expected Inputs
-Implemented stdio MCP `inputSchema` fields:
+Implemented MCP `inputSchema` fields:
 
 Required:
 - `repo_url` (`string`)
@@ -416,7 +416,7 @@ Tool
 - create initial attempt
 
 ### Expected Inputs
-Implemented stdio MCP `inputSchema` fields:
+Implemented MCP `inputSchema` fields:
 
 Required:
 - `workspace_id` (`string`, UUID format)
@@ -469,7 +469,7 @@ Tool
 - optionally trigger repository projection regeneration after commit
 
 ### Expected Inputs
-Implemented stdio MCP `inputSchema` fields:
+Implemented MCP `inputSchema` fields:
 
 Required:
 - `workflow_instance_id` (`string`, UUID format)
@@ -532,12 +532,12 @@ Tool with read semantics
 - return composite resume view
 
 ### Expected Inputs
-Implemented stdio MCP `inputSchema` fields:
+Implemented MCP `inputSchema` fields:
 
 Required:
 - `workflow_instance_id` (`string`, UUID format)
 
-Current stdio MCP schema does not expose additional optional arguments for this tool.
+The current MCP schema does not expose additional optional arguments for this tool.
 
 ### Canonical Persistence
 Read-only operation on:
@@ -853,7 +853,7 @@ It may also:
 - attach failure or cancellation context
 
 ### Expected Inputs
-Implemented stdio MCP `inputSchema` fields:
+Implemented MCP `inputSchema` fields:
 
 Required:
 - `workflow_instance_id` (`string`, UUID format)
@@ -1056,7 +1056,6 @@ Return dependency-aware service readiness.
 - `started`
 - `database_configured`
 - `http_enabled`
-- `stdio_enabled`
 - `workflow_service_initialized`
 - `runtime`
 - `database_reachable` (when checked)
@@ -1082,7 +1081,6 @@ Return dependency-aware service readiness.
     "started": true,
     "database_configured": true,
     "http_enabled": true,
-    "stdio_enabled": false,
     "workflow_service_initialized": true,
     "runtime": [
       {
@@ -1127,7 +1125,7 @@ Expose both registered HTTP routes and registered MCP tools for each active tran
 }
 ```
 
-If both HTTP and stdio are enabled, a stdio entry is also returned.
+The current runtime surface returns the active HTTP runtime entry.
 
 ### `/debug/routes`
 
@@ -1172,19 +1170,7 @@ Filter runtime introspection down to tool registrations.
 
 ```/dev/null/json#L1-14
 {
-  "tools": [
-    {
-      "transport": "stdio",
-      "tools": [
-        "memory_get_context",
-        "memory_remember_episode",
-        "memory_search",
-        "projection_failures_ignore",
-        "projection_failures_resolve",
-        "resume_workflow"
-      ]
-    }
-  ]
+  "tools": []
 }
 ```
 
@@ -1201,8 +1187,6 @@ Typical content includes:
 - `readiness=...`
 - `runtime=[...]`
 - `mcp_endpoint=...` when HTTP is enabled
-- `stdio_transport=enabled` when stdio is enabled
-
 ### Error behavior
 
 For invalid debug endpoint paths, the HTTP handler returns a normalized `404` payload with:
@@ -1220,7 +1204,7 @@ For invalid debug endpoint paths, the HTTP handler returns a normalized `404` pa
 Return the workspace-scoped current operational resume view.
 
 ### Implementation Status
-Implemented on the stdio MCP runtime surface in the current `v0.1.0` repository state.
+Implemented as a workflow-oriented read surface in the current `v0.1.0` repository state.
 
 ### Category
 Resource
@@ -1276,7 +1260,7 @@ Typical content:
 Return read-only detail for an exact workflow instance.
 
 ### Implementation Status
-Implemented on the stdio MCP runtime surface in the current `v0.1.0` repository state.
+Implemented as a workflow-oriented read surface in the current `v0.1.0` repository state.
 
 ### Category
 Resource
