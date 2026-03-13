@@ -1,0 +1,5 @@
+# Housekeeping
+- When a new session starts, read last_session.md first.
+- Keep last_session.md updated with your last response for the next session switched due to the limitation of context window
+- When a work loop is done, keep git repo up-to-date by running `git commit` with a descriptive message
+- ignore the status of .gitignore
