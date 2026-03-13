@@ -15,7 +15,6 @@ from ..workflow.service import (
     CreateCheckpointInput,
     ProjectionArtifactType,
     RegisterWorkspaceInput,
-    ResumeWorkflowInput,
     StartWorkflowInput,
     VerifyStatus,
     WorkflowError,

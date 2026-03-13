@@ -548,3 +548,452 @@ def test_create_checkpoint_raises_for_unknown_attempt() -> None:
         assert exc.code == "attempt_not_found"
     else:
         raise AssertionError("Expected AttemptNotFoundError")
+
+
+def test_register_workspace_updates_existing_workspace_with_explicit_workspace_id() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+
+    updated = service.register_workspace(
+        RegisterWorkspaceInput(
+            workspace_id=workspace.workspace_id,
+            repo_url=workspace.repo_url,
+            canonical_path=workspace.canonical_path,
+            default_branch="develop",
+            metadata={"team": "platform"},
+        )
+    )
+
+    assert updated.workspace_id == workspace.workspace_id
+    assert updated.repo_url == workspace.repo_url
+    assert updated.canonical_path == workspace.canonical_path
+    assert updated.default_branch == "develop"
+    assert updated.metadata == {"team": "platform"}
+    assert updated.created_at == workspace.created_at
+    assert updated.updated_at >= workspace.updated_at
+
+
+def test_register_workspace_rejects_repo_url_conflict_without_workspace_id() -> None:
+    service, _ = make_service_and_uow()
+    register_workspace(service)
+
+    try:
+        service.register_workspace(
+            RegisterWorkspaceInput(
+                repo_url="https://example.com/org/repo.git",
+                canonical_path="/tmp/another-repo",
+                default_branch="main",
+            )
+        )
+    except WorkspaceRegistrationConflictError as exc:
+        assert exc.code == "workspace_registration_conflict"
+        assert "repo_url" in str(exc)
+    else:
+        raise AssertionError("Expected WorkspaceRegistrationConflictError")
+
+
+def test_register_workspace_raises_when_explicit_workspace_id_is_unknown() -> None:
+    service, _ = make_service_and_uow()
+
+    try:
+        service.register_workspace(
+            RegisterWorkspaceInput(
+                workspace_id=uuid4(),
+                repo_url="https://example.com/org/repo.git",
+                canonical_path="/tmp/repo",
+                default_branch="main",
+            )
+        )
+    except WorkspaceNotFoundError as exc:
+        assert exc.code == "workspace_not_found"
+    else:
+        raise AssertionError("Expected WorkspaceNotFoundError")
+
+
+def test_register_workspace_rejects_canonical_path_belonging_to_another_workspace() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+    first = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-a.git",
+            canonical_path="/tmp/repo-a",
+            default_branch="main",
+        )
+    )
+    second = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-b.git",
+            canonical_path="/tmp/repo-b",
+            default_branch="main",
+        )
+    )
+
+    try:
+        service.register_workspace(
+            RegisterWorkspaceInput(
+                workspace_id=second.workspace_id,
+                repo_url=second.repo_url,
+                canonical_path=first.canonical_path,
+                default_branch=second.default_branch,
+            )
+        )
+    except WorkspaceRegistrationConflictError as exc:
+        assert exc.code == "workspace_registration_conflict"
+        assert "canonical_path belongs to another workspace" in str(exc)
+    else:
+        raise AssertionError("Expected WorkspaceRegistrationConflictError")
+
+
+def test_register_workspace_rejects_repo_url_belonging_to_another_workspace() -> None:
+    service, _ = make_service_and_uow()
+    first = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-a.git",
+            canonical_path="/tmp/repo-a",
+            default_branch="main",
+        )
+    )
+    second = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-b.git",
+            canonical_path="/tmp/repo-b",
+            default_branch="main",
+        )
+    )
+
+    try:
+        service.register_workspace(
+            RegisterWorkspaceInput(
+                workspace_id=second.workspace_id,
+                repo_url=first.repo_url,
+                canonical_path=second.canonical_path,
+                default_branch=second.default_branch,
+            )
+        )
+    except WorkspaceRegistrationConflictError as exc:
+        assert exc.code == "workspace_registration_conflict"
+        assert "repo_url belongs to another workspace" in str(exc)
+    else:
+        raise AssertionError("Expected WorkspaceRegistrationConflictError")
+
+
+def test_create_checkpoint_rejects_terminal_workflow() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(workspace_id=workspace.workspace_id, ticket_id="DONE")
+    )
+    service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+        )
+    )
+
+    try:
+        service.create_checkpoint(
+            CreateCheckpointInput(
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                step_name="after_terminal",
+            )
+        )
+    except InvalidStateTransitionError as exc:
+        assert exc.code == "invalid_state_transition"
+        assert "terminal workflow" in str(exc)
+    else:
+        raise AssertionError("Expected InvalidStateTransitionError")
+
+
+def test_create_checkpoint_rejects_terminal_attempt() -> None:
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(workspace_id=workspace.workspace_id, ticket_id="MANUAL")
+    )
+
+    terminal_attempt = WorkflowAttempt(
+        attempt_id=started.attempt.attempt_id,
+        workflow_instance_id=started.attempt.workflow_instance_id,
+        attempt_number=started.attempt.attempt_number,
+        status=WorkflowAttemptStatus.FAILED,
+        failure_reason="manual override",
+        verify_status=started.attempt.verify_status,
+        started_at=started.attempt.started_at,
+        finished_at=datetime(2024, 1, 1, tzinfo=UTC),
+        created_at=started.attempt.created_at,
+        updated_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    uow.attempts_by_id[terminal_attempt.attempt_id] = terminal_attempt
+
+    try:
+        service.create_checkpoint(
+            CreateCheckpointInput(
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                step_name="after_failed_attempt",
+            )
+        )
+    except InvalidStateTransitionError as exc:
+        assert exc.code == "invalid_state_transition"
+        assert "terminal attempt" in str(exc)
+    else:
+        raise AssertionError("Expected InvalidStateTransitionError")
+
+
+def test_record_resume_projection_raises_when_projection_repository_is_unavailable() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="NO-PROJECTION-REPO",
+        )
+    )
+
+    class MissingProjectionStateUow:
+        def __init__(self) -> None:
+            self.workspaces = SimpleNamespace(
+                get_by_id=lambda workspace_id: (
+                    workspace if workspace_id == workspace.workspace_id else None
+                )
+            )
+            self.workflow_instances = SimpleNamespace(
+                get_by_id=lambda workflow_instance_id: (
+                    started.workflow_instance
+                    if workflow_instance_id
+                    == started.workflow_instance.workflow_instance_id
+                    else None
+                )
+            )
+            self.projection_states = None
+
+        def __enter__(self) -> "MissingProjectionStateUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def commit(self) -> None:
+            return None
+
+        def rollback(self) -> None:
+            return None
+
+    unavailable_service = WorkflowService(lambda: MissingProjectionStateUow())
+
+    try:
+        unavailable_service.record_resume_projection(
+            RecordProjectionStateInput(
+                workspace_id=workspace.workspace_id,
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                status=ProjectionStatus.FRESH,
+                target_path=".agent/resume.json",
+            )
+        )
+    except Exception as exc:
+        assert "projection state repository is not available" in str(exc)
+    else:
+        raise AssertionError("Expected PersistenceError")
+
+
+def test_record_resume_projection_failure_raises_when_projection_repository_is_unavailable() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="NO-FAILURE-REPO",
+        )
+    )
+
+    class MissingProjectionFailureUow:
+        def __init__(self) -> None:
+            self.workspaces = SimpleNamespace(
+                get_by_id=lambda workspace_id: (
+                    workspace if workspace_id == workspace.workspace_id else None
+                )
+            )
+            self.workflow_instances = SimpleNamespace(
+                get_by_id=lambda workflow_instance_id: (
+                    started.workflow_instance
+                    if workflow_instance_id
+                    == started.workflow_instance.workflow_instance_id
+                    else None
+                )
+            )
+            self.projection_failures = None
+
+        def __enter__(self) -> "MissingProjectionFailureUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def commit(self) -> None:
+            return None
+
+        def rollback(self) -> None:
+            return None
+
+    unavailable_service = WorkflowService(lambda: MissingProjectionFailureUow())
+
+    try:
+        unavailable_service.record_resume_projection_failure(
+            RecordProjectionFailureInput(
+                workspace_id=workspace.workspace_id,
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                target_path=".agent/resume.json",
+                error_message="write failed",
+            )
+        )
+    except Exception as exc:
+        assert "projection failure repository is not available" in str(exc)
+    else:
+        raise AssertionError("Expected PersistenceError")
+
+
+def test_record_resume_projection_failure_rejects_empty_error_message() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="EMPTY-ERROR",
+        )
+    )
+
+    try:
+        service.record_resume_projection_failure(
+            RecordProjectionFailureInput(
+                workspace_id=workspace.workspace_id,
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                target_path=".agent/resume.json",
+                error_message="   ",
+            )
+        )
+    except Exception as exc:
+        assert getattr(exc, "code", None) == "validation_error"
+    else:
+        raise AssertionError("Expected validation_error for empty error_message")
+
+
+def test_resolve_resume_projection_failures_raises_when_projection_repository_is_unavailable() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="NO-RESOLVE-REPO",
+        )
+    )
+
+    class MissingProjectionFailureUow:
+        def __init__(self) -> None:
+            self.workspaces = SimpleNamespace(
+                get_by_id=lambda workspace_id: (
+                    workspace if workspace_id == workspace.workspace_id else None
+                )
+            )
+            self.workflow_instances = SimpleNamespace(
+                get_by_id=lambda workflow_instance_id: (
+                    started.workflow_instance
+                    if workflow_instance_id
+                    == started.workflow_instance.workflow_instance_id
+                    else None
+                )
+            )
+            self.projection_failures = None
+
+        def __enter__(self) -> "MissingProjectionFailureUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def commit(self) -> None:
+            return None
+
+        def rollback(self) -> None:
+            return None
+
+    unavailable_service = WorkflowService(lambda: MissingProjectionFailureUow())
+
+    try:
+        unavailable_service.resolve_resume_projection_failures(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+        )
+    except Exception as exc:
+        assert "projection failure repository is not available" in str(exc)
+    else:
+        raise AssertionError("Expected PersistenceError")
+
+
+def test_ignore_resume_projection_failures_raises_when_projection_repository_is_unavailable() -> (
+    None
+):
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="NO-IGNORE-REPO",
+        )
+    )
+
+    class MissingProjectionFailureUow:
+        def __init__(self) -> None:
+            self.workspaces = SimpleNamespace(
+                get_by_id=lambda workspace_id: (
+                    workspace if workspace_id == workspace.workspace_id else None
+                )
+            )
+            self.workflow_instances = SimpleNamespace(
+                get_by_id=lambda workflow_instance_id: (
+                    started.workflow_instance
+                    if workflow_instance_id
+                    == started.workflow_instance.workflow_instance_id
+                    else None
+                )
+            )
+            self.projection_failures = None
+
+        def __enter__(self) -> "MissingProjectionFailureUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def commit(self) -> None:
+            return None
+
+        def rollback(self) -> None:
+            return None
+
+    unavailable_service = WorkflowService(lambda: MissingProjectionFailureUow())
+
+    try:
+        unavailable_service.ignore_resume_projection_failures(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+        )
+    except Exception as exc:
+        assert "projection failure repository is not available" in str(exc)
+    else:
+        raise AssertionError("Expected PersistenceError")

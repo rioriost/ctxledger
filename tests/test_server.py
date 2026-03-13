@@ -72,8 +72,6 @@ from ctxledger.runtime.types import (
     ProjectionFailureActionResponse,
     ProjectionFailureHistoryResponse,
     ReadinessStatus,
-    RuntimeDispatchResult,
-    RuntimeIntrospectionResponse,
     WorkflowResumeResponse,
 )
 from ctxledger.server import (

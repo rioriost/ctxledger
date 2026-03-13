@@ -228,32 +228,6 @@ def test_db_statement_timeout_must_be_positive_when_set(
             load_settings()
 
 
-def test_db_connect_timeout_must_be_positive(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS"] = "0"
-
-    with patched_env(**env):
-        with pytest.raises(
-            ConfigError,
-            match="CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS must be greater than 0",
-        ):
-            load_settings()
-
-
-def test_db_statement_timeout_must_be_positive_when_set(
-    clean_ctxledger_env: None,
-) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"] = "-1"
-
-    with patched_env(**env):
-        with pytest.raises(
-            ConfigError,
-            match="CTXLEDGER_DB_STATEMENT_TIMEOUT_MS must be greater than 0",
-        ):
-            load_settings()
-
-
 def test_optional_statement_timeout_can_be_omitted(clean_ctxledger_env: None) -> None:
     env = minimum_valid_env()
     env["CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"] = None
