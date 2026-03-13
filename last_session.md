@@ -112,12 +112,22 @@
 - `server.py` に残っていた internal bridge helper がなくなったことで、server bootstrap の責務と call graph はさらに単純化されました。
 - `runtime.server_factory.py` は `build_workflow_service_factory()` のみを提供する最小 module になり、server bootstrap helper の旧 layering artifact はさらに減りました。
 - `runtime.server_responses.py` からも remaining `server.py` 経由の response type import が外れ、debug routes/tools response も serializer ベースの表現へ揃ったため、runtime introspection 系の payload 変換責務は以前より一貫しています。
+- `docs/plans/auth_proxy_scaling_plan.md` に、認証・認可の段階的方針を記録しました。
+- その plan では:
+  - small pattern は Traefik + custom lightweight auth service を先に実装する
+  - large pattern は cloud / multi-user / identity-aware gateway 前提で扱う
+  - ただし large pattern は roadmap `0.4` の後以降に着手する
+  - 現時点の `ctxledger` は multi-user authorization をまだ中心に据えた設計ではない
+  という整理を明示しています。
 - 現時点では HTTP-only cleanup の大きな pruning は一段落しており、Docker Compose 上の live remote MCP validation まで通っているため、この cleanup スレッドは実質完了扱いでよい状態です。
 
 次セッションで優先してやること:
-1. もし cleanup を正式にクローズするなら、`docs/plans/http_fastapi_cleanup_plan.md` に完了扱いの最終メモを加えるか検討する
-2. live Docker auth path (`docker/docker-compose.auth.yml`) でも必要なら追加 smoke を行う
-3. 新しい cleanup 候補がなければ、この HTTP-only cleanup スレッドは一区切りとして次の機能・改善タスクへ進む
-4. 追加変更を入れる場合は、変更後に `pytest -q` と必要な Docker smoke を再実行して回帰確認を維持する
-5. 問題なければ次の descriptive commit を作成する
-6. もし別トピックへ移るなら、この handoff を起点に新しい作業目標を定義する
+1. auth strategy については `docs/plans/auth_proxy_scaling_plan.md` を起点に進める
+2. 次の実装対象は small pattern:
+   - Traefik を front door に置く
+   - custom lightweight auth service を実装する
+   - `ctxledger` を proxy 背後の private backend として compose する
+3. large pattern は roadmap `0.4` の後以降の別フェーズとして扱う
+4. large pattern 着手時には、proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価する
+5. 追加変更を入れる場合は、変更後に `pytest -q` と必要な Docker smoke を再実行して回帰確認を維持する
+6. 問題なければ次の descriptive commit を作成する
