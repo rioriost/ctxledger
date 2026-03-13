@@ -12,6 +12,7 @@
 - 現在のテスト結果は `169 passed` です。
 - Git コミット:
   - `6df3f5f` — `Add FastAPI MCP runtime smoke validation`
+  - `3525158` — `Document MCP smoke workflow validation`
 
 確認済みのE2E結果:
 1. basic smoke validation
@@ -34,24 +35,44 @@
    - 実Docker上の PostgreSQL に対して、workflow 系の最小E2Eが通ることを確認済み
    - `workflow_complete` まで成功し、attempt は `succeeded`、workflow は `completed` になった
 
+3. workflow resource-read validation
+   - `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read`
+   - 成功確認:
+     - `resources/read` for `workspace://{workspace_id}/resume`
+     - `resources/read` for `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+   - 実在する workflow/workspace データに対して、resource read が live Docker server 上で成功することを確認済み
+
 README の更新内容:
 - FastAPI + uvicorn ベースの Docker 起動手順を反映
 - `/debug/runtime` による runtime wiring 確認手順を追加
-- `scripts/mcp_http_smoke.py` の basic / workflow シナリオの使い方を追記
+- `scripts/mcp_http_smoke.py` の basic / workflow / workflow-resource-read シナリオの使い方を追記
 - Python 直接起動の推奨手順を `uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080` に更新
+
+docs の更新内容:
+- `docs/deployment.md`
+  - FastAPI/uvicorn ベースの実HTTP serving 形態を反映
+  - Docker local deployment evidence を追記
+  - smoke validation コマンド例を追記
+  - `resources/read` を含む remote validation の説明を追記
+- `docs/v0.1.0_acceptance_evidence.md`
+  - Docker + FastAPI + minimum client による live remote MCP evidence を反映
+  - workflow tools と workflow resources の HTTP MCP E2E確認を反映
+  - `resources/list` / `resources/read` の confirmed 扱いを反映
+  - Docker local deployment works を Confirmed に寄せる更新を反映
 
 到達点:
 - Docker 上で remote MCP server として起動可能
-- minimum MCP client で `initialize` / `tools/list` / `tools/call` / `resources/list` を確認済み
+- minimum MCP client で `initialize` / `tools/list` / `tools/call` / `resources/list` / `resources/read` を確認済み
 - workflow 系 (`workspace_register`, `workflow_start`, `workflow_checkpoint`, `workflow_resume`, `workflow_complete`) も Docker + 実DB で確認済み
 - これにより、`v0.1.0` の remote MCP closeout に必要な最小確認ラインはかなり満たせている
 
 まだ残っていること:
-1. 必要なら `resources/read` を workflow scenario で実在する workflow/workspace に対して確認する
-2. 必要なら docs/deployment.md や docs/v0.1.0_acceptance_evidence.md に FastAPI / smoke validation の結果を反映する
-3. 作業区切りとして追加コミットする
+1. `docs/deployment.md` と `docs/v0.1.0_acceptance_evidence.md` の変更をコミットに含める
+2. 必要なら `docs/mcp-api.md` にも FastAPI / smoke validation の実運用手順を反映する
+3. 必要なら auth 有効時 (`CTXLEDGER_REQUIRE_AUTH=true`) の smoke validation も追加で確認する
+4. 作業区切りとして追加コミットする
 
 次セッションで優先してやること:
-- `resources/read` の実在データE2E確認
-- deployment / acceptance docs の更新
+- deployment / acceptance docs の変更を最終確認
+- auth 有効パスの E2E を必要に応じて追加
 - `last_session.md` を再確認してコミット

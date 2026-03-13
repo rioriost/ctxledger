@@ -18,6 +18,8 @@ In `v0.1.0`, the primary deployment target is a local Docker-based environment w
 - one `ctxledger` server
 - one PostgreSQL instance
 
+The currently evidenced local deployment path now runs `ctxledger` as a FastAPI application served by `uvicorn`, while preserving the existing MCP and HTTP dispatch behavior behind `/mcp`.
+
 ---
 
 ## 2. Deployment Principles
@@ -53,6 +55,7 @@ Responsibilities:
 
 ### `ctxledger`
 - MCP server
+- FastAPI/`uvicorn` HTTP application process
 - workflow control API
 - resource assembly
 - projection generation
@@ -94,6 +97,13 @@ The currently evidenced minimal HTTP MCP path supports:
 ### 4.2 Deployment Recommendation
 
 Use HTTP mode for normal deployment, including Docker-based local operation, and treat `/mcp` as the canonical MCP endpoint for `v0.1.0`.
+
+For the currently evidenced local runtime, the recommended concrete serving shape is:
+
+- FastAPI application wrapper
+- `uvicorn` process
+- MCP requests routed to `/mcp`
+- debug and workflow HTTP routes exposed alongside the MCP endpoint
 
 ---
 
@@ -195,7 +205,77 @@ Examples of critical configuration:
 - invalid host/port configuration
 - invalid debug endpoint exposure configuration
 
-## 6.2 Debug Endpoint Exposure Policy
+## 6.2 Deployment Evidence for Local HTTP Serving
+
+The repository now contains direct local-deployment evidence for a real remote HTTP MCP serving path.
+
+Current evidenced serving shape:
+
+- FastAPI application wrapper in `src/ctxledger/http_app.py`
+- `uvicorn`-based process startup
+- Docker Compose startup through `docker/docker-compose.yml`
+- healthcheck validation through `/debug/runtime`
+
+Current evidenced Docker startup command shape:
+
+```/dev/null/sh#L1-1
+uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080
+```
+
+Current evidenced local verification surfaces include:
+
+- MCP endpoint:
+  - `/mcp`
+- debug endpoints:
+  - `/debug/runtime`
+  - `/debug/routes`
+  - `/debug/tools`
+
+Current evidenced smoke validation script:
+
+- `scripts/mcp_http_smoke.py`
+
+That smoke script now supports:
+
+1. **basic MCP validation**
+   - `initialize`
+   - `tools/list`
+   - `tools/call`
+   - `resources/list`
+
+2. **workflow-oriented MCP validation**
+   - `workspace_register`
+   - `workflow_start`
+   - `workflow_checkpoint`
+   - `workflow_resume`
+   - `workflow_complete`
+
+3. **resource read validation for real workflow data**
+   - `resources/read` for:
+     - `workspace://{workspace_id}/resume`
+     - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+Representative local validation command shapes:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --tool-name memory_get_context
+```
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow
+```
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read
+```
+
+Operational meaning of this evidence:
+
+- the HTTP MCP endpoint is not just unit-tested internally
+- the Dockerized application is reachable as a real remote MCP server
+- a minimum client can perform MCP lifecycle setup, tool discovery, tool invocation, workflow mutation, workflow resume inspection, and workflow resource reads against the live server
+
+## 6.3 Debug Endpoint Exposure Policy
 
 `ctxledger` exposes operational debug endpoints under `/debug/*` for runtime introspection.
 
@@ -234,6 +314,7 @@ Current implementation behavior:
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false` removes `/debug/*` handlers from the HTTP runtime registration surface
 - when HTTP bearer token authentication is enabled, `/debug/*` should follow the same authentication boundary as other protected HTTP endpoints
 - operators should treat `/debug/*` responses as authenticated operational metadata rather than public diagnostics
+- Docker-based local health validation can use `/debug/runtime` as an operational readiness probe for the FastAPI/`uvicorn` process
 
 The payloads returned by `/debug/*` may reveal details such as:
 

@@ -69,6 +69,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional resource URI to verify with resources/read after resources/list",
     )
+    parser.add_argument(
+        "--workflow-resource-read",
+        action="store_true",
+        help="When running the workflow scenario, also read workflow resources for the created workflow",
+    )
     return parser
 
 
@@ -242,6 +247,7 @@ def _run_workflow_scenario(
     endpoint_url: str,
     bearer_token: str | None,
     timeout_seconds: float,
+    read_resources: bool = False,
 ) -> None:
     workspace_result = _require_tool_success(
         _call_tool(
@@ -251,8 +257,8 @@ def _run_workflow_scenario(
             request_id=10,
             tool_name="workspace_register",
             arguments={
-                "repo_url": "https://example.com/ctxledger-smoke.git",
-                "canonical_path": "/tmp/ctxledger-smoke",
+                "repo_url": f"https://example.com/ctxledger-smoke-{timeout_seconds}.git",
+                "canonical_path": f"/tmp/ctxledger-smoke-{timeout_seconds}",
                 "default_branch": "main",
                 "metadata": {
                     "scenario": "workflow",
@@ -334,6 +340,71 @@ def _run_workflow_scenario(
         tool_name="workflow_resume",
     )
     _print_step("workflow_resume", workflow_resume_result)
+
+    if read_resources:
+        workspace_resume_uri = f"workspace://{workspace_id}/resume"
+        workspace_resume_request = {
+            "jsonrpc": "2.0",
+            "id": 15,
+            "method": "resources/read",
+            "params": {
+                "uri": workspace_resume_uri,
+            },
+        }
+        workspace_resume_response = _post_json(
+            url=endpoint_url,
+            payload=workspace_resume_request,
+            bearer_token=bearer_token,
+            timeout_seconds=timeout_seconds,
+        )
+        workspace_resume_result = _require_jsonrpc_success(
+            workspace_resume_response,
+            expected_id=15,
+            method_name="resources/read",
+        )
+        workspace_resume_contents = workspace_resume_result.get("contents")
+        if (
+            not isinstance(workspace_resume_contents, list)
+            or not workspace_resume_contents
+            or not isinstance(workspace_resume_contents[0], dict)
+        ):
+            raise SmokeFailure(
+                "resources/read for workspace resume did not return a valid contents[] payload"
+            )
+        _print_step("resources/read workspace resume", workspace_resume_contents[0])
+
+        workflow_detail_uri = (
+            f"workspace://{workspace_id}/workflow/{workflow_instance_id}"
+        )
+        workflow_detail_request = {
+            "jsonrpc": "2.0",
+            "id": 16,
+            "method": "resources/read",
+            "params": {
+                "uri": workflow_detail_uri,
+            },
+        }
+        workflow_detail_response = _post_json(
+            url=endpoint_url,
+            payload=workflow_detail_request,
+            bearer_token=bearer_token,
+            timeout_seconds=timeout_seconds,
+        )
+        workflow_detail_result = _require_jsonrpc_success(
+            workflow_detail_response,
+            expected_id=16,
+            method_name="resources/read",
+        )
+        workflow_detail_contents = workflow_detail_result.get("contents")
+        if (
+            not isinstance(workflow_detail_contents, list)
+            or not workflow_detail_contents
+            or not isinstance(workflow_detail_contents[0], dict)
+        ):
+            raise SmokeFailure(
+                "resources/read for workflow detail did not return a valid contents[] payload"
+            )
+        _print_step("resources/read workflow detail", workflow_detail_contents[0])
 
     workflow_complete_result = _require_tool_success(
         _call_tool(
@@ -518,6 +589,7 @@ def main(argv: list[str] | None = None) -> int:
                 endpoint_url=endpoint_url,
                 bearer_token=args.bearer_token,
                 timeout_seconds=args.timeout_seconds,
+                read_resources=args.workflow_resource_read,
             )
 
         print("[ok] MCP HTTP smoke test completed")
