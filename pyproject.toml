@@ -24,4 +24,5 @@ build-backend = "uv_build"
 test = [
   "pytest>=9",
   "pytest-cov>=7",
+  "fastapi"
 ]
