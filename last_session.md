@@ -78,6 +78,149 @@ small pattern 実装・検証完了事項:
 - 追加した内容:
   - `--expect-http-status`
   - `--expect-auth-failure`
+- initialize probe を先に流して expected HTTP status を検証する flow
+- 最初は proxy rejection 時に payload 内 `error` object を必須扱いしていましたが、ForwardAuth rejection body は JSON-RPC ではなく plain JSON/transport body でもよいので、この制約を外しました。
+- その結果、proxy rejection path と allow path の両方を同じ smoke script で確認できるようになりました。
+- README も更新しました。
+- small pattern section を追加・更新し、
+  - `docker/docker-compose.small-auth.yml`
+  - `CTXLEDGER_SMALL_AUTH_TOKEN`
+  - proxy port `8091`
+  - missing token `401`
+  - invalid token `401`
+  - valid token で workflow/resource smoke 通過
+  を明記しました。
+- `docs/plans/auth_proxy_scaling_plan.md` に small pattern 実装済み/検証済みの注記を追記しました。
+  - deliverables A-D の status
+  - exit criteria の current assessment
+  - current repository shape と validated shape
+- Traefik healthcheck は `/ping` / `/ping/` が `404` になっていたため、最終的に process-level probe へ変更しました。
+- その結果、small pattern stack 全体が healthy になりました。
+- 未使用だった `docker/auth_small/Dockerfile` は削除済みです。
+- current small pattern は source mount + `python:3.14-slim` + runtime install で一貫させています。
+- これにより、repo 上の auth-small artifact は actual compose runtime shape と一致するようになりました。
+
+今回の作業:
+- small pattern をさらに進め、**proxy-only auth cleanup** を実施しました。
+- 目的は、small pattern を「proxy layer が唯一の認証境界」で完結させ、`ctxledger` 本体から app-layer auth 実装を完全に外すことです。
+- `src/ctxledger/config.py` から app-layer auth 設定を削除しました。
+  - `AuthSettings` dataclass を削除
+  - `AppSettings.auth` を削除
+  - `CTXLEDGER_REQUIRE_AUTH`
+  - `CTXLEDGER_AUTH_BEARER_TOKEN`
+  に関する validation を削除
+  - `load_settings()` での auth 設定読み込みを削除
+- `src/ctxledger/runtime/http_handlers.py` から app-layer bearer auth 実装を削除しました。
+  - `extract_bearer_token()`
+  - `build_http_auth_error_response()`
+  - `require_http_bearer_auth()`
+  を削除
+- これにあわせて各 HTTP handler から auth gate 呼び出しを削除しました。
+  - `build_workflow_resume_http_handler()`
+  - `build_closed_projection_failures_http_handler()`
+  - `build_projection_failures_ignore_http_handler()`
+  - `build_projection_failures_resolve_http_handler()`
+  - `build_runtime_introspection_http_handler()`
+  - `build_runtime_routes_http_handler()`
+  - `build_runtime_tools_http_handler()`
+  - `build_mcp_http_handler()`
+- その結果、`ctxledger` application runtime は `/mcp` も debug routes も operator routes も、**app-layer bearer auth なし**で動く shape になりました。
+- `build_mcp_http_handler()` では `StreamableHttpEndpoint` の `auth_validator` を渡さない形へ変更しました。
+- `runtime/http_handlers.py` の `__all__` も auth helper の export を外し、canonical HTTP handler surface のみを残しました。
+- auth cleanup の途中で circular import が顕在化しました。
+  - `runtime.introspection` が serializer を re-export していた旧前提と
+  - `runtime.orchestration` / `runtime.server_responses` の import path
+  が噛み合わず、`serialize_runtime_introspection_collection` import で循環が起きました。
+- そのため:
+  - `src/ctxledger/runtime/introspection.py` から serializer re-export を削除
+  - `runtime.orchestration` は `serialize_runtime_introspection_collection` を canonical `runtime.serializers` から import
+  - `runtime.server_responses.build_runtime_introspection_response()` も serializer を canonical module から import
+  する形へ修正しました。
+- これにより、auth cleanup で表面化した introspection/serializer import cycle は解消しました。
+- `docker/docker-compose.auth.yml` は direct app-layer auth override としては廃止扱いにしました。
+- 現在の内容は compatibility stub コメントのみで、deprecated であること、認証は `docker/docker-compose.small-auth.yml` 側の proxy layer でやるべきことを明記しています。
+- `tests/test_config.py` から auth 設定前提のケースを削除・更新しました。
+  - `minimum_valid_env()` から `CTXLEDGER_REQUIRE_AUTH` を削除
+  - `settings.auth.is_enabled` assertion を削除
+  - auth-required validation test 群を削除
+- `tests/test_cli.py` から `AuthSettings` import と `AppSettings.auth` 生成を削除しました。
+- `tests/test_mcp_modules.py` から `AuthSettings` import と `make_settings()` の auth args を削除しました。
+- `tests/test_postgres_integration.py` の loaded settings fixture env から `CTXLEDGER_REQUIRE_AUTH` を削除しました。
+- `tests/test_server.py` も追従しました。
+  - top-level `AuthSettings` import を削除
+  - `make_settings()` から `auth_bearer_token` / `require_auth` args を削除
+  - `AppSettings.auth` 生成を削除
+  - HTTP route の bearer auth 必須を確認していた test 群を削除
+- これにより、server-side test suite から direct app auth 前提の coverage は除去されました。
+- なお、generic streamable HTTP unit test にある `auth_validator` 使用テストは、`build_streamable_http_endpoint()` 自体の generic capability test として残っているだけで、`ctxledger` app-layer auth の存在を意味しません。
+- README を proxy-only 前提へ更新しました。
+  - config list から `CTXLEDGER_REQUIRE_AUTH` / `CTXLEDGER_AUTH_BEARER_TOKEN` を削除
+  - direct app-layer authenticated smoke step を削除し、proxy-authenticated smoke step に置換
+  - production guidance を proxy-layer authentication 前提に書き換え
+  - security notes も proxy-layer bearer auth 前提へ修正
+- `docs/SECURITY.md` を proxy-only auth model 前提へ書き換えました。
+  - app-layer bearer auth 記述を削除
+  - proxy-only authentication model を明示
+  - config expectation を proxy/gateway secret 前提へ変更
+  - local/shared/prod deployment recommendations を proxy-first shape へ更新
+  - action routes / debug routes の保護境界も proxy-layer前提へ統一
+- `docs/deployment.md` も proxy-only auth 前提へ更新しました。
+  - recommended env vars から `CTXLEDGER_REQUIRE_AUTH` / `CTXLEDGER_AUTH_BEARER_TOKEN` を削除
+  - environment guidance table を proxy-layer auth 前提へ変更
+  - malformed authentication configuration 記述を削除
+- `docs/CHANGELOG.md` の production guidance note も proxy-only auth 前提へ更新しました。
+- この一連の変更により、**small pattern = proxy-only auth** が repo 全体でより一貫した形になっています。
+
+large pattern documentation prep:
+- `docs/plans/auth_proxy_scaling_plan.md` の large pattern section を改めて見直し、現時点では「実装」ではなく「比較観点と着手条件の整理」に留める方針が自然だと確認しました。
+- roadmap 上、large pattern は **after roadmap `0.4`** の別フェーズであり、今すぐ compose や runtime に手を入れる対象ではありません。
+- 現時点で large pattern に入る前提条件として重要なのは:
+  - `docs/roadmap.md` 上の `0.4` 以後であること
+  - proxy-layer auth だけで十分か、app-layer authorization / ownership / audit attribution が必要かを再評価すること
+  - MCP-capable IDE client と non-browser auth flow の両立性を first-class に扱うこと
+- candidate comparison の観点として、plan に既に書かれている以下が重要です:
+  - `Pomerium`
+  - `oauth2-proxy`
+  - another OIDC-aware gateway
+  - organization-standard identity gateway
+- 現時点の整理としては:
+  - `oauth2-proxy` は browser/cookie/redirect-heavy になりやすく、IDE UX との相性評価が必要
+  - `Pomerium` は policy-friendly で multi-user internal tool には合いそう
+  - ただし large pattern の最終選定は、client compatibility / operational fit / org standard の3軸で比較するのが自然
+- 次に large pattern documentation prep を進めるなら、`docs/plans/` 配下に「candidate evaluation memo」や「decision matrix」を 1 枚追加し、
+  - auth flow shape
+  - IDE compatibility
+  - identity propagation
+  - operator complexity
+  - future authorization extensibility
+  の観点で比較整理するのがよさそうです。
+- ただしこれは implementation 開始ではなく、phase gate を越える前の design prep として扱うべきです。
+
+今回確認したテスト結果:
+- `pytest -q tests/test_config.py tests/test_mcp_modules.py tests/test_cli.py`
+- session 開始時点で project-wide diagnostics は 0 errors / 0 warnings でした。
+- full test suite として `pytest -q` も実行し、`246 passed in 11.31s` でした。
+- この時点で auth cleanup 後の repo は diagnostics / tests ともに green です。
+
+今回追加した documentation prep:
+- `docs/plans/auth_large_gateway_evaluation_memo.md` を新規追加しました。
+- この memo は large pattern の implementation plan ではなく、**post-0.4 の design-prep comparison memo** として位置づけています。
+- memo では主に以下を整理しました:
+  - MCP IDE compatibility を最優先評価軸にすること
+  - identity quality / operational fit / authorization extensibility / architecture alignment を比較軸にすること
+  - `Pomerium` / `oauth2-proxy` / other OIDC-aware gateway / organization-standard gateway の4カテゴリ比較
+  - downstream identity propagation を将来の optional capability として意識すること
+  - final gateway 選定前に answer すべき readiness questions
+- `docs/plans/auth_proxy_scaling_plan.md` にも追記し、
+  - large pattern の early comparison criteria はこの新 memo にあること
+  - current comparison frame の参照先
+  - implementation sequence における design-prep baseline
+  を明記しました。
+
+次 session への引き継ぎ候補:
+- `last_session.md` 自体の更新を実ファイルへ反映する
+- `git status` を見て今回の doc 変更を確認する
+- repo ルールに従って、work loop の区切りで descriptive message 付きの `git commit` を行う
   - initialize probe を先に流して expected HTTP status を検証する flow
 - 最初は proxy rejection 時に payload 内 `error` object を必須扱いしていましたが、ForwardAuth rejection body は JSON-RPC ではなく plain JSON/transport body でもよいので、この制約を外しました。
 - その結果、proxy rejection path と allow path の両方を同じ smoke script で確認できるようになりました。
