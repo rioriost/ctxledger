@@ -815,6 +815,11 @@ def test_postgres_memory_search_hybrid_results_include_ranking_details(
         "lexical_only": 1,
         "semantic_only_discounted": 1,
     }
+    assert search.details["result_composition"] == {
+        "with_lexical_signal": 1,
+        "with_semantic_signal": 1,
+        "with_both_signals": 0,
+    }
     assert search.details["results_returned"] == 2
     assert [result.summary for result in search.results] == [
         "Projection drift root cause identified in deployment workflow",
@@ -966,6 +971,11 @@ def test_postgres_memory_search_result_mode_counts_cover_hybrid_lexical_and_sema
         "hybrid": 1,
         "lexical_only": 1,
         "semantic_only_discounted": 1,
+    }
+    assert search.details["result_composition"] == {
+        "with_lexical_signal": 2,
+        "with_semantic_signal": 2,
+        "with_both_signals": 1,
     }
     assert search.details["results_returned"] == 3
     assert [result.summary for result in search.results] == [

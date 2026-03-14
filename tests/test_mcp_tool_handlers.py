@@ -1711,6 +1711,11 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
                     "lexical_only": 1,
                     "semantic_only_discounted": 0,
                 },
+                "result_composition": {
+                    "with_lexical_signal": 1,
+                    "with_semantic_signal": 0,
+                    "with_both_signals": 0,
+                },
                 "results_returned": 1,
             },
         )
@@ -1754,6 +1759,11 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
             "lexical_only": 1,
             "hybrid": 0,
             "semantic_only_discounted": 0,
+        },
+        "result_composition": {
+            "with_lexical_signal": 1,
+            "with_semantic_signal": 0,
+            "with_both_signals": 0,
         },
         "results_returned": 1,
     }

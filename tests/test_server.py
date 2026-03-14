@@ -3254,6 +3254,11 @@ def test_build_memory_search_tool_handler_returns_implemented_payload() -> None:
             "lexical_only": 0,
             "semantic_only_discounted": 0,
         },
+        "result_composition": {
+            "with_lexical_signal": 0,
+            "with_semantic_signal": 0,
+            "with_both_signals": 0,
+        },
         "results_returned": 0,
         "semantic_generation_skipped_reason": "embedding_search_not_configured",
     }

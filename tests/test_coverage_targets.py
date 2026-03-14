@@ -3310,6 +3310,11 @@ def test_serialize_search_memory_response_serializes_results() -> None:
                 "lexical_only": 0,
                 "semantic_only_discounted": 0,
             },
+            "result_composition": {
+                "with_lexical_signal": 1,
+                "with_semantic_signal": 1,
+                "with_both_signals": 1,
+            },
             "results_returned": 1,
         },
     )
@@ -3344,6 +3349,11 @@ def test_serialize_search_memory_response_serializes_results() -> None:
             "hybrid": 1,
             "lexical_only": 0,
             "semantic_only_discounted": 0,
+        },
+        "result_composition": {
+            "with_lexical_signal": 1,
+            "with_semantic_signal": 1,
+            "with_both_signals": 1,
         },
         "results_returned": 1,
     }
@@ -4163,6 +4173,11 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         "lexical_only": 1,
         "semantic_only_discounted": 1,
     }
+    assert search_response.details["result_composition"] == {
+        "with_lexical_signal": 1,
+        "with_semantic_signal": 1,
+        "with_both_signals": 0,
+    }
     assert search_response.details["results_returned"] == 2
     assert [result.memory_id for result in search_response.results] == [
         lexical_and_semantic_memory_id,
@@ -4315,6 +4330,11 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
         "hybrid": 0,
         "lexical_only": 0,
         "semantic_only_discounted": 2,
+    }
+    assert search_response.details["result_composition"] == {
+        "with_lexical_signal": 0,
+        "with_semantic_signal": 2,
+        "with_both_signals": 0,
     }
     assert search_response.results[0].semantic_score == pytest.approx(1.0)
     assert search_response.results[1].semantic_score == pytest.approx(0.390625)

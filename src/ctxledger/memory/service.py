@@ -1036,10 +1036,23 @@ class MemoryService:
             "lexical_only": 0,
             "semantic_only_discounted": 0,
         }
+        result_composition = {
+            "with_lexical_signal": 0,
+            "with_semantic_signal": 0,
+            "with_both_signals": 0,
+        }
         for result in limited_results:
             score_mode = str(result.ranking_details.get("score_mode", "hybrid"))
             if score_mode in result_mode_counts:
                 result_mode_counts[score_mode] += 1
+            has_lexical_signal = result.lexical_score > 0.0
+            has_semantic_signal = result.semantic_score > 0.0
+            if has_lexical_signal:
+                result_composition["with_lexical_signal"] += 1
+            if has_semantic_signal:
+                result_composition["with_semantic_signal"] += 1
+            if has_lexical_signal and has_semantic_signal:
+                result_composition["with_both_signals"] += 1
 
         details = {
             "query": request.query,
@@ -1057,6 +1070,7 @@ class MemoryService:
                 "semantic_only_discount": semantic_only_discount,
             },
             "result_mode_counts": result_mode_counts,
+            "result_composition": result_composition,
             "results_returned": len(limited_results),
         }
         if semantic_generation_skipped_reason is not None:
