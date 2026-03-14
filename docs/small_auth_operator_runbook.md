@@ -85,9 +85,25 @@ For real shared or long-lived environments, use a strong random secret rather th
 
 Start the small-pattern stack with the base compose file plus the auth overlay.
 
+For a **first start** or an intentional clean rebuild of the stack, use:
+
 ```/dev/null/sh#L1-1
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
+
+For a **normal restart** after the stack has already been created, you usually do **not** need `--force-recreate`:
+
+```/dev/null/sh#L1-1
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
+```
+
+If you changed code or image inputs and want a normal rebuild without forcibly replacing every container, use:
+
+```/dev/null/sh#L1-1
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
+```
+
+Use `--force-recreate` only when you intentionally want to replace existing containers, such as after a major compose/config change or when you want a known-fresh container set.
 
 Expected high-level outcome:
 

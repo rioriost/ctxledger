@@ -171,17 +171,33 @@ For any shared, persistent, or less-trusted environment, use a strong random sec
 
 #### 1. Start PostgreSQL, the private backend, auth service, and Traefik
 
-From the repository root, start the base compose file plus the auth overlay with a shared bearer token:
+From the repository root, start the base compose file plus the auth overlay with a shared bearer token.
+
+For a **first start** or a deliberate clean rebuild of the stack, use:
 
 ```/dev/null/sh#L1-1
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
+For a **normal restart after the stack has already been created**, you usually do **not** need `--force-recreate`:
+
+```/dev/null/sh#L1-1
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
+```
+
 If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` in your shell first, you can also run:
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
 ```
+
+If you changed code or image inputs and want a normal rebuild without forcibly replacing every container, use:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
+```
+
+Use `--force-recreate` only when you intentionally want to replace existing containers, such as after a major compose/config change or when you want a known-fresh container set.
 
 After startup, the recommended authenticated MCP endpoint is:
 
@@ -269,10 +285,18 @@ If you use [`envrcctl`](https://github.com/rioriost/homebrew-envrcctl), you can 
 echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_SMALL_AUTH_TOKEN --account 'ctxledger' --stdin
 ```
 
-You can then run startup and validation commands with the secret injected into the environment:
+You can then run startup and validation commands with the secret injected into the environment.
+
+For a first start or forced clean rebuild:
 
 ```/dev/null/sh#L1-1
 envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```
+
+For a normal restart of an existing stack:
+
+```/dev/null/sh#L1-1
+envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
 ```
 
 ```/dev/null/sh#L1-1
@@ -872,10 +896,18 @@ This extends the workflow validation with:
 
 If you want to validate authenticated access, use the small-pattern Traefik/auth deployment. Authentication is expected to be enforced at the proxy layer rather than inside `ctxledger`.
 
-Start the stack with a shared token for the proxy/auth layer:
+Start the stack with a shared token for the proxy/auth layer.
+
+For a first start or an intentional clean rebuild:
 
 ```/dev/null/sh#L1-1
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```
+
+For a normal restart of an already-created stack:
+
+```/dev/null/sh#L1-1
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
 ```
 
 Then run the smoke client with the matching bearer token through the proxy endpoint:
@@ -906,10 +938,18 @@ This setup is intended to keep the MCP backend private behind the proxy:
 - the private MCP backend service runs without direct host port exposure
 - PostgreSQL remains internal to the compose network
 
-Start the stack with a shared token for the proxy/auth layer:
+Start the stack with a shared token for the proxy/auth layer.
+
+For a first start or an intentional clean rebuild:
 
 ```/dev/null/sh#L1-1
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```
+
+For a normal restart of an already-created stack:
+
+```/dev/null/sh#L1-1
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
 ```
 
 Then point your MCP client or smoke client at the Traefik endpoint and send the same bearer token:

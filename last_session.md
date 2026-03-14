@@ -11,7 +11,7 @@
 - `0.4`: hierarchical memory retrieval
   - `memory_get_context` は multi-layer context assembly 的な役割へ拡張されうる
 
-この整理に合わせて、README と `docs/roadmap.md` に **tool-to-version mapping の説明を追加済み**です。また、`.rules` にも terminal workflow guidance を追加し、`workflow_complete` は terminal transition であり、close 後の追加作業は新しい workflow を開始すべきことを明記しました。さらに、README の `Agent workflow usage guidance` と `docs/workflow-model.md` にも、terminal workflow は inspect 対象であって continuation 対象ではなく、close 後の追加作業は新しい workflow または適切な continuation path で扱うべきことを追記済みです。加えて、`docs/architecture.md` にも同趣旨の説明を追加し、completion semantics・checkpoint semantics・terminal resumable status の各節で、terminal workflow の扱いが `.rules` / README / workflow model と整合するようそろえました。あわせて、tests を見直し、terminal workflow guidance に関する既存のテストカバレッジとして **terminal workflow への checkpoint 拒否** と **terminal resume status の確認** は既に存在していることを確認したうえで、さらに **「terminal workflow は inspection 対象で continuation 対象ではない」** ことと、**close 後の追加作業は新しい workflow で進める** ことを、より意図レベルで読める test として `tests/test_workflow_service.py` に追加しました。加えて、`tests/test_postgres_integration.py` にも **terminal resume は inspection 用で continuation ではない** ことを確認する integration test を追加し、PostgreSQL-backed path でも同じ意味づけが保たれることを確認しました。
+この整理に合わせて、README と `docs/roadmap.md` に **tool-to-version mapping の説明を追加済み**です。また、`.rules` にも terminal workflow guidance を追加し、`workflow_complete` は terminal transition であり、close 後の追加作業は新しい workflow を開始すべきことを明記しました。さらに、README の `Agent workflow usage guidance` と `docs/workflow-model.md` にも、terminal workflow は inspect 対象であって continuation 対象ではなく、close 後の追加作業は新しい workflow または適切な continuation path で扱うべきことを追記済みです。加えて、`docs/architecture.md` にも同趣旨の説明を追加し、completion semantics・checkpoint semantics・terminal resumable status の各節で、terminal workflow の扱いが `.rules` / README / workflow model と整合するようそろえました。あわせて、tests を見直し、terminal workflow guidance に関する既存のテストカバレッジとして **terminal workflow への checkpoint 拒否** と **terminal resume status の確認** は既に存在していることを確認したうえで、さらに **「terminal workflow は inspection 対象で continuation 対象ではない」** ことと、**close 後の追加作業は新しい workflow で進める** ことを、より意図レベルで読める test として `tests/test_workflow_service.py` に追加しました。加えて、`tests/test_postgres_integration.py` にも **terminal resume は inspection 用で continuation ではない** ことを確認する integration test を追加し、PostgreSQL-backed path でも同じ意味づけが保たれることを確認しました。さらに、small-auth の compose stack を **新規に作り直して起動**し、`ctxledger-postgres` / `ctxledger-auth-small` / `ctxledger-server-private` / `ctxledger-traefik` が立ち上がることを確認しました。そのうえで、README と `docs/small_auth_operator_runbook.md` の compose 起動手順について、**初回起動または意図的なクリーン再作成**と、**2回目以降の通常再起動**、および **通常の再build** を区別して説明する整理を進めました。
 
 ## この session で完了したこと
 
@@ -175,6 +175,17 @@ README の手順に沿って、以下を実施しました。
   - `tests/test_workflow_service.py` に **completed workflow 後の追加作業は新しい workflow で進める** ことをより直接に示す test
   - `tests/test_postgres_integration.py` に **PostgreSQL-backed integration path でも terminal resume は inspection 用で continuation ではない** ことを示す test
 - これにより、README / docs で明文化した terminal workflow guidance は、実装挙動レベルだけでなく intent-level の test 名と assertion でも以前より読み取りやすくなり、unit 相当と PostgreSQL integration の両方で意味づけを確認できる状態になった
+- その後、今後の作業用に small-auth compose stack を **新規に作り直して起動**し、少なくとも以下のコンテナが起動していることを確認した
+  - `ctxledger-postgres`
+  - `ctxledger-auth-small`
+  - `ctxledger-server-private`
+  - `ctxledger-traefik`
+- compose 起動手順については、README 上の `--force-recreate` は **初回起動や意図的なクリーン再作成には妥当**だが、**2回目以降の通常再起動では毎回必要ではない** という整理に至った
+- そのため、small-auth の運用説明は少なくとも次の3区分で案内するのが自然だと判断した
+  - **初回起動 / クリーン再作成**: `up -d --build --force-recreate`
+  - **通常再起動**: `up -d`
+  - **コードや image 入力を変えた後の通常再build**: `up -d --build`
+- あわせて、`docs/small_auth_operator_runbook.md` にも同じ区分を入れて、README と runbook の説明をそろえる方針を取った
 
 ## 次セッションでやること
 
@@ -185,5 +196,6 @@ README の手順に沿って、以下を実施しました。
    - `attempt_id`
    - `ticket_id`
 3. `.envrc` の扱いを確認し、必要なら整理する
-4. `tests/test_workflow_service.py` と `tests/test_postgres_integration.py` の未 commit 差分を確認し、意図した変更なら commit 対象に含める
-5. `README.md` と `.gitignore` の未 commit 差分が残っていれば、必要に応じて整理して commit する
+4. README と `docs/small_auth_operator_runbook.md` に追加した compose 起動手順の整理が、実際の運用意図と矛盾しないか確認する
+5. `README.md`、`docs/small_auth_operator_runbook.md`、`tests/test_workflow_service.py`、`tests/test_postgres_integration.py` の未 commit 差分を確認し、意図した変更なら commit 対象に含める
+6. `.gitignore` に未 commit 差分が残っていれば、必要に応じて整理して commit する
