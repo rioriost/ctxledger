@@ -32,6 +32,7 @@ The deployment model follows these principles:
 4. **Readiness depends on DB connectivity and schema availability**
 5. **Projection failures must not invalidate canonical workflow state**
 6. **Production deployments should place the MCP server behind TLS and a reverse proxy**
+7. **The `0.2.0` work scope is expected to include an HTTPS/TLS deployment path after the memory workstream is closed out**
 
 ---
 
@@ -71,6 +72,13 @@ Recommended production topology:
 - `ctxledger` application container/process
 - PostgreSQL with persistent storage
 - optional future background workers for embeddings/summaries/indexing
+
+Planned follow-up scope for `0.2.0` after the memory closeout work:
+
+- HTTPS exposure for the MCP endpoint through proxy-side TLS termination
+- local operator guidance for certificate and trust handling
+- authenticated MCP client compatibility over HTTPS
+- explicit documentation for when to use plain local HTTP versus HTTPS-oriented deployment paths
 
 ---
 
@@ -254,21 +262,21 @@ That smoke script now supports:
 Representative local validation command shapes:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --tool-name memory_get_context
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --tool-name memory_get_context --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
 Operational meaning of this evidence:
 
-- the HTTP MCP endpoint is not just unit-tested internally
-- the Dockerized application is reachable as a real remote MCP server
+- the MCP endpoint is not just unit-tested internally
+- the Dockerized application is reachable as a real remote MCP server through the HTTPS proxy entrypoint
 - a minimum client can perform MCP lifecycle setup, tool discovery, tool invocation, workflow mutation, workflow resume inspection, and workflow resource reads against the live server
 
 ## 6.3 Debug Endpoint Exposure Policy
@@ -318,11 +326,79 @@ The payloads returned by `/debug/*` may reveal details such as:
   - `runtime_introspection`
   - `runtime_routes`
   - `runtime_tools`
-  - `workflow_resume`
-  - `workflow_closed_projection_failures`
-  - `projection_failures_ignore`
-  - `projection_failures_resolve`
-- runtime wiring state
+
+## 6.4 Local HTTPS-only small-auth path
+
+The repository now supports a local HTTPS-only variant of the small-pattern deployment through Traefik.
+
+The intended shape is:
+
+- Traefik remains the only host-exposed MCP entrypoint
+- Traefik terminates TLS locally
+- the forward-auth middleware protects the HTTPS entrypoint
+- the private `ctxledger` backend remains on internal plain HTTP inside the Compose network
+- operators provide local certificate files for Traefik rather than enabling TLS inside `ctxledger` itself
+- the small-auth proxy path no longer accepts plain HTTP traffic on a separate public entrypoint
+
+Expected local certificate files:
+
+- `docker/traefik/certs/localhost.crt`
+- `docker/traefik/certs/localhost.key`
+
+These files are mounted into the Traefik container and used for the HTTPS listener.
+
+### Local HTTPS endpoint
+
+With the small-auth overlay running:
+
+- HTTPS MCP endpoint:
+  - `https://127.0.0.1:8443/mcp`
+
+The HTTPS path is meant for:
+
+- local operator validation
+- production-like proxy-boundary testing
+- authenticated MCP client checks over `https`
+- smoke validation against a TLS-terminated entrypoint
+
+### Certificate guidance
+
+For local development, a practical option is to generate a certificate for `localhost` and loopback addresses with `mkcert`:
+
+```/dev/null/sh#L1-2
+mkdir -p docker/traefik/certs
+mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
+```
+
+An OpenSSL self-signed certificate can also work for local-only testing, but it may not be trusted automatically by your machine or client tooling.
+
+Operational expectations:
+
+- do not commit real certificate or key material to version control
+- treat `localhost.key` as sensitive secret material
+- use this path for local or tightly controlled operator testing, not as a substitute for production certificate management
+- if the local certificate is not trusted, use client-side trust configuration or an explicit insecure/testing mode only for local validation
+
+### HTTPS smoke validation
+
+After certificate files exist and the authenticated Traefik stack is running, validate the HTTPS path with the bearer token used for the HTTPS proxy path.
+
+Representative command shape for local self-signed testing:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --insecure --scenario workflow --workflow-resource-read
+```
+
+The `--insecure` flag is intended for local self-signed or otherwise untrusted certificates. If the certificate is trusted locally, prefer normal verification and omit that flag.
+
+### Relationship to production posture
+
+This local HTTPS-only path improves production-like operator validation, but it does not change the broader deployment model:
+
+- TLS termination still belongs at the proxy boundary
+- authentication still belongs at the proxy boundary
+- the backend application remains private behind the proxy
+- certificate issuance, trust, rotation, and secret handling remain deployment/operator concerns rather than application concerns
 
 These details are useful for diagnostics but increase observability exposure, so they should be treated as operationally sensitive.
 
@@ -510,9 +586,9 @@ For local deployment, the expected development path is:
 
 ## 9.2 Expected Endpoint
 
-When HTTP transport is enabled, the expected MCP endpoint is:
+For the documented operator-facing deployment path, the expected MCP endpoint is:
 
-- `http://localhost:8080/mcp`
+- `https://127.0.0.1:8443/mcp`
 
 ## 9.3 Compose Expectations
 
@@ -527,7 +603,7 @@ A local `docker-compose` setup should provide:
 Recommended port exposure:
 
 - PostgreSQL for local debugging if needed
-- `ctxledger` HTTP port, typically `8080`
+- Traefik HTTPS entrypoint, typically `8443`
 
 ## 9.4 Persistence Expectations
 
@@ -725,7 +801,7 @@ A valid `v0.1.0` deployment should provide:
 - durable canonical workflow persistence
 - readiness tied to DB and schema availability
 - projection support as best-effort derived output
-- HTTP MCP access at `http://localhost:8080/mcp` in local development
+- HTTPS MCP access at `https://127.0.0.1:8443/mcp` for the documented local operator-facing deployment path
 
 The most important deployment property is not simply that the service starts, but that:
 

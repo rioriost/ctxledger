@@ -9,7 +9,7 @@ services:
       ctxledger-private:
         condition: service_healthy
     command:
-      - --entrypoints.web.address=:8091
+      - --entrypoints.websecure.address=:8443
       - --providers.file.filename=/etc/traefik/dynamic.yml
       - --providers.file.watch=true
       - --api.dashboard=false
@@ -17,9 +17,10 @@ services:
       - --accesslog=true
       - --log.level=INFO
     ports:
-      - "8091:8091"
+      - "8443:8443"
     volumes:
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./traefik/certs:/etc/traefik/certs:ro
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep '[t]raefik' >/dev/null 2>&1 || exit 1"]
       interval: 10s

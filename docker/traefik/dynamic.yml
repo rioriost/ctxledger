@@ -1,12 +1,13 @@
 http:
   routers:
-    ctxledger-mcp:
+    ctxledger-mcp-https:
       entryPoints:
-        - web
+        - websecure
       rule: "PathPrefix(`/mcp`) || PathPrefix(`/debug/`) || PathPrefix(`/workflow-resume/`) || Path(`/projection_failures_ignore`) || Path(`/projection_failures_resolve`)"
       service: ctxledger-backend
       middlewares:
         - ctxledger-forward-auth
+      tls: {}
 
   middlewares:
     ctxledger-forward-auth:
@@ -22,3 +23,8 @@ http:
       loadBalancer:
         servers:
           - url: http://ctxledger-private:8080
+
+tls:
+  certificates:
+    - certFile: /etc/traefik/certs/localhost.crt
+      keyFile: /etc/traefik/certs/localhost.key

@@ -24,6 +24,8 @@ Before contributing, make sure you have:
 - PostgreSQL access through the provided Docker setup, or an equivalent local environment
 - the ability to run the project test suite
 
+PostgreSQL integration tests are expected to avoid mutating or truncating any pre-existing working history in the default database schema. The current repository direction is to run persistence integration tests in an isolated temporary PostgreSQL schema and drop that schema after the test completes.
+
 Typical local startup path:
 
 ```/dev/null/sh#L1-1
@@ -148,6 +150,25 @@ In particular:
 - do not describe protected access as if `ctxledger` itself is the documented auth boundary
 - do not imply large-pattern identity-aware gateway selection has already been finalized
 
+### 4.6 PostgreSQL integration test isolation
+If you touch:
+
+- PostgreSQL integration tests
+- PostgreSQL persistence setup
+- schema bootstrap behavior
+- repository-level persistence assumptions
+
+preserve isolation from any pre-existing operator or development history stored in PostgreSQL.
+
+In particular:
+
+- do not truncate or delete rows from the default working schema just to prepare tests
+- prefer creating a dedicated temporary schema for each PostgreSQL integration test scope
+- apply the repository schema into that temporary schema
+- ensure the test connection/session uses that schema explicitly
+- drop the temporary schema after the test completes
+- keep persistence integration tests safe to run even when the local PostgreSQL instance already contains useful workflow history
+
 ---
 
 ## 5. Testing Expectations
@@ -161,6 +182,17 @@ For normal Python or doc-adjacent code changes, run:
 pytest -q
 ```
 
+### For PostgreSQL persistence or integration-test changes
+If your change affects PostgreSQL persistence behavior or repository integration tests, verify not only that the tests pass, but also that they preserve local working history outside the temporary test schema.
+
+Expected behavior for PostgreSQL integration tests:
+
+- each test scope creates its own temporary schema
+- schema bootstrap is applied inside that temporary schema
+- the test session uses that schema through connection/session configuration
+- the temporary schema is dropped after the test completes
+- the default working schema and any existing workflow history remain untouched
+
 ### For MCP or workflow behavior changes
 You should strongly consider running the full suite.
 
@@ -172,6 +204,7 @@ You should also validate the small pattern operationally when your change affect
 - `auth-small`
 - auth-related docs that describe actual operator steps
 - smoke-script expectations
+- local HTTPS proxy guidance or certificate-handling steps
 
 Representative small-pattern validation flow:
 
@@ -179,21 +212,37 @@ Representative small-pattern validation flow:
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans
 ```
 
+```/dev/null/sh#L1-2
+mkdir -p docker/traefik/certs
+mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
+```
+
 ```/dev/null/sh#L1-1
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --insecure --scenario workflow --workflow-resource-read
 ```
+
+Expected local HTTPS setup notes:
+
+- local certificate files should exist at:
+  - `docker/traefik/certs/localhost.crt`
+  - `docker/traefik/certs/localhost.key`
+- do not commit real certificate or key material
+- use a trusted local certificate when possible, or use local-only insecure verification for self-signed testing
+- the small-auth path is now HTTPS-only; do not validate or document a public `http://127.0.0.1:8091` entrypoint for this flow
+
+Use `--insecure` only for local self-signed or otherwise untrusted certificates. If the local certificate is trusted, prefer normal TLS verification.
 
 If your auth-related change is docs-only and does not alter runtime behavior, note that in the PR.
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 
@@ -242,6 +242,18 @@ class RecordProjectionFailureInput:
 
 
 @dataclass(slots=True, frozen=True)
+class EpisodeRecord:
+    episode_id: UUID
+    workflow_instance_id: UUID
+    summary: str
+    attempt_id: UUID | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    status: str = "recorded"
+    created_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass(slots=True, frozen=True)
 class ResumeIssue:
     code: str
     message: str
@@ -355,6 +367,22 @@ class WorkflowInstanceRepository:
     def get_latest_by_workspace_id(self, workspace_id: UUID) -> WorkflowInstance | None:
         raise NotImplementedError
 
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[WorkflowInstance, ...]:
+        raise NotImplementedError
+
+    def list_by_ticket_id(
+        self,
+        ticket_id: str,
+        *,
+        limit: int,
+    ) -> tuple[WorkflowInstance, ...]:
+        raise NotImplementedError
+
     def create(self, workflow: WorkflowInstance) -> WorkflowInstance:
         raise NotImplementedError
 
@@ -407,6 +435,11 @@ class VerifyReportRepository:
         raise NotImplementedError
 
 
+class MemoryEpisodeRepository:
+    def create(self, episode: EpisodeRecord) -> EpisodeRecord:
+        raise NotImplementedError
+
+
 class ProjectionStateRepository:
     def get_resume_projections(
         self, workspace_id: UUID, workflow_instance_id: UUID
@@ -456,6 +489,7 @@ class UnitOfWork:
     workflow_attempts: WorkflowAttemptRepository
     workflow_checkpoints: WorkflowCheckpointRepository
     verify_reports: VerifyReportRepository
+    memory_episodes: MemoryEpisodeRepository | None
     projection_states: ProjectionStateRepository | None
     projection_failures: ProjectionFailureRepository | None
 

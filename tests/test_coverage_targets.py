@@ -25,12 +25,17 @@ from ctxledger.config import (
     ProjectionSettings,
 )
 from ctxledger.memory.service import (
+    EpisodeRecord,
+    GetContextResponse,
     GetMemoryContextRequest,
+    InMemoryEpisodeRepository,
+    InMemoryWorkflowLookupRepository,
     MemoryErrorCode,
     MemoryFeature,
     MemoryService,
     MemoryServiceError,
     RememberEpisodeRequest,
+    RememberEpisodeResponse,
     SearchMemoryRequest,
     StubResponse,
 )
@@ -54,6 +59,7 @@ from ctxledger.runtime.orchestration import (
 )
 from ctxledger.runtime.serializers import (
     serialize_closed_projection_failures_history,
+    serialize_get_context_response,
     serialize_runtime_introspection,
     serialize_runtime_introspection_collection,
     serialize_stub_response,
@@ -111,6 +117,7 @@ def make_settings(
             url=database_url,
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
+            schema_name="public",
         ),
         http=HttpSettings(
             host=host,
@@ -3267,14 +3274,23 @@ def test_build_readiness_status_covers_not_started_database_unavailable_and_sche
     assert schema_not_ready_status.details["schema_ready"] is False
 
 
-def test_memory_service_validates_requests_and_returns_stub_responses() -> None:
-    service = MemoryService()
+def test_memory_service_records_episodes_and_keeps_stubbed_retrieval_responses() -> (
+    None
+):
+    workflow_id = uuid4()
+    attempt_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
 
     remember_response = service.remember_episode(
         RememberEpisodeRequest(
-            workflow_instance_id="wf-123",
+            workflow_instance_id=str(workflow_id),
             summary="Episode summary",
-            attempt_id="attempt-1",
+            attempt_id=str(attempt_id),
+            metadata={"kind": "checkpoint"},
         )
     )
     search_response = service.search(
@@ -3289,7 +3305,7 @@ def test_memory_service_validates_requests_and_returns_stub_responses() -> None:
         GetMemoryContextRequest(
             query="relevant context",
             workspace_id="ws-1",
-            workflow_instance_id="wf-1",
+            workflow_instance_id=str(workflow_id),
             ticket_id="TICKET-1",
             limit=3,
             include_episodes=False,
@@ -3298,9 +3314,20 @@ def test_memory_service_validates_requests_and_returns_stub_responses() -> None:
         )
     )
 
+    assert isinstance(remember_response, RememberEpisodeResponse)
     assert remember_response.feature == MemoryFeature.REMEMBER_EPISODE
-    assert remember_response.implemented is False
-    assert remember_response.details["attempt_id"] == "attempt-1"
+    assert remember_response.implemented is True
+    assert remember_response.status == "recorded"
+    assert remember_response.episode is not None
+    assert remember_response.episode.workflow_instance_id == workflow_id
+    assert remember_response.episode.attempt_id == attempt_id
+    assert remember_response.episode.summary == "Episode summary"
+    assert remember_response.episode.metadata == {"kind": "checkpoint"}
+    assert remember_response.details == {
+        "workflow_instance_id": str(workflow_id),
+        "attempt_id": str(attempt_id),
+    }
+    assert len(episode_repository.episodes) == 1
 
     assert search_response.feature == MemoryFeature.SEARCH
     assert search_response.details["limit"] == 5
@@ -3313,7 +3340,10 @@ def test_memory_service_validates_requests_and_returns_stub_responses() -> None:
 
 
 def test_memory_service_raises_validation_errors_for_invalid_requests() -> None:
-    service = MemoryService()
+    workflow_id = uuid4()
+    service = MemoryService(
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
 
     with pytest.raises(MemoryServiceError) as remember_error:
         service.remember_episode(
@@ -3325,6 +3355,27 @@ def test_memory_service_raises_validation_errors_for_invalid_requests() -> None:
     assert remember_error.value.code == MemoryErrorCode.INVALID_REQUEST
     assert remember_error.value.feature == MemoryFeature.REMEMBER_EPISODE
     assert remember_error.value.details == {"field": "workflow_instance_id"}
+
+    with pytest.raises(MemoryServiceError) as invalid_uuid_error:
+        service.remember_episode(
+            RememberEpisodeRequest(
+                workflow_instance_id="not-a-uuid",
+                summary="Episode summary",
+            )
+        )
+    assert invalid_uuid_error.value.code == MemoryErrorCode.INVALID_REQUEST
+    assert invalid_uuid_error.value.feature == MemoryFeature.REMEMBER_EPISODE
+    assert invalid_uuid_error.value.details == {"field": "workflow_instance_id"}
+
+    with pytest.raises(MemoryServiceError) as missing_workflow_error:
+        service.remember_episode(
+            RememberEpisodeRequest(
+                workflow_instance_id=str(uuid4()),
+                summary="Episode summary",
+            )
+        )
+    assert missing_workflow_error.value.code == MemoryErrorCode.WORKFLOW_NOT_FOUND
+    assert missing_workflow_error.value.feature == MemoryFeature.REMEMBER_EPISODE
 
     with pytest.raises(MemoryServiceError) as search_error:
         service.search(
@@ -3353,6 +3404,419 @@ def test_memory_service_raises_validation_errors_for_invalid_requests() -> None:
         context_error.value.message
         == "At least one of query, workspace_id, workflow_instance_id, or ticket_id must be provided."
     )
+
+
+def test_memory_get_context_returns_episode_oriented_results() -> None:
+    workflow_id = uuid4()
+    other_workflow_id = uuid4()
+    attempt_id = uuid4()
+    now = datetime(2024, 1, 10, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    older_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Older episode",
+        attempt_id=attempt_id,
+        metadata={"kind": "design"},
+        created_at=now,
+        updated_at=now,
+    )
+    newer_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Newer episode",
+        attempt_id=None,
+        metadata={"kind": "fix"},
+        created_at=datetime(2024, 1, 11, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 11, tzinfo=UTC),
+    )
+    unrelated_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=other_workflow_id,
+        summary="Unrelated episode",
+        attempt_id=None,
+        metadata={"kind": "other"},
+        created_at=datetime(2024, 1, 12, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 12, tzinfo=UTC),
+    )
+
+    episode_repository.create(older_episode)
+    episode_repository.create(newer_episode)
+    episode_repository.create(unrelated_episode)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            {workflow_id, other_workflow_id}
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=5,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert isinstance(response, GetContextResponse)
+    assert response.feature == MemoryFeature.GET_CONTEXT
+    assert response.implemented is True
+    assert response.status == "ok"
+    assert response.available_in_version == "0.2.0"
+    assert [episode.summary for episode in response.episodes] == [
+        "Newer episode",
+        "Older episode",
+    ]
+    assert response.details == {
+        "query": None,
+        "normalized_query": None,
+        "lookup_scope": "workflow_instance",
+        "workspace_id": None,
+        "workflow_instance_id": str(workflow_id),
+        "ticket_id": None,
+        "limit": 5,
+        "include_episodes": True,
+        "include_memory_items": False,
+        "include_summaries": False,
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(workflow_id)],
+        "query_filter_applied": False,
+        "episodes_before_query_filter": 2,
+        "matched_episode_count": 2,
+        "episodes_returned": 2,
+    }
+
+
+def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    created_at = datetime(2024, 2, 1, tzinfo=UTC)
+
+    for index in range(3):
+        episode_repository.create(
+            EpisodeRecord(
+                episode_id=uuid4(),
+                workflow_instance_id=workflow_id,
+                summary=f"Episode {index}",
+                metadata={"index": index},
+                created_at=created_at.replace(day=index + 1),
+                updated_at=created_at.replace(day=index + 1),
+            )
+        )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    limited_response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=2,
+            include_episodes=True,
+        )
+    )
+    no_episode_response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=2,
+            include_episodes=False,
+        )
+    )
+
+    assert [episode.summary for episode in limited_response.episodes] == [
+        "Episode 2",
+        "Episode 1",
+    ]
+    assert limited_response.details["lookup_scope"] == "workflow_instance"
+    assert limited_response.details["resolved_workflow_count"] == 1
+    assert limited_response.details["resolved_workflow_ids"] == [str(workflow_id)]
+    assert limited_response.details["query_filter_applied"] is False
+    assert limited_response.details["episodes_before_query_filter"] == 2
+    assert limited_response.details["matched_episode_count"] == 2
+    assert limited_response.details["episodes_returned"] == 2
+
+    assert no_episode_response.episodes == ()
+    assert no_episode_response.details["lookup_scope"] == "workflow_instance"
+    assert no_episode_response.details["resolved_workflow_count"] == 1
+    assert no_episode_response.details["resolved_workflow_ids"] == [str(workflow_id)]
+    assert no_episode_response.details["query_filter_applied"] is False
+    assert no_episode_response.details["episodes_before_query_filter"] == 0
+    assert no_episode_response.details["matched_episode_count"] == 0
+    assert no_episode_response.details["episodes_returned"] == 0
+    assert no_episode_response.details["workflow_instance_id"] == str(workflow_id)
+
+
+def test_memory_get_context_applies_initial_query_filtering() -> None:
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    created_at = datetime(2024, 3, 1, tzinfo=UTC)
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Fix flaky postgres startup ordering",
+            metadata={"kind": "stabilization", "component": "postgres"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Document release checklist",
+            metadata={"kind": "docs", "component": "release"},
+            created_at=created_at.replace(day=2),
+            updated_at=created_at.replace(day=2),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            query="postgres",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Fix flaky postgres startup ordering"
+    ]
+    assert response.details == {
+        "query": "postgres",
+        "normalized_query": "postgres",
+        "lookup_scope": "workflow_instance",
+        "workspace_id": None,
+        "workflow_instance_id": str(workflow_id),
+        "ticket_id": None,
+        "limit": 10,
+        "include_episodes": True,
+        "include_memory_items": False,
+        "include_summaries": False,
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(workflow_id)],
+        "query_filter_applied": True,
+        "episodes_before_query_filter": 2,
+        "matched_episode_count": 1,
+        "episodes_returned": 1,
+    }
+
+
+def test_memory_get_context_matches_query_against_metadata_keys() -> None:
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    created_at = datetime(2024, 3, 5, tzinfo=UTC)
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Document release checklist",
+            metadata={"kind": "docs", "component": "release"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Capture workflow evidence",
+            metadata={"kind": "ops", "service": "postgres"},
+            created_at=created_at.replace(day=6),
+            updated_at=created_at.replace(day=6),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            query="component",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Document release checklist"
+    ]
+    assert response.details == {
+        "query": "component",
+        "normalized_query": "component",
+        "lookup_scope": "workflow_instance",
+        "workspace_id": None,
+        "workflow_instance_id": str(workflow_id),
+        "ticket_id": None,
+        "limit": 10,
+        "include_episodes": True,
+        "include_memory_items": False,
+        "include_summaries": False,
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(workflow_id)],
+        "query_filter_applied": True,
+        "episodes_before_query_filter": 2,
+        "matched_episode_count": 1,
+        "episodes_returned": 1,
+    }
+
+
+def test_memory_get_context_matches_query_against_metadata_values() -> None:
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    created_at = datetime(2024, 3, 7, tzinfo=UTC)
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Document release checklist",
+            metadata={"kind": "docs", "component": "release"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Capture workflow evidence",
+            metadata={"kind": "ops", "service": "postgres"},
+            created_at=created_at.replace(day=8),
+            updated_at=created_at.replace(day=8),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            query="release",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Document release checklist"
+    ]
+    assert response.details == {
+        "query": "release",
+        "normalized_query": "release",
+        "lookup_scope": "workflow_instance",
+        "workspace_id": None,
+        "workflow_instance_id": str(workflow_id),
+        "ticket_id": None,
+        "limit": 10,
+        "include_episodes": True,
+        "include_memory_items": False,
+        "include_summaries": False,
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(workflow_id)],
+        "query_filter_applied": True,
+        "episodes_before_query_filter": 2,
+        "matched_episode_count": 1,
+        "episodes_returned": 1,
+    }
+
+
+def test_serialize_get_context_response_serializes_episode_payloads() -> None:
+    workflow_id = uuid4()
+    attempt_id = uuid4()
+    created_at = datetime(2024, 3, 4, 5, 6, 7, tzinfo=UTC)
+    response = GetContextResponse(
+        feature=MemoryFeature.GET_CONTEXT,
+        implemented=True,
+        message="Episode-oriented memory context retrieved successfully.",
+        status="ok",
+        available_in_version="0.2.0",
+        timestamp=created_at,
+        episodes=(
+            EpisodeRecord(
+                episode_id=uuid4(),
+                workflow_instance_id=workflow_id,
+                summary="Recovered context",
+                attempt_id=attempt_id,
+                metadata={"kind": "root-cause"},
+                status="recorded",
+                created_at=created_at,
+                updated_at=created_at,
+            ),
+        ),
+        details={
+            "query": "root cause",
+            "normalized_query": "root cause",
+            "lookup_scope": "workflow_instance",
+            "workflow_instance_id": str(workflow_id),
+            "resolved_workflow_count": 1,
+            "resolved_workflow_ids": [str(workflow_id)],
+            "query_filter_applied": True,
+            "episodes_before_query_filter": 3,
+            "matched_episode_count": 1,
+            "episodes_returned": 1,
+        },
+    )
+
+    payload = serialize_get_context_response(response)
+
+    assert payload["feature"] == "memory_get_context"
+    assert payload["implemented"] is True
+    assert (
+        payload["message"] == "Episode-oriented memory context retrieved successfully."
+    )
+    assert payload["status"] == "ok"
+    assert payload["available_in_version"] == "0.2.0"
+    assert payload["timestamp"] == created_at.isoformat()
+    assert payload["details"] == {
+        "query": "root cause",
+        "normalized_query": "root cause",
+        "lookup_scope": "workflow_instance",
+        "workflow_instance_id": str(workflow_id),
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(workflow_id)],
+        "query_filter_applied": True,
+        "episodes_before_query_filter": 3,
+        "matched_episode_count": 1,
+        "episodes_returned": 1,
+    }
+    assert payload["episodes"] == [
+        {
+            "episode_id": str(response.episodes[0].episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "summary": "Recovered context",
+            "attempt_id": str(attempt_id),
+            "metadata": {"kind": "root-cause"},
+            "status": "recorded",
+            "created_at": created_at.isoformat(),
+            "updated_at": created_at.isoformat(),
+        }
+    ]
 
 
 def test_projection_writer_write_resume_projection_handles_success_and_failures(
@@ -4332,7 +4796,10 @@ def test_server_validate_configuration_and_get_workflow_resume() -> None:
 
     class FakeSettings:
         def __init__(self) -> None:
-            self.database = SimpleNamespace(url="postgresql://example/db")
+            self.database = SimpleNamespace(
+                url="postgresql://example/db",
+                schema_name="public",
+            )
             self.http = SimpleNamespace(
                 host="127.0.0.1",
                 port=8080,

@@ -49,18 +49,21 @@ Before you start `ctxledger`, prepare the following:
 - Docker and Docker Compose
 - a local network port available for:
   - PostgreSQL on `5432`
-  - `ctxledger` on `8080`
-- an MCP client that can connect to a remote HTTP MCP server, such as:
+  - Traefik HTTPS entrypoint on `8443`
+- an MCP client that can connect to a remote MCP server over HTTPS, such as:
   - VS Code
   - Zed
 
 For the recommended local path, you do **not** need to install PostgreSQL separately.  
-The provided Docker Compose setup starts both PostgreSQL and the `ctxledger` server for you.
+The provided Docker Compose setup starts PostgreSQL plus the proxy-protected `ctxledger` deployment for you.
 
-You should also know the local MCP endpoint that the default Docker setup exposes:
+If you already have durable local history in PostgreSQL, note that the repository’s PostgreSQL integration tests are intended to avoid mutating that existing working history directly.  
+The current integration-test approach uses a temporary PostgreSQL schema per test run, applies the bundled schema there, and drops that temporary schema afterward instead of truncating long-lived tables in `public`.
+
+You should also know the current local MCP endpoint exposed for operator use:
 
 ```/dev/null/txt#L1-1
-http://127.0.0.1:8080/mcp
+https://127.0.0.1:8443/mcp
 ```
 
 If you want to use authenticated access, prepare a bearer token for the proxy layer and use the small-pattern Traefik/auth deployment described below.
@@ -69,70 +72,9 @@ If you want to use authenticated access, prepare a bearer token for the proxy la
 
 ## Quick Start
 
-The recommended local operator path is the **authenticated small-pattern deployment** through Traefik on port `8091`.  
-The direct unauthenticated path on port `8080` is still available for isolated local development and debugging.
+The recommended local operator path is the **authenticated small-pattern deployment** through Traefik on port `8443`.
 
-### Option A. Start `ctxledger` without authentication
-
-Use this mode when you want the simplest direct local path to the backend.
-
-#### 1. Start PostgreSQL and the direct MCP server
-
-From the repository root, start PostgreSQL and the remote MCP server:
-
-```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml up -d --build
-```
-
-After startup, the direct MCP endpoint is:
-
-```/dev/null/txt#L1-1
-http://127.0.0.1:8080/mcp
-```
-
-You can optionally verify that the local server is up by checking the runtime debug endpoint:
-
-```/dev/null/sh#L1-1
-curl http://127.0.0.1:8080/debug/runtime
-```
-
-#### 2. Configure your MCP client for the unauthenticated local endpoint
-
-##### VS Code
-
-Add a remote MCP server entry in your VS Code MCP client configuration.
-
-A representative configuration shape is:
-
-```/dev/null/json#L1-8
-{
-  "mcpServers": {
-    "ctxledger": {
-      "url": "http://127.0.0.1:8080/mcp"
-    }
-  }
-}
-```
-
-##### Zed
-
-Add a remote MCP server entry in your Zed MCP configuration.
-
-A representative configuration shape is:
-
-```/dev/null/json#L1-8
-{
-  "mcp_servers": {
-    "ctxledger": {
-      "url": "http://127.0.0.1:8080/mcp"
-    }
-  }
-}
-```
-
-Once configured, your MCP client should be able to reach `ctxledger` directly over HTTP and use the workflow and memory tool surfaces exposed at `/mcp`.
-
-### Option B. Start `ctxledger` with authentication (recommended)
+### Start `ctxledger` with authentication (recommended)
 
 Use this mode when you want the documented proxy-first deployment shape for local development, operator validation, and IDE clients that can send bearer headers.
 
@@ -199,13 +141,20 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.
 
 Use `--force-recreate` only when you intentionally want to replace existing containers, such as after a major compose/config change or when you want a known-fresh container set.
 
-After startup, the recommended authenticated MCP endpoint is:
+After startup, the authenticated MCP endpoint is:
 
 ```/dev/null/txt#L1-1
-http://127.0.0.1:8091/mcp
+https://127.0.0.1:8443/mcp
 ```
 
 Every MCP client request to this endpoint must include the same bearer token you chose above.
+
+This small-auth deployment is intentionally HTTPS-first. Provide local certificate files for Traefik at:
+
+- `docker/traefik/certs/localhost.crt`
+- `docker/traefik/certs/localhost.key`
+
+This HTTPS path is intended for local operator validation and production-like proxy testing. If the certificate is self-signed or otherwise not trusted by your machine, your client or smoke validation command may need an insecure or trust-configured mode.
 
 #### 2. Verify authentication behavior
 
@@ -214,7 +163,7 @@ First, confirm that requests without a token are rejected. This shows that proxy
 Missing token should be rejected with `401`:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 Then confirm that a request with the same token used at startup is accepted.
@@ -222,14 +171,29 @@ Then confirm that a request with the same token used at startup is accepted.
 A valid token should pass and the workflow/resource smoke should succeed:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
 If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` already, you can keep the smoke command aligned with the startup token like this:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read --insecure
 ```
+
+If you want to validate the HTTPS entrypoint instead, first create local certificate files for Traefik. A practical local option is `mkcert`:
+
+```/dev/null/sh#L1-2
+mkdir -p docker/traefik/certs
+mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
+```
+
+You can then validate the HTTPS endpoint with the same token:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --insecure --scenario workflow --workflow-resource-read
+```
+
+The `--insecure` flag is useful for local self-signed certificates. If your certificate is trusted locally, you can omit it.
 
 #### 3. Configure your MCP client for the authenticated endpoint
 
@@ -245,7 +209,7 @@ A representative authenticated shape is:
 {
   "mcpServers": {
     "ctxledger": {
-      "url": "http://127.0.0.1:8091/mcp",
+      "url": "https://127.0.0.1:8443/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_TOKEN_HERE"
       }
@@ -262,12 +226,10 @@ A representative authenticated shape is:
 
 ```/dev/null/json#L1-11
 {
-  "mcp_servers": {
-    "ctxledger": {
-      "url": "http://127.0.0.1:8091/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_TOKEN_HERE"
-      }
+  "ctxledger": {
+    "url": "https://127.0.0.1:8443/mcp",
+    "headers": {
+         "Authorization": "Bearer YOUR_TOKEN_HERE"
     }
   }
 }
@@ -276,6 +238,14 @@ A representative authenticated shape is:
 Unfortunately, Zed does not expand environment variables in its MCP configuration file, so `YOUR_TOKEN_HERE` must be replaced with the actual token value.
 
 Once configured, your MCP client should be able to reach `ctxledger` through the proxy-protected MCP endpoint and use the workflow and memory tool surfaces exposed at `/mcp`.
+
+If your MCP client supports HTTPS MCP endpoints and your local certificate is trusted, you can also point it at:
+
+```/dev/null/txt#L1-1
+https://127.0.0.1:8443/mcp
+```
+
+When using the HTTPS local path, keep the same bearer token header and ensure the client trusts the local certificate chain or is explicitly configured for local self-signed testing.
 
 #### Optional: use `envrcctl` to manage the token
 
@@ -300,7 +270,7 @@ envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-co
 ```
 
 ```/dev/null/sh#L1-1
-envrcctl exec -- python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read
+envrcctl exec -- python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read --insecure
 ```
 
 Because Zed does not expand environment variables in its MCP configuration file, you must still retrieve the token and paste it into `YOUR_TOKEN_HERE` manually:
@@ -342,7 +312,7 @@ For reliable handoff between agent sessions, it is also helpful to keep the curr
 
 ## Current Scope (`v0.1.0`)
 
-The initial release is centered on the workflow kernel.
+The initial release is centered on the workflow kernel, while the memory layer has begun to take shape in a limited but real form.
 
 ### Implemented / targeted first
 - workspace registration
@@ -355,12 +325,19 @@ The initial release is centered on the workflow kernel.
 - structured configuration and startup validation
 - health / readiness foundations
 
-### Architecturally defined, but may still be partial or stubbed
-- episodic memory
-- semantic memory
-- embedding-backed retrieval
-- hierarchical summaries
-- relation-aware memory retrieval
+### Memory status in the current repository
+- `memory_remember_episode` is implemented for append-only episodic recording
+  - `attempt_id` is now persisted canonically with the episode record when provided
+- `memory_get_context` is partially implemented as an episode-oriented retrieval path
+  - direct `workflow_instance_id` lookup is supported
+  - workflow lookup by `workspace_id` is supported
+  - workflow lookup by `ticket_id` is supported
+  - `include_episodes=false` is supported
+  - `limit` is supported
+  - initial lightweight query filtering over episode summary and explicit metadata fields is supported
+  - broader retrieval behavior remains early-stage
+- `memory_search` remains a stub
+- semantic memory, embedding-backed retrieval, hierarchical summaries, and relation-aware retrieval remain future work
 
 ---
 
@@ -509,15 +486,65 @@ It should not be read as silently claiming full MCP surface completeness beyond 
 - `memory_search`
 - `memory_get_context`
 
-Some memory APIs may remain stubbed in `v0.1.0` while the workflow subsystem is completed first.
+Current implementation status:
 
-The intended staged roadmap is:
+- `memory_remember_episode`
+  - implemented
+  - validates `workflow_instance_id`
+  - optionally validates `attempt_id`
+  - verifies workflow existence before recording
+  - records append-only episode entries
+  - persists `attempt_id` canonically when present
+- `memory_get_context`
+  - partially implemented
+  - currently returns episode-oriented context
+  - supports direct retrieval by `workflow_instance_id`
+  - supports lookup expansion by `workspace_id`
+  - supports lookup expansion by `ticket_id`
+  - supports `limit`
+  - supports `include_episodes`
+  - supports initial lightweight query filtering against episode summary and explicit metadata fields
+  - broader relevance-based, semantic, summary, and multi-layer retrieval is not implemented yet
+- `memory_search`
+  - currently stubbed / not implemented
 
-- `0.2`: episodic memory, with `memory_remember_episode` as the most direct fit and `memory_get_context` potentially gaining an initial episode-oriented form
-- `0.3`: semantic search, with `memory_search` as the most direct fit and `memory_get_context` potentially gaining stronger relevance-based retrieval
+The intended staged roadmap is still:
+
+- `0.2`: episodic memory, with `memory_remember_episode` implemented and `memory_get_context` now providing an initial episode-oriented form
+- `0.3`: semantic search, with `memory_search` as the most direct tool fit and `memory_get_context` potentially gaining stronger relevance-based retrieval
 - `0.4`: hierarchical memory retrieval, where `memory_get_context` may evolve into a more multi-layer context assembly surface
 
 This is a roadmap-oriented interpretation of the current architecture and planning documents, not a guarantee that every memory tool will be fully complete at the start of its corresponding version.
+
+### Working `0.2.0` memory closeout criteria
+The repository should treat `0.2.0` memory closeout as satisfied only when the following are true:
+
+- `memory_remember_episode` is implemented and stores episode records durably in PostgreSQL
+- `attempt_id` is canonically persisted on episodes when provided
+- `memory_get_context` remains implemented as an episode-oriented retrieval path, not as a stub
+- `memory_get_context` supports workflow-linked retrieval through:
+  - `workflow_instance_id`
+  - `workspace_id`
+  - `ticket_id`
+- `memory_get_context` supports:
+  - `limit`
+  - `include_episodes`
+  - initial query-aware filtering over episode summary and explicit metadata fields
+- `memory_get_context` returns enough response details to explain how context was assembled, including at least:
+  - `lookup_scope`
+  - `resolved_workflow_count`
+  - `resolved_workflow_ids`
+  - `query_filter_applied`
+  - `episodes_before_query_filter`
+  - `matched_episode_count`
+  - `episodes_returned`
+- unit and PostgreSQL-backed integration coverage exist for the implemented episodic capture and context retrieval paths
+- docs clearly distinguish:
+  - implemented episodic memory behavior
+  - partially implemented context retrieval behavior
+  - stubbed `memory_search`
+- semantic retrieval, embeddings, relations, and hierarchical summaries remain explicitly out of scope for `0.2.0`
+- TLS / HTTPS deployment work may proceed as part of the broader `0.2.0` stream, but only after the memory-focused closeout work is considered sufficiently complete
 
 ### Workflow HTTP read endpoints
 - `/workflow-resume/{workflow_instance_id}`
@@ -723,6 +750,7 @@ Project metadata is defined in `pyproject.toml`.
 Important environment variables include:
 
 - `CTXLEDGER_DATABASE_URL`
+- `CTXLEDGER_DB_SCHEMA_NAME`
 - `CTXLEDGER_TRANSPORT`
 - `CTXLEDGER_ENABLE_HTTP`
 
@@ -750,6 +778,7 @@ See `./.env.example` for a committed local-development configuration template.
 
 ```/dev/null/.env.example#L1-12
 CTXLEDGER_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ctxledger
+CTXLEDGER_DB_SCHEMA_NAME=public
 CTXLEDGER_TRANSPORT=http
 CTXLEDGER_ENABLE_HTTP=true
 CTXLEDGER_HOST=0.0.0.0
@@ -769,6 +798,7 @@ See `./.env.production.example` for a committed production-oriented configuratio
 
 ```/dev/null/.env.production.example#L1-14
 CTXLEDGER_DATABASE_URL=postgresql://ctxledger:replace-me@db.internal:5432/ctxledger
+CTXLEDGER_DB_SCHEMA_NAME=public
 CTXLEDGER_TRANSPORT=http
 CTXLEDGER_ENABLE_HTTP=true
 CTXLEDGER_HOST=0.0.0.0
@@ -784,89 +814,87 @@ CTXLEDGER_LOG_LEVEL=info
 
 In production-like environments, also prefer TLS termination and reverse-proxy access in front of the HTTP service, with authentication enforced at the proxy layer rather than inside `ctxledger`.
 
+`CTXLEDGER_DB_SCHEMA_NAME` defaults to `public`, which is the normal runtime choice. It can also be set explicitly when you need to target a different PostgreSQL schema, such as an isolated temporary schema for persistence integration tests.
+
 ---
 
 ## Local Startup
 
-The recommended local path is Docker-based.
+The recommended local path is Docker-based and proxy-protected over HTTPS.
 
 On successful startup, `ctxledger` also prints a short runtime summary to stderr so you can quickly verify the active transport wiring.
 
-### Option A: Docker Compose
+### Docker Compose
 
-#### 1. Start PostgreSQL and application services
+#### 1. Prepare local TLS certificate files
+
+Before starting the proxy-protected stack, create certificate material for Traefik if you do not already have it.
+
+A practical local option is `mkcert`:
+
+```/dev/null/sh#L1-2
+mkdir -p docker/traefik/certs
+mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
+```
+
+#### 2. Start PostgreSQL plus the HTTPS proxy stack
 
 From the repository root:
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml up --build
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
-#### 2. Verify endpoint availability
+#### 3. Verify endpoint availability
 
 Expected local MCP endpoint:
 
 ```/dev/null/txt#L1-1
-http://localhost:8080/mcp
+https://127.0.0.1:8443/mcp
 ```
 
-The Docker Compose path now runs `ctxledger` as a FastAPI application served by `uvicorn`, while preserving the existing MCP and debug dispatch behavior.
+The operator-facing path is now HTTPS-only through Traefik. The backend application remains private behind the proxy.
 
-#### 3. Verify runtime wiring
+#### 4. Verify auth rejection and runtime reachability
 
-You can verify that the server is up and exposing the expected HTTP surface:
+You can verify that unauthenticated requests are rejected at the proxy boundary:
 
 ```/dev/null/sh#L1-1
-curl http://localhost:8080/debug/runtime
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
-A typical response shape is:
-
-```/dev/null/json#L1-18
-{
-  "runtime": [
-    {
-      "transport": "http",
-      "routes": [
-        "mcp_rpc",
-        "projection_failures_ignore",
-        "projection_failures_resolve",
-        "runtime_introspection",
-        "runtime_routes",
-        "runtime_tools",
-        "workflow_closed_projection_failures",
-        "workflow_resume"
-      ],
-      "tools": ["memory_get_context", "memory_remember_episode", "memory_search", "projection_failures_ignore", "projection_failures_resolve", "workflow_checkpoint", "workflow_complete", "workflow_resume", "workflow_start", "workspace_register"],
-      "resources": ["workspace://{workspace_id}/resume", "workspace://{workspace_id}/workflow/{workflow_instance_id}"]
-    }
-  ]
-}
-```
-
-#### 4. Run the minimum MCP smoke validation
+#### 5. Run the minimum MCP smoke validation
 
 A repository-provided smoke client is available for remote MCP validation:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --tool-name memory_get_context
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --tool-name memory_get_context --insecure
 ```
 
-This validates the minimum confirmed HTTP MCP path for `v0.1.0`:
+This validates the minimum confirmed MCP path for `v0.1.0`:
 
-- `initialize`
-- `tools/list`
-- `tools/call`
-- `resources/list`
+- initialize
+- tools/list
+- tools/call
 
-The default smoke call uses `memory_get_context`, which is currently a safe stubbed memory tool in `v0.1.0`. The call itself succeeds over MCP HTTP even though the underlying feature remains intentionally unimplemented.
+The default smoke call uses `memory_get_context`. That tool is no longer a pure stub: it now supports an initial episode-oriented retrieval path, while still remaining partial relative to the broader planned memory architecture.
 
-#### 5. Run workflow-oriented smoke validation
+#### 6. Run workflow-oriented smoke validation
 
-If you also want to validate the workflow tool path against the real Dockerized PostgreSQL instance, use the workflow scenario:
+If you also want to validate the workflow tool path against the real Dockerized PostgreSQL instance, use the workflow scenario.
+
+For repository test contributors, this is also a good point to keep the integration-test DB behavior in mind:
+
+- PostgreSQL integration tests should avoid clearing durable working history from long-lived tables
+- the current repository approach is to create a temporary schema for integration tests
+- apply the bundled schema inside that temporary schema
+- run the test suite against that temporary schema through session `search_path` selection
+- drop the temporary schema after the test finishes
+
+This keeps existing operator or development history in `public` out of the integration-test cleanup path.
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --insecure
 ```
 
 This scenario performs:
@@ -879,12 +907,12 @@ This scenario performs:
 
 against the live server.
 
-#### 6. Run workflow resource-read validation
+#### 7. Run workflow resource-read validation
 
 If you also want to validate workflow resource reads against the live server, enable resource reads in the workflow scenario:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
 This extends the workflow validation with:
@@ -892,7 +920,7 @@ This extends the workflow validation with:
 - `resources/read` for `workspace://{workspace_id}/resume`
 - `resources/read` for `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 
-#### 7. Run the proxy-authenticated smoke validation
+#### 8. Run the proxy-authenticated smoke validation
 
 If you want to validate authenticated access, use the small-pattern Traefik/auth deployment. Authentication is expected to be enforced at the proxy layer rather than inside `ctxledger`.
 
@@ -913,7 +941,7 @@ CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f doc
 Then run the smoke client with the matching bearer token through the proxy endpoint:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
 This validates that the proxy-protected remote MCP server still supports:
@@ -955,7 +983,7 @@ CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f doc
 Then point your MCP client or smoke client at the Traefik endpoint and send the same bearer token:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
 You can also validate proxy rejection behavior before the happy path.
@@ -963,19 +991,19 @@ You can also validate proxy rejection behavior before the happy path.
 Missing token should be rejected by Traefik ForwardAuth with `401`:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 An invalid token should also be rejected with `401`:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 Then confirm that a valid token is allowed through the proxy and that the workflow/resource smoke still passes:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
 Operational notes for this mode:
@@ -999,81 +1027,17 @@ This small-pattern deployment is the recommended stepping stone for:
 docker compose -f docker/docker-compose.yml down
 ```
 
-### Option B: Dockerfile-based startup
+### Container Image Notes
 
-You can also build and run the application image directly from the repository root.
-
-#### 1. Build the image
+You can still build the application image directly from the repository root:
 
 ```/dev/null/sh#L1-1
 docker build -t ctxledger:local .
 ```
 
-#### 2. Start PostgreSQL separately
+However, the current recommended operator-facing deployment path is the HTTPS-terminated Traefik stack rather than direct host exposure of the backend application container.
 
-Example shape:
-
-```/dev/null/sh#L1-1
-docker run --name ctxledger-postgres -e POSTGRES_DB=ctxledger -e POSTGRES_USER=ctxledger -e POSTGRES_PASSWORD=ctxledger -p 5432:5432 -d pgvector/pgvector:pg16
-```
-
-#### 3. Apply the schema explicitly
-
-`ctxledger` is designed so that schema bootstrap/migration is an **explicit operational step**.
-
-Use:
-
-- `schemas/postgres.sql`
-
-Apply it with your preferred PostgreSQL client after the database is up.
-
-Example shape:
-
-```/dev/null/sh#L1-1
-psql postgresql://ctxledger:ctxledger@localhost:5432/ctxledger -f schemas/postgres.sql
-```
-
-#### 4. Run the application container
-
-Example shape:
-
-```/dev/null/sh#L1-1
-docker run --rm -p 8080:8080 -e CTXLEDGER_DATABASE_URL=postgresql://ctxledger:ctxledger@host.docker.internal:5432/ctxledger -e CTXLEDGER_TRANSPORT=http -e CTXLEDGER_ENABLE_HTTP=true -e CTXLEDGER_HOST=0.0.0.0 -e CTXLEDGER_PORT=8080 -e CTXLEDGER_HTTP_PATH=/mcp ctxledger:local
-```
-
-If you are running the image directly with the current repository layout, make sure the container starts the FastAPI app through `uvicorn`. A typical command shape is:
-
-```/dev/null/sh#L1-1
-uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080
-```
-
-If your Docker environment does not support `host.docker.internal`, use an address appropriate for your host networking setup.
-
-#### 5. Verify endpoint availability
-
-Expected local MCP endpoint:
-
-```/dev/null/txt#L1-1
-http://localhost:8080/mcp
-```
-
-#### 6. Inspect startup summary and debug surfaces
-
-A typical startup summary shape is:
-
-```/dev/null/txt#L1-6
-ctxledger 0.1.0 started
-health=ok
-readiness=ready
-runtime=[{'transport': 'http', 'routes': ['mcp_rpc', 'projection_failures_ignore', 'projection_failures_resolve', 'runtime_introspection', 'runtime_routes', 'runtime_tools', 'workflow_closed_projection_failures', 'workflow_resume'], 'tools': ['memory_get_context', 'memory_remember_episode', 'memory_search', 'projection_failures_ignore', 'projection_failures_resolve', 'workflow_checkpoint', 'workflow_complete', 'workflow_resume', 'workflow_start', 'workspace_register'], 'resources': ['workspace://{workspace_id}/resume', 'workspace://{workspace_id}/workflow/{workflow_instance_id}']}]
-mcp_endpoint=http://localhost:8080/mcp
-```
-
-You can then inspect the same runtime wiring through:
-
-- `/debug/runtime`
-- `/debug/routes`
-- `/debug/tools`
+If you use the image directly for advanced or internal-only experiments, treat that as a backend/runtime detail rather than the primary documented operator path.
 
 ### Option C: Python direct startup
 

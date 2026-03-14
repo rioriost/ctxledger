@@ -1,201 +1,246 @@
-この session では、`ctxledger` の MCP サーバ機能そのものではなく、**MCP クライアント上の AI エージェントが `.rules` に従って workflow を記録する運用になっているか** を確認し、その運用前提が README・`.rules`・`last_session.md` に一貫して反映されるよう整理しました。加えて、README の Quick Start を **認証なし** と **認証付き（推奨）** に分け、認証付きでは **bearer token が必須であり、起動・smoke・MCP クライアント設定で同じ token を揃える必要がある** こと、**token の具体的な生成例**、および **`envrcctl secret set` / `envrcctl exec -- ...` を使う optional な運用** まで反映しました。さらに、検証により **Zed は MCP 設定ファイル中の環境変数を展開しない** ことが分かったため、その注意書きも README に追記済みです。最後に、`.rules` を整理し、**`last_session.md` は `ctxledger` 開発時だけの housekeeping** として分離しつつ、**一般の `ctxledger` 利用プロジェクト向け workflow ルール** を独立させました。
-
-この追記ではさらに、**memory 系 tool のロードマップ解釈**を整理しました。現在の文書群から読む限り、`v0.1.0` では `memory_remember_episode` / `memory_search` / `memory_get_context` は意図的に stub または deferred であり、自然な段階整理は次のとおりです。
-
-- `0.2`: episodic memory
-  - `memory_remember_episode` が最も直接対応する tool
-  - `memory_get_context` は episode ベースの初期形が入る可能性がある
-- `0.3`: semantic search
-  - `memory_search` が最も直接対応する tool
-  - `memory_get_context` は relevance-based retrieval を強める方向で拡張される可能性がある
-- `0.4`: hierarchical memory retrieval
-  - `memory_get_context` は multi-layer context assembly 的な役割へ拡張されうる
-
-この整理に合わせて、README と `docs/roadmap.md` に **tool-to-version mapping の説明を追加済み**です。また、`.rules` にも terminal workflow guidance を追加し、`workflow_complete` は terminal transition であり、close 後の追加作業は新しい workflow を開始すべきことを明記しました。さらに、README の `Agent workflow usage guidance` と `docs/workflow-model.md` にも、terminal workflow は inspect 対象であって continuation 対象ではなく、close 後の追加作業は新しい workflow または適切な continuation path で扱うべきことを追記済みです。加えて、`docs/architecture.md` にも同趣旨の説明を追加し、completion semantics・checkpoint semantics・terminal resumable status の各節で、terminal workflow の扱いが `.rules` / README / workflow model と整合するようそろえました。あわせて、tests を見直し、terminal workflow guidance に関する既存のテストカバレッジとして **terminal workflow への checkpoint 拒否** と **terminal resume status の確認** は既に存在していることを確認したうえで、さらに **「terminal workflow は inspection 対象で continuation 対象ではない」** ことと、**close 後の追加作業は新しい workflow で進める** ことを、より意図レベルで読める test として `tests/test_workflow_service.py` に追加しました。加えて、`tests/test_postgres_integration.py` にも **terminal resume は inspection 用で continuation ではない** ことを確認する integration test を追加し、PostgreSQL-backed path でも同じ意味づけが保たれることを確認しました。さらに、small-auth の compose stack を **新規に作り直して起動**し、`ctxledger-postgres` / `ctxledger-auth-small` / `ctxledger-server-private` / `ctxledger-traefik` が立ち上がることを確認しました。そのうえで、README と `docs/small_auth_operator_runbook.md` の compose 起動手順について、**初回起動または意図的なクリーン再作成**と、**2回目以降の通常再起動**、および **通常の再build** を区別して説明する整理を進めました。
+この session では、`ctxledger` の **`0.2` memory closeout の残整理を確認したうえで、TLS / HTTPS workstream を実装・検証し、さらに small-auth の公開面を HTTPS-only に寄せるところまで進めました**。前回メモ時点では `memory_get_context` の details / observability contract、field-based query filtering、PostgreSQL integration test isolation はかなり揃っており、実際に今回の確認でも **memory closeout の主要部分はすでにコード・tests・docs に反映済み** であることを確かめられました。そのため今回の主眼は、**small-auth Traefik path に現実的な HTTPS entrypoint を追加し、それを public / operator-facing path として実運用検証すること**、さらに **direct host-exposed HTTP path を段階的に落としていくこと** に置きました。version は引き続き `0.1.0` のまま維持し、memory / deployment / docs の closeout が揃うまで tag を打たない方針も継続です。
 
 ## この session で完了したこと
 
-- `ctxledger/.rules` を housekeeping 中心の内容から、**2層構造のルール**に整理した
-  - `ctxledger` 開発専用 housekeeping
-  - `ctxledger` 利用プロジェクト向け一般 workflow rules
-- `last_session.md` については、
-  - **`ctxledger` 自体を開発する時だけ必要**
-  - 一般の利用プロジェクトでは前提にしない
-  という位置づけを `.rules` 上で明確にした
-- ただし、`ctxledger` 開発時でも下の一般 workflow rules は適用されることを `.rules` に明記した
-- 一般 workflow rules から
-  - `last_session.md` の存在に依存するよう読める文言
-  を外し、repo 内の continuation note や resume artifact は **derived / auxiliary context** 扱いに整理した
-- `README.md` に `Agent workflow usage guidance` を追加し、AI エージェントが
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_resume`
-  - `workflow_checkpoint`
-  - `workflow_complete`
-  を使うべきことを明示した
-- README の Quick Start を以下の 2 系統に整理した
-  - **認証なし**: `http://127.0.0.1:8080/mcp`
-  - **認証付き（推奨）**: `http://127.0.0.1:8091/mcp`
-- 認証付き Quick Start に以下を追加・整理した
-  - `CTXLEDGER_SMALL_AUTH_TOKEN` を使うこと
-  - startup / smoke / MCP client config で **同じ token** を使うこと
-  - 不一致時は `401` になること
-  - `openssl rand -hex 32`
-  - `python -c "import secrets; print(secrets.token_urlsafe(32))"`
-    を使った token 生成例
-  - `envrcctl` を使う場合の optional な運用
-- `envrcctl` については、README 上で次を反映した
-  - token は `envrcctl secret set CTXLEDGER_SMALL_AUTH_TOKEN --stdin` で保存する
-  - 実行時は `envrcctl exec -- ...` で環境に注入する
-  - Zed は MCP 設定ファイル中の環境変数を展開しないため、`envrcctl secret get CTXLEDGER_SMALL_AUTH_TOKEN` などで取得した実 token を `YOUR_TOKEN_HERE` に貼り付ける必要がある
-- `.coverage` を削除して作業ツリーのノイズを整理した
-- README の手順どおりに Docker Compose で起動し、runtime debug endpoint と MCP workflow smoke を実地確認した
-- README の認証付き説明は、`envrcctl` 周りを **optional** として一段下げ、冗長さを減らす方向で整理した
+- `memory closeout` の current state を再確認した
+  - `src/ctxledger/memory/service.py`
+  - `tests/test_coverage_targets.py`
+  - `tests/test_postgres_integration.py`
+  - `tests/test_mcp_tool_handlers.py`
+  - `README.md`
+  - `docs/mcp-api.md`
+  - `docs/memory-model.md`
+  - `docs/roadmap.md`
+  を見直し、前回 session メモにある
+  - `resolved_workflow_ids`
+  - `matched_episode_count`
+  - field-based query filtering
+  - PostgreSQL temporary schema isolation
+  が実際にかなり揃っていることを確認した
+  - つまり今回時点の主な未完了領域は memory そのものより **TLS / HTTPS deployment workstream** だと判断した
 
-## 確認したこと
+- `scripts/mcp_http_smoke.py` を更新した
+  - `--insecure` を追加した
+  - local self-signed / untrusted cert を使った HTTPS validation ができるようにした
+  - MCP / workflow / resource smoke の既存 flow を壊さないようにした
+  - HTTP / HTTPS 両方の JSON-RPC / resource-read / workflow scenario path で使える状態にした
 
-- README 上では `ctxledger` は remote HTTP MCP server として動作し、workflow tools として少なくとも以下を公開しています。
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_checkpoint`
-  - `workflow_resume`
-  - `workflow_complete`
-- そのため、Zed などの MCP クライアントから **workflow を記録するためのサーバ側機能は存在する** 状態です。
-- 一方で、作業ディレクトリ直下の `.rules` は当初 housekeeping のみで、AI エージェントに対して
-  - セッション開始時に workflow を開始/再開すること
-  - 作業中に checkpoint を残すこと
-  - 作業完了時に workflow を complete すること
-  を求めていませんでした。
-- このため、**現状の `.rules` に従うだけでは、AI エージェントが workflow 記録フローを実行する保証がない**、という問題を確認しました。
-- 検証の結果、**Zed は MCP 設定ファイル中の環境変数を展開しない** ことも確認しました。
-- また、`last_session.md` は **`ctxledger` 開発時のブートストラップ補助ファイル**であり、一般の利用プロジェクト向け rules の前提にしてはいけないことも整理しました。
+- `docker/docker-compose.small-auth.yml` を更新した
+  - Traefik に `websecure` entrypoint を追加した
+  - initially `8443` を公開し、HTTPS listener を持てるようにした
+  - その後さらに **HTTP public listener を削除** し、
+    - `8091`
+    - `web`
+    を落として **HTTPS-only public entrypoint**
+    - `8443`
+    のみ残す形へ整理した
+  - small-auth overlay における operator-facing path は now HTTPS-only
 
-## Workflow handoff identifiers
+- `docker/traefik/dynamic.yml` を更新した
+  - HTTPS router を追加した
+  - TLS certificate wiring を追加した
+  - initially HTTP router と HTTPS router の両方を持たせたが、その後 **HTTP router を削除**
+  - final state は
+    - `websecure`
+    - `tls`
+    - forward-auth
+    のみを使う構成
+  - `ctxledger` backend は internal HTTP のまま private network 側で受けるが、public side は HTTPS-only
 
-次セッションの AI エージェントが workflow を再開しやすいよう、以下の識別子をこの note に残せる形を採用します。
+- `docker/traefik/certs/README.md` を新規作成した
+  - local TLS cert placement を明記した
+  - 期待ファイル名
+    - `localhost.crt`
+    - `localhost.key`
+  - `mkcert`
+  - `openssl`
+  の生成例を追記した
+  - private key を commit しない運用注意を明記した
 
-- `workspace_id`
-- `workflow_instance_id`
-- `attempt_id`
-- `ticket_id`
+- `docker/docker-compose.yml` を更新した
+  - `ctxledger` service の host port mapping
+    - `8080:8080`
+    を削除した
+  - `expose: 8080` の internal-only exposure に変えた
+  - これにより、base compose 上の backend は compose network 内で HTTP のまま動くが、**host から direct に `http://127.0.0.1:8080` で叩けない** 状態になった
+  - public/operator-facing access は proxy-terminated HTTPS path に寄せる方向へ前進した
 
-現時点では、この session で workflow-aware 運用確認と memory roadmap clarification のために複数の実 ID が得られています。次回以降も、実際に MCP 経由で開始・再開した workflow の値をここへ追記してください。
+- `README.md` を更新した
+  - small-auth recommended path を `8443` ベースに変更した
+  - `https://127.0.0.1:8443/mcp` を operator-facing endpoint として明記した
+  - `--insecure` を使った local self-signed validation 例を追加した
+  - VS Code / Zed examples も HTTPS endpoint に寄せた
+  - `envrcctl` examples も HTTPS endpoint に寄せた
+  - ただし、README 全体にはまだ direct `8080` path の historical sections が残っている
 
-- workspace / initial MCP tool check
-  - `workspace_id`: `98b6d72c-1805-4a55-a872-c1b2ee8bda45`
-  - `workflow_instance_id`: `07e227cf-f5dc-4664-ab99-93544d666c93`
-  - `attempt_id`: `c8fc7c2f-142d-4229-8104-a9a0175517ff`
-  - `ticket_id`: `mcp-tool-check`
-- memory roadmap clarification
-  - `workspace_id`: `98b6d72c-1805-4a55-a872-c1b2ee8bda45`
-  - `workflow_instance_id`: `3c4ee912-8f55-47e3-8e0e-908aa9281de2`
-  - `attempt_id`: `19347f06-01ae-4505-96ad-031b17907e69`
-  - `ticket_id`: `memory-roadmap-clarification`
-- prior session carry-forward
-  - `ticket_id`: `rules-workflow-tracking`
+- `docs/deployment.md` を更新した
+  - local HTTPS small-auth path を docs 化した
+  - さらに **HTTPS-only small-auth path** として wording を更新した
+  - `8443` endpoint
+  - cert placement
+  - `mkcert`
+  - `--insecure`
+  - public HTTP listener を残さない intent
+  を明記した
+  - ただし、同ファイル内にはまだ
+    - `http://127.0.0.1:8080`
+    - `http://localhost:8080`
+    ベースの general HTTP runtime sections が残っている
 
-## 実地確認結果
+- `docs/CONTRIBUTING.md` を更新した
+  - small-auth validation flow を HTTPS-only に変更した
+  - contributor validation として
+    - cert file 作成
+    - `8443`
+    - `--insecure`
+    を使う path を明記した
+  - `http://127.0.0.1:8091` を small-auth public path として document しないよう明記した
 
-README の手順に沿って、以下を実施しました。
+- `docs/small_auth_operator_runbook.md` を更新した
+  - runbook を全面的に HTTPS-only に寄せた
+  - `8091` → `8443`
+  - `http://127.0.0.1:8091/mcp` → `https://127.0.0.1:8443/mcp`
+  - cert file existence を precondition に追加した
+  - missing token / invalid token / valid token validation examples を HTTPS-only にした
+  - stale direct-local `8080` path は historical / stale path 扱いにした
 
-- `docker compose -f docker/docker-compose.yml up -d --build`
-- `curl http://127.0.0.1:8080/debug/runtime`
-- `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow`
-- `python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read`
+- `docs/mcp-api.md` を更新した
+  - public/operator-facing validation examples を direct `8080` ではなく
+    - `https://127.0.0.1:8443`
+    ベースへ変更した
+  - `/mcp` surface の current live validation path は now proxy-terminated HTTPS だと説明した
+  - ただし同ファイルには
+    - trusted direct local path without proxy auth
+    の historical HTTP examples が一部まだ残っている
 
-確認できたこと:
+- `tests/test_cli.py` を更新した
+  - startup summary expectation の `mcp_endpoint` を
+    - `http://127.0.0.1:8080/mcp`
+    から
+    - `/mcp`
+    に変更した
+  - これにより、server runtime summary が direct host-exposed URL を前提にしない expectation に寄せた
 
-- `ctxledger-postgres` と `ctxledger-server` はともに healthy で起動した
-- `/debug/runtime` は HTTP runtime と workflow routes / tools / resources を返した
-- workflow smoke では以下が成功した
+- `tests/test_coverage_targets.py` を更新した
+  - runtime summary expectation を同様に
+    - `mcp_endpoint=http://127.0.0.1:8080/mcp`
+    から
+    - `mcp_endpoint=/mcp`
+    に変更した
+
+## 実運用検証で確認できたこと
+
+今回の session では、local self-signed cert をその場で生成して、実際に compose stack を起動・再起動しながら以下を検証した。
+
+- small-auth stack で local cert を生成して起動できる
+- `https://127.0.0.1:8443`
+  の public entrypoint で TLS-terminated MCP access ができる
+- missing token は `401`
+- valid token では
   - `initialize`
   - `tools/list`
   - `tools/call`
+  - `resources/list`
+  - `resources/read`
   - `workspace_register`
   - `workflow_start`
   - `workflow_checkpoint`
   - `workflow_resume`
   - `workflow_complete`
-- resource read 付き smoke でも以下が成功した
-  - `resources/list`
-  - `resources/read` for `workspace://{workspace_id}/resume`
-  - `resources/read` for `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+  が通る
+- `--insecure` を使うことで self-signed cert でも smoke が可能
+- old public HTTP path
+  - `http://127.0.0.1:8091`
+  は **connection refused**
+- direct backend host path
+  - `http://127.0.0.1:8080`
+  も **connection refused**
+- つまり **public/operator-facing access path は now effectively HTTPS-only**
+  になった
 
-この確認により、**README の手順どおりに起動し、Zed などの MCP クライアントが同じ MCP surface を使う前提では、workflow 記録と resume/resource 読み出しの最小フローは実際に動作する** ことを確認できました。
+## 今回の session で重要だった発見
 
-実地確認で得られた代表的な識別子:
+- 現時点の architecture では、**“http を完全廃止”** をそのまま app-internal まで厳密に適用するより、
+  **public surface から HTTP を消し、Traefik TLS termination + private backend HTTP**
+  とするのが最も自然
+- small-auth overlay だけ HTTPS 化するのは比較的容易だったが、
+  **base compose の direct host exposure を落とす** と docs / tests / operator guidance に広く影響する
+- runtime summary の `mcp_endpoint=http://...` みたいな expectation は、
+  **public operator endpoint** と **private route surface**
+  が分かれてくると曖昧になる
+- そのため `mcp_endpoint=/mcp` のような **route-oriented summary** に寄せる方が今の deployment posture と整合しやすい
+- local self-signed cert path は実用上有効だが、
+  **鍵を repo に残さないこと**、
+  **trusted cert でない場合は `--insecure` が必要**
+  という注意がかなり重要
+- memory closeout 本体はこの session 開始時点ですでにかなり揃っており、
+  むしろ今回の実作業価値は **deployment closeout を HTTPS-only operator path に寄せたこと** にあった
 
-- workflow smoke 1
-  - `workspace_id`: `e163b9d0-8c84-4971-af4e-72a9eedad840`
-  - `workflow_instance_id`: `57a41b5e-1b11-4188-8e60-89ef88bc0937`
-  - `attempt_id`: `9ad36c3b-bfe1-44fe-b6b7-d9daa15bee06`
-  - `ticket_id`: `SMOKE-CTXLEDGER-001`
-- workflow smoke 2 with resource read
-  - `workspace_id`: `48b4b42a-98a2-4520-a83a-95353234a02e`
-  - `workflow_instance_id`: `9a340c21-876f-4365-bbd7-2e5b0af107a6`
-  - `attempt_id`: `2bcaa2e7-cbea-4f85-ae48-8147383649d5`
-  - `ticket_id`: `SMOKE-CTXLEDGER-001`
+## 現在のコード状態に関する重要点
 
-## 現在のコード状態に関する補足
+- `memory_remember_episode` は functional
+- `memory_get_context` の details / filtering / tests / docs は引き続き揃っている
+- PostgreSQL integration test isolation は temporary schema 方式のまま
+- small-auth public path は now:
+  - `https://127.0.0.1:8443/mcp`
+- small-auth old public HTTP path:
+  - `http://127.0.0.1:8091`
+  は removed
+- base compose backend host path:
+  - `http://127.0.0.1:8080`
+  は no longer host-exposed
+- backend app 自体は still:
+  - internal HTTP on compose network
+  - Traefik TLS termination in front
+- つまり **public HTTPS-only**
+  だが **app-internal TLS serving ではない**
+- local cert helper doc は:
+  - `docker/traefik/certs/README.md`
+- smoke script は:
+  - `--insecure`
+  を持つ
+- README / deployment / contributing / small_auth runbook / mcp-api はかなり HTTPS-only path に寄せた
+- ただし repo 全体にはまだ historical direct HTTP references が残る
 
-- `tests/test_workflow_service.py` の `test_record_resume_projection_fresh_status_fills_missing_timestamps()` は未完成ではなく、既に存在しており、`FRESH` 状態記録時に不足 timestamp を補完することを検証するテストです。
-- 同ファイルには未 commit の追加テスト差分があり、少なくとも以下の観点が含まれています。
-  - `test_complete_workflow_writes_verify_report_when_requested()`
-  - `test_record_resume_projection_fresh_status_fills_missing_timestamps()`
-- `.coverage` は削除して、生成物由来のノイズは整理しました。
-- 作業ツリー上では `.envrc` が未追跡の可能性があるため、次セッションで扱いを確認すると安全です。
-- `.gitignore` や `README.md` に未 commit 差分が残っている可能性があるため、次にまとめて確認するとよいです。
+## まだ残っている作業 / 次の session でやるとよいこと
 
-## 今回の主な結論
+次の session では、まず **残存する historical HTTP / 8080 / direct-path references の整理 closeout** をやるのが自然。
 
-- **README の手順でサーバを起動して Zed などを接続すれば、workflow 記録機能を使える状態ではある** に留まらず、実際に Docker Compose / debug endpoint / workflow smoke / resource read smoke まで成功した
-- ただし、**AI エージェントにその記録を継続的に実行させるには `.rules` の明示的な運用指示が必要**
-- `.rules` と README の両方に workflow-aware な guidance を入れたため、エージェント運用ルールはかなり明確になった
-- `last_session.md` は **`ctxledger` 開発専用 housekeeping** として扱い、一般の利用プロジェクト向け rules からは分離した方が自然
-- 認証付き Quick Start は、**token の決め方・生成・再利用・`401` 条件** を含めて説明できる状態になった
-- `envrcctl` は有用だが **optional** 扱いにした方が Quick Start の主線が見えやすい
-- **Zed は MCP 設定ファイル中の環境変数を展開しない** ため、`envrcctl` は AI エージェントや shell 実行時の参照には有効でも、Zed の MCP 設定 JSON 中の `YOUR_TOKEN_HERE` を自動置換する用途には使えない
-- そのため、Zed では `envrcctl secret get CTXLEDGER_SMALL_AUTH_TOKEN` などで取得した実 token を貼り付ける必要がある
-- README 本文は、現時点では大きな破綻はなく、主に `envrcctl` 周りを optional に落としたことでかなり読みやすくなった
-- `.rules` も、`ctxledger` 開発専用 housekeeping と一般 workflow rules を分けたことで、目的がかなり明確になった
-- memory roadmap については、現時点の資料から
-  - `0.2` は `memory_remember_episode`
-  - `0.3` は `memory_search`
-  - `memory_get_context` は `0.2`〜`0.4` にまたがる段階実装候補
-  と読むのが最も自然、という整理に到達した
-- したがって、`memory_get_context` が `0.2` で完全実装されると断定するのは避け、**episode-oriented initial form → stronger relevance retrieval → multi-layer context assembly** という進化的な説明に寄せるのが安全
-- workflow lifecycle については、`workflow_complete` は **terminal transition** として扱うべきであり、`completed` / `failed` / `cancelled` になった workflow には追加 checkpoint を打てない、という運用ルールを明示化する必要があると確認した
-- 今回の失敗は product bug ではなく、**いったん `workflow_complete` した同じ workflow に対して後から checkpoint を追加しようとした運用ミス** によるものだった
-- そのため、作業継続の可能性があるうちは `workflow_complete` を早まらせず、close 後に新しい作業が発生したら **新しい workflow を開始する** という guidance を `.rules` に追加するのが妥当、という結論に至った
-- tests の観点では、少なくとも以下のカバレッジを確認・補強できた
-  - `tests/test_workflow_service.py` に **terminal workflow への checkpoint 拒否**
-  - `tests/test_workflow_service.py` に **terminal attempt への checkpoint 拒否**
-  - `tests/test_workflow_service.py` と `tests/test_postgres_integration.py` に **`workflow_complete` 後の `resume.resumable_status == TERMINAL`**
-  - `tests/test_workflow_service.py` に **terminal resume result は inspection 対象で continuation ではない** ことをより直接に示す test
-  - `tests/test_workflow_service.py` に **completed workflow 後の追加作業は新しい workflow で進める** ことをより直接に示す test
-  - `tests/test_postgres_integration.py` に **PostgreSQL-backed integration path でも terminal resume は inspection 用で continuation ではない** ことを示す test
-- これにより、README / docs で明文化した terminal workflow guidance は、実装挙動レベルだけでなく intent-level の test 名と assertion でも以前より読み取りやすくなり、unit 相当と PostgreSQL integration の両方で意味づけを確認できる状態になった
-- その後、今後の作業用に small-auth compose stack を **新規に作り直して起動**し、少なくとも以下のコンテナが起動していることを確認した
-  - `ctxledger-postgres`
-  - `ctxledger-auth-small`
-  - `ctxledger-server-private`
-  - `ctxledger-traefik`
-- compose 起動手順については、README 上の `--force-recreate` は **初回起動や意図的なクリーン再作成には妥当**だが、**2回目以降の通常再起動では毎回必要ではない** という整理に至った
-- そのため、small-auth の運用説明は少なくとも次の3区分で案内するのが自然だと判断した
-  - **初回起動 / クリーン再作成**: `up -d --build --force-recreate`
-  - **通常再起動**: `up -d`
-  - **コードや image 入力を変えた後の通常再build**: `up -d --build`
-- あわせて、`docs/small_auth_operator_runbook.md` にも同じ区分を入れて、README と runbook の説明をそろえる方針を取った
+優先度が高い残件:
 
-## 次セッションでやること
+- `README.md`
+  - still direct `8080` / Option A / Dockerfile startup / local startup sections が残る
+  - “public operator path is HTTPS-only” と整合するよう further cleanup が必要
+- `docs/deployment.md`
+  - still `http://127.0.0.1:8080`
+  - `http://localhost:8080`
+  - local HTTP validation examples
+  が残る
+- `docs/mcp-api.md`
+  - `Representative HTTP request examples on a trusted direct local path without proxy auth`
+    のような section が still 残る
+- `docs/CHANGELOG.md`
+  - “direct local path simple” など old posture wording が残る
+- `docs/SECURITY.md`
+  - local direct local development wording の見直し余地あり
+- `docs/imple_plan_0.1.0.md`
+- `docs/imple_plan_review_0.1.0.md`
+  - historical planning docs なのでどこまで current-state cleanup するか判断が必要
+- tests
+  - current changed files の diagnostics は良いが、
+    full suite rerun と必要なら expectation fallout を確認したい
+- `last_session.md`
+  - 次回はこのメモを current canonical continuation としてさらに更新
 
-1. 実際の Zed などの MCP クライアント上の AI エージェントで、更新後の `.rules` と関連ドキュメントに従った workflow-aware な運用が回るか確認する
-2. 実運用 workflow を開始または再開したら、以下をこの note に記録する
-   - `workspace_id`
-   - `workflow_instance_id`
-   - `attempt_id`
-   - `ticket_id`
-3. `.envrc` の扱いを確認し、必要なら整理する
-4. README と `docs/small_auth_operator_runbook.md` に追加した compose 起動手順の整理が、実際の運用意図と矛盾しないか確認する
-5. `README.md`、`docs/small_auth_operator_runbook.md`、`tests/test_workflow_service.py`、`tests/test_postgres_integration.py` の未 commit 差分を確認し、意図した変更なら commit 対象に含める
-6. `.gitignore` に未 commit 差分が残っていれば、必要に応じて整理して commit する
+次の session 開始時にまず見るべきポイント:
+
+1. `git diff` / `git status`
+2. `README.md` に残る direct `8080` sections
+3. `docs/deployment.md` に残る `http://127.0.0.1:8080` / `http://localhost:8080` sections
+4. `docs/mcp-api.md` の direct local HTTP examples
+5. 必要なら full test rerun
+6. 最後に closeout commit
+
+## 次の session への短い引き継ぎ
+
+次は **“公開面は HTTPS-only” の posture を docs / tests 全体へ最後まで揃える closeout** をやる。small-auth overlay はすでに `8443` HTTPS-only で動き、`8091` と direct host `8080` は connection refused まで確認済み。残るのは主に **README / deployment / mcp-api / changelog / security / historical plan docs に残る direct HTTP / 8080 references の整理** と、必要なら full suite rerun、最後の continuation note と commit。

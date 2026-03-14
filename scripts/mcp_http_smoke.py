@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import secrets
+import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -42,6 +43,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--bearer-token",
         default=None,
         help="Optional bearer token for authenticated MCP endpoints",
+    )
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Disable TLS certificate verification for local/self-signed HTTPS endpoints",
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -101,6 +107,7 @@ def _post_json(
     payload: dict[str, Any],
     bearer_token: str | None,
     timeout_seconds: float,
+    insecure: bool = False,
 ) -> JsonRpcResponse:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = {
@@ -117,8 +124,18 @@ def _post_json(
         method="POST",
     )
 
+    ssl_context = None
+    if insecure:
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=timeout_seconds,
+            context=ssl_context,
+        ) as response:
             raw = response.read().decode("utf-8")
             parsed = json.loads(raw)
             if not isinstance(parsed, dict):
@@ -218,6 +235,7 @@ def _run_initialize_probe(
     timeout_seconds: float,
     expected_http_status: int,
     expect_auth_failure: bool,
+    insecure: bool,
 ) -> None:
     initialize_request = {
         "jsonrpc": "2.0",
@@ -230,6 +248,7 @@ def _run_initialize_probe(
         payload=initialize_request,
         bearer_token=bearer_token,
         timeout_seconds=timeout_seconds,
+        insecure=insecure,
     )
 
     _require_http_status(
@@ -261,6 +280,7 @@ def _call_tool(
     endpoint_url: str,
     bearer_token: str | None,
     timeout_seconds: float,
+    insecure: bool,
     request_id: int,
     tool_name: str,
     arguments: dict[str, Any],
@@ -279,6 +299,7 @@ def _call_tool(
         payload=tools_call_request,
         bearer_token=bearer_token,
         timeout_seconds=timeout_seconds,
+        insecure=insecure,
     )
     tools_call_result = _require_jsonrpc_success(
         tools_call_response,
@@ -317,6 +338,7 @@ def _run_workflow_scenario(
     endpoint_url: str,
     bearer_token: str | None,
     timeout_seconds: float,
+    insecure: bool,
     read_resources: bool = False,
 ) -> None:
     workflow_suffix = secrets.token_hex(8)
@@ -325,7 +347,8 @@ def _run_workflow_scenario(
             endpoint_url=endpoint_url,
             bearer_token=bearer_token,
             timeout_seconds=timeout_seconds,
-            request_id=10,
+            insecure=insecure,
+            request_id=4,
             tool_name="workspace_register",
             arguments={
                 "repo_url": f"https://example.com/ctxledger-smoke-{workflow_suffix}.git",
@@ -350,11 +373,12 @@ def _run_workflow_scenario(
             endpoint_url=endpoint_url,
             bearer_token=bearer_token,
             timeout_seconds=timeout_seconds,
-            request_id=11,
+            insecure=insecure,
+            request_id=5,
             tool_name="workflow_start",
             arguments={
                 "workspace_id": workspace_id,
-                "ticket_id": "SMOKE-CTXLEDGER-001",
+                "ticket_id": f"CTXLEDGER-SMOKE-{workflow_suffix}",
                 "metadata": {
                     "scenario": "workflow",
                     "source": "mcp_http_smoke",
@@ -376,7 +400,8 @@ def _run_workflow_scenario(
             endpoint_url=endpoint_url,
             bearer_token=bearer_token,
             timeout_seconds=timeout_seconds,
-            request_id=12,
+            insecure=insecure,
+            request_id=6,
             tool_name="workflow_checkpoint",
             arguments={
                 "workflow_instance_id": workflow_instance_id,
@@ -403,7 +428,8 @@ def _run_workflow_scenario(
             endpoint_url=endpoint_url,
             bearer_token=bearer_token,
             timeout_seconds=timeout_seconds,
-            request_id=13,
+            insecure=insecure,
+            request_id=9,
             tool_name="workflow_resume",
             arguments={
                 "workflow_instance_id": workflow_instance_id,
@@ -428,6 +454,7 @@ def _run_workflow_scenario(
             payload=workspace_resume_request,
             bearer_token=bearer_token,
             timeout_seconds=timeout_seconds,
+            insecure=insecure,
         )
         workspace_resume_result = _require_jsonrpc_success(
             workspace_resume_response,
@@ -461,6 +488,7 @@ def _run_workflow_scenario(
             payload=workflow_detail_request,
             bearer_token=bearer_token,
             timeout_seconds=timeout_seconds,
+            insecure=insecure,
         )
         workflow_detail_result = _require_jsonrpc_success(
             workflow_detail_response,
@@ -483,7 +511,8 @@ def _run_workflow_scenario(
             endpoint_url=endpoint_url,
             bearer_token=bearer_token,
             timeout_seconds=timeout_seconds,
-            request_id=14,
+            insecure=insecure,
+            request_id=10,
             tool_name="workflow_complete",
             arguments={
                 "workflow_instance_id": workflow_instance_id,
@@ -516,6 +545,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout_seconds,
             expected_http_status=args.expect_http_status,
             expect_auth_failure=args.expect_auth_failure,
+            insecure=args.insecure,
         )
 
         if args.expect_auth_failure:
@@ -533,6 +563,7 @@ def main(argv: list[str] | None = None) -> int:
             payload=tools_list_request,
             bearer_token=args.bearer_token,
             timeout_seconds=args.timeout_seconds,
+            insecure=args.insecure,
         )
         tools_list_result = _require_jsonrpc_success(
             tools_list_response,
@@ -563,6 +594,7 @@ def main(argv: list[str] | None = None) -> int:
             endpoint_url=endpoint_url,
             bearer_token=args.bearer_token,
             timeout_seconds=args.timeout_seconds,
+            insecure=args.insecure,
             request_id=3,
             tool_name=args.tool_name,
             arguments=tool_arguments,
@@ -586,6 +618,7 @@ def main(argv: list[str] | None = None) -> int:
             payload=resources_list_request,
             bearer_token=args.bearer_token,
             timeout_seconds=args.timeout_seconds,
+            insecure=args.insecure,
         )
         resources_list_result = _require_jsonrpc_success(
             resources_list_response,
@@ -623,6 +656,7 @@ def main(argv: list[str] | None = None) -> int:
                 payload=resources_read_request,
                 bearer_token=args.bearer_token,
                 timeout_seconds=args.timeout_seconds,
+                insecure=args.insecure,
             )
             resources_read_result = _require_jsonrpc_success(
                 resources_read_response,
@@ -644,6 +678,7 @@ def main(argv: list[str] | None = None) -> int:
                 endpoint_url=endpoint_url,
                 bearer_token=args.bearer_token,
                 timeout_seconds=args.timeout_seconds,
+                insecure=args.insecure,
                 read_resources=args.workflow_resource_read,
             )
 

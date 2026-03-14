@@ -20,8 +20,12 @@ The repository now evidences the following HTTP MCP operations on that path:
 - `resources/list`
 - `resources/read`
 
-In `v0.1.0`, the primary implemented surface is the workflow control subsystem.  
-Memory-related operations are defined architecturally but may remain stubbed or partially implemented.
+In `v0.1.0`, the primary implemented surface is still the workflow control subsystem.  
+Memory-related operations are no longer purely architectural, but they remain uneven in maturity:
+
+- `memory_remember_episode` is implemented, including canonical persistence of `attempt_id` when provided
+- `memory_get_context` is partially implemented in an episode-oriented form, including initial query-aware filtering and richer context details about lookup scope, resolved workflows, and returned episode counts
+- `memory_search` remains stubbed
 
 The currently evidenced remote serving shape is:
 
@@ -75,6 +79,8 @@ Examples:
 - `workflow_start`
 - `workflow_checkpoint`
 - `workflow_complete`
+- `memory_remember_episode`
+- `memory_get_context`
 
 Tool argument discovery is implemented through `tools/list`, which now returns concrete `inputSchema` payloads for the visible tool surface.
 
@@ -124,7 +130,7 @@ This matters because MCP clients can now discover required arguments before call
 Future examples:
 
 - `workflow_retry`
-- `memory_remember_episode`
+- richer `memory_search`
 
 ## 3.2 Resources
 
@@ -156,6 +162,52 @@ Not yet implemented and still future-facing/stubbed as resources:
 
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
+
+This distinction matters because the current memory progress is tool-oriented first:
+episodic recording and initial episode-oriented context retrieval are available
+through MCP tools, while dedicated memory resources remain future work.
+
+The current episode-oriented retrieval path is also intentionally conservative:
+it is still driven by canonical workflow linkage first, with only a light initial
+query filter layered on top of that canonical lookup path.
+
+In its current implemented form, the response `details` are intended to provide
+light observability into how context assembly occurred. That currently includes:
+
+- the original `query`
+- the normalized query form used for lightweight matching
+- `lookup_scope`
+- the requested `workspace_id`
+- the resolved `workflow_instance_id` when direct workflow lookup is used
+- the requested `ticket_id`
+- `limit`
+- `include_episodes`
+- `include_memory_items`
+- `include_summaries`
+- `resolved_workflow_count`
+- `resolved_workflow_ids`
+- `query_filter_applied`
+- `episodes_before_query_filter`
+- `matched_episode_count`
+- `episodes_returned`
+
+The current lightweight query filter is still intentionally simple, but it is no
+longer described best as opaque metadata stringification alone.
+Its current intended behavior is:
+
+- always check the episode `summary`
+- also check lightweight field-based metadata text derived from metadata keys and values
+- perform case-insensitive matching
+- remain bounded to workflow-linked episode retrieval rather than semantic search
+
+These fields are meant to explain the current episode-oriented assembly behavior.
+At the current implementation stage, `matched_episode_count` and
+`episodes_returned` may be the same value, but they are kept separate so the
+details surface can remain useful if later `0.2.x` behavior adds post-match
+truncation, ranking, or other assembly steps.
+They should not yet be interpreted as a stable semantic-retrieval contract, since
+broader ranking, relevance, relation-aware retrieval, and hierarchical summary
+assembly are still future work.
 
 ## 3.3 Special Case: `workflow_resume`
 
@@ -233,15 +285,7 @@ GET /projection_failures_resolve?workspace_id=11111111-1111-1111-1111-1111111111
 Authorization: Bearer example-token
 ```
 
-Representative HTTP request examples on a trusted direct local path without proxy auth:
-
-```/dev/null/http#L1-1
-GET /projection_failures_ignore?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222&projection_type=resume_md
-```
-
-```/dev/null/http#L1-1
-GET /projection_failures_resolve?workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222
-```
+Representative HTTP request examples should be understood in the context of the documented proxy-protected deployment path above.  The current operator-facing path is the HTTPS-terminated proxy entrypoint rather than a direct host-exposed local HTTP endpoint.
 
 Representative `404 not_found` response examples for invalid path shapes:
 
@@ -328,16 +372,17 @@ They do not replace Tools or Resources and are not canonical inputs to the API.
 
 ## 5. Primary HTTP MCP Path
 
-The primary deployment and acceptance path for `v0.1.0` is a real remote HTTP MCP server exposed at `/mcp`.
+The primary deployment and acceptance path for `v0.1.0` remains an HTTP MCP server exposed at `/mcp`, but the documented operator-facing public path is now the HTTPS-terminated proxy entrypoint rather than a direct host-exposed backend port.
 
 The currently evidenced runtime shape is:
 
 - FastAPI application wrapper in `src/ctxledger/http_app.py`
-- `uvicorn` process startup
-- Docker Compose startup through `docker/docker-compose.yml`
+- `uvicorn` process startup for the private backend
+- Docker Compose startup through `docker/docker-compose.yml` plus `docker/docker-compose.small-auth.yml`
+- Traefik TLS termination on the public entrypoint
 
 This means the HTTP MCP surface is no longer only an internal dispatch/testing concern.  
-It is also exercised as a live remote endpoint in the repository’s local deployment flow.
+It is also exercised as a live remote endpoint in the repository’s local deployment flow, with the public/operator-facing path now going through HTTPS at the proxy boundary.
 
 ### 5.1 Confirmed HTTP MCP Operations
 
@@ -358,15 +403,15 @@ A repository-provided smoke client exists at:
 Representative validation command shapes include:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --tool-name memory_get_context
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --tool-name memory_get_context --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --scenario workflow --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8080 --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --scenario workflow --workflow-resource-read --insecure
 ```
 
 These validations now cover:
@@ -377,6 +422,15 @@ These validations now cover:
 - resource discovery through `resources/list`
 - resource reading through `resources/read`
 - workflow-tool mutation flows against a live PostgreSQL-backed deployment
+
+For memory closeout interpretation, this should be read together with the current
+memory behavior boundary:
+
+- `memory_remember_episode` is implemented
+- `memory_get_context` is real but still partial
+- `memory_get_context` currently exposes episode-oriented assembly details rather
+  than a mature relevance-ranked retrieval contract
+- `memory_search` remains stubbed
 
 ### 5.3 Confirmed Workflow Tool Validation Over Remote HTTP MCP
 
@@ -1012,22 +1066,35 @@ Persist an episode summary into the episodic memory subsystem.
 Tool
 
 ### Status in `v0.1.0`
-Defined architecturally, but may be stubbed or unavailable.
+Implemented in the current repository state.
 
-### Intended Future Behavior
-- store summarized episode records
-- support episode-derived memory extraction
-- provide future recall inputs
+### Current Behavior
+- validates `workflow_instance_id`
+- validates `attempt_id` when provided
+- verifies workflow existence before recording
+- persists append-only episodic records
+- returns the recorded episode payload on success
 
-### Future Canonical Persistence
+### Current Canonical Persistence
+Writes to:
+
 - `episodes`
-- related episode detail tables
+- future related episode detail tables
 
-### Current Expected Behavior
-Either:
+The canonical `episodes` record now includes:
 
-- return a clear unimplemented error, or
-- expose a documented non-production stub
+- `episode_id`
+- `workflow_instance_id`
+- `attempt_id` (optional, but canonically persisted when provided)
+- `summary`
+- `status`
+- `metadata_json`
+- timestamps
+
+### Intended Further Evolution
+- store richer episode-derived structures
+- support stronger provenance and recall behavior
+- act as a durable input into later semantic and hierarchical memory layers
 
 ---
 
@@ -1064,7 +1131,50 @@ Return auxiliary memory context relevant to a task or workflow.
 Tool with read semantics
 
 ### Status in `v0.1.0`
-Defined architecturally, but may be stubbed or unavailable.
+Partially implemented in the current repository state.
+
+### Current Behavior
+The current implementation is episode-oriented and currently supports:
+
+- canonical workflow-linked retrieval by `workflow_instance_id`
+- canonical workflow expansion by `workspace_id`
+- canonical workflow expansion by `ticket_id`
+- `limit`
+- `include_episodes`
+- initial query-aware filtering against episode summary and lightweight field-based metadata text
+- richer `details` describing how the context was assembled
+
+Representative current response details may include:
+
+- `query`
+- `normalized_query`
+- `lookup_scope`
+- `workspace_id`
+- `workflow_instance_id`
+- `ticket_id`
+- `limit`
+- `include_episodes`
+- `include_memory_items`
+- `include_summaries`
+- `resolved_workflow_count`
+- `resolved_workflow_ids`
+- `query_filter_applied`
+- `episodes_before_query_filter`
+- `matched_episode_count`
+- `episodes_returned`
+
+### Current Retrieval Semantics
+The current path is intentionally conservative:
+
+1. resolve the relevant workflow set from canonical workflow state
+2. collect related episodes
+3. optionally apply a lightweight case-insensitive query filter over:
+   - episode `summary`
+   - lightweight field-based metadata text derived from metadata keys and values
+4. return auxiliary support context
+
+This means the operation is not yet a full semantic or hierarchical retriever.  
+It is still fundamentally a workflow-linked episodic context assembler.
 
 ### Intended Future Behavior
 Return support context such as:
@@ -1679,7 +1789,13 @@ The architectural target is:
 - future-safe extension points
 
 The initial release does not attempt to provide complete memory retrieval behavior.  
-Memory APIs may exist in documented stub form until the corresponding subsystems are implemented.
+Memory APIs now span a mixed maturity level:
+
+- some are implemented (`memory_remember_episode`)
+- some are partially implemented (`memory_get_context`)
+- some remain stubbed (`memory_search`)
+
+This should be described explicitly rather than collapsed into a single “memory is stubbed” statement.
 
 ---
 
@@ -1707,13 +1823,16 @@ Memory APIs may exist in documented stub form until the corresponding subsystems
 - HTTP route surface for `projection_failures_ignore`
 - HTTP route surface for `projection_failures_resolve`
 
-### Allowed Stub Surface
+### Allowed Stub / Partial Surface
 
-- `memory_remember_episode`
 - `memory_search`
-- `memory_get_context`
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
+
+### Implemented / Partially Implemented Memory Surface
+
+- `memory_remember_episode`
+- `memory_get_context`
 
 ### Acceptance Evidence Note for Tool Schema Discoverability
 
@@ -1735,7 +1854,7 @@ Representative evidence includes:
   - `workflow_resume`
   - `workflow_complete`
   - projection failure tools
-  - memory stub tools
+  - implemented and partial memory tools
 
 This means `workspace_register` argument discovery is no longer dependent on runtime validation errors alone and should be counted as visible acceptance evidence for MCP server/client compatibility on the confirmed HTTP MCP path.
 

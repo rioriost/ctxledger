@@ -5,11 +5,20 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Iterator
+from uuid import uuid4
 
 import pytest
 
 from ctxledger.config import ProjectionSettings, load_settings
 from ctxledger.db.postgres import PostgresConfig, build_postgres_uow_factory
+from ctxledger.memory.service import (
+    GetMemoryContextRequest,
+    MemoryFeature,
+    MemoryService,
+    RememberEpisodeRequest,
+    UnitOfWorkEpisodeRepository,
+    UnitOfWorkWorkflowLookupRepository,
+)
 from ctxledger.projection.writer import ResumeProjectionWriter
 from ctxledger.workflow.service import (
     CompleteWorkflowInput,
@@ -34,6 +43,7 @@ DOCKER_COMPOSE_FILE = (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATABASE_URL = "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger"
 POSTGRES_SERVICE_NAME = "postgres"
+TEST_SCHEMA_PREFIX = "ctxledger_test_"
 
 
 def _docker_compose_cmd(*args: str) -> list[str]:
@@ -70,35 +80,91 @@ def _is_docker_available() -> bool:
 
 def _wait_for_postgres_ready(timeout_seconds: float = 60.0) -> None:
     deadline = time.monotonic() + timeout_seconds
+    last_result: subprocess.CompletedProcess[str] | None = None
 
     while time.monotonic() < deadline:
-        result = _run_compose("ps", "--format", "json", check=False)
-        if result.returncode == 0 and "healthy" in result.stdout.lower():
+        last_result = _run_compose("ps", "--format", "json", check=False)
+        if last_result.returncode == 0 and "healthy" in last_result.stdout.lower():
             return
         time.sleep(1.0)
 
     logs = _run_compose("logs", POSTGRES_SERVICE_NAME, check=False)
+    stdout = "" if last_result is None else last_result.stdout
+    stderr = "" if last_result is None else last_result.stderr
     raise AssertionError(
         "PostgreSQL container did not become healthy in time.\n"
-        f"stdout:\n{result.stdout}\n"
-        f"stderr:\n{result.stderr}\n"
+        f"stdout:\n{stdout}\n"
+        f"stderr:\n{stderr}\n"
         f"logs:\n{logs.stdout}\n{logs.stderr}"
     )
 
 
-def _apply_schema() -> None:
-    schema_path = PROJECT_ROOT / "schemas" / "postgres.sql"
-    command = (
-        "docker exec -i ctxledger-postgres "
-        "psql -U ctxledger -d ctxledger -v ON_ERROR_STOP=1"
-    )
-    completed = subprocess.run(
-        command,
+def _run_psql(sql: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            "docker",
+            "exec",
+            "-i",
+            "ctxledger-postgres",
+            "psql",
+            "-U",
+            "ctxledger",
+            "-d",
+            "ctxledger",
+            "-v",
+            "ON_ERROR_STOP=1",
+        ],
         cwd=PROJECT_ROOT,
         text=True,
-        input=schema_path.read_text(encoding="utf-8"),
-        shell=True,
+        input=sql,
         capture_output=True,
+        check=False,
+    )
+
+
+def _wait_for_database_accepting_connections(timeout_seconds: float = 60.0) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    last_result: subprocess.CompletedProcess[str] | None = None
+
+    while time.monotonic() < deadline:
+        last_result = _run_psql("SELECT 1;")
+        if last_result.returncode == 0:
+            return
+        time.sleep(1.0)
+
+    logs = _run_compose("logs", POSTGRES_SERVICE_NAME, check=False)
+    stdout = "" if last_result is None else last_result.stdout
+    stderr = "" if last_result is None else last_result.stderr
+    raise AssertionError(
+        "PostgreSQL did not start accepting connections in time.\n"
+        f"stdout:\n{stdout}\n"
+        f"stderr:\n{stderr}\n"
+        f"logs:\n{logs.stdout}\n{logs.stderr}"
+    )
+
+
+def _quote_ident(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _apply_schema(schema_name: str) -> None:
+    schema_path = PROJECT_ROOT / "schemas" / "postgres.sql"
+    quoted_schema_name = _quote_ident(schema_name)
+    schema_sql = schema_path.read_text(encoding="utf-8")
+    schema_sql = schema_sql.replace(
+        "CREATE OR REPLACE FUNCTION set_updated_at()",
+        f"CREATE OR REPLACE FUNCTION {quoted_schema_name}.set_updated_at()",
+    )
+    schema_sql = schema_sql.replace(
+        "EXECUTE FUNCTION set_updated_at();",
+        f"EXECUTE FUNCTION {quoted_schema_name}.set_updated_at();",
+    )
+    completed = _run_psql(
+        f"""
+        CREATE SCHEMA IF NOT EXISTS {quoted_schema_name};
+        SET search_path TO {quoted_schema_name}, public;
+        {schema_sql}
+        """
     )
     if completed.returncode != 0:
         raise AssertionError(
@@ -108,33 +174,47 @@ def _apply_schema() -> None:
         )
 
 
-def _truncate_workflow_tables() -> None:
-    sql = """
-    TRUNCATE TABLE
-      verify_reports,
-      workflow_checkpoints,
-      workflow_attempts,
-      workflow_instances,
-      projection_failures,
-      projection_states,
-      workspaces
-    RESTART IDENTITY CASCADE;
+def _wait_for_schema_ready(schema_name: str, timeout_seconds: float = 60.0) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    sql = f"""
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.tables
+      WHERE table_schema = '{schema_name}'
+        AND table_name = 'workspaces'
+    );
     """
-    command = (
-        "docker exec -i ctxledger-postgres "
-        "psql -U ctxledger -d ctxledger -v ON_ERROR_STOP=1"
+    last_result: subprocess.CompletedProcess[str] | None = None
+
+    while time.monotonic() < deadline:
+        last_result = _run_psql(sql)
+        if last_result.returncode == 0 and "t" in last_result.stdout.lower():
+            return
+        time.sleep(1.0)
+
+    logs = _run_compose("logs", POSTGRES_SERVICE_NAME, check=False)
+    stdout = "" if last_result is None else last_result.stdout
+    stderr = "" if last_result is None else last_result.stderr
+    raise AssertionError(
+        "PostgreSQL schema did not become ready in time.\n"
+        f"stdout:\n{stdout}\n"
+        f"stderr:\n{stderr}\n"
+        f"logs:\n{logs.stdout}\n{logs.stderr}"
     )
-    completed = subprocess.run(
-        command,
-        cwd=PROJECT_ROOT,
-        text=True,
-        input=sql,
-        shell=True,
-        capture_output=True,
-    )
+
+
+def _ensure_schema_ready(schema_name: str) -> None:
+    _wait_for_database_accepting_connections()
+    _apply_schema(schema_name)
+    _wait_for_schema_ready(schema_name)
+
+
+def _drop_schema(schema_name: str) -> None:
+    quoted_schema_name = _quote_ident(schema_name)
+    completed = _run_psql(f"DROP SCHEMA IF EXISTS {quoted_schema_name} CASCADE;")
     if completed.returncode != 0:
         raise AssertionError(
-            "Failed to truncate PostgreSQL workflow tables.\n"
+            "Failed to drop PostgreSQL test schema.\n"
             f"stdout:\n{completed.stdout}\n"
             f"stderr:\n{completed.stderr}"
         )
@@ -157,11 +237,20 @@ def postgres_integration_environment() -> Iterator[None]:
             f"{up_result.stdout}\n{up_result.stderr}"
         )
 
+    _wait_for_postgres_ready()
+    yield
+
+
+@pytest.fixture
+def postgres_test_schema(
+    postgres_integration_environment: None,
+) -> Iterator[str]:
+    schema_name = f"{TEST_SCHEMA_PREFIX}{uuid4().hex}"
+    _ensure_schema_ready(schema_name)
     try:
-        _wait_for_postgres_ready()
-        yield
+        yield schema_name
     finally:
-        _run_compose("down", "-v", check=False)
+        _drop_schema(schema_name)
 
 
 @pytest.fixture
@@ -171,24 +260,21 @@ def postgres_database_url(postgres_integration_environment: None) -> str:
 
 @pytest.fixture
 def clean_postgres_database(
-    postgres_integration_environment: None,
-) -> Iterator[None]:
-    _truncate_workflow_tables()
-    try:
-        yield
-    finally:
-        _truncate_workflow_tables()
+    postgres_test_schema: str,
+) -> Iterator[str]:
+    yield postgres_test_schema
 
 
 @pytest.fixture
 def postgres_workflow_service(
     postgres_database_url: str,
-    clean_postgres_database: None,
+    clean_postgres_database: str,
 ) -> WorkflowService:
     config = PostgresConfig(
         database_url=postgres_database_url,
         connect_timeout_seconds=5,
         statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
     )
     return WorkflowService(build_postgres_uow_factory(config))
 
@@ -273,6 +359,493 @@ def test_postgres_workflow_service_round_trip_happy_path(
     assert completed.verify_report.status == VerifyStatus.PASSED
 
     assert terminal_resume.resumable_status == ResumableStatus.TERMINAL
+
+
+def test_postgres_memory_get_context_returns_multiple_workflow_episodes(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    workflow_service = WorkflowService(
+        build_postgres_uow_factory(
+            PostgresConfig(
+                database_url=postgres_database_url,
+                connect_timeout_seconds=5,
+                statement_timeout_ms=5000,
+                schema_name=clean_postgres_database,
+            )
+        )
+    )
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(
+            build_postgres_uow_factory(
+                PostgresConfig(
+                    database_url=postgres_database_url,
+                    connect_timeout_seconds=5,
+                    statement_timeout_ms=5000,
+                    schema_name=clean_postgres_database,
+                )
+            )
+        ),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(
+            build_postgres_uow_factory(
+                PostgresConfig(
+                    database_url=postgres_database_url,
+                    connect_timeout_seconds=5,
+                    statement_timeout_ms=5000,
+                    schema_name=clean_postgres_database,
+                )
+            )
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-context.git",
+            canonical_path="/tmp/integration-repo-memory-context",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMCTX-001",
+        )
+    )
+
+    first_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Investigated root cause",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "investigation"},
+        )
+    )
+    second_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Applied durable fix",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "implementation"},
+        )
+    )
+
+    context = memory_service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert first_episode.feature == MemoryFeature.REMEMBER_EPISODE
+    assert second_episode.feature == MemoryFeature.REMEMBER_EPISODE
+    assert context.feature == MemoryFeature.GET_CONTEXT
+    assert context.implemented is True
+    assert len(context.episodes) == 2
+    assert [episode.summary for episode in context.episodes] == [
+        "Applied durable fix",
+        "Investigated root cause",
+    ]
+    assert context.details["query"] is None
+    assert context.details["normalized_query"] is None
+    assert context.details["lookup_scope"] == "workflow_instance"
+    assert context.details["workflow_instance_id"] == str(
+        started.workflow_instance.workflow_instance_id
+    )
+    assert context.details["resolved_workflow_ids"] == [
+        str(started.workflow_instance.workflow_instance_id)
+    ]
+    assert context.details["resolved_workflow_count"] == 1
+    assert context.details["query_filter_applied"] is False
+    assert context.details["episodes_before_query_filter"] == 2
+    assert context.details["matched_episode_count"] == 2
+    assert context.details["episodes_returned"] == 2
+
+
+def test_postgres_memory_get_context_returns_workspace_episodes(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    workflow_service = WorkflowService(
+        build_postgres_uow_factory(
+            PostgresConfig(
+                database_url=postgres_database_url,
+                connect_timeout_seconds=5,
+                statement_timeout_ms=5000,
+                schema_name=clean_postgres_database,
+            )
+        )
+    )
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(
+            build_postgres_uow_factory(
+                PostgresConfig(
+                    database_url=postgres_database_url,
+                    connect_timeout_seconds=5,
+                    statement_timeout_ms=5000,
+                    schema_name=clean_postgres_database,
+                )
+            )
+        ),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(
+            build_postgres_uow_factory(
+                PostgresConfig(
+                    database_url=postgres_database_url,
+                    connect_timeout_seconds=5,
+                    statement_timeout_ms=5000,
+                    schema_name=clean_postgres_database,
+                )
+            )
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-context-workspace.git",
+            canonical_path="/tmp/integration-repo-memory-context-workspace",
+            default_branch="main",
+        )
+    )
+    first_started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMCTX-WS-001",
+        )
+    )
+    workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=first_started.workflow_instance.workflow_instance_id,
+            attempt_id=first_started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+        )
+    )
+    second_started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMCTX-WS-002",
+        )
+    )
+
+    older_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(
+                first_started.workflow_instance.workflow_instance_id
+            ),
+            summary="Workspace episode from older workflow",
+            attempt_id=str(first_started.attempt.attempt_id),
+            metadata={"kind": "investigation"},
+        )
+    )
+    newer_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(
+                second_started.workflow_instance.workflow_instance_id
+            ),
+            summary="Workspace episode from newer workflow",
+            attempt_id=str(second_started.attempt.attempt_id),
+            metadata={"kind": "implementation"},
+        )
+    )
+
+    context = memory_service.get_context(
+        GetMemoryContextRequest(
+            workspace_id=str(workspace.workspace_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert older_episode.feature == MemoryFeature.REMEMBER_EPISODE
+    assert newer_episode.feature == MemoryFeature.REMEMBER_EPISODE
+    assert context.feature == MemoryFeature.GET_CONTEXT
+    assert context.implemented is True
+    assert [episode.summary for episode in context.episodes] == [
+        "Workspace episode from newer workflow",
+        "Workspace episode from older workflow",
+    ]
+    assert context.details["query"] is None
+    assert context.details["normalized_query"] is None
+    assert context.details["lookup_scope"] == "workspace"
+    assert context.details["workspace_id"] == str(workspace.workspace_id)
+    assert context.details["workflow_instance_id"] is None
+    assert context.details["ticket_id"] is None
+    assert sorted(context.details["resolved_workflow_ids"]) == sorted(
+        [
+            str(first_started.workflow_instance.workflow_instance_id),
+            str(second_started.workflow_instance.workflow_instance_id),
+        ]
+    )
+    assert context.details["resolved_workflow_count"] == 2
+    assert context.details["query_filter_applied"] is False
+    assert context.details["episodes_before_query_filter"] == 2
+    assert context.details["matched_episode_count"] == 2
+    assert context.details["episodes_returned"] == 2
+
+
+def test_postgres_memory_get_context_returns_ticket_episodes(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    workflow_service = WorkflowService(
+        build_postgres_uow_factory(
+            PostgresConfig(
+                database_url=postgres_database_url,
+                connect_timeout_seconds=5,
+                statement_timeout_ms=5000,
+                schema_name=clean_postgres_database,
+            )
+        )
+    )
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(
+            build_postgres_uow_factory(
+                PostgresConfig(
+                    database_url=postgres_database_url,
+                    connect_timeout_seconds=5,
+                    statement_timeout_ms=5000,
+                    schema_name=clean_postgres_database,
+                )
+            )
+        ),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(
+            build_postgres_uow_factory(
+                PostgresConfig(
+                    database_url=postgres_database_url,
+                    connect_timeout_seconds=5,
+                    statement_timeout_ms=5000,
+                    schema_name=clean_postgres_database,
+                )
+            )
+        ),
+    )
+
+    first_workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-context-ticket-a.git",
+            canonical_path="/tmp/integration-repo-memory-context-ticket-a",
+            default_branch="main",
+        )
+    )
+    second_workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-context-ticket-b.git",
+            canonical_path="/tmp/integration-repo-memory-context-ticket-b",
+            default_branch="main",
+        )
+    )
+
+    first_started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=first_workspace.workspace_id,
+            ticket_id="INTEG-MEMCTX-TICKET-001",
+        )
+    )
+    second_started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=second_workspace.workspace_id,
+            ticket_id="INTEG-MEMCTX-TICKET-001",
+        )
+    )
+
+    older_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(
+                first_started.workflow_instance.workflow_instance_id
+            ),
+            summary="Ticket episode from first workspace",
+            attempt_id=str(first_started.attempt.attempt_id),
+            metadata={"kind": "investigation"},
+        )
+    )
+    newer_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(
+                second_started.workflow_instance.workflow_instance_id
+            ),
+            summary="Ticket episode from second workspace",
+            attempt_id=str(second_started.attempt.attempt_id),
+            metadata={"kind": "implementation"},
+        )
+    )
+
+    context = memory_service.get_context(
+        GetMemoryContextRequest(
+            ticket_id="INTEG-MEMCTX-TICKET-001",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert older_episode.feature == MemoryFeature.REMEMBER_EPISODE
+    assert newer_episode.feature == MemoryFeature.REMEMBER_EPISODE
+    assert context.feature == MemoryFeature.GET_CONTEXT
+    assert context.implemented is True
+    assert [episode.summary for episode in context.episodes] == [
+        "Ticket episode from second workspace",
+        "Ticket episode from first workspace",
+    ]
+    assert context.details["query"] is None
+    assert context.details["normalized_query"] is None
+    assert context.details["lookup_scope"] == "ticket"
+    assert context.details["workspace_id"] is None
+    assert context.details["workflow_instance_id"] is None
+    assert context.details["ticket_id"] == "INTEG-MEMCTX-TICKET-001"
+    assert sorted(context.details["resolved_workflow_ids"]) == sorted(
+        [
+            str(first_started.workflow_instance.workflow_instance_id),
+            str(second_started.workflow_instance.workflow_instance_id),
+        ]
+    )
+    assert context.details["resolved_workflow_count"] == 2
+    assert context.details["query_filter_applied"] is False
+    assert context.details["episodes_before_query_filter"] == 2
+    assert context.details["matched_episode_count"] == 2
+    assert context.details["episodes_returned"] == 2
+
+
+def test_postgres_memory_get_context_applies_initial_query_filtering(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    workflow_service = WorkflowService(
+        build_postgres_uow_factory(
+            PostgresConfig(
+                database_url=postgres_database_url,
+                connect_timeout_seconds=5,
+                statement_timeout_ms=5000,
+                schema_name=clean_postgres_database,
+            )
+        )
+    )
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(
+            build_postgres_uow_factory(
+                PostgresConfig(
+                    database_url=postgres_database_url,
+                    connect_timeout_seconds=5,
+                    statement_timeout_ms=5000,
+                    schema_name=clean_postgres_database,
+                )
+            )
+        ),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(
+            build_postgres_uow_factory(
+                PostgresConfig(
+                    database_url=postgres_database_url,
+                    connect_timeout_seconds=5,
+                    statement_timeout_ms=5000,
+                    schema_name=clean_postgres_database,
+                )
+            )
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-context-query.git",
+            canonical_path="/tmp/integration-repo-memory-context-query",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMCTX-QUERY-001",
+        )
+    )
+
+    memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Fix flaky postgres startup ordering",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "stabilization", "component": "postgres"},
+        )
+    )
+    memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Document release checklist",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "docs", "component": "release"},
+        )
+    )
+    memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Track filtering semantics decision",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "analysis", "component": "metadata-filter"},
+        )
+    )
+
+    context = memory_service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            query="postgres",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert context.feature == MemoryFeature.GET_CONTEXT
+    assert context.implemented is True
+    assert [episode.summary for episode in context.episodes] == [
+        "Fix flaky postgres startup ordering",
+    ]
+    assert context.details["query"] == "postgres"
+    assert context.details["normalized_query"] == "postgres"
+    assert context.details["lookup_scope"] == "workflow_instance"
+    assert context.details["workflow_instance_id"] == str(
+        started.workflow_instance.workflow_instance_id
+    )
+    assert context.details["resolved_workflow_ids"] == [
+        str(started.workflow_instance.workflow_instance_id)
+    ]
+    assert context.details["resolved_workflow_count"] == 1
+    assert context.details["query_filter_applied"] is True
+    assert context.details["episodes_before_query_filter"] == 3
+    assert context.details["matched_episode_count"] == 1
+    assert context.details["episodes_returned"] == 1
+
+    metadata_context = memory_service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            query="metadata-filter",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert metadata_context.feature == MemoryFeature.GET_CONTEXT
+    assert metadata_context.implemented is True
+    assert [episode.summary for episode in metadata_context.episodes] == [
+        "Track filtering semantics decision",
+    ]
+    assert metadata_context.details["query"] == "metadata-filter"
+    assert metadata_context.details["normalized_query"] == "metadata-filter"
+    assert metadata_context.details["lookup_scope"] == "workflow_instance"
+    assert metadata_context.details["workflow_instance_id"] == str(
+        started.workflow_instance.workflow_instance_id
+    )
+    assert metadata_context.details["resolved_workflow_ids"] == [
+        str(started.workflow_instance.workflow_instance_id)
+    ]
+    assert metadata_context.details["resolved_workflow_count"] == 1
+    assert metadata_context.details["query_filter_applied"] is True
+    assert metadata_context.details["episodes_before_query_filter"] == 3
+    assert metadata_context.details["matched_episode_count"] == 1
+    assert metadata_context.details["episodes_returned"] == 1
 
 
 def test_postgres_terminal_resume_is_for_inspection_not_continuation(
@@ -1320,7 +1893,7 @@ def test_postgres_workflow_service_ignore_clears_open_projection_failure_warning
 
 def test_postgres_writer_and_reconcile_end_to_end_json_only(
     postgres_database_url: str,
-    clean_postgres_database: None,
+    clean_postgres_database: str,
     tmp_path: Path,
 ) -> None:
     service = WorkflowService(
@@ -1329,6 +1902,7 @@ def test_postgres_writer_and_reconcile_end_to_end_json_only(
                 database_url=postgres_database_url,
                 connect_timeout_seconds=5,
                 statement_timeout_ms=5000,
+                schema_name=clean_postgres_database,
             )
         )
     )
@@ -1392,7 +1966,7 @@ def test_postgres_writer_and_reconcile_end_to_end_json_only(
 
 def test_postgres_writer_and_reconcile_end_to_end_markdown_failure(
     postgres_database_url: str,
-    clean_postgres_database: None,
+    clean_postgres_database: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1402,6 +1976,7 @@ def test_postgres_writer_and_reconcile_end_to_end_markdown_failure(
                 database_url=postgres_database_url,
                 connect_timeout_seconds=5,
                 statement_timeout_ms=5000,
+                schema_name=clean_postgres_database,
             )
         )
     )
@@ -1513,7 +2088,7 @@ def test_postgres_writer_and_reconcile_end_to_end_markdown_failure(
 
 def test_postgres_writer_and_reconcile_end_to_end_json_failure(
     postgres_database_url: str,
-    clean_postgres_database: None,
+    clean_postgres_database: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1523,6 +2098,7 @@ def test_postgres_writer_and_reconcile_end_to_end_json_failure(
                 database_url=postgres_database_url,
                 connect_timeout_seconds=5,
                 statement_timeout_ms=5000,
+                schema_name=clean_postgres_database,
             )
         )
     )
@@ -1636,7 +2212,7 @@ def test_postgres_writer_and_reconcile_end_to_end_json_failure(
 
 def test_postgres_settings_can_build_uow_factory_from_loaded_settings(
     postgres_database_url: str,
-    clean_postgres_database: None,
+    clean_postgres_database: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     env = {
@@ -1661,6 +2237,12 @@ def test_postgres_settings_can_build_uow_factory_from_loaded_settings(
 
     settings = load_settings()
     config = PostgresConfig.from_settings(settings)
+    config = PostgresConfig(
+        database_url=config.database_url,
+        connect_timeout_seconds=config.connect_timeout_seconds,
+        statement_timeout_ms=config.statement_timeout_ms,
+        schema_name=clean_postgres_database,
+    )
     service = WorkflowService(build_postgres_uow_factory(config))
 
     workspace = service.register_workspace(
@@ -1692,7 +2274,7 @@ def test_postgres_settings_can_build_uow_factory_from_loaded_settings(
 
 def test_postgres_projection_state_can_be_observed_after_projection_write(
     postgres_database_url: str,
-    clean_postgres_database: None,
+    clean_postgres_database: str,
 ) -> None:
     service = WorkflowService(
         build_postgres_uow_factory(
@@ -1700,6 +2282,7 @@ def test_postgres_projection_state_can_be_observed_after_projection_write(
                 database_url=postgres_database_url,
                 connect_timeout_seconds=5,
                 statement_timeout_ms=5000,
+                schema_name=clean_postgres_database,
             )
         )
     )

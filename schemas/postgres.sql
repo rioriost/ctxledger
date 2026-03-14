@@ -365,8 +365,14 @@ CREATE TABLE IF NOT EXISTS episodes (
     CHECK (status IN ('recorded', 'superseded', 'archived'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_workflow_instance
-  ON episodes (workflow_instance_id);
+ALTER TABLE episodes
+  ADD COLUMN IF NOT EXISTS attempt_id UUID REFERENCES workflow_attempts(attempt_id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_episodes_workflow_instance_created_desc
+  ON episodes (workflow_instance_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_episodes_attempt_created_desc
+  ON episodes (attempt_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_episodes_created_desc
   ON episodes (created_at DESC);

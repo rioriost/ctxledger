@@ -30,7 +30,14 @@ from ctxledger.mcp.tool_handlers import (
     build_workflow_start_tool_handler,
     build_workspace_register_tool_handler,
 )
-from ctxledger.memory.service import MemoryErrorCode, MemoryServiceError, StubResponse
+from ctxledger.memory.service import (
+    GetContextResponse,
+    MemoryErrorCode,
+    MemoryFeature,
+    MemoryServiceError,
+    RememberEpisodeResponse,
+    StubResponse,
+)
 from ctxledger.runtime.types import McpToolResponse, WorkflowResumeResponse
 from ctxledger.workflow.service import (
     ProjectionArtifactType,
@@ -1558,8 +1565,39 @@ def make_stub_response() -> StubResponse:
     )
 
 
+def make_remember_episode_response() -> RememberEpisodeResponse:
+    from ctxledger.memory.service import EpisodeRecord, MemoryFeature
+
+    workflow_instance_id = uuid4()
+    attempt_id = uuid4()
+    created_at = datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)
+
+    return RememberEpisodeResponse(
+        feature=MemoryFeature.REMEMBER_EPISODE,
+        implemented=True,
+        message="Episode recorded successfully.",
+        status="recorded",
+        available_in_version="0.2.0",
+        timestamp=created_at,
+        episode=EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_instance_id,
+            summary="remember this",
+            attempt_id=attempt_id,
+            metadata={"kind": "checkpoint"},
+            status="recorded",
+            created_at=created_at,
+            updated_at=created_at,
+        ),
+        details={
+            "workflow_instance_id": str(workflow_instance_id),
+            "attempt_id": str(attempt_id),
+        },
+    )
+
+
 def test_build_memory_remember_episode_tool_handler_returns_success() -> None:
-    service = FakeMemoryService(remember_result=make_stub_response())
+    service = FakeMemoryService(remember_result=make_remember_episode_response())
     handler = build_memory_remember_episode_tool_handler(service)
 
     response = handler(
@@ -1573,12 +1611,16 @@ def test_build_memory_remember_episode_tool_handler_returns_success() -> None:
 
     assert response.payload["ok"] is True
     assert response.payload["result"]["feature"] == "memory_remember_episode"
-    assert response.payload["result"]["implemented"] is False
-    assert response.payload["result"]["message"] == "ok"
-    assert response.payload["result"]["status"] == "not_implemented"
-    assert response.payload["result"]["available_in_version"] == "0.1.0"
-    assert response.payload["result"]["details"] == {"value": 1, "source": "test"}
+    assert response.payload["result"]["implemented"] is True
+    assert response.payload["result"]["message"] == "Episode recorded successfully."
+    assert response.payload["result"]["status"] == "recorded"
+    assert response.payload["result"]["available_in_version"] == "0.2.0"
     assert "timestamp" in response.payload["result"]
+    assert response.payload["result"]["episode"]["summary"] == "remember this"
+    assert response.payload["result"]["episode"]["metadata"] == {"kind": "checkpoint"}
+    assert response.payload["result"]["episode"]["status"] == "recorded"
+    assert response.payload["result"]["details"]["workflow_instance_id"]
+    assert response.payload["result"]["details"]["attempt_id"]
     assert service.remember_calls is not None
     call = service.remember_calls[0]
     assert isinstance(call.workflow_instance_id, str)
@@ -1667,14 +1709,27 @@ def test_build_memory_search_tool_handler_maps_memory_error() -> None:
 def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values() -> (
     None
 ):
-    service = FakeMemoryService(context_result=make_stub_response())
+    created_at = datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)
+    workflow_instance_id = uuid4()
+    service = FakeMemoryService(
+        context_result=GetContextResponse(
+            feature=MemoryFeature.GET_CONTEXT,
+            implemented=True,
+            message="Episode-oriented memory context retrieved successfully.",
+            status="ok",
+            available_in_version="0.2.0",
+            timestamp=created_at,
+            episodes=(),
+            details={"episodes_returned": 0},
+        )
+    )
     handler = build_memory_get_context_tool_handler(service)
 
     response = handler(
         {
             "query": 123,
             "workspace_id": uuid4(),
-            "workflow_instance_id": uuid4(),
+            "workflow_instance_id": workflow_instance_id,
             "ticket_id": 999,
             "limit": "bad",
             "include_episodes": "bad",
@@ -1684,13 +1739,17 @@ def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values
     )
 
     assert response.payload["ok"] is True
-    assert response.payload["result"]["feature"] == "memory_remember_episode"
-    assert response.payload["result"]["implemented"] is False
-    assert response.payload["result"]["message"] == "ok"
-    assert response.payload["result"]["status"] == "not_implemented"
-    assert response.payload["result"]["available_in_version"] == "0.1.0"
-    assert response.payload["result"]["details"] == {"value": 1, "source": "test"}
-    assert "timestamp" in response.payload["result"]
+    assert response.payload["result"]["feature"] == "memory_get_context"
+    assert response.payload["result"]["implemented"] is True
+    assert (
+        response.payload["result"]["message"]
+        == "Episode-oriented memory context retrieved successfully."
+    )
+    assert response.payload["result"]["status"] == "ok"
+    assert response.payload["result"]["available_in_version"] == "0.2.0"
+    assert response.payload["result"]["details"] == {"episodes_returned": 0}
+    assert response.payload["result"]["episodes"] == []
+    assert response.payload["result"]["timestamp"] == created_at.isoformat()
     assert service.context_calls is not None
     call = service.context_calls[0]
     assert call.query == "123"

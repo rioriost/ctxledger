@@ -9,6 +9,7 @@ from ctxledger.db.postgres import (
     build_postgres_uow_factory,
 )
 from ctxledger.workflow.service import (
+    EpisodeRecord,
     ProjectionArtifactType,
     ProjectionFailureInfo,
     ProjectionFailureRepository,
@@ -104,6 +105,34 @@ class InMemoryWorkflowInstanceRepository(WorkflowInstanceRepository):
         ]
         workflows.sort(key=lambda workflow: workflow.updated_at, reverse=True)
         return workflows[0] if workflows else None
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: object,
+        *,
+        limit: int,
+    ) -> tuple[WorkflowInstance, ...]:
+        workflows = [
+            workflow
+            for workflow in self._workflows_by_id.values()
+            if workflow.workspace_id == workspace_id
+        ]
+        workflows.sort(key=lambda workflow: workflow.updated_at, reverse=True)
+        return tuple(workflows[:limit])
+
+    def list_by_ticket_id(
+        self,
+        ticket_id: str,
+        *,
+        limit: int,
+    ) -> tuple[WorkflowInstance, ...]:
+        workflows = [
+            workflow
+            for workflow in self._workflows_by_id.values()
+            if workflow.ticket_id == ticket_id
+        ]
+        workflows.sort(key=lambda workflow: workflow.updated_at, reverse=True)
+        return tuple(workflows[:limit])
 
     def create(self, workflow: WorkflowInstance) -> WorkflowInstance:
         self._workflows_by_id[workflow.workflow_instance_id] = workflow
@@ -211,6 +240,15 @@ class InMemoryVerifyReportRepository(VerifyReportRepository):
     def create(self, verify_report: VerifyReport) -> VerifyReport:
         self._verify_reports_by_id[verify_report.verify_id] = verify_report
         return verify_report
+
+
+class InMemoryMemoryEpisodeRepository:
+    def __init__(self, episodes_by_id: dict[object, EpisodeRecord]) -> None:
+        self._episodes_by_id = episodes_by_id
+
+    def create(self, episode: EpisodeRecord) -> EpisodeRecord:
+        self._episodes_by_id[episode.episode_id] = episode
+        return episode
 
 
 class InMemoryProjectionStateRepository(ProjectionStateRepository):
@@ -496,6 +534,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         attempts_by_id: dict[object, WorkflowAttempt] | None = None,
         checkpoints_by_id: dict[object, WorkflowCheckpoint] | None = None,
         verify_reports_by_id: dict[object, VerifyReport] | None = None,
+        episodes_by_id: dict[object, EpisodeRecord] | None = None,
         projection_states_by_key: dict[
             tuple[object, object, ProjectionArtifactType], ProjectionInfo
         ]
@@ -521,6 +560,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._verify_reports_by_id = (
             verify_reports_by_id if verify_reports_by_id is not None else {}
         )
+        self._episodes_by_id = episodes_by_id if episodes_by_id is not None else {}
         self._projection_states_by_key = (
             projection_states_by_key if projection_states_by_key is not None else {}
         )
@@ -543,6 +583,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             self._checkpoints_by_id
         )
         self.verify_reports = InMemoryVerifyReportRepository(self._verify_reports_by_id)
+        self.memory_episodes = InMemoryMemoryEpisodeRepository(self._episodes_by_id)
         self.projection_states = InMemoryProjectionStateRepository(
             self._projection_states_by_key
         )
@@ -573,6 +614,7 @@ class InMemoryStore:
     attempts_by_id: dict[object, WorkflowAttempt]
     checkpoints_by_id: dict[object, WorkflowCheckpoint]
     verify_reports_by_id: dict[object, VerifyReport]
+    episodes_by_id: dict[object, EpisodeRecord]
     projection_states_by_key: dict[
         tuple[object, object, ProjectionArtifactType], ProjectionInfo
     ]
@@ -589,6 +631,7 @@ class InMemoryStore:
             attempts_by_id={},
             checkpoints_by_id={},
             verify_reports_by_id={},
+            episodes_by_id={},
             projection_states_by_key={},
             projection_failures_by_key={},
         )
@@ -601,6 +644,7 @@ class InMemoryStore:
             attempts_by_id=dict(self.attempts_by_id),
             checkpoints_by_id=dict(self.checkpoints_by_id),
             verify_reports_by_id=dict(self.verify_reports_by_id),
+            episodes_by_id=dict(self.episodes_by_id),
             projection_states_by_key=dict(self.projection_states_by_key),
             projection_failures_by_key={
                 key: list(value)
@@ -622,6 +666,7 @@ def build_in_memory_uow_factory(
             attempts_by_id=backing_store.attempts_by_id,
             checkpoints_by_id=backing_store.checkpoints_by_id,
             verify_reports_by_id=backing_store.verify_reports_by_id,
+            episodes_by_id=backing_store.episodes_by_id,
             projection_states_by_key=backing_store.projection_states_by_key,
             projection_failures_by_key=backing_store.projection_failures_by_key,
         )
@@ -630,9 +675,10 @@ def build_in_memory_uow_factory(
 
 
 __all__ = [
-    "InMemoryProjectionFailureRepository",
-    "InMemoryProjectionStateRepository",
-    "InMemoryStore",
+    InMemoryProjectionFailureRepository,
+    InMemoryProjectionStateRepository,
+    InMemoryMemoryEpisodeRepository,
+    InMemoryStore,
     "InMemoryUnitOfWork",
     "InMemoryVerifyReportRepository",
     "InMemoryWorkflowAttemptRepository",

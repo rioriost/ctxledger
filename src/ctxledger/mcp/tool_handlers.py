@@ -9,6 +9,8 @@ from ..memory.service import (
     MemoryServiceError,
     RememberEpisodeRequest,
     SearchMemoryRequest,
+    UnitOfWorkEpisodeRepository,
+    UnitOfWorkWorkflowLookupRepository,
 )
 from ..workflow.service import (
     CompleteWorkflowInput,
@@ -24,6 +26,7 @@ from ..workflow.service import (
 if TYPE_CHECKING:
     from ..runtime.types import McpToolResponse
     from ..server import CtxLedgerServer
+    from ..workflow.service import UnitOfWork
 
 
 def _mcp_tool_response_cls() -> type["McpToolResponse"]:
@@ -747,9 +750,11 @@ def build_memory_remember_episode_tool_handler(
                     ),
                 )
             )
-            from ..runtime.serializers import serialize_stub_response
+            from ..runtime.serializers import serialize_remember_episode_response
 
-            return build_mcp_success_response(serialize_stub_response(response))
+            return build_mcp_success_response(
+                serialize_remember_episode_response(response)
+            )
         except MemoryServiceError as exc:
             return build_mcp_error_response(
                 code=exc.code.value,
@@ -847,9 +852,9 @@ def build_memory_get_context_tool_handler(
                     ),
                 )
             )
-            from ..runtime.serializers import serialize_stub_response
+            from ..runtime.serializers import serialize_get_context_response
 
-            return build_mcp_success_response(serialize_stub_response(response))
+            return build_mcp_success_response(serialize_get_context_response(response))
         except MemoryServiceError as exc:
             return build_mcp_error_response(
                 code=exc.code.value,
@@ -858,3 +863,16 @@ def build_memory_get_context_tool_handler(
             )
 
     return _handler
+
+
+def build_workflow_backed_memory_service(
+    server: "CtxLedgerServer | None",
+) -> MemoryService:
+    if server is None or server.workflow_service is None:
+        return MemoryService()
+
+    uow_factory = server.workflow_service._uow_factory
+    return MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+    )

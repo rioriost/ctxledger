@@ -1,18 +1,11 @@
-"""Memory service stubs aligned with the ctxledger architecture.
+"""Memory service support for episodic persistence and future retrieval layers.
 
-This module intentionally provides architectural placeholders for the memory
-subsystem in v0.1.0.
+The workflow subsystem remains the canonical operational truth source.
+The memory subsystem stores reusable knowledge derived from or related to
+workflow execution.
 
-The current release focuses on durable workflow control. Memory features are
-defined at the API and architecture level, but may remain stubbed until the
-episodic, semantic, and hierarchical retrieval layers are implemented.
-
-Design goals of this module:
-- preserve a stable application-facing surface
-- keep workflow control and memory retrieval separate
-- return explicit "not implemented" style failures instead of pretending that
-  retrieval or persistence is production-ready
-- provide typed request/response shapes that future implementations can extend
+For the current implementation stage, episodic persistence is supported while
+semantic and hierarchical retrieval remain intentionally stubbed.
 """
 
 from __future__ import annotations
@@ -20,7 +13,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
+from typing import Any, Callable, Protocol
+from uuid import UUID, uuid4
+
+from ..workflow.service import UnitOfWork
 
 
 class MemoryFeature(StrEnum):
@@ -36,6 +32,7 @@ class MemoryErrorCode(StrEnum):
 
     NOT_IMPLEMENTED = "memory_not_implemented"
     INVALID_REQUEST = "memory_invalid_request"
+    WORKFLOW_NOT_FOUND = "memory_workflow_not_found"
 
 
 @dataclass(slots=True, frozen=True)
@@ -57,12 +54,54 @@ class MemoryServiceError(Exception):
 
 @dataclass(slots=True, frozen=True)
 class RememberEpisodeRequest:
-    """Request shape for future episodic memory persistence."""
+    """Request shape for episodic memory persistence."""
 
     workflow_instance_id: str
     summary: str
     attempt_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True, frozen=True)
+class EpisodeRecord:
+    """Canonical episodic memory record."""
+
+    episode_id: UUID
+    workflow_instance_id: UUID
+    summary: str
+    attempt_id: UUID | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    status: str = "recorded"
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True, frozen=True)
+class RememberEpisodeResponse:
+    """Response returned when an episode is persisted."""
+
+    feature: MemoryFeature
+    implemented: bool
+    message: str
+    status: str = "recorded"
+    available_in_version: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    episode: EpisodeRecord | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True, frozen=True)
+class GetContextResponse:
+    """Response returned when episode-oriented context is assembled."""
+
+    feature: MemoryFeature
+    implemented: bool
+    message: str
+    status: str = "ok"
+    available_in_version: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    episodes: tuple[EpisodeRecord, ...] = ()
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True, frozen=True)
@@ -106,23 +145,231 @@ class StubResponse:
     details: dict[str, Any] = field(default_factory=dict)
 
 
+class WorkflowLookupRepository(Protocol):
+    """Minimal workflow lookup contract needed by the memory service."""
+
+    def workflow_exists(self, workflow_instance_id: UUID) -> bool: ...
+
+    def workflow_ids_by_workspace_id(
+        self,
+        workspace_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]: ...
+
+    def workflow_ids_by_ticket_id(
+        self,
+        ticket_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]: ...
+
+
+class EpisodeRepository(Protocol):
+    """Persistence contract for episodic memory records."""
+
+    def create(self, episode: EpisodeRecord) -> EpisodeRecord: ...
+
+    def list_by_workflow_id(
+        self,
+        workflow_instance_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[EpisodeRecord, ...]: ...
+
+
+class UnitOfWorkWorkflowLookupRepository:
+    """Workflow lookup backed by the application's unit of work."""
+
+    def __init__(self, uow_factory: Callable[[], UnitOfWork]) -> None:
+        self._uow_factory = uow_factory
+
+    def workflow_exists(self, workflow_instance_id: UUID) -> bool:
+        with self._uow_factory() as uow:
+            return uow.workflow_instances.get_by_id(workflow_instance_id) is not None
+
+    def workflow_ids_by_workspace_id(
+        self,
+        workspace_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]:
+        workspace_uuid = UUID(workspace_id)
+        with self._uow_factory() as uow:
+            workflows = uow.workflow_instances.list_by_workspace_id(
+                workspace_uuid,
+                limit=limit,
+            )
+            return tuple(workflow.workflow_instance_id for workflow in workflows)
+
+    def workflow_ids_by_ticket_id(
+        self,
+        ticket_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]:
+        with self._uow_factory() as uow:
+            workflows = uow.workflow_instances.list_by_ticket_id(
+                ticket_id,
+                limit=limit,
+            )
+            return tuple(workflow.workflow_instance_id for workflow in workflows)
+
+
+def _normalize_query_text(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized.casefold() if normalized else None
+
+
+def _metadata_query_strings(metadata: dict[str, Any]) -> tuple[str, ...]:
+    query_strings: list[str] = []
+
+    for key, value in metadata.items():
+        query_strings.append(str(key).casefold())
+        if isinstance(value, str):
+            normalized_value = value.strip()
+            if normalized_value:
+                query_strings.append(normalized_value.casefold())
+        else:
+            query_strings.append(str(value).casefold())
+
+    return tuple(query_strings)
+
+
+class UnitOfWorkEpisodeRepository:
+    """Episode repository backed by PostgreSQL tables through the unit of work."""
+
+    def __init__(self, uow_factory: Callable[[], UnitOfWork]) -> None:
+        self._uow_factory = uow_factory
+
+    def create(self, episode: EpisodeRecord) -> EpisodeRecord:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_episodes"):
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.REMEMBER_EPISODE,
+                    message="Episode persistence repository is not configured.",
+                    details={},
+                )
+            created = uow.memory_episodes.create(episode)
+            uow.commit()
+            return created
+
+    def list_by_workflow_id(
+        self,
+        workflow_instance_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[EpisodeRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_episodes"):
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Episode persistence repository is not configured.",
+                    details={},
+                )
+            return uow.memory_episodes.list_by_workflow_id(
+                workflow_instance_id,
+                limit=limit,
+            )
+
+
+class InMemoryWorkflowLookupRepository:
+    """Simple in-memory workflow lookup support for local tests and bootstrap."""
+
+    def __init__(
+        self,
+        workflow_ids: set[UUID] | None = None,
+        workflows_by_id: dict[UUID, dict[str, str]] | None = None,
+    ) -> None:
+        self._workflow_ids = workflow_ids if workflow_ids is not None else set()
+        self._workflows_by_id = workflows_by_id if workflows_by_id is not None else {}
+
+    def workflow_exists(self, workflow_instance_id: UUID) -> bool:
+        return (
+            workflow_instance_id in self._workflow_ids
+            or workflow_instance_id in self._workflows_by_id
+        )
+
+    def workflow_ids_by_workspace_id(
+        self,
+        workspace_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]:
+        matches = [
+            workflow_instance_id
+            for workflow_instance_id, workflow_info in self._workflows_by_id.items()
+            if workflow_info.get("workspace_id") == workspace_id
+        ]
+        return tuple(matches[:limit])
+
+    def workflow_ids_by_ticket_id(
+        self,
+        ticket_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]:
+        matches = [
+            workflow_instance_id
+            for workflow_instance_id, workflow_info in self._workflows_by_id.items()
+            if workflow_info.get("ticket_id") == ticket_id
+        ]
+        return tuple(matches[:limit])
+
+
+class InMemoryEpisodeRepository:
+    """Simple append-only in-memory episode repository."""
+
+    def __init__(self) -> None:
+        self._episodes: list[EpisodeRecord] = []
+
+    @property
+    def episodes(self) -> tuple[EpisodeRecord, ...]:
+        return tuple(self._episodes)
+
+    def create(self, episode: EpisodeRecord) -> EpisodeRecord:
+        self._episodes.append(episode)
+        return episode
+
+    def list_by_workflow_id(
+        self,
+        workflow_instance_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[EpisodeRecord, ...]:
+        matches = [
+            episode
+            for episode in self._episodes
+            if episode.workflow_instance_id == workflow_instance_id
+        ]
+        matches.sort(key=lambda episode: episode.created_at, reverse=True)
+        return tuple(matches[:limit])
+
+
 class MemoryService:
-    """Architectural placeholder for the ctxledger memory subsystem.
+    """Memory subsystem service.
 
-    The workflow subsystem is the primary functional target in v0.1.0.
-    This service exists to preserve a clean boundary for future memory work:
-
-    - episodic memory persistence
-    - semantic/procedural memory search
-    - hierarchical summary retrieval
-    - relation-aware context assembly
-
-    The service currently validates a minimal subset of inputs and returns
-    explicit stub responses.
+    Episodic persistence is implemented as append-only episode creation.
+    Retrieval-oriented operations remain stubbed until later stages.
     """
 
-    def remember_episode(self, request: RememberEpisodeRequest) -> StubResponse:
-        """Stub for future episodic memory persistence."""
+    def __init__(
+        self,
+        *,
+        episode_repository: EpisodeRepository | None = None,
+        workflow_lookup: WorkflowLookupRepository | None = None,
+    ) -> None:
+        self._episode_repository = episode_repository or InMemoryEpisodeRepository()
+        self._workflow_lookup = workflow_lookup
+
+    def remember_episode(
+        self, request: RememberEpisodeRequest
+    ) -> RememberEpisodeResponse:
+        """Persist a new episode associated with a workflow."""
         self._require_non_empty(
             request.workflow_instance_id,
             field_name="workflow_instance_id",
@@ -134,15 +381,54 @@ class MemoryService:
             feature=MemoryFeature.REMEMBER_EPISODE,
         )
 
-        return self._not_implemented(
+        workflow_instance_id = self._parse_uuid(
+            request.workflow_instance_id,
+            field_name="workflow_instance_id",
             feature=MemoryFeature.REMEMBER_EPISODE,
-            message=(
-                "Episode persistence is defined architecturally but is not "
-                "implemented in v0.1.0."
-            ),
+        )
+        attempt_id = (
+            self._parse_uuid(
+                request.attempt_id,
+                field_name="attempt_id",
+                feature=MemoryFeature.REMEMBER_EPISODE,
+            )
+            if request.attempt_id is not None and self._has_text(request.attempt_id)
+            else None
+        )
+
+        if (
+            self._workflow_lookup is not None
+            and not self._workflow_lookup.workflow_exists(workflow_instance_id)
+        ):
+            raise MemoryServiceError(
+                code=MemoryErrorCode.WORKFLOW_NOT_FOUND,
+                feature=MemoryFeature.REMEMBER_EPISODE,
+                message="workflow_instance_id was not found.",
+                details={"workflow_instance_id": str(workflow_instance_id)},
+            )
+
+        episode = self._episode_repository.create(
+            EpisodeRecord(
+                episode_id=uuid4(),
+                workflow_instance_id=workflow_instance_id,
+                summary=request.summary.strip(),
+                attempt_id=attempt_id,
+                metadata=dict(request.metadata),
+            )
+        )
+
+        return RememberEpisodeResponse(
+            feature=MemoryFeature.REMEMBER_EPISODE,
+            implemented=True,
+            message="Episode recorded successfully.",
+            status="recorded",
+            available_in_version="0.2.0",
+            episode=episode,
             details={
-                "workflow_instance_id": request.workflow_instance_id,
-                "attempt_id": request.attempt_id,
+                "workflow_instance_id": str(episode.workflow_instance_id),
+                "attempt_id": (
+                    str(episode.attempt_id) if episode.attempt_id is not None else None
+                ),
             },
         )
 
@@ -171,12 +457,14 @@ class MemoryService:
             },
         )
 
-    def get_context(self, request: GetMemoryContextRequest) -> StubResponse:
-        """Stub for future auxiliary memory context retrieval.
+    def get_context(self, request: GetMemoryContextRequest) -> GetContextResponse:
+        """Return episode-oriented auxiliary context.
 
-        This operation is intentionally separate from workflow resume. It is
-        meant to return relevance-based support context rather than canonical
-        operational state.
+        This operation remains intentionally separate from workflow resume. It
+        returns support context rather than canonical operational state.
+
+        In the current implementation stage, retrieval is episode-oriented and
+        keyed primarily by workflow_instance_id.
         """
         if not any(
             [
@@ -201,20 +489,111 @@ class MemoryService:
             feature=MemoryFeature.GET_CONTEXT,
         )
 
-        return self._not_implemented(
+        lookup_scope = "query"
+        resolved_workflow_ids: tuple[UUID, ...] = ()
+        resolved_workflow_instance_id: str | None = None
+        normalized_query = _normalize_query_text(request.query)
+
+        if self._has_text(request.workflow_instance_id):
+            lookup_scope = "workflow_instance"
+            workflow_instance_id = self._parse_uuid(
+                request.workflow_instance_id or "",
+                field_name="workflow_instance_id",
+                feature=MemoryFeature.GET_CONTEXT,
+            )
+            if (
+                self._workflow_lookup is not None
+                and not self._workflow_lookup.workflow_exists(workflow_instance_id)
+            ):
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.WORKFLOW_NOT_FOUND,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="workflow_instance_id was not found.",
+                    details={"workflow_instance_id": str(workflow_instance_id)},
+                )
+            resolved_workflow_ids = (workflow_instance_id,)
+            resolved_workflow_instance_id = str(workflow_instance_id)
+        elif self._has_text(request.workspace_id) and self._workflow_lookup is not None:
+            lookup_scope = "workspace"
+            resolved_workflow_ids = self._workflow_lookup.workflow_ids_by_workspace_id(
+                request.workspace_id or "",
+                limit=request.limit,
+            )
+        elif self._has_text(request.ticket_id) and self._workflow_lookup is not None:
+            lookup_scope = "ticket"
+            resolved_workflow_ids = self._workflow_lookup.workflow_ids_by_ticket_id(
+                request.ticket_id or "",
+                limit=request.limit,
+            )
+
+        details = {
+            "query": request.query,
+            "normalized_query": normalized_query,
+            "lookup_scope": lookup_scope,
+            "workspace_id": request.workspace_id,
+            "workflow_instance_id": resolved_workflow_instance_id,
+            "ticket_id": request.ticket_id,
+            "limit": request.limit,
+            "include_episodes": request.include_episodes,
+            "include_memory_items": request.include_memory_items,
+            "include_summaries": request.include_summaries,
+            "resolved_workflow_count": len(resolved_workflow_ids),
+            "resolved_workflow_ids": [
+                str(workflow_id) for workflow_id in resolved_workflow_ids
+            ],
+        }
+
+        if not request.include_episodes:
+            return GetContextResponse(
+                feature=MemoryFeature.GET_CONTEXT,
+                implemented=True,
+                message="Episode-oriented memory context retrieved successfully.",
+                status="ok",
+                available_in_version="0.2.0",
+                episodes=(),
+                details={
+                    **details,
+                    "query_filter_applied": False,
+                    "episodes_before_query_filter": 0,
+                    "matched_episode_count": 0,
+                    "episodes_returned": 0,
+                },
+            )
+
+        episodes = self._collect_episode_context(
+            workflow_ids=resolved_workflow_ids,
+            limit=request.limit,
+        )
+        episodes_before_query_filter = len(episodes)
+
+        if normalized_query is not None:
+            episodes = tuple(
+                episode
+                for episode in episodes
+                if normalized_query in episode.summary.casefold()
+                or any(
+                    normalized_query in metadata_query_string
+                    for metadata_query_string in _metadata_query_strings(
+                        episode.metadata
+                    )
+                )
+            )
+
+        matched_episode_count = len(episodes)
+
+        return GetContextResponse(
             feature=MemoryFeature.GET_CONTEXT,
-            message=(
-                "Memory context retrieval is defined architecturally but is not "
-                "implemented in v0.1.0."
-            ),
+            implemented=True,
+            message="Episode-oriented memory context retrieved successfully.",
+            status="ok",
+            available_in_version="0.2.0",
+            episodes=episodes,
             details={
-                "workspace_id": request.workspace_id,
-                "workflow_instance_id": request.workflow_instance_id,
-                "ticket_id": request.ticket_id,
-                "limit": request.limit,
-                "include_episodes": request.include_episodes,
-                "include_memory_items": request.include_memory_items,
-                "include_summaries": request.include_summaries,
+                **details,
+                "query_filter_applied": normalized_query is not None,
+                "episodes_before_query_filter": episodes_before_query_filter,
+                "matched_episode_count": matched_episode_count,
+                "episodes_returned": len(episodes),
             },
         )
 
@@ -258,10 +637,52 @@ class MemoryService:
             raise MemoryServiceError(
                 code=MemoryErrorCode.INVALID_REQUEST,
                 feature=feature,
-                message="limit must be greater than 0.",
+                message="limit must be a positive integer.",
                 details={"field": "limit", "value": value},
             )
 
+    def _collect_episode_context(
+        self,
+        *,
+        workflow_ids: tuple[UUID, ...],
+        limit: int,
+    ) -> tuple[EpisodeRecord, ...]:
+        if not workflow_ids:
+            return ()
+
+        episodes: list[EpisodeRecord] = []
+        seen_episode_ids: set[UUID] = set()
+
+        for workflow_id in workflow_ids:
+            for episode in self._episode_repository.list_by_workflow_id(
+                workflow_id,
+                limit=limit,
+            ):
+                if episode.episode_id in seen_episode_ids:
+                    continue
+                seen_episode_ids.add(episode.episode_id)
+                episodes.append(episode)
+
+        episodes.sort(key=lambda episode: episode.created_at, reverse=True)
+        return tuple(episodes[:limit])
+
+    def _parse_uuid(
+        self,
+        value: str,
+        *,
+        field_name: str,
+        feature: MemoryFeature,
+    ) -> UUID:
+        try:
+            return UUID(value.strip())
+        except AttributeError, ValueError:
+            raise MemoryServiceError(
+                code=MemoryErrorCode.INVALID_REQUEST,
+                feature=feature,
+                message=f"{field_name} must be a valid UUID string.",
+                details={"field": field_name},
+            ) from None
+
     @staticmethod
-    def _has_text(value: str | None) -> bool:
-        return bool(value and value.strip())
+    def _has_text(value: object | None) -> bool:
+        return isinstance(value, str) and bool(value.strip())

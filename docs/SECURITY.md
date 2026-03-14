@@ -336,11 +336,11 @@ Do not place real secrets in:
 
 A reasonable local posture is:
 
-- direct local development may run without proxy auth only in tightly controlled environments
-- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=true` can remain useful for local operator visibility
-- once the deployment is shared or exposed beyond a single trusted operator, prefer the documented proxy-first small pattern
+- the documented local operator-facing path should use the HTTPS-terminated proxy-first small pattern
+- `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=true` can remain useful for local operator visibility when kept behind the same proxy boundary
+- once the deployment is shared or exposed beyond a single trusted operator, keep the backend private and use the documented HTTPS proxy entrypoint rather than any direct host-exposed HTTP path
 
-This is acceptable only when the environment is controlled and not broadly exposed.
+This is acceptable only when the environment is controlled, the backend remains private, and operator-facing access is still routed through the HTTPS proxy entrypoint.
 
 ## 7.2 Shared Internal Environments
 

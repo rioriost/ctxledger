@@ -90,6 +90,7 @@ class DatabaseSettings:
     url: str
     connect_timeout_seconds: int
     statement_timeout_ms: int | None
+    schema_name: str
 
     @property
     def is_configured(self) -> bool:
@@ -174,6 +175,9 @@ class AppSettings:
                 "CTXLEDGER_DB_STATEMENT_TIMEOUT_MS must be greater than 0"
             )
 
+        if not self.database.schema_name:
+            raise ConfigError("CTXLEDGER_DB_SCHEMA_NAME must not be empty")
+
 
 def load_settings() -> AppSettings:
     settings = AppSettings(
@@ -188,6 +192,7 @@ def load_settings() -> AppSettings:
             statement_timeout_ms=_parse_optional_int(
                 "CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"
             ),
+            schema_name=_get_env("CTXLEDGER_DB_SCHEMA_NAME", "public") or "public",
         ),
         http=HttpSettings(
             host=_get_env("CTXLEDGER_HOST", "0.0.0.0") or "0.0.0.0",

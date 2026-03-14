@@ -143,7 +143,7 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS=false`
   - TLS termination and reverse-proxy deployment
   - private backend networking for the application service
-- local-oriented guidance now keeps the direct local path simple, while the documented shared/internet-facing path uses proxy-only authentication
+- local/operator-facing guidance now uses the proxy-protected HTTPS small pattern as the documented access path, while the backend remains private behind the proxy
 - these surfaces do not replace canonical workflow state access through workflow tools and resources
 - projection failure lifecycle now distinguishes:
   - projection status such as `failed`

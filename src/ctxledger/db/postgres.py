@@ -9,6 +9,8 @@ from typing import Any
 from uuid import UUID
 
 from ctxledger.workflow.service import (
+    EpisodeRecord,
+    MemoryEpisodeRepository,
     PersistenceError,
     ProjectionArtifactType,
     ProjectionFailureInfo,
@@ -96,6 +98,14 @@ def _schema_path() -> Path:
     return Path(__file__).resolve().parents[3] / "schemas" / "postgres.sql"
 
 
+def _quote_ident(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _episode_status(value: Any) -> str:
+    return str(value) if value is not None else "recorded"
+
+
 def _connect(database_url: str) -> Connection:
     _require_psycopg()
     return psycopg.connect(database_url, row_factory=dict_row)  # type: ignore[misc]
@@ -106,13 +116,21 @@ class PostgresConfig:
     database_url: str
     connect_timeout_seconds: int = 5
     statement_timeout_ms: int | None = None
+    schema_name: str = "public"
 
     @classmethod
     def from_settings(cls, settings: Any) -> PostgresConfig:
+        schema_name = getattr(
+            getattr(settings, "database", None), "schema_name", "public"
+        )
+        normalized_schema_name = (
+            str(schema_name).strip() if schema_name is not None else "public"
+        ) or "public"
         return cls(
             database_url=settings.database.url,
             connect_timeout_seconds=settings.database.connect_timeout_seconds,
             statement_timeout_ms=settings.database.statement_timeout_ms,
+            schema_name=normalized_schema_name,
         )
 
 
@@ -144,8 +162,9 @@ class PostgresDatabaseHealthChecker:
                     """
                     SELECT table_name
                     FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                    """
+                    WHERE table_schema = %s
+                    """,
+                    (self._config.schema_name,),
                 )
                 present = {str(row["table_name"]) for row in cur.fetchall()}
 
@@ -159,6 +178,9 @@ class PostgresDatabaseHealthChecker:
                 else 0
             )
             cur.execute(f"SET statement_timeout = {timeout_ms}")
+            cur.execute(
+                f"SET search_path TO {_quote_ident(self._config.schema_name)}, public"
+            )
 
 
 class PostgresWorkspaceRepository(WorkspaceRepository):
@@ -381,6 +403,60 @@ class PostgresWorkflowInstanceRepository(WorkflowInstanceRepository):
             )
             row = cur.fetchone()
         return None if row is None else self._row_to_workflow(row)
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[WorkflowInstance, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    workflow_instance_id,
+                    workspace_id,
+                    ticket_id,
+                    status,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM workflow_instances
+                WHERE workspace_id = %s
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT %s
+                """,
+                (workspace_id, limit),
+            )
+            rows = cur.fetchall()
+        return tuple(self._row_to_workflow(row) for row in rows)
+
+    def list_by_ticket_id(
+        self,
+        ticket_id: str,
+        *,
+        limit: int,
+    ) -> tuple[WorkflowInstance, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    workflow_instance_id,
+                    workspace_id,
+                    ticket_id,
+                    status,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM workflow_instances
+                WHERE ticket_id = %s
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT %s
+                """,
+                (ticket_id, limit),
+            )
+            rows = cur.fetchall()
+        return tuple(self._row_to_workflow(row) for row in rows)
 
     def create(self, workflow: WorkflowInstance) -> WorkflowInstance:
         with self._conn.cursor() as cur:
@@ -832,6 +908,102 @@ class PostgresVerifyReportRepository(VerifyReportRepository):
         )
 
 
+class PostgresMemoryEpisodeRepository(MemoryEpisodeRepository):
+    def __init__(self, conn: Connection) -> None:
+        self._conn = conn
+
+    def create(self, episode: EpisodeRecord) -> EpisodeRecord:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO episodes (
+                    episode_id,
+                    workflow_instance_id,
+                    attempt_id,
+                    summary,
+                    status,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                RETURNING
+                    episode_id,
+                    workflow_instance_id,
+                    attempt_id,
+                    summary,
+                    status,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                """,
+                (
+                    episode.episode_id,
+                    episode.workflow_instance_id,
+                    episode.attempt_id,
+                    episode.summary,
+                    episode.status,
+                    _json_dumps(episode.metadata),
+                    episode.created_at,
+                    episode.updated_at,
+                ),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            raise PersistenceError("Failed to create episode")
+
+        return self._row_to_episode(row)
+
+    def list_by_workflow_id(
+        self,
+        workflow_instance_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[EpisodeRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    episode_id,
+                    workflow_instance_id,
+                    attempt_id,
+                    summary,
+                    status,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM episodes
+                WHERE workflow_instance_id = %s
+                ORDER BY created_at DESC, episode_id DESC
+                LIMIT %s
+                """,
+                (workflow_instance_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(self._row_to_episode(row) for row in rows)
+
+    def _row_to_episode(
+        self,
+        row: dict[str, Any],
+    ) -> EpisodeRecord:
+        return EpisodeRecord(
+            episode_id=_to_uuid(row["episode_id"]),
+            workflow_instance_id=_to_uuid(row["workflow_instance_id"]),
+            summary=str(row["summary"]),
+            attempt_id=(
+                _to_uuid(row["attempt_id"])
+                if row.get("attempt_id") is not None
+                else None
+            ),
+            metadata=_json_loads(row["metadata_json"]),
+            status=_episode_status(row.get("status")),
+            created_at=_to_datetime(row["created_at"]),
+            updated_at=_to_datetime(row["updated_at"]),
+        )
+
+
 class PostgresProjectionStateRepository(ProjectionStateRepository):
     """
     Minimal read-only projection state repository.
@@ -1254,6 +1426,7 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
         self.workflow_attempts = PostgresWorkflowAttemptRepository(self._conn)
         self.workflow_checkpoints = PostgresWorkflowCheckpointRepository(self._conn)
         self.verify_reports = PostgresVerifyReportRepository(self._conn)
+        self.memory_episodes = PostgresMemoryEpisodeRepository(self._conn)
         self.projection_states = PostgresProjectionStateRepository(self._conn)
         self.projection_failures = PostgresProjectionFailureRepository(self._conn)
         self._committed = False
@@ -1294,6 +1467,9 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
                 else 0
             )
             cur.execute(f"SET statement_timeout = {timeout_ms}")
+            cur.execute(
+                f"SET search_path TO {_quote_ident(self._config.schema_name)}, public"
+            )
 
 
 def build_postgres_uow_factory(config: PostgresConfig) -> Any:

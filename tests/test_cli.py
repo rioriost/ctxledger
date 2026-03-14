@@ -40,6 +40,7 @@ def make_settings(
             url=database_url,
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
+            schema_name="public",
         ),
         http=HttpSettings(
             host="127.0.0.1",
@@ -1140,7 +1141,7 @@ def test_main_serve_renders_startup_summary_from_run_server(
             "'runtime_routes', 'runtime_tools', 'workflow_resume'], 'tools': []}]",
             file=sys.stderr,
         )
-        print("mcp_endpoint=http://127.0.0.1:8080/mcp", file=sys.stderr)
+        print("mcp_endpoint=/mcp", file=sys.stderr)
         return 0
 
     monkeypatch.setattr("ctxledger.server.run_server", fake_run_server)
@@ -1156,7 +1157,7 @@ def test_main_serve_renders_startup_summary_from_run_server(
     assert "health=ok" in captured.err
     assert "readiness=ready" in captured.err
     assert "runtime=[{'transport': 'http'" in captured.err
-    assert "mcp_endpoint=http://127.0.0.1:8080/mcp" in captured.err
+    assert "mcp_endpoint=/mcp" in captured.err
 
 
 def test_main_serve_passes_transport_and_network_overrides(
@@ -1175,7 +1176,7 @@ def test_main_serve_passes_transport_and_network_overrides(
             "'runtime_routes', 'runtime_tools', 'workflow_resume'], 'tools': []}]",
             file=sys.stderr,
         )
-        print("mcp_endpoint=http://0.0.0.0:9090/mcp", file=sys.stderr)
+        print("mcp_endpoint=/mcp", file=sys.stderr)
         return 0
 
     monkeypatch.setattr("ctxledger.server.run_server", fake_run_server)
@@ -1201,7 +1202,7 @@ def test_main_serve_passes_transport_and_network_overrides(
         "port": 9090,
     }
     assert captured.out == ""
-    assert "mcp_endpoint=http://0.0.0.0:9090/mcp" in captured.err
+    assert "mcp_endpoint=/mcp" in captured.err
 
 
 def test_main_serve_returns_failure_when_run_server_reports_startup_error(

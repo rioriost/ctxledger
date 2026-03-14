@@ -54,8 +54,8 @@ services:
         "-lc",
         "python -m pip install --upgrade pip && python -m pip install -e . && uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080",
       ]
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     volumes:
       - ..:/app
     healthcheck:

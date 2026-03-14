@@ -1190,6 +1190,18 @@ These validate:
 - latest checkpoint retrieval
 - latest verify retrieval
 
+Persistence integration tests should also preserve operator and development history already stored in PostgreSQL.
+
+Current repository testing direction:
+
+- integration tests should not truncate or mutate long-lived working tables in the shared/default schema
+- each PostgreSQL integration test run should use an isolated temporary schema
+- the test schema should be created before schema bootstrap is applied
+- session behavior should set the PostgreSQL search path so unqualified repository queries resolve into the temporary test schema first
+- the temporary schema should be dropped after the test run completes
+
+This keeps persistence integration coverage realistic while preventing test cleanup from deleting or overwriting existing local workflow and memory history stored for normal repository use.
+
 ### 20.3 Transport and Adapter Tests
 
 These validate:

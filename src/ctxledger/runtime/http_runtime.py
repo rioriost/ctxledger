@@ -18,6 +18,7 @@ from ..mcp.tool_handlers import (
     build_projection_failures_ignore_tool_handler,
     build_projection_failures_resolve_tool_handler,
     build_resume_workflow_tool_handler,
+    build_workflow_backed_memory_service,
     build_workflow_checkpoint_tool_handler,
     build_workflow_complete_tool_handler,
     build_workflow_start_tool_handler,
@@ -160,14 +161,13 @@ class HttpRuntimeAdapter:
         tool_name: str,
         arguments: dict[str, Any],
     ) -> McpToolResponse:
+        memory_service = build_workflow_backed_memory_service(self._server)
         tool_handlers = {
-            "memory_get_context": build_memory_get_context_tool_handler(
-                MemoryService()
-            ),
+            "memory_get_context": build_memory_get_context_tool_handler(memory_service),
             "memory_remember_episode": build_memory_remember_episode_tool_handler(
-                MemoryService()
+                memory_service
             ),
-            "memory_search": build_memory_search_tool_handler(MemoryService()),
+            "memory_search": build_memory_search_tool_handler(memory_service),
             "projection_failures_ignore": build_projection_failures_ignore_tool_handler(
                 self._server
             ),

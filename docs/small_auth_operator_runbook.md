@@ -29,7 +29,7 @@ IDE client or smoke client
 
 Operationally, that means:
 
-- `traefik` is the only host-exposed HTTP entrypoint
+- `traefik` is the only host-exposed HTTPS entrypoint
 - `auth-small` validates `Authorization: Bearer <token>`
 - `ctxledger` runs as a private backend service with no direct host port exposure in this mode
 - PostgreSQL remains internal to the compose network
@@ -53,7 +53,7 @@ Note:
 
 Primary externally used port:
 
-- `8091` for the Traefik entrypoint
+- `8443` for the Traefik HTTPS entrypoint
 
 Important environment variable:
 
@@ -66,9 +66,12 @@ Important environment variable:
 Before starting the small pattern, ensure:
 
 1. Docker and Docker Compose are available
-2. port `8091` is free on the host
+2. port `8443` is free on the host
 3. PostgreSQL local port usage from other stacks will not conflict with the base compose setup
-4. you have chosen a bearer token value for:
+4. local certificate files exist for Traefik at:
+   - `docker/traefik/certs/localhost.crt`
+   - `docker/traefik/certs/localhost.key`
+5. you have chosen a bearer token value for:
    - `CTXLEDGER_SMALL_AUTH_TOKEN`
 
 Representative token shape:
@@ -110,7 +113,7 @@ Expected high-level outcome:
 - PostgreSQL starts
 - `auth-small` starts
 - private `ctxledger` backend starts
-- Traefik starts on `8091`
+- Traefik starts on `8443`
 
 ---
 
@@ -142,7 +145,7 @@ The first operator task after startup should be to verify both rejection and all
 ### 7.1 Missing token must fail
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 Expected result:
@@ -153,7 +156,7 @@ Expected result:
 ### 7.2 Invalid token must fail
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 Expected result:
@@ -164,7 +167,7 @@ Expected result:
 ### 7.3 Valid token must pass
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
 Expected result:
@@ -206,7 +209,7 @@ Point the client at the Traefik endpoint, not the private backend.
 Representative endpoint:
 
 ```/dev/null/txt#L1-1
-http://127.0.0.1:8091/mcp
+https://127.0.0.1:8443/mcp
 ```
 
 The client should send the same bearer token configured through `CTXLEDGER_SMALL_AUTH_TOKEN`.
@@ -219,8 +222,8 @@ Authorization: Bearer replace-me-with-a-strong-secret
 
 Operational rule:
 
-- if the client is configured for `http://127.0.0.1:8080/mcp`, that is the direct local path, not the small-pattern proxy path
-- for this runbook, the intended operator path is `8091`
+- if the client is configured for `http://127.0.0.1:8080/mcp`, that is a stale direct-local path and not the small-pattern proxy path
+- for this runbook, the intended operator path is `https://127.0.0.1:8443/mcp`
 
 ---
 
@@ -260,7 +263,7 @@ Check:
 
 ---
 
-## 11.2 `404` instead of MCP traffic through `8091`
+## 11.2 Connection or routing failure through `8443`
 
 Likely causes:
 
@@ -268,11 +271,13 @@ Likely causes:
 - dynamic proxy configuration was not loaded as expected
 - the request path is wrong
 - the stack was started without the auth overlay
+- certificate files are missing or unreadable
 
 Check:
 
 - that the stack was started with both compose files
-- that the request target is `http://127.0.0.1:8091/mcp`
+- that the request target is `https://127.0.0.1:8443/mcp`
+- that `docker/traefik/certs/localhost.crt` and `docker/traefik/certs/localhost.key` exist
 - container logs if needed
 
 ---
@@ -283,14 +288,14 @@ Likely causes:
 
 - wrong compose command was used
 - the base stack is still running separately from a previous direct-local session
-- the operator is accidentally testing the direct local deployment path instead of the small pattern
+- the operator is accidentally testing a stale direct local deployment path instead of the small pattern
 
 Check:
 
 - whether you started with:
   - `docker/docker-compose.yml`
   - and `docker/docker-compose.small-auth.yml`
-- whether the test target is `8091` instead of `8080`
+- whether the test target is `8443` instead of a stale direct port such as `8080`
 
 Also confirm the compose files themselves are in the cleaned-up shape:
 
@@ -372,8 +377,9 @@ Use this quick checklist for a normal work loop.
 - run valid-token workflow/resource smoke and confirm success
 
 ### Client setup
-- point the client to `http://127.0.0.1:8091/mcp`
+- point the client to `https://127.0.0.1:8443/mcp`
 - send `Authorization: Bearer <token>`
+- trust the local certificate chain or use a local-only insecure/testing mode when appropriate
 
 ### Shutdown
 - stop the layered stack with the same compose files

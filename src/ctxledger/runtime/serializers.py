@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from ..memory.service import StubResponse
+from ctxledger.memory.service import (
+    GetContextResponse,
+    RememberEpisodeResponse,
+    StubResponse,
+)
+
 from ..workflow.service import WorkflowResume
 from .introspection import RuntimeIntrospection
 
@@ -175,6 +180,65 @@ def serialize_stub_response(response: StubResponse) -> dict[str, Any]:
     }
 
 
+def serialize_remember_episode_response(
+    response: RememberEpisodeResponse,
+) -> dict[str, Any]:
+    payload = {
+        "feature": response.feature.value,
+        "implemented": response.implemented,
+        "message": response.message,
+        "status": response.status,
+        "available_in_version": response.available_in_version,
+        "timestamp": response.timestamp.isoformat(),
+        "details": response.details,
+    }
+    if response.episode is not None:
+        payload["episode"] = {
+            "episode_id": str(response.episode.episode_id),
+            "workflow_instance_id": str(response.episode.workflow_instance_id),
+            "summary": response.episode.summary,
+            "attempt_id": (
+                str(response.episode.attempt_id)
+                if response.episode.attempt_id is not None
+                else None
+            ),
+            "metadata": response.episode.metadata,
+            "status": response.episode.status,
+            "created_at": response.episode.created_at.isoformat(),
+            "updated_at": response.episode.updated_at.isoformat(),
+        }
+    return payload
+
+
+def serialize_get_context_response(
+    response: GetContextResponse,
+) -> dict[str, Any]:
+    return {
+        "feature": response.feature.value,
+        "implemented": response.implemented,
+        "message": response.message,
+        "status": response.status,
+        "available_in_version": response.available_in_version,
+        "timestamp": response.timestamp.isoformat(),
+        "episodes": [
+            {
+                "episode_id": str(episode.episode_id),
+                "workflow_instance_id": str(episode.workflow_instance_id),
+                "summary": episode.summary,
+                "attempt_id": (
+                    str(episode.attempt_id) if episode.attempt_id is not None else None
+                ),
+                "metadata": episode.metadata,
+                "status": episode.status,
+                "created_at": episode.created_at.isoformat(),
+                "updated_at": episode.updated_at.isoformat(),
+            }
+            for episode in response.episodes
+        ],
+        "details": response.details,
+    }
+
+
 def serialize_runtime_introspection(
     introspection: RuntimeIntrospection,
 ) -> dict[str, Any]:
@@ -197,6 +261,8 @@ def serialize_runtime_introspection_collection(
 
 __all__ = [
     "serialize_closed_projection_failures_history",
+    "serialize_get_context_response",
+    "serialize_remember_episode_response",
     "serialize_runtime_introspection",
     "serialize_runtime_introspection_collection",
     "serialize_stub_response",
