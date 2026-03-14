@@ -170,7 +170,7 @@ echo "$CTXLEDGER_SMALL_AUTH_TOKEN"
 If you use [`envrcctl`](https://github.com/rioriost/homebrew-envrcctl), you can also store the token as a managed secret and run commands with that secret injected into the environment:
 
 ```/dev/null/sh#L1-2
-echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_SMALL_AUTH_TOKEN --stdin
+echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_SMALL_AUTH_TOKEN --account 'ctxledger' --stdin
 direnv allow
 ```
 
@@ -276,6 +276,12 @@ A representative authenticated shape is:
     }
   }
 }
+```
+
+Unfortunately, Zed does not expand environment variables in its MCP configuration file. If you use `envrcctl`, you can retrieve the token and paste it into `YOUR_TOKEN_HERE`:
+
+```/dev/null/sh#L1-2
+envrcctl secret get CTXLEDGER_SMALL_AUTH_TOKEN
 ```
 
 Once configured, your MCP client should be able to reach `ctxledger` through the proxy-protected MCP endpoint and use the workflow and memory tool surfaces exposed at `/mcp`.
