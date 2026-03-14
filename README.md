@@ -136,6 +136,22 @@ Once configured, your MCP client should be able to reach `ctxledger` directly ov
 
 Use this mode when you want the documented proxy-first deployment shape for local development, operator validation, and IDE clients that can send bearer headers.
 
+Before you start this mode, choose a bearer token value. You will use the same token in all three places:
+
+- as `CTXLEDGER_SMALL_AUTH_TOKEN` in the startup command
+- as the bearer token passed to smoke validation commands
+- as the `Authorization: Bearer ...` header in your MCP client configuration
+
+If these values do not match exactly, authenticated requests will fail with `401`.
+
+For local experiments, the examples below use:
+
+```/dev/null/txt#L1-1
+replace-me-with-a-strong-secret
+```
+
+For any shared, persistent, or less-trusted environment, use a strong random secret instead of the example placeholder.
+
 #### 1. Start PostgreSQL, the private backend, auth service, and Traefik
 
 From the repository root, start the base compose file plus the auth overlay with a shared bearer token:
@@ -150,13 +166,19 @@ After startup, the recommended authenticated MCP endpoint is:
 http://127.0.0.1:8091/mcp
 ```
 
+Every MCP client request to this endpoint must include the same bearer token you chose above.
+
 #### 2. Verify authentication behavior
+
+First, confirm that requests without a token are rejected. This shows that proxy-side authentication is actually active.
 
 Missing token should be rejected with `401`:
 
 ```/dev/null/sh#L1-1
 python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure
 ```
+
+Then confirm that a request with the same token used at startup is accepted.
 
 A valid token should pass and the workflow/resource smoke should succeed:
 
@@ -165,6 +187,8 @@ python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token
 ```
 
 #### 3. Configure your MCP client for the authenticated endpoint
+
+Use the same token value you set in `CTXLEDGER_SMALL_AUTH_TOKEN`. If the token in your MCP client differs from the startup token, the client will receive `401` responses from the proxy.
 
 ##### VS Code
 
