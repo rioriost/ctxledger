@@ -1,68 +1,79 @@
 # ctxledger last session
 
 ## 直近で完了していること
-- `memory_search` の explainability 拡張は一通り揃っています。
-- `ranking_details` は以下で確認済みです。
-  - `tests/test_coverage_targets.py`
-  - `tests/test_mcp_tool_handlers.py`
-  - `tests/test_server.py`
-  - `tests/test_postgres_integration.py`
-- hybrid ranking の現行仕様に合わせて、関連 test expectation を更新済みです。
-  - lexical hit がある result は `score_mode == "lexical_only"` または `hybrid`
-  - semantic-only result は `score_mode == "semantic_only_discounted"`
-- `tests/test_coverage_targets.py` の残っていた diagnostics / style warning も後続 cleanup で解消しました。
+- `0.3.0` に向けた release alignment を実施しました。
+- project version を `0.3.0` に更新しました。
+- default app version も `0.3.0` に合わせました。
+- `memory_search` は README / roadmap / changelog 上でも implemented 扱いに揃えました。
+- `pgvector` は将来用の土台ではなく、現行 `memory_search` の similarity lookup に使っている前提へ docs を更新しました。
 
 ## 今回やったこと
-1. `tests/test_coverage_targets.py`
-   - 未使用 import を削除
-   - 未使用ローカル変数を整理
-   - hybrid ranking expectation を現行実装に合わせて修正
-   - semantic-only score / final score の期待値を更新
-   - 追加で lambda style の警告箇所を `def` ベースへ整理
-   - 最終的に file diagnostics を clean 化
+1. `pyproject.toml`
+   - `version = "0.2.0"` を `0.3.0` に更新
 
-2. `tests/test_postgres_integration.py`
-   - 未使用 import を見直し
-   - 必要だった `ProjectionSettings` / `load_settings` / `ResumeProjectionWriter` は残した
-   - PostgreSQL-backed hybrid ranking test の期待値を現行実装に合わせて修正
-   - 未使用ローカル変数を削除
+2. `src/ctxledger/config.py`
+   - `CTXLEDGER_APP_VERSION` の default を `0.1.0` から `0.3.0` に更新
 
-3. `last_session.md`
-   - 長く積み上がっていた handoff を圧縮して、次回再開しやすい要約版へ整理
+3. `docs/CHANGELOG.md`
+   - `0.3.0` エントリを追加
+   - `memory_search` を initial hybrid lexical + embedding-backed retrieval として記載
+   - embedding provider support の現況と limitation を明記
+   - `0.2.0` 側の `memory_search` 記述は「当時は stub だった」という過去形に修正
+
+4. `docs/roadmap.md`
+   - `0.3` セクションを planned-only ではなく、landed / positioning / remaining work が分かる形に更新
+   - `memory_search` implemented
+   - embedding scaffolding / PostgreSQL embedding persistence / similarity lookup / MCP wiring を反映
+   - provider-specific integration が未完である点も明記
+
+5. `README.md`
+   - memory tools の current implementation status を現状コードに合わせて更新
+   - `memory_search` を stub 扱いから implemented 扱いへ変更
+   - hybrid ranking / ranking details / lexical fallback / supported embedding path を追記
+
+6. `docs/deployment.md`
+   - `pgvector` セクションを更新
+   - 現在は memory embeddings の similarity lookup を支える active path であることを明記
 
 ## 検証
-実行済み:
-- `python -m pytest -q tests/test_coverage_targets.py tests/test_postgres_integration.py`
-  - `183 passed`
-- `python -m pytest -q tests/test_coverage_targets.py`
-  - `156 passed`
+確認済み:
+- `README.md` diagnostics clean
+- `docs/CHANGELOG.md` diagnostics clean
+- `docs/roadmap.md` diagnostics clean
+- `src/ctxledger/config.py` diagnostics clean
 
-## 今回の commit
-- `9755c42`
-  - `Align memory search ranking tests with current hybrid scoring`
-- `85c2939`
-  - `Clean remaining coverage target test diagnostics`
+未実施:
+- pytest の再実行
+  - 今回は release alignment / docs / version 更新が中心で、コードロジック変更は入れていない
 
 ## 現在の状態
-- tracked changes はすべて commit 済みです。
-- repository に残っているのは未追跡ファイルのみです。
+- `0.3.0` を名乗るための主要な docs / version alignment は一通り入りました。
+- まだ commit までは進めていません。
+- repository には引き続き未追跡 cert がある想定です。
 
-未追跡:
+未追跡想定:
 - `docker/traefik/certs/localhost.crt`
 - `docker/traefik/certs/localhost.key`
 
 ## 補足
-- 上記 cert はローカル開発用に見えるため、現時点では version control に含めていません。
-- 直近の memory search / ranking / explainability 周辺の tracked change は整理済みで、次は新しい改善タスクに素直に入れます。
+- `memory_search` の release framing はかなり改善されましたが、`0.3.0` の provider support 境界は今後も docs で過大表現しない方が安全です。
+- 現時点の strongest supported embedding execution path は `local_stub` と `custom_http` です。
+- `openai` / `voyageai` / `cohere` は config surface はあるものの、full provider-specific runtime support は未完という整理です。
+- `memory_get_context` は引き続き主に episode-oriented retrieval として扱うのが自然です。
 
 ## 次の最短ルート
-1. cert を今後も untracked のままにするか判断
-2. 新しい作業として以下のどれかに進む
+1. `git diff` で release alignment 差分を最終確認
+2. 必要なら関連 test を軽く再実行
+   - `tests/test_server.py`
+   - `tests/test_mcp_tool_handlers.py`
+   - `tests/test_coverage_targets.py`
+3. 問題なければ descriptive commit を作成
+4. その後の改善タスクに進む場合は以下のどれか
    - semantic score の式そのものを改善する
    - `details` payload に aggregate な ranking explanation を広げる
    - PostgreSQL 側の hybrid 挙動をさらに濃く検証する
-3. 新しい作業に入る場合は、既存 running workflow をそのまま継続して checkpoint を追加する
 
 ## 次回再開時の一言メモ
-- codebase は clean に近く、memory search の ranking / explainability まわりは一度整った
-- まず `git status` で cert 2件だけ未追跡であることを確認し、その後は ranking 改善か details 拡張に進めばよい
+- `0.3.0` release alignment は docs / version ベースではほぼ入った
+- 次は commit と必要最小限の validation を済ませればよい
+- その後は ranking 改善か provider support 境界の整理に進める

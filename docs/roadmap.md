@@ -88,9 +88,9 @@ Proposed `0.2.0` memory closeout criteria:
 - docs should continue to distinguish clearly between:
   - implemented episodic capture
   - partially implemented episode-oriented context retrieval
-  - still-stubbed `memory_search`
-- `memory_search` does not need to be implemented for `0.2.0`
-  - semantic retrieval remains a `0.3` concern
+  - not-yet-required `0.3.0` semantic retrieval work beyond the initial `memory_search` surface
+- `memory_search` did not need to be implemented for `0.2.0`
+  - broader semantic retrieval remained a `0.3` concern
   - hierarchical memory remains a later concern
 
 Remaining work to close out `0.2` more confidently:
@@ -113,20 +113,40 @@ Remaining work to close out `0.2` more confidently:
 
 ## 0.3
 
-Planned focus:
+Primary delivery focus:
 
-- pgvector semantic search
-- reusable semantic/procedural memory retrieval
+- initial pgvector-backed semantic search
+- reusable semantic/procedural memory retrieval foundations
 - stronger relevance ranking for context assembly
 
-Expected primary tool fit:
+Current progress already landed toward `0.3`:
 
-- `memory_search`
-- richer `memory_get_context` relevance-based retrieval
+- `memory_search` is implemented
+  - hybrid lexical and embedding-backed ranking over stored memory items
+  - workspace-scoped retrieval over persisted memory items
+  - explicit ranking details including lexical and semantic components
+  - response metadata covering search mode, semantic candidate counts, and hybrid scoring configuration
+- embedding configuration and generator scaffolding are implemented
+  - provider selection for `disabled`, `local_stub`, `openai`, `voyageai`, `cohere`, and `custom_http`
+  - deterministic local stub embeddings for development and test coverage
+  - generic `custom_http` execution support for external embedding generation
+- PostgreSQL-backed memory embedding persistence is implemented
+- PostgreSQL-backed similarity lookup for memory embeddings is implemented
+- MCP schema, handler wiring, serialization, and integration coverage now include `memory_search`
 
-Current note:
+Current `0.3.0` positioning:
 
-- `memory_search` is still stubbed
+- the most concrete currently supported embedding execution paths are `local_stub` and `custom_http`
+- `openai`, `voyageai`, and `cohere` configuration surfaces exist, but full provider-specific runtime integrations remain incomplete
+- `memory_get_context` remains primarily an episode-oriented retrieval surface from `0.2.0`, not yet a richer multi-layer relevance assembly path
+
+Remaining work to close out `0.3` more confidently:
+
+- align README, changelog, and operator-facing docs with the now-implemented `memory_search` surface
+- decide the exact `0.3.0` release boundary for provider-specific embedding integrations
+- clarify which semantic retrieval behaviors are considered in-scope for `0.3.0` versus later iterative releases
+- continue improving relevance tuning and explanation quality without overstating retrieval guarantees
+- defer broader hierarchical and relation-aware retrieval expansion to later milestones
 
 ## 0.4
 
@@ -154,13 +174,13 @@ Expected themes:
 
 ## Immediate next steps
 
-- finish the remaining memory-focused `0.2` closeout work first
+- finish aligning release-facing docs with the implemented `0.3.0` memory search surface
 - keep the documented `memory_get_context` details contract aligned with the implemented episode-oriented `0.2.0` scope
 - clarify the intended meaning difference between `matched_episode_count` and `episodes_returned`
-- shift the lightweight query filter toward explicit field-based matching over summary text plus metadata keys/values
+- continue refining lightweight filtering and relevance behavior without conflating it with later hierarchical retrieval work
 - refresh README and API docs to reflect the current memory tool reality
-- add HTTPS / TLS planning and implementation work for the proxy-facing MCP endpoint after the memory workstream
-- keep `0.1.0` as the current version until explicit `0.2.0` criteria are met
+- decide the `0.3.0` release boundary for embedding provider support and document it explicitly
+- keep versioning aligned with the highest release scope that the implementation and docs can honestly support
 
 ## 0.0
 

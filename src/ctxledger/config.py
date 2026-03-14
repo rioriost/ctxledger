@@ -268,7 +268,7 @@ class AppSettings:
 def load_settings() -> AppSettings:
     settings = AppSettings(
         app_name=_get_env("CTXLEDGER_APP_NAME", "ctxledger") or "ctxledger",
-        app_version=_get_env("CTXLEDGER_APP_VERSION", "0.1.0") or "0.1.0",
+        app_version=_get_env("CTXLEDGER_APP_VERSION", "0.3.0") or "0.3.0",
         environment=_get_env("CTXLEDGER_ENV", "development") or "development",
         database=DatabaseSettings(
             url=_get_env("CTXLEDGER_DATABASE_URL", "") or "",

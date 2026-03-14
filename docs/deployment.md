@@ -129,9 +129,16 @@ The service is not meaningfully operational without:
 
 ## 5.2 pgvector
 
-The schema enables `pgvector` so future semantic retrieval can be added without redesigning the database foundation.
+The schema enables `pgvector` and the current memory-search implementation now uses vector-backed similarity lookup for stored memory embeddings in PostgreSQL.
 
-In `v0.1.0`, vector-backed retrieval may still be incomplete, but enabling the extension early keeps the schema aligned with the architecture.
+This should be understood as an initial semantic retrieval layer rather than a claim that all planned memory retrieval behavior is complete. The current `0.3.0`-oriented state is best described as:
+
+- PostgreSQL-backed storage for memory embeddings
+- vector similarity lookup used by `memory_search`
+- hybrid lexical + embedding-backed ranking over stored memory items
+- additional provider-specific embedding integrations and richer multi-layer retrieval still remaining as follow-up work
+
+Operators should therefore treat `pgvector` as part of the active memory-search path, not merely as dormant future-proofing infrastructure.
 
 ## 5.3 Filesystem Access
 

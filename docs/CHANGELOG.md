@@ -10,6 +10,24 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 - No unreleased entries yet.
 
+## [0.3.0] - 2026-03-14
+
+### Added
+
+- implemented `memory_search` as an initial hybrid lexical and embedding-backed retrieval surface over stored memory items
+- hybrid ranking that combines lexical matches with embedding similarity for memory item search results
+- ranking explanation details in `memory_search` results, including lexical component, semantic component, score mode, and semantic-only discount reporting
+- embedding configuration and generation scaffolding for `disabled`, `local_stub`, `openai`, `voyageai`, `cohere`, and `custom_http` provider modes
+- PostgreSQL-backed memory embedding persistence and pgvector-backed similarity lookup for memory item retrieval
+- MCP handler, schema, and serialization support for `memory_search`
+- unit, server, MCP handler, and PostgreSQL integration coverage for the implemented `0.3.0` memory search path
+
+### Notes
+
+- the most concrete currently supported embedding execution paths are `local_stub` and `custom_http`
+- `openai`, `voyageai`, and `cohere` configuration surfaces exist, but full provider-specific runtime support remains incomplete
+- `memory_get_context` remains primarily episode-oriented in `0.3.0`; richer multi-layer and relation-aware context assembly remain future work
+
 ## [0.2.0] - 2026-03-14
 
 ### Added
@@ -63,6 +81,6 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ### Notes
 
-- `memory_search` remains intentionally stubbed and is still planned for later semantic retrieval work
+- `memory_search` remained intentionally stubbed in `0.2.0` and was deferred to later semantic retrieval work
 - `memory_get_context` remains intentionally partial and episode-oriented in `0.2.0`; broader semantic, hierarchical, and relation-aware retrieval remain future work
 - `0.2.0` closes out the episodic memory milestone and establishes an HTTPS-enabled MCP deployment path after that memory closeout work

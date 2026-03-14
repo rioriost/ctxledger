@@ -472,12 +472,17 @@ Current implementation status:
   - supports initial lightweight query filtering against episode summary and explicit metadata fields
   - broader relevance-based, semantic, summary, and multi-layer retrieval is not implemented yet
 - `memory_search`
-  - currently stubbed / not implemented
+  - implemented as an initial hybrid lexical and embedding-backed retrieval surface over stored memory items
+  - currently supports workspace-scoped search, result limits, and optional structured filters
+  - returns lexical score, semantic score, and ranking explanation details for each result
+  - falls back to lexical-only behavior when embedding generation or semantic lookup is unavailable
+  - the most concrete currently supported embedding execution paths are `local_stub` and `custom_http`
+  - broader provider-specific integrations and richer multi-layer retrieval remain follow-up work
 
 The intended staged roadmap is still:
 
 - `0.2`: episodic memory, with `memory_remember_episode` implemented and `memory_get_context` now providing an initial episode-oriented form
-- `0.3`: semantic search, with `memory_search` as the most direct tool fit and `memory_get_context` potentially gaining stronger relevance-based retrieval
+- `0.3`: semantic search, with `memory_search` now implemented as the primary tool fit and `memory_get_context` still a candidate for stronger relevance-based retrieval over time
 - `0.4`: hierarchical memory retrieval, where `memory_get_context` may evolve into a more multi-layer context assembly surface
 
 This is a roadmap-oriented interpretation of the current architecture and planning documents, not a guarantee that every memory tool will be fully complete at the start of its corresponding version.
