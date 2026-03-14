@@ -23,6 +23,7 @@ from ctxledger.workflow.service import (
     ResumeWorkflowInput,
     StartWorkflowInput,
     VerifyStatus,
+    WorkflowAttemptStatus,
     WorkflowInstanceStatus,
     WorkflowService,
 )
@@ -272,6 +273,60 @@ def test_postgres_workflow_service_round_trip_happy_path(
     assert completed.verify_report.status == VerifyStatus.PASSED
 
     assert terminal_resume.resumable_status == ResumableStatus.TERMINAL
+
+
+def test_postgres_terminal_resume_is_for_inspection_not_continuation(
+    postgres_workflow_service: WorkflowService,
+) -> None:
+    service = postgres_workflow_service
+
+    workspace = service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-terminal.git",
+            canonical_path="/tmp/integration-repo-terminal",
+            default_branch="main",
+        )
+    )
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-TERMINAL-001",
+        )
+    )
+    checkpoint_result = service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="finalize",
+            checkpoint_json={"next_intended_action": "No further execution"},
+        )
+    )
+    service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+        )
+    )
+
+    terminal_resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert terminal_resume.resumable_status == ResumableStatus.TERMINAL
+    assert terminal_resume.attempt is not None
+    assert terminal_resume.attempt.status == WorkflowAttemptStatus.SUCCEEDED
+    assert terminal_resume.latest_checkpoint is not None
+    assert (
+        terminal_resume.latest_checkpoint.checkpoint_id
+        == checkpoint_result.checkpoint.checkpoint_id
+    )
+    assert (
+        terminal_resume.next_hint
+        == "Workflow is terminal. Inspect the final state instead of resuming execution."
+    )
 
 
 def test_postgres_workflow_service_resume_without_projection_state_is_still_resumable(
