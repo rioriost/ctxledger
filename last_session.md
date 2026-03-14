@@ -591,3 +591,43 @@ clean です。
 - `memory_search` 周辺は lexical-only から hybrid へ進んでいる
 - serializer 側には `lexical_score` / `semantic_score` の出力が入っている前提で確認する
 - commit するなら、search / embedding / serializer / integration test をまとめた説明的なメッセージが自然
+
+## 今回の追記
+- hybrid search の focused validation を追加で実施
+- `tests/test_postgres_integration.py -k 'memory_search or find_similar'`
+  - **2 passed**
+- `tests/test_coverage_targets.py -k 'serialize_search_memory_response or memory_service_records_episodes_and_returns_search_results'`
+  - **2 passed**
+- `tests/test_mcp_tool_handlers.py -k 'memory_search'`
+  - 最初は **1 failed, 1 passed**
+  - その後修正して **2 passed**
+
+### 今回分かったこと
+不一致は実装ではなく **MCP handler テスト期待値の取り残し** でした。
+
+- `runtime/serializers.py` はすでに
+  - `lexical_score`
+  - `semantic_score`
+  を search result payload に含める
+- しかし `tests/test_mcp_tool_handlers.py` の
+  `test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_values`
+  では、その2項目をまだ期待していなかった
+
+そのため、テスト期待値に
+
+- `lexical_score: 3.0`
+- `semantic_score: 0.0`
+
+を追加して整合させたら通りました。
+
+### diagnostics
+- `tests/test_mcp_tool_handlers.py`: clean
+
+### workflow
+canonical checkpoint を記録済み:
+- `hybrid_search_validation_synced`
+
+### 次の最短ルート
+1. `tests/test_mcp_tool_handlers.py` の修正を commit する
+2. 必要なら server/search 周辺のもう少し広い suite を回す
+3. その後に ranking 調整や PostgreSQL hybrid path の追加確認へ進む
