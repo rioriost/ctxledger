@@ -1,108 +1,51 @@
-この session では、coverage 95% 未満ファイルを 95%以上に引き上げる作業を継続し、最終的に対象をすべて達成しました。`runtime/http_handlers.py`・`runtime/server_responses.py`・`workflow/service.py` を中心にテストを追加し、95% 未満ファイルをゼロにしています。
+この session では、`ctxledger` の MCP サーバ機能そのものではなく、**MCP クライアント上の AI エージェントが `.rules` に従って workflow を記録する運用になっているか** を確認し、ルール不足を補う方針まで進めました。
 
-今回の追加成果
+## 確認したこと
 
-### `src/ctxledger/http_app.py`
-前段で 95% 超えに引き上げた状態を維持しました。
+- README 上では `ctxledger` は remote HTTP MCP server として動作し、workflow tools として少なくとも以下を公開しています。
+  - `workspace_register`
+  - `workflow_start`
+  - `workflow_checkpoint`
+  - `workflow_resume`
+  - `workflow_complete`
+- そのため、Zed などの MCP クライアントから **workflow を記録するためのサーバ側機能は存在する** 状態です。
+- 一方で、作業ディレクトリ直下の `.rules` は housekeeping のみで、AI エージェントに対して
+  - セッション開始時に workflow を開始/再開すること
+  - 作業中に checkpoint を残すこと
+  - 作業完了時に workflow を complete すること
+  を求めていませんでした。
+- このため、**現状の `.rules` に従うだけでは、AI エージェントが workflow 記録フローを実行する保証がない**、という問題を確認しました。
 
-結果:
-- `http_app.py` → `96%`
+## 対応方針
 
-### `src/ctxledger/runtime/orchestration.py`
-前段で signal / override path を補完した状態を維持しました。
+`.rules` を、housekeeping だけでなく **workflow-aware な運用ルール** に更新する方針にしました。  
+含めるべきポイントは以下です。
 
-結果:
-- `runtime/orchestration.py` → `97%`
+- セッション開始時
+  - `last_session.md` を読む
+  - `workspace_register` で workspace を登録/確認する
+  - 継続作業なら `workflow_resume`
+  - 新規作業なら `workflow_start`
+- 作業中
+  - 計画確定、コード変更、テスト追加、検証完了などの節目ごとに `workflow_checkpoint`
+- 作業完了時
+  - `last_session.md` を更新
+  - `workflow_complete`
+  - descriptive な `git commit`
+- resume projection を使うフローでは、その更新も checkpoint / close-out の一部として扱う
 
-### `src/ctxledger/mcp/tool_handlers.py`
-前段で required field / server-not-ready 分岐を補完して 95% 到達済みの状態を維持しました。
+## 今回の主な結論
 
-結果:
-- `mcp/tool_handlers.py` → `95%`
+- **README の手順でサーバを起動して Zed などを接続すれば、workflow 記録機能を使える状態ではある**
+- ただし、**AI エージェントにその記録を継続的に実行させるには `.rules` の明示的な運用指示が必要**
+- そのため、次の作業では `.rules` を workflow 記録前提の内容に更新し、その後 `git commit` まで進めるのが自然です
 
-### `src/ctxledger/runtime/http_handlers.py`
-95% 未満の残対象だったため、request parsing / handler branches を追加補完しました。
+## 補足確認
 
-追加した観点:
-- `parse_optional_projection_type_argument()` の `None` path
-- projection failure ignore/resolve handler の valid projection type path
-- debug runtime/routes/tools handler の query string path
-- 404 / 400 系に加えて正常系の追加
+- `tests/test_workflow_service.py` の `test_record_resume_projection_fresh_status_fills_missing_timestamps()` は未完成ではなく、既に存在しており、`FRESH` 状態記録時に不足 timestamp を補完することを検証するテストです。
 
-結果:
-- `runtime/http_handlers.py` → `95%`
+## 次セッションでやること
 
-### `src/ctxledger/runtime/server_responses.py`
-95% 未満の残対象だったため、response fallback branches を追加しました。
-
-追加した観点:
-- projection failure ignore/resolve の generic error fallback
-- workflow resume bootstrap error の empty message path
-- route/tool/runtime collection の追加分岐
-
-結果:
-- `runtime/server_responses.py` → `95%`
-
-### `src/ctxledger/workflow/service.py`
-最後の 95% 未満対象を詰め切りました。
-
-追加した観点:
-- error hierarchy code/details
-- repository / unit-of-work base contract の `NotImplementedError`
-- reconcile / warning / hint の周辺分岐
-- projection-related validation and mismatch paths の補強
-
-結果:
-- `workflow/service.py` → `99%`
-
-## 条件達成状況
-
-今回の目標だった「coverage 95% 未満のファイルを、95%以上になるまで連続実行」は達成済みです。
-今回の最終レポート上では、95% 未満のファイルはありません。
-
-## 今の主要カバレッジ
-
-- `src/ctxledger/config.py` → `100%`
-- `src/ctxledger/db/__init__.py` → `100%`
-- `src/ctxledger/db/memory_uow.py` → `100%`
-- `src/ctxledger/mcp/__init__.py` → `100%`
-- `src/ctxledger/mcp/rpc.py` → `100%`
-- `src/ctxledger/mcp/streamable_http.py` → `100%`
-- `src/ctxledger/runtime/serializers.py` → `100%`
-- `src/ctxledger/runtime/status.py` → `100%`
-- `src/ctxledger/runtime/server_factory.py` → `100%`
-- `src/ctxledger/runtime/introspection.py` → `100%`
-- `src/ctxledger/runtime/protocols.py` → `100%`
-- `src/ctxledger/runtime/types.py` → `100%`
-- `src/ctxledger/runtime/errors.py` → `100%`
-- `src/ctxledger/projection/__init__.py` → `100%`
-- `src/ctxledger/db/postgres.py` → `99%`
-- `src/ctxledger/memory/service.py` → `99%`
-- `src/ctxledger/workflow/service.py` → `99%`
-- `src/ctxledger/projection/writer.py` → `98%`
-- `src/ctxledger/mcp/resource_handlers.py` → `98%`
-- `src/ctxledger/runtime/database_health.py` → `97%`
-- `src/ctxledger/runtime/http_runtime.py` → `97%`
-- `src/ctxledger/runtime/orchestration.py` → `97%`
-- `src/ctxledger/http_app.py` → `96%`
-- `src/ctxledger/mcp/tool_schemas.py` → `96%`
-- `src/ctxledger/__init__.py` → `95%`
-- `src/ctxledger/mcp/lifecycle.py` → `95%`
-- `src/ctxledger/mcp/tool_handlers.py` → `95%`
-- `src/ctxledger/runtime/http_handlers.py` → `95%`
-- `src/ctxledger/runtime/server_responses.py` → `95%`
-- `src/ctxledger/server.py` → `95%`
-
-## テスト結果
-
-- `pytest -q tests/test_coverage_targets.py tests/test_mcp_tool_handlers.py tests/test_workflow_service.py`
-  - `286 passed`
-
-- `pytest --cov=src/ctxledger --cov-report=term-missing tests/test_coverage_targets.py tests/test_workflow_service.py tests/test_mcp_modules.py tests/test_config.py tests/test_cli.py tests/test_mcp_tool_handlers.py tests/test_postgres_helpers.py`
-  - `431 passed`
-
-## 現在の状態
-
-- 95% 未満ファイルはゼロ
-- total coverage は `98%`
-- この段階で session note 更新と commit まで進めてよい状態
+1. `ctxledger/.rules` を workflow-aware な内容へ更新する
+2. 必要なら `last_session.md` に workflow 再開しやすい情報の残し方も整理する
+3. 変更を確認して `git commit` する

@@ -1,5 +1,18 @@
-# Housekeeping
-- When a new session starts, read last_session.md first.
-- Keep last_session.md updated with your last response for the next session switched due to the limitation of context window
-- When a work loop is done, keep git repo up-to-date by running `git commit` with a descriptive message
-- ignore the status of .gitignore
+# Session and Workflow Rules
+
+- When a new session starts, read `last_session.md` first.
+- At the beginning of work, use the ctxledger MCP workflow tools to ensure the current repository is tracked:
+  - register or confirm the workspace with `workspace_register`
+  - if continuing existing work, use `workflow_resume`
+  - if starting new work, use `workflow_start`
+- During work, record meaningful progress with `workflow_checkpoint`, especially after:
+  - planning or narrowing the task
+  - completing a code change
+  - adding or updating tests
+  - finishing validation or debugging steps
+- When the task or work loop is done:
+  - update `last_session.md` with a concise continuation note for the next session
+  - mark the workflow as finished with `workflow_complete`
+  - keep git repo up-to-date by running `git commit` with a descriptive message
+- If resume projections are part of the current workflow, keep them up-to-date as part of the checkpoint or close-out flow.
+- Ignore the status of `.gitignore`.
