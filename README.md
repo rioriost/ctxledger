@@ -167,6 +167,19 @@ export CTXLEDGER_SMALL_AUTH_TOKEN="$(openssl rand -hex 32)"
 echo "$CTXLEDGER_SMALL_AUTH_TOKEN"
 ```
 
+If you use `envrcctl`, you can also store the token as a managed non-secret variable in `.envrc` and let your shell load it automatically:
+
+```/dev/null/sh#L1-2
+envrcctl set CTXLEDGER_SMALL_AUTH_TOKEN "$(openssl rand -hex 32)"
+direnv allow
+```
+
+You can confirm the stored value when needed with:
+
+```/dev/null/sh#L1-1
+envrcctl get CTXLEDGER_SMALL_AUTH_TOKEN
+```
+
 Then reuse that same value in your startup command, smoke validation, and MCP client configuration.
 
 For any shared, persistent, or less-trusted environment, use a strong random secret instead of the example placeholder.
@@ -182,6 +195,14 @@ CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f doc
 If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` in your shell first, you can also run:
 
 ```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```
+
+If you are using `envrcctl` with `direnv`, a practical startup sequence is:
+
+```/dev/null/sh#L1-3
+envrcctl set CTXLEDGER_SMALL_AUTH_TOKEN "$(openssl rand -hex 32)"
+direnv allow
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
@@ -216,6 +237,8 @@ If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` already, you can keep the smoke com
 ```/dev/null/sh#L1-1
 python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read
 ```
+
+The same pattern works when `CTXLEDGER_SMALL_AUTH_TOKEN` is provided by `envrcctl` through `.envrc`, because the variable will already be present in your shell environment after `direnv allow`.
 
 #### 3. Configure your MCP client for the authenticated endpoint
 
