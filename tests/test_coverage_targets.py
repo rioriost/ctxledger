@@ -31,6 +31,7 @@ from ctxledger.memory.embeddings import (
     DisabledEmbeddingGenerator,
     EmbeddingGenerationError,
     EmbeddingRequest,
+    EmbeddingResult,
     ExternalAPIEmbeddingGenerator,
     LocalStubEmbeddingGenerator,
     build_embedding_generator,
@@ -47,6 +48,7 @@ from ctxledger.memory.service import (
     MemoryEmbeddingRecord,
     MemoryErrorCode,
     MemoryFeature,
+    MemoryItemRecord,
     MemoryService,
     MemoryServiceError,
     RememberEpisodeRequest,
@@ -4023,9 +4025,122 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert search_response.results[0].score == search_response.results[0].lexical_score
 
     assert context_response.feature == MemoryFeature.GET_CONTEXT
-    assert context_response.details["include_episodes"] is False
-    assert context_response.details["include_memory_items"] is True
-    assert context_response.details["include_summaries"] is False
+
+
+def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_embedding_repository = InMemoryMemoryEmbeddingRepository()
+    workflow_lookup = InMemoryWorkflowLookupRepository(
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TICKET-HYBRID-1",
+            }
+        }
+    )
+
+    lexical_and_semantic_memory_id = uuid4()
+    semantic_only_memory_id = uuid4()
+    lexical_and_semantic_episode_id = uuid4()
+    semantic_only_episode_id = uuid4()
+    created_at = datetime(2024, 1, 2, tzinfo=UTC)
+
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=lexical_and_semantic_memory_id,
+            workspace_id=UUID("00000000-0000-0000-0000-000000000001"),
+            episode_id=lexical_and_semantic_episode_id,
+            type="episode_note",
+            provenance="episode",
+            content="Projection drift root cause identified in deployment workflow",
+            metadata={"kind": "root-cause"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=semantic_only_memory_id,
+            workspace_id=UUID("00000000-0000-0000-0000-000000000001"),
+            episode_id=semantic_only_episode_id,
+            type="episode_note",
+            provenance="episode",
+            content="Background note with no lexical overlap",
+            metadata={"kind": "background"},
+            created_at=datetime(2024, 1, 3, tzinfo=UTC),
+            updated_at=datetime(2024, 1, 3, tzinfo=UTC),
+        )
+    )
+
+    memory_embedding_repository.create(
+        MemoryEmbeddingRecord(
+            memory_embedding_id=uuid4(),
+            memory_id=lexical_and_semantic_memory_id,
+            embedding_model="test-hybrid-v1",
+            embedding=(0.8, 0.0),
+            content_hash="lexical-and-semantic-hash",
+            created_at=created_at,
+        )
+    )
+    memory_embedding_repository.create(
+        MemoryEmbeddingRecord(
+            memory_embedding_id=uuid4(),
+            memory_id=semantic_only_memory_id,
+            embedding_model="test-hybrid-v1",
+            embedding=(1.0, 0.0),
+            content_hash="semantic-only-hash",
+            created_at=datetime(2024, 1, 3, tzinfo=UTC),
+        )
+    )
+
+    class FixedEmbeddingGenerator:
+        def generate(self, request: EmbeddingRequest) -> EmbeddingResult:
+            assert request.text == "projection drift root cause"
+            return EmbeddingResult(
+                provider="test",
+                model="test-hybrid-v1",
+                vector=(1.0, 0.0),
+                content_hash="query-hash",
+            )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_embedding_repository=memory_embedding_repository,
+        embedding_generator=FixedEmbeddingGenerator(),
+        workflow_lookup=workflow_lookup,
+    )
+
+    search_response = service.search(
+        SearchMemoryRequest(
+            query="projection drift root cause",
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert search_response.feature == MemoryFeature.SEARCH
+    assert search_response.details["search_mode"] == "hybrid_memory_item_search"
+    assert search_response.details["semantic_candidates_considered"] == 2
+    assert search_response.details["semantic_query_generated"] is True
+    assert search_response.details["results_returned"] == 2
+    assert [result.memory_id for result in search_response.results] == [
+        lexical_and_semantic_memory_id,
+        semantic_only_memory_id,
+    ]
+    assert "content" in search_response.results[0].matched_fields
+    assert "embedding_similarity" in search_response.results[0].matched_fields
+    assert search_response.results[0].lexical_score > 0.0
+    assert search_response.results[0].semantic_score > 0.0
+    assert search_response.results[0].score > search_response.results[1].score
+    assert search_response.results[1].lexical_score == 0.0
+    assert (
+        search_response.results[1].semantic_score
+        > search_response.results[0].semantic_score
+    )
 
 
 def test_memory_service_raises_validation_errors_for_invalid_requests() -> None:

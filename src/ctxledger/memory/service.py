@@ -910,7 +910,10 @@ class MemoryService:
             )
 
             combined_fields = tuple(dict.fromkeys((*matched_fields, *semantic_fields)))
-            hybrid_score = lexical_score + (semantic_score * 2.0)
+            hybrid_score = lexical_score + semantic_score
+
+            if lexical_score <= 0 and semantic_score > 0:
+                hybrid_score = semantic_score * 0.75
 
             if hybrid_score <= 0:
                 continue
