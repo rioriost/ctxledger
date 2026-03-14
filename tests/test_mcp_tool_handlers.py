@@ -1743,6 +1743,8 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
             "metadata": {"kind": "checkpoint"},
             "score": 3.0,
             "matched_fields": ["content"],
+            "lexical_score": 3.0,
+            "semantic_score": 0.0,
             "created_at": created_at.isoformat(),
             "updated_at": created_at.isoformat(),
         }
