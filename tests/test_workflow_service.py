@@ -2170,3 +2170,59 @@ def test_repository_contract_base_classes_raise_not_implemented() -> None:
         uow.commit()
     with pytest.raises(NotImplementedError):
         uow.rollback()
+
+
+def test_complete_workflow_writes_verify_report_when_requested() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="VERIFY-REPORT-ON-COMPLETE",
+        )
+    )
+
+    result = service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.CANCELLED,
+            verify_status=VerifyStatus.SKIPPED,
+            verify_report={"reason": "manual-stop"},
+        )
+    )
+
+    assert result.workflow_instance.status == WorkflowInstanceStatus.CANCELLED
+    assert result.attempt.status == WorkflowAttemptStatus.CANCELLED
+    assert result.attempt.verify_status == VerifyStatus.SKIPPED
+    assert result.verify_report is not None
+    assert result.verify_report.status == VerifyStatus.SKIPPED
+    assert result.verify_report.report_json == {"reason": "manual-stop"}
+
+
+def test_record_resume_projection_fresh_status_fills_missing_timestamps() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="FRESH-TIMESTAMPS",
+        )
+    )
+
+    recorded = service.record_resume_projection(
+        RecordProjectionStateInput(
+            workspace_id=workspace.workspace_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FRESH,
+            target_path=".agent/resume.json",
+            last_successful_write_at=None,
+            last_canonical_update_at=None,
+        )
+    )
+
+    assert recorded.last_successful_write_at is not None
+    assert recorded.last_canonical_update_at is not None
+    assert recorded.last_canonical_update_at == recorded.last_successful_write_at
+    assert recorded.open_failure_count == 0
