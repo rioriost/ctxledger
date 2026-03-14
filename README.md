@@ -478,6 +478,14 @@ It should not be read as silently claiming full MCP surface completeness beyond 
 
 Some memory APIs may remain stubbed in `v0.1.0` while the workflow subsystem is completed first.
 
+The intended staged roadmap is:
+
+- `0.2`: episodic memory, with `memory_remember_episode` as the most direct fit and `memory_get_context` potentially gaining an initial episode-oriented form
+- `0.3`: semantic search, with `memory_search` as the most direct fit and `memory_get_context` potentially gaining stronger relevance-based retrieval
+- `0.4`: hierarchical memory retrieval, where `memory_get_context` may evolve into a more multi-layer context assembly surface
+
+This is a roadmap-oriented interpretation of the current architecture and planning documents, not a guarantee that every memory tool will be fully complete at the start of its corresponding version.
+
 ### Workflow HTTP read endpoints
 - `/workflow-resume/{workflow_instance_id}`
 - `/workflow-resume/{workflow_instance_id}/closed-projection-failures`

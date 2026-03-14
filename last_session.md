@@ -1,5 +1,18 @@
 この session では、`ctxledger` の MCP サーバ機能そのものではなく、**MCP クライアント上の AI エージェントが `.rules` に従って workflow を記録する運用になっているか** を確認し、その運用前提が README・`.rules`・`last_session.md` に一貫して反映されるよう整理しました。加えて、README の Quick Start を **認証なし** と **認証付き（推奨）** に分け、認証付きでは **bearer token が必須であり、起動・smoke・MCP クライアント設定で同じ token を揃える必要がある** こと、**token の具体的な生成例**、および **`envrcctl secret set` / `envrcctl exec -- ...` を使う optional な運用** まで反映しました。さらに、検証により **Zed は MCP 設定ファイル中の環境変数を展開しない** ことが分かったため、その注意書きも README に追記済みです。最後に、`.rules` を整理し、**`last_session.md` は `ctxledger` 開発時だけの housekeeping** として分離しつつ、**一般の `ctxledger` 利用プロジェクト向け workflow ルール** を独立させました。
 
+この追記ではさらに、**memory 系 tool のロードマップ解釈**を整理しました。現在の文書群から読む限り、`v0.1.0` では `memory_remember_episode` / `memory_search` / `memory_get_context` は意図的に stub または deferred であり、自然な段階整理は次のとおりです。
+
+- `0.2`: episodic memory
+  - `memory_remember_episode` が最も直接対応する tool
+  - `memory_get_context` は episode ベースの初期形が入る可能性がある
+- `0.3`: semantic search
+  - `memory_search` が最も直接対応する tool
+  - `memory_get_context` は relevance-based retrieval を強める方向で拡張される可能性がある
+- `0.4`: hierarchical memory retrieval
+  - `memory_get_context` は multi-layer context assembly 的な役割へ拡張されうる
+
+この整理に合わせて、README と `docs/roadmap.md` に **tool-to-version mapping の説明を追加済み**です。
+
 ## この session で完了したこと
 
 - `ctxledger/.rules` を housekeeping 中心の内容から、**2層構造のルール**に整理した
@@ -66,12 +79,20 @@
 - `attempt_id`
 - `ticket_id`
 
-現時点では、この session で確定した実 ID は未記録です。次回以降、実際に MCP 経由で開始・再開した workflow の値をここへ残してください。
+現時点では、この session で workflow-aware 運用確認と memory roadmap clarification のために複数の実 ID が得られています。次回以降も、実際に MCP 経由で開始・再開した workflow の値をここへ追記してください。
 
-- `workspace_id`: `(record when available)`
-- `workflow_instance_id`: `(record when available)`
-- `attempt_id`: `(record when available)`
-- `ticket_id`: `rules-workflow-tracking`
+- workspace / initial MCP tool check
+  - `workspace_id`: `98b6d72c-1805-4a55-a872-c1b2ee8bda45`
+  - `workflow_instance_id`: `07e227cf-f5dc-4664-ab99-93544d666c93`
+  - `attempt_id`: `c8fc7c2f-142d-4229-8104-a9a0175517ff`
+  - `ticket_id`: `mcp-tool-check`
+- memory roadmap clarification
+  - `workspace_id`: `98b6d72c-1805-4a55-a872-c1b2ee8bda45`
+  - `workflow_instance_id`: `3c4ee912-8f55-47e3-8e0e-908aa9281de2`
+  - `attempt_id`: `19347f06-01ae-4505-96ad-031b17907e69`
+  - `ticket_id`: `memory-roadmap-clarification`
+- prior session carry-forward
+  - `ticket_id`: `rules-workflow-tracking`
 
 ## 実地確認結果
 
@@ -137,6 +158,12 @@ README の手順に沿って、以下を実施しました。
 - そのため、Zed では `envrcctl secret get CTXLEDGER_SMALL_AUTH_TOKEN` などで取得した実 token を貼り付ける必要がある
 - README 本文は、現時点では大きな破綻はなく、主に `envrcctl` 周りを optional に落としたことでかなり読みやすくなった
 - `.rules` も、`ctxledger` 開発専用 housekeeping と一般 workflow rules を分けたことで、目的がかなり明確になった
+- memory roadmap については、現時点の資料から
+  - `0.2` は `memory_remember_episode`
+  - `0.3` は `memory_search`
+  - `memory_get_context` は `0.2`〜`0.4` にまたがる段階実装候補
+  と読むのが最も自然、という整理に到達した
+- したがって、`memory_get_context` が `0.2` で完全実装されると断定するのは避け、**episode-oriented initial form → stronger relevance retrieval → multi-layer context assembly** という進化的な説明に寄せるのが安全
 
 ## 次セッションでやること
 
