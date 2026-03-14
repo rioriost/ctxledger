@@ -844,6 +844,171 @@ def test_postgres_memory_search_hybrid_results_include_ranking_details(
     assert lexical_result.score > semantic_only_result.score
 
 
+def test_postgres_memory_search_result_mode_counts_cover_hybrid_lexical_and_semantic_only(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(uow_factory)
+
+    class FixedThreeModeEmbeddingGenerator(EmbeddingGenerator):
+        def generate(self, request: EmbeddingRequest) -> EmbeddingResult:
+            if request.text == "projection drift root cause":
+                return EmbeddingResult(
+                    provider="test",
+                    model="test-hybrid-v2",
+                    vector=(1.0,) + (0.0,) * 1535,
+                    content_hash="query-hash",
+                )
+
+            if request.text == "Projection drift root cause with semantic support":
+                return EmbeddingResult(
+                    provider="test",
+                    model="test-hybrid-v2",
+                    vector=(0.95,) + (0.0,) * 1535,
+                    content_hash="hybrid-memory-hash",
+                )
+
+            if (
+                request.text
+                == "Projection drift root cause documented without semantic alignment"
+            ):
+                return EmbeddingResult(
+                    provider="test",
+                    model="test-hybrid-v2",
+                    vector=(0.0, 1.0) + (0.0,) * 1534,
+                    content_hash="lexical-only-memory-hash",
+                )
+
+            if request.text == "Background note with unrelated wording":
+                return EmbeddingResult(
+                    provider="test",
+                    model="test-hybrid-v2",
+                    vector=(0.5,) + (0.0,) * 1535,
+                    content_hash="semantic-only-memory-hash",
+                )
+
+            raise AssertionError(f"unexpected embedding request: {request.text}")
+
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+        embedding_generator=FixedThreeModeEmbeddingGenerator(),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-search-three-modes.git",
+            canonical_path="/tmp/integration-repo-memory-search-three-modes",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMSEARCH-HYBRID-THREE-MODES-001",
+        )
+    )
+
+    hybrid_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Projection drift root cause with semantic support",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "hybrid"},
+        )
+    )
+    lexical_only_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Projection drift root cause documented without semantic alignment",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "lexical-only"},
+        )
+    )
+    semantic_only_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Background note with unrelated wording",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "semantic-only"},
+        )
+    )
+
+    assert hybrid_episode.episode is not None
+    assert lexical_only_episode.episode is not None
+    assert semantic_only_episode.episode is not None
+
+    search = memory_service.search(
+        SearchMemoryRequest(
+            query="projection drift root cause",
+            workspace_id=str(workspace.workspace_id),
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert search.feature == MemoryFeature.SEARCH
+    assert search.implemented is True
+    assert search.details["search_mode"] == "hybrid_memory_item_search"
+    assert search.details["semantic_candidates_considered"] == 3
+    assert search.details["semantic_query_generated"] is True
+    assert search.details["result_mode_counts"] == {
+        "hybrid": 1,
+        "lexical_only": 1,
+        "semantic_only_discounted": 1,
+    }
+    assert search.details["results_returned"] == 3
+    assert [result.summary for result in search.results] == [
+        "Projection drift root cause with semantic support",
+        "Projection drift root cause documented without semantic alignment",
+        "Background note with unrelated wording",
+    ]
+
+    hybrid_result = search.results[0]
+    lexical_only_result = search.results[1]
+    semantic_only_result = search.results[2]
+
+    assert hybrid_result.lexical_score > 0.0
+    assert hybrid_result.semantic_score > 0.0
+    assert hybrid_result.ranking_details == {
+        "lexical_component": hybrid_result.lexical_score,
+        "semantic_component": hybrid_result.semantic_score,
+        "score_mode": "hybrid",
+        "semantic_only_discount_applied": False,
+    }
+
+    assert lexical_only_result.lexical_score > 0.0
+    assert lexical_only_result.semantic_score == 0.0
+    assert lexical_only_result.ranking_details == {
+        "lexical_component": lexical_only_result.lexical_score,
+        "semantic_component": 0.0,
+        "score_mode": "lexical_only",
+        "semantic_only_discount_applied": False,
+    }
+
+    assert semantic_only_result.lexical_score == 0.0
+    assert semantic_only_result.semantic_score > 0.0
+    assert semantic_only_result.ranking_details == {
+        "lexical_component": 0.0,
+        "semantic_component": semantic_only_result.semantic_score,
+        "score_mode": "semantic_only_discounted",
+        "semantic_only_discount_applied": True,
+    }
+
+    assert hybrid_result.score > lexical_only_result.score
+    assert lexical_only_result.score > semantic_only_result.score
+
+
 def test_postgres_memory_embedding_repository_find_similar_returns_nearest_matches(
     postgres_database_url: str,
     clean_postgres_database: str,
