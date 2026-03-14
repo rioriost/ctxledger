@@ -1166,18 +1166,38 @@ class MemoryService:
                 )
             resolved_workflow_ids = (workflow_instance_id,)
             resolved_workflow_instance_id = str(workflow_instance_id)
-        elif self._has_text(request.workspace_id) and self._workflow_lookup is not None:
-            lookup_scope = "workspace"
-            resolved_workflow_ids = self._workflow_lookup.workflow_ids_by_workspace_id(
-                request.workspace_id or "",
-                limit=request.limit,
-            )
-        elif self._has_text(request.ticket_id) and self._workflow_lookup is not None:
-            lookup_scope = "ticket"
-            resolved_workflow_ids = self._workflow_lookup.workflow_ids_by_ticket_id(
-                request.ticket_id or "",
-                limit=request.limit,
-            )
+        elif self._workflow_lookup is not None:
+            workspace_workflow_ids: tuple[UUID, ...] = ()
+            ticket_workflow_ids: tuple[UUID, ...] = ()
+
+            if self._has_text(request.workspace_id):
+                workspace_workflow_ids = (
+                    self._workflow_lookup.workflow_ids_by_workspace_id(
+                        request.workspace_id or "",
+                        limit=request.limit,
+                    )
+                )
+
+            if self._has_text(request.ticket_id):
+                ticket_workflow_ids = self._workflow_lookup.workflow_ids_by_ticket_id(
+                    request.ticket_id or "",
+                    limit=request.limit,
+                )
+
+            if workspace_workflow_ids and ticket_workflow_ids:
+                lookup_scope = "workspace_and_ticket"
+                ticket_workflow_id_set = set(ticket_workflow_ids)
+                resolved_workflow_ids = tuple(
+                    workflow_id
+                    for workflow_id in workspace_workflow_ids
+                    if workflow_id in ticket_workflow_id_set
+                )[: request.limit]
+            elif workspace_workflow_ids:
+                lookup_scope = "workspace"
+                resolved_workflow_ids = workspace_workflow_ids
+            elif ticket_workflow_ids:
+                lookup_scope = "ticket"
+                resolved_workflow_ids = ticket_workflow_ids
 
         details = {
             "query": request.query,

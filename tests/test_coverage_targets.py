@@ -4898,6 +4898,195 @@ def test_memory_get_context_matches_multi_token_query_against_metadata() -> None
     }
 
 
+def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
+    matching_workflow_id = uuid4()
+    same_workspace_workflow_id = uuid4()
+    same_ticket_workflow_id = uuid4()
+    created_at = datetime(2024, 3, 13, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=matching_workflow_id,
+            summary="Matching workflow context",
+            metadata={"kind": "match"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=same_workspace_workflow_id,
+            summary="Workspace-only workflow context",
+            metadata={"kind": "workspace-only"},
+            created_at=created_at.replace(day=14),
+            updated_at=created_at.replace(day=14),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=same_ticket_workflow_id,
+            summary="Ticket-only workflow context",
+            metadata={"kind": "ticket-only"},
+            created_at=created_at.replace(day=15),
+            updated_at=created_at.replace(day=15),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                matching_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000001",
+                    "ticket_id": "TICKET-NARROW",
+                },
+                same_workspace_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000001",
+                    "ticket_id": "OTHER-TICKET",
+                },
+                same_ticket_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000002",
+                    "ticket_id": "TICKET-NARROW",
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            ticket_id="TICKET-NARROW",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Matching workflow context"
+    ]
+    assert response.details == {
+        "query": None,
+        "normalized_query": None,
+        "query_tokens": [],
+        "lookup_scope": "workspace_and_ticket",
+        "workspace_id": "00000000-0000-0000-0000-000000000001",
+        "workflow_instance_id": None,
+        "ticket_id": "TICKET-NARROW",
+        "limit": 10,
+        "include_episodes": True,
+        "include_memory_items": False,
+        "include_summaries": False,
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(matching_workflow_id)],
+        "query_filter_applied": False,
+        "episodes_before_query_filter": 1,
+        "matched_episode_count": 1,
+        "episodes_returned": 1,
+    }
+
+
+def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_filtering() -> (
+    None
+):
+    matching_workflow_id = uuid4()
+    same_workspace_workflow_id = uuid4()
+    same_ticket_workflow_id = uuid4()
+    created_at = datetime(2024, 3, 16, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=matching_workflow_id,
+            summary="Projection drift root cause",
+            metadata={"kind": "match"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=same_workspace_workflow_id,
+            summary="Projection drift workspace decoy",
+            metadata={"kind": "workspace-only"},
+            created_at=created_at.replace(day=17),
+            updated_at=created_at.replace(day=17),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=same_ticket_workflow_id,
+            summary="Projection drift ticket decoy",
+            metadata={"kind": "ticket-only"},
+            created_at=created_at.replace(day=18),
+            updated_at=created_at.replace(day=18),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                matching_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000010",
+                    "ticket_id": "TICKET-QUERY",
+                },
+                same_workspace_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000010",
+                    "ticket_id": "OTHER-TICKET",
+                },
+                same_ticket_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000011",
+                    "ticket_id": "TICKET-QUERY",
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            query="root cause",
+            workspace_id="00000000-0000-0000-0000-000000000010",
+            ticket_id="TICKET-QUERY",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Projection drift root cause"
+    ]
+    assert response.details == {
+        "query": "root cause",
+        "normalized_query": "root cause",
+        "query_tokens": ["root", "cause"],
+        "lookup_scope": "workspace_and_ticket",
+        "workspace_id": "00000000-0000-0000-0000-000000000010",
+        "workflow_instance_id": None,
+        "ticket_id": "TICKET-QUERY",
+        "limit": 10,
+        "include_episodes": True,
+        "include_memory_items": False,
+        "include_summaries": False,
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(matching_workflow_id)],
+        "query_filter_applied": True,
+        "episodes_before_query_filter": 1,
+        "matched_episode_count": 1,
+        "episodes_returned": 1,
+    }
+
+
 def test_serialize_get_context_response_serializes_episode_payloads() -> None:
     workflow_id = uuid4()
     attempt_id = uuid4()
