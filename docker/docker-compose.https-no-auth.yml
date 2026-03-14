@@ -1,0 +1,27 @@
+services:
+  traefik-no-auth:
+    image: traefik:v3.1
+    container_name: ctxledger-traefik-no-auth
+    restart: unless-stopped
+    depends_on:
+      ctxledger:
+        condition: service_healthy
+    command:
+      - --entrypoints.websecure.address=:8444
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --providers.file.watch=true
+      - --api.dashboard=false
+      - --ping=true
+      - --accesslog=true
+      - --log.level=INFO
+    ports:
+      - "8444:8444"
+    volumes:
+      - ./traefik-no-auth/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./traefik/certs:/etc/traefik/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep '[t]raefik' >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s

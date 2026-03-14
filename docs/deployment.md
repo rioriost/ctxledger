@@ -327,18 +327,21 @@ The payloads returned by `/debug/*` may reveal details such as:
   - `runtime_routes`
   - `runtime_tools`
 
-## 6.4 Local HTTPS-only small-auth path
+## 6.4 Local HTTPS paths
 
-The repository now supports a local HTTPS-only variant of the small-pattern deployment through Traefik.
+The repository now supports two local HTTPS variants through Traefik:
 
-The intended shape is:
+1. **HTTPS without authentication**
+2. **HTTPS with proxy-layer authentication**
 
-- Traefik remains the only host-exposed MCP entrypoint
+Both variants keep the backend private and terminate TLS at Traefik.
+
+Shared shape:
+
+- Traefik remains the host-exposed MCP entrypoint
 - Traefik terminates TLS locally
-- the forward-auth middleware protects the HTTPS entrypoint
 - the private `ctxledger` backend remains on internal plain HTTP inside the Compose network
 - operators provide local certificate files for Traefik rather than enabling TLS inside `ctxledger` itself
-- the small-auth proxy path no longer accepts plain HTTP traffic on a separate public entrypoint
 
 Expected local certificate files:
 
@@ -347,19 +350,73 @@ Expected local certificate files:
 
 These files are mounted into the Traefik container and used for the HTTPS listener.
 
-### Local HTTPS endpoint
+### 6.4.1 Local HTTPS path without authentication
+
+This path is intended for:
+
+- local client testing over HTTPS
+- simple Zed validation without proxy auth
+- controlled local experiments where auth is intentionally not part of the test
+
+The intended shape is:
+
+- Traefik exposes HTTPS on `8444`
+- no forward-auth middleware is applied
+- the backend remains private behind the proxy
+
+With the no-auth HTTPS overlay running:
+
+- HTTPS MCP endpoint:
+  - `https://127.0.0.1:8444/mcp`
+
+Representative startup command:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml up -d --build --force-recreate
+```
+
+Representative smoke validation commands:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8444 --tool-name memory_get_context --insecure
+```
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8444 --scenario workflow --workflow-resource-read --insecure
+```
+
+### 6.4.2 Local HTTPS-only small-auth path
+
+This path is intended for:
+
+- local operator validation
+- production-like proxy-boundary testing
+- authenticated MCP client checks over `https`
+- smoke validation against a TLS-terminated entrypoint
+
+The intended shape is:
+
+- Traefik exposes HTTPS on `8443`
+- the forward-auth middleware protects the HTTPS entrypoint
+- the backend remains private behind the proxy
+- the small-auth proxy path does not accept a separate public HTTP entrypoint
 
 With the small-auth overlay running:
 
 - HTTPS MCP endpoint:
   - `https://127.0.0.1:8443/mcp`
 
-The HTTPS path is meant for:
+Representative startup command:
 
-- local operator validation
-- production-like proxy-boundary testing
-- authenticated MCP client checks over `https`
-- smoke validation against a TLS-terminated entrypoint
+```/dev/null/sh#L1-1
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```
+
+Representative smoke validation command for local self-signed testing:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --insecure --scenario workflow --workflow-resource-read
+```
 
 ### Certificate guidance
 
@@ -376,27 +433,15 @@ Operational expectations:
 
 - do not commit real certificate or key material to version control
 - treat `localhost.key` as sensitive secret material
-- use this path for local or tightly controlled operator testing, not as a substitute for production certificate management
+- use these paths for local or tightly controlled operator testing, not as a substitute for production certificate management
 - if the local certificate is not trusted, use client-side trust configuration or an explicit insecure/testing mode only for local validation
-
-### HTTPS smoke validation
-
-After certificate files exist and the authenticated Traefik stack is running, validate the HTTPS path with the bearer token used for the HTTPS proxy path.
-
-Representative command shape for local self-signed testing:
-
-```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --insecure --scenario workflow --workflow-resource-read
-```
-
-The `--insecure` flag is intended for local self-signed or otherwise untrusted certificates. If the certificate is trusted locally, prefer normal verification and omit that flag.
 
 ### Relationship to production posture
 
-This local HTTPS-only path improves production-like operator validation, but it does not change the broader deployment model:
+These local HTTPS paths improve production-like operator validation, but they do not change the broader deployment model:
 
 - TLS termination still belongs at the proxy boundary
-- authentication still belongs at the proxy boundary
+- when auth is enabled, authentication still belongs at the proxy boundary
 - the backend application remains private behind the proxy
 - certificate issuance, trust, rotation, and secret handling remain deployment/operator concerns rather than application concerns
 

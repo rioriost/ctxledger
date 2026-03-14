@@ -1,0 +1,19 @@
+http:
+  routers:
+    ctxledger-mcp-https:
+      entryPoints:
+        - websecure
+      rule: "Host(`localhost`) && (PathPrefix(`/mcp`) || PathPrefix(`/debug/`) || PathPrefix(`/workflow-resume/`) || Path(`/projection_failures_ignore`) || Path(`/projection_failures_resolve`))"
+      service: ctxledger-backend
+      tls: {}
+
+  services:
+    ctxledger-backend:
+      loadBalancer:
+        servers:
+          - url: http://ctxledger:8080
+
+tls:
+  certificates:
+    - certFile: /etc/traefik/certs/localhost.crt
+      keyFile: /etc/traefik/certs/localhost.key

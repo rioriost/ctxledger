@@ -63,7 +63,7 @@ The current integration-test approach uses a temporary PostgreSQL schema per tes
 You should also know the current local MCP endpoint exposed for operator use:
 
 ```/dev/null/txt#L1-1
-https://127.0.0.1:8443/mcp
+https://localhost:8443/mcp
 ```
 
 If you want to use authenticated access, prepare a bearer token for the proxy layer and use the small-pattern Traefik/auth deployment described below.
@@ -72,35 +72,82 @@ If you want to use authenticated access, prepare a bearer token for the proxy la
 
 ## Quick Start
 
-The recommended local operator path is the **authenticated small-pattern deployment** through Traefik on port `8443`.
+The repository supports two HTTPS-based local startup paths for operator testing with clients such as Zed:
 
-### Start `ctxledger` with authentication (recommended)
+- **A. start `ctxledger` without authentication over HTTPS** on port `8444`
+- **B. start `ctxledger` with proxy authentication over HTTPS** on port `8443`
+
+Both paths require local certificate files for Traefik at:
+
+- `docker/traefik/certs/localhost.crt`
+- `docker/traefik/certs/localhost.key`
+
+For the verified working local path with Zed on macOS, use `mkcert` so the `localhost` certificate is trusted by the local machine. A practical local setup is:
+
+```/dev/null/sh#L1-3
+mkdir -p docker/traefik/certs
+mkcert -install
+mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
+```
+
+### A. Start `ctxledger` without authentication over HTTPS
+
+Use this mode when you want the simplest HTTPS path for local Zed testing without proxy-side auth.
+
+#### 1. Start the no-auth HTTPS stack
+
+From the repository root, start the base compose file plus the no-auth HTTPS overlay:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml up -d --build --force-recreate
+```
+
+For a normal restart after the stack already exists, you can usually omit `--force-recreate`:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml up -d
+```
+
+#### 2. Access the HTTPS MCP endpoint
+After startup, the HTTPS MCP endpoint is:
+
+```/dev/null/txt#L1-1
+https://localhost:8444/mcp
+```
+
+If the certificate is self-signed or otherwise not trusted by your machine, local validation commands may need an insecure mode.
+
+#### 3. Optional validation
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url https://localhost:8444 --scenario workflow --workflow-resource-read
+```
+
+#### 4. Configure Zed
+
+```/dev/null/json#L1-6
+{
+  "ctxledger": {
+    "url": "https://localhost:8444/mcp"
+  }
+}
+```
+
+This no-auth HTTPS path was verified against a trusted `mkcert`-generated `localhost` certificate.
+
+### B. Start `ctxledger` with authentication (recommended)
 
 Use this mode when you want the documented proxy-first deployment shape for local development, operator validation, and IDE clients that can send bearer headers.
 
-Before you start this mode, choose a bearer token value. You will use the same token in all three places:
+Run either A or B as a local stack, not both at the same time.
+
+#### 1. Choose a bearer token
+
+You will use the same token in all three places:
 
 - as `CTXLEDGER_SMALL_AUTH_TOKEN` in the startup command
 - as the bearer token passed to smoke validation commands
 - as the `Authorization: Bearer ...` header in your MCP client configuration
-
-If these values do not match exactly, authenticated requests will fail with `401`.
-
-For local experiments, the examples below use:
-
-```/dev/null/txt#L1-1
-replace-me-with-a-strong-secret
-```
-
-To generate a stronger token, you can use either of these examples:
-
-```/dev/null/sh#L1-1
-openssl rand -hex 32
-```
-
-```/dev/null/sh#L1-1
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
 
 A practical shell pattern is:
 
@@ -109,9 +156,7 @@ export CTXLEDGER_SMALL_AUTH_TOKEN="$(openssl rand -hex 32)"
 echo "$CTXLEDGER_SMALL_AUTH_TOKEN"
 ```
 
-For any shared, persistent, or less-trusted environment, use a strong random secret instead of the example placeholder.
-
-#### 1. Start PostgreSQL, the private backend, auth service, and Traefik
+#### 2. Start the auth-enabled HTTPS stack
 
 From the repository root, start the base compose file plus the auth overlay with a shared bearer token.
 
@@ -133,15 +178,7 @@ If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` in your shell first, you can also r
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
 ```
 
-If you changed code or image inputs and want a normal rebuild without forcibly replacing every container, use:
-
-```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
-```
-
-Use `--force-recreate` only when you intentionally want to replace existing containers, such as after a major compose/config change or when you want a known-fresh container set.
-
-After startup, the authenticated MCP endpoint is:
+#### 3. Access the authenticated HTTPS MCP endpoint
 
 ```/dev/null/txt#L1-1
 https://127.0.0.1:8443/mcp
@@ -149,85 +186,26 @@ https://127.0.0.1:8443/mcp
 
 Every MCP client request to this endpoint must include the same bearer token you chose above.
 
-This small-auth deployment is intentionally HTTPS-first. Provide local certificate files for Traefik at:
-
-- `docker/traefik/certs/localhost.crt`
-- `docker/traefik/certs/localhost.key`
-
-This HTTPS path is intended for local operator validation and production-like proxy testing. If the certificate is self-signed or otherwise not trusted by your machine, your client or smoke validation command may need an insecure or trust-configured mode.
-
-#### 2. Verify authentication behavior
-
-First, confirm that requests without a token are rejected. This shows that proxy-side authentication is actually active.
+#### 4. Optional validation
 
 Missing token should be rejected with `401`:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --expect-http-status 401 --expect-auth-failure
 ```
-
-Then confirm that a request with the same token used at startup is accepted.
 
 A valid token should pass and the workflow/resource smoke should succeed:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read
 ```
 
-If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` already, you can keep the smoke command aligned with the startup token like this:
-
-```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read --insecure
-```
-
-If you want to validate the HTTPS entrypoint instead, first create local certificate files for Traefik. A practical local option is `mkcert`:
-
-```/dev/null/sh#L1-2
-mkdir -p docker/traefik/certs
-mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
-```
-
-You can then validate the HTTPS endpoint with the same token:
-
-```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --insecure --scenario workflow --workflow-resource-read
-```
-
-The `--insecure` flag is useful for local self-signed certificates. If your certificate is trusted locally, you can omit it.
-
-#### 3. Configure your MCP client for the authenticated endpoint
-
-Use the same token value you set in `CTXLEDGER_SMALL_AUTH_TOKEN`. If the token in your MCP client differs from the startup token, the client will receive `401` responses from the proxy.
-
-##### VS Code
-
-Add a remote MCP server entry in your VS Code MCP client configuration.
-
-A representative authenticated shape is:
-
-```/dev/null/json#L1-11
-{
-  "mcpServers": {
-    "ctxledger": {
-      "url": "https://127.0.0.1:8443/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_TOKEN_HERE"
-      }
-    }
-  }
-}
-```
-
-##### Zed
-
-Add a remote MCP server entry in your Zed MCP configuration.
-
-A representative authenticated shape is:
+#### 5. Configure Zed
 
 ```/dev/null/json#L1-11
 {
   "ctxledger": {
-    "url": "https://127.0.0.1:8443/mcp",
+    "url": "https://localhost:8443/mcp",
     "headers": {
          "Authorization": "Bearer YOUR_TOKEN_HERE"
     }
@@ -236,14 +214,6 @@ A representative authenticated shape is:
 ```
 
 Unfortunately, Zed does not expand environment variables in its MCP configuration file, so `YOUR_TOKEN_HERE` must be replaced with the actual token value.
-
-Once configured, your MCP client should be able to reach `ctxledger` through the proxy-protected MCP endpoint and use the workflow and memory tool surfaces exposed at `/mcp`.
-
-If your MCP client supports HTTPS MCP endpoints and your local certificate is trusted, you can also point it at:
-
-```/dev/null/txt#L1-1
-https://127.0.0.1:8443/mcp
-```
 
 When using the HTTPS local path, keep the same bearer token header and ensure the client trusts the local certificate chain or is explicitly configured for local self-signed testing.
 
@@ -267,10 +237,6 @@ For a normal restart of an existing stack:
 
 ```/dev/null/sh#L1-1
 envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
-```
-
-```/dev/null/sh#L1-1
-envrcctl exec -- python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read --insecure
 ```
 
 Because Zed does not expand environment variables in its MCP configuration file, you must still retrieve the token and paste it into `YOUR_TOKEN_HERE` manually:
@@ -820,15 +786,19 @@ In production-like environments, also prefer TLS termination and reverse-proxy a
 
 ## Local Startup
 
-The recommended local path is Docker-based and proxy-protected over HTTPS.
+The recommended local path is Docker-based and HTTPS-oriented.
 
 On successful startup, `ctxledger` also prints a short runtime summary to stderr so you can quickly verify the active transport wiring.
 
 ### Docker Compose
 
-#### 1. Prepare local TLS certificate files
+#### A. HTTPS startup without authentication
 
-Before starting the proxy-protected stack, create certificate material for Traefik if you do not already have it.
+Use this when you want the simplest HTTPS path for local client testing without proxy-side auth.
+
+##### 1. Prepare local TLS certificate files
+
+Before starting the stack, create certificate material for Traefik if you do not already have it.
 
 A practical local option is `mkcert`:
 
@@ -837,194 +807,201 @@ mkdir -p docker/traefik/certs
 mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
 ```
 
-#### 2. Start PostgreSQL plus the HTTPS proxy stack
+##### 2. Start PostgreSQL, the backend, and the HTTPS no-auth proxy
 
 From the repository root:
 
 ```/dev/null/sh#L1-1
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml up -d --build --force-recreate
 ```
 
-#### 3. Verify endpoint availability
+For a normal restart after the stack has already been created:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml up -d
+```
+
+##### 3. Verify endpoint availability
 
 Expected local MCP endpoint:
 
 ```/dev/null/txt#L1-1
-https://127.0.0.1:8443/mcp
+https://127.0.0.1:8444/mcp
 ```
 
-The operator-facing path is now HTTPS-only through Traefik. The backend application remains private behind the proxy.
+This path is HTTPS-only through Traefik and does not require an auth header.
 
-#### 4. Verify auth rejection and runtime reachability
-
-You can verify that unauthenticated requests are rejected at the proxy boundary:
+##### 4. Run the minimum MCP smoke validation
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8444 --tool-name memory_get_context --insecure
 ```
 
-#### 5. Run the minimum MCP smoke validation
-
-A repository-provided smoke client is available for remote MCP validation:
+##### 5. Run workflow and resource-read validation
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --tool-name memory_get_context --insecure
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8444 --scenario workflow --workflow-resource-read --insecure
 ```
 
-This validates the minimum confirmed MCP path for `v0.1.0`:
+##### 6. Configure Zed for the no-auth HTTPS endpoint
 
-- initialize
-- tools/list
-- tools/call
+A representative Zed MCP configuration shape is:
 
-The default smoke call uses `memory_get_context`. That tool is no longer a pure stub: it now supports an initial episode-oriented retrieval path, while still remaining partial relative to the broader planned memory architecture.
+```/dev/null/json#L1-6
+{
+  "ctxledger": {
+    "url": "https://127.0.0.1:8444/mcp"
+  }
+}
+```
 
-#### 6. Run workflow-oriented smoke validation
+If your local certificate is not trusted by the client environment, use a trusted local certificate chain before testing from Zed.
 
-If you also want to validate the workflow tool path against the real Dockerized PostgreSQL instance, use the workflow scenario.
+#### B. HTTPS startup with authentication (recommended)
 
-For repository test contributors, this is also a good point to keep the integration-test DB behavior in mind:
+Use this when you want the documented proxy-first deployment shape for local development, operator validation, and IDE clients that can send bearer headers.
 
-- PostgreSQL integration tests should avoid clearing durable working history from long-lived tables
-- the current repository approach is to create a temporary schema for integration tests
-- apply the bundled schema inside that temporary schema
-- run the test suite against that temporary schema through session `search_path` selection
-- drop the temporary schema after the test finishes
+Before you start this mode, choose a bearer token value. You will use the same token in all three places:
 
-This keeps existing operator or development history in `public` out of the integration-test cleanup path.
+- as `CTXLEDGER_SMALL_AUTH_TOKEN` in the startup command
+- as the bearer token passed to smoke validation commands
+- as the `Authorization: Bearer ...` header in your MCP client configuration
+
+If these values do not match exactly, authenticated requests will fail with `401`.
+
+For local experiments, the examples below use:
+
+```/dev/null/txt#L1-1
+replace-me-with-a-strong-secret
+```
+
+To generate a stronger token, you can use either of these examples:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --insecure
+openssl rand -hex 32
 ```
-
-This scenario performs:
-
-- `workspace_register`
-- `workflow_start`
-- `workflow_checkpoint`
-- `workflow_resume`
-- `workflow_complete`
-
-against the live server.
-
-#### 7. Run workflow resource-read validation
-
-If you also want to validate workflow resource reads against the live server, enable resource reads in the workflow scenario:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
+python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-This extends the workflow validation with:
+A practical shell pattern is:
 
-- `resources/read` for `workspace://{workspace_id}/resume`
-- `resources/read` for `workspace://{workspace_id}/workflow/{workflow_instance_id}`
-
-#### 8. Run the proxy-authenticated smoke validation
-
-If you want to validate authenticated access, use the small-pattern Traefik/auth deployment. Authentication is expected to be enforced at the proxy layer rather than inside `ctxledger`.
-
-Start the stack with a shared token for the proxy/auth layer.
-
-For a first start or an intentional clean rebuild:
-
-```/dev/null/sh#L1-1
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```/dev/null/sh#L1-2
+export CTXLEDGER_SMALL_AUTH_TOKEN="$(openssl rand -hex 32)"
+echo "$CTXLEDGER_SMALL_AUTH_TOKEN"
 ```
 
-For a normal restart of an already-created stack:
+For any shared, persistent, or less-trusted environment, use a strong random secret instead of the example placeholder.
 
-```/dev/null/sh#L1-1
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
+##### 1. Prepare local TLS certificate files
+
+Before starting the stack, create certificate material for Traefik if you do not already have it.
+
+A practical local option is `mkcert`:
+
+```/dev/null/sh#L1-2
+mkdir -p docker/traefik/certs
+mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
 ```
 
-Then run the smoke client with the matching bearer token through the proxy endpoint:
+##### 2. Start PostgreSQL, the private backend, auth service, and Traefik
 
-```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
-```
+From the repository root, start the base compose file plus the auth overlay with a shared bearer token.
 
-This validates that the proxy-protected remote MCP server still supports:
-
-- `initialize`
-- `tools/list`
-- `tools/call`
-- `resources/list`
-- `resources/read`
-- workflow mutation and resume flows
-
-#### 8. Run the small Traefik auth pattern
-
-If you want to validate the small pattern described in `docs/plans/auth_proxy_scaling_plan.md`, run the stack with the Traefik/auth overlay.
-
-For a step-by-step operator procedure covering startup, auth verification, client targeting, shutdown, and common failure modes, see `docs/small_auth_operator_runbook.md`.
-
-This setup is intended to keep the MCP backend private behind the proxy:
-
-- `traefik` is the only host-exposed entrypoint
-- `auth-small` validates `Authorization: Bearer <token>` with Traefik ForwardAuth
-- the private MCP backend service runs without direct host port exposure
-- PostgreSQL remains internal to the compose network
-
-Start the stack with a shared token for the proxy/auth layer.
-
-For a first start or an intentional clean rebuild:
+For a **first start** or a deliberate clean rebuild of the stack, use:
 
 ```/dev/null/sh#L1-1
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
-For a normal restart of an already-created stack:
+For a **normal restart after the stack has already been created**, you usually do **not** need `--force-recreate`:
 
 ```/dev/null/sh#L1-1
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
 ```
 
-Then point your MCP client or smoke client at the Traefik endpoint and send the same bearer token:
+If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` in your shell first, you can also run:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
 ```
 
-You can also validate proxy rejection behavior before the happy path.
+If you changed code or image inputs and want a normal rebuild without forcibly replacing every container, use:
 
-Missing token should be rejected by Traefik ForwardAuth with `401`:
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
+```
+
+Use `--force-recreate` only when you intentionally want to replace existing containers, such as after a major compose/config change or when you want a known-fresh container set.
+
+##### 3. Verify endpoint availability
+
+Expected local MCP endpoint:
+
+```/dev/null/txt#L1-1
+https://localhost:8443/mcp
+```
+
+Every MCP client request to this endpoint must include the same bearer token you chose above.
+
+##### 4. Verify authentication behavior
+
+First, confirm that requests without a token are rejected. This shows that proxy-side authentication is actually active.
+
+Missing token should be rejected with `401`:
 
 ```/dev/null/sh#L1-1
 python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
-An invalid token should also be rejected with `401`:
+Then confirm that a request with the same token used at startup is accepted.
 
-```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure --insecure
-```
-
-Then confirm that a valid token is allowed through the proxy and that the workflow/resource smoke still passes:
+A valid token should pass and the workflow/resource smoke should succeed:
 
 ```/dev/null/sh#L1-1
 python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
-Operational notes for this mode:
-
-- authentication happens at the proxy boundary, before requests reach the private MCP backend
-- the compose override is `docker/docker-compose.small-auth.yml`
-- the documented intent is a private backend service behind Traefik, not direct host exposure of the MCP backend itself
-- the lightweight auth service is expected to return `200` for valid tokens and `401` for missing or invalid tokens
-- `ctxledger` no longer relies on app-layer bearer authentication in the documented deployment path
-
-This small-pattern deployment is the recommended stepping stone for:
-
-- one trusted operator
-- local development
-- a tightly controlled private environment
-- IDE clients such as Zed or VS Code that can send bearer headers
-
-#### 9. Shut down the local stack
+If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` already, you can keep the smoke command aligned with the startup token like this:
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml down
+python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read --insecure
+```
+
+The `--insecure` flag is useful for local self-signed certificates. If your certificate is trusted locally, you can omit it.
+
+##### 5. Configure Zed for the authenticated HTTPS endpoint
+
+A representative Zed MCP configuration shape is:
+
+```/dev/null/json#L1-11
+{
+  "ctxledger": {
+    "url": "https://127.0.0.1:8443/mcp",
+    "headers": {
+         "Authorization": "Bearer YOUR_TOKEN_HERE"
+    }
+  }
+}
+```
+
+Unfortunately, Zed does not expand environment variables in its MCP configuration file, so `YOUR_TOKEN_HERE` must be replaced with the actual token value.
+
+When using the HTTPS local path, keep the same bearer token header and ensure the client trusts the local certificate chain or is explicitly configured for local self-signed testing.
+
+#### Shut down the local stack
+
+For the no-auth HTTPS stack:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml down --remove-orphans
+```
+
+For the auth-enabled HTTPS stack:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down --remove-orphans
 ```
 
 ### Container Image Notes
