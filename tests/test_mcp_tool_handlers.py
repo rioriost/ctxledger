@@ -1681,6 +1681,12 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
                     matched_fields=("content",),
                     lexical_score=3.0,
                     semantic_score=0.0,
+                    ranking_details={
+                        "lexical_component": 3.0,
+                        "semantic_component": 0.0,
+                        "score_mode": "lexical_only",
+                        "semantic_only_discount_applied": False,
+                    },
                     created_at=created_at,
                     updated_at=created_at,
                 ),
@@ -1695,6 +1701,11 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
                 "memory_items_considered": 1,
                 "semantic_candidates_considered": 1,
                 "semantic_query_generated": True,
+                "hybrid_scoring": {
+                    "lexical_weight": 1.0,
+                    "semantic_weight": 1.0,
+                    "semantic_only_discount": 0.75,
+                },
                 "results_returned": 1,
             },
         )
@@ -1729,6 +1740,11 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
         "memory_items_considered": 1,
         "semantic_candidates_considered": 1,
         "semantic_query_generated": True,
+        "hybrid_scoring": {
+            "lexical_weight": 1.0,
+            "semantic_weight": 1.0,
+            "semantic_only_discount": 0.75,
+        },
         "results_returned": 1,
     }
     assert "timestamp" in response.payload["result"]
@@ -1745,6 +1761,12 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
             "matched_fields": ["content"],
             "lexical_score": 3.0,
             "semantic_score": 0.0,
+            "ranking_details": {
+                "lexical_component": 3.0,
+                "semantic_component": 0.0,
+                "score_mode": "lexical_only",
+                "semantic_only_discount_applied": False,
+            },
             "created_at": created_at.isoformat(),
             "updated_at": created_at.isoformat(),
         }

@@ -216,6 +216,7 @@ def serialize_search_memory_response(
                 "matched_fields": list(result.matched_fields),
                 "lexical_score": result.lexical_score,
                 "semantic_score": result.semantic_score,
+                "ranking_details": result.ranking_details,
                 "created_at": result.created_at.isoformat(),
                 "updated_at": result.updated_at.isoformat(),
             }

@@ -153,6 +153,7 @@ class SearchResultRecord:
     matched_fields: tuple[str, ...] = ()
     lexical_score: float = 0.0
     semantic_score: float = 0.0
+    ranking_details: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -352,6 +353,19 @@ def _metadata_query_strings(metadata: dict[str, Any]) -> tuple[str, ...]:
             query_strings.append(str(value).casefold())
 
     return tuple(query_strings)
+
+
+def _embedding_dot_product(
+    left: tuple[float, ...],
+    right: tuple[float, ...],
+) -> float:
+    if len(left) != len(right):
+        return 0.0
+
+    return sum(
+        left_value * right_value
+        for left_value, right_value in zip(left, right, strict=False)
+    )
 
 
 class UnitOfWorkEpisodeRepository:
@@ -882,9 +896,50 @@ class MemoryService:
         semantic_result_count = len(semantic_matches)
 
         if semantic_matches:
-            denominator = max(len(semantic_matches), 1)
+            semantic_rank_floor = 0.25
+            semantic_rank_denominator = max(len(semantic_matches) - 1, 1)
+            top_similarity = _embedding_dot_product(
+                semantic_matches[0].embedding,
+                semantic_query.vector,
+            )
+            bottom_similarity = top_similarity
+            if len(semantic_matches) > 1:
+                bottom_similarity = _embedding_dot_product(
+                    semantic_matches[-1].embedding,
+                    semantic_query.vector,
+                )
+            similarity_range = max(top_similarity - bottom_similarity, 0.0)
+
             for index, embedding_match in enumerate(semantic_matches):
-                semantic_score = float(denominator - index) / float(denominator)
+                raw_similarity = _embedding_dot_product(
+                    embedding_match.embedding,
+                    semantic_query.vector,
+                )
+                rank_component = semantic_rank_floor + (
+                    (1.0 - semantic_rank_floor)
+                    * (
+                        float(semantic_rank_denominator - index)
+                        / float(semantic_rank_denominator)
+                    )
+                )
+                similarity_component = 1.0
+                if similarity_range > 0:
+                    normalized_similarity = max(
+                        0.0,
+                        min(
+                            1.0,
+                            (raw_similarity - bottom_similarity) / similarity_range,
+                        ),
+                    )
+                    if raw_similarity >= top_similarity:
+                        similarity_component = 1.0
+                    elif raw_similarity <= bottom_similarity:
+                        similarity_component = 0.0
+                    else:
+                        similarity_component = semantic_rank_floor + (
+                            (1.0 - semantic_rank_floor) * normalized_similarity
+                        )
+                semantic_score = rank_component * similarity_component
                 current_best = semantic_score_by_memory_id.get(
                     embedding_match.memory_id,
                     0.0,
@@ -898,6 +953,10 @@ class MemoryService:
                     )
 
         scored_results: list[SearchResultRecord] = []
+        lexical_weight = 1.0
+        semantic_weight = 1.0
+        semantic_only_discount = 0.75
+
         for memory_item in memory_items:
             lexical_score, matched_fields = self._score_memory_item_for_query(
                 memory_item=memory_item,
@@ -910,10 +969,16 @@ class MemoryService:
             )
 
             combined_fields = tuple(dict.fromkeys((*matched_fields, *semantic_fields)))
-            hybrid_score = lexical_score + semantic_score
+            lexical_component = lexical_score * lexical_weight
+            semantic_component = semantic_score * semantic_weight
+            score_mode = "hybrid"
 
+            hybrid_score = lexical_component + semantic_component
             if lexical_score <= 0 and semantic_score > 0:
-                hybrid_score = semantic_score * 0.75
+                hybrid_score = semantic_component * semantic_only_discount
+                score_mode = "semantic_only_discounted"
+            elif lexical_score > 0 and semantic_score <= 0:
+                score_mode = "lexical_only"
 
             if hybrid_score <= 0:
                 continue
@@ -931,6 +996,14 @@ class MemoryService:
                     matched_fields=combined_fields,
                     lexical_score=lexical_score,
                     semantic_score=semantic_score,
+                    ranking_details={
+                        "lexical_component": lexical_component,
+                        "semantic_component": semantic_component,
+                        "score_mode": score_mode,
+                        "semantic_only_discount_applied": (
+                            lexical_score <= 0 and semantic_score > 0
+                        ),
+                    },
                     created_at=memory_item.created_at,
                     updated_at=memory_item.updated_at,
                 )
@@ -968,6 +1041,11 @@ class MemoryService:
             "memory_items_considered": len(memory_items),
             "semantic_candidates_considered": semantic_result_count,
             "semantic_query_generated": semantic_query_generated,
+            "hybrid_scoring": {
+                "lexical_weight": lexical_weight,
+                "semantic_weight": semantic_weight,
+                "semantic_only_discount": semantic_only_discount,
+            },
             "results_returned": len(limited_results),
         }
         if semantic_generation_skipped_reason is not None:

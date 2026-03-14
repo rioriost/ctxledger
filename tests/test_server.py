@@ -3244,6 +3244,11 @@ def test_build_memory_search_tool_handler_returns_implemented_payload() -> None:
         "memory_items_considered": 0,
         "semantic_candidates_considered": 0,
         "semantic_query_generated": False,
+        "hybrid_scoring": {
+            "lexical_weight": 1.0,
+            "semantic_weight": 1.0,
+            "semantic_only_discount": 0.75,
+        },
         "results_returned": 0,
         "semantic_generation_skipped_reason": "embedding_search_not_configured",
     }

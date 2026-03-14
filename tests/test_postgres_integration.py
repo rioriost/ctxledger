@@ -451,6 +451,17 @@ def test_postgres_memory_search_returns_memory_item_based_results(
     assert search.details["filters"] == {}
     assert search.details["search_mode"] == "memory_item_lexical"
     assert search.details["memory_items_considered"] == 2
+    assert search.details["semantic_candidates_considered"] == 0
+    assert search.details["semantic_query_generated"] is False
+    assert (
+        search.details["semantic_generation_skipped_reason"]
+        == "embedding_search_not_configured"
+    )
+    assert search.details["hybrid_scoring"] == {
+        "lexical_weight": 1.0,
+        "semantic_weight": 1.0,
+        "semantic_only_discount": 0.75,
+    }
     assert search.details["results_returned"] == 1
     assert len(search.results) == 1
     assert search.results[0].workspace_id == workspace.workspace_id
@@ -463,7 +474,15 @@ def test_postgres_memory_search_returns_memory_item_based_results(
         "component": "postgres",
     }
     assert "content" in search.results[0].matched_fields
-    assert search.results[0].score > 0
+    assert search.results[0].lexical_score > 0
+    assert search.results[0].semantic_score == 0.0
+    assert search.results[0].score == search.results[0].lexical_score
+    assert search.results[0].ranking_details == {
+        "lexical_component": search.results[0].lexical_score,
+        "semantic_component": 0.0,
+        "score_mode": "lexical_only",
+        "semantic_only_discount_applied": False,
+    }
 
     with uow_factory() as uow:
         assert uow.memory_items is not None
@@ -670,6 +689,154 @@ def test_postgres_memory_remember_episode_persists_custom_http_embedding(
     assert memory_embeddings[0].embedding_model == "custom-http-test-model"
     assert memory_embeddings[0].embedding == (0.125,) * 1536
     assert memory_embeddings[0].content_hash == "custom-http-content-hash"
+
+
+def test_postgres_memory_search_hybrid_results_include_ranking_details(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(uow_factory)
+
+    class FixedHybridEmbeddingGenerator(EmbeddingGenerator):
+        def generate(self, request: EmbeddingRequest) -> EmbeddingResult:
+            if request.text == "projection drift root cause":
+                return EmbeddingResult(
+                    provider="test",
+                    model="test-hybrid-v1",
+                    vector=(1.0,) + (0.0,) * 1535,
+                    content_hash="query-hash",
+                )
+
+            if (
+                request.text
+                == "Projection drift root cause identified in deployment workflow"
+            ):
+                return EmbeddingResult(
+                    provider="test",
+                    model="test-hybrid-v1",
+                    vector=(0.8,) + (0.0,) * 1535,
+                    content_hash="lexical-memory-hash",
+                )
+
+            if request.text == "Background note with no lexical overlap":
+                return EmbeddingResult(
+                    provider="test",
+                    model="test-hybrid-v1",
+                    vector=(1.0,) + (0.0,) * 1535,
+                    content_hash="semantic-only-memory-hash",
+                )
+
+            raise AssertionError(f"unexpected embedding request: {request.text}")
+
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+        embedding_generator=FixedHybridEmbeddingGenerator(),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-search-hybrid.git",
+            canonical_path="/tmp/integration-repo-memory-search-hybrid",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMSEARCH-HYBRID-001",
+        )
+    )
+
+    lexical_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Projection drift root cause identified in deployment workflow",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "root-cause"},
+        )
+    )
+    semantic_only_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Background note with no lexical overlap",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "background"},
+        )
+    )
+
+    assert lexical_episode.episode is not None
+    assert semantic_only_episode.episode is not None
+
+    with uow_factory() as uow:
+        assert uow.memory_items is not None
+        assert uow.memory_embeddings is not None
+
+        workspace_items = uow.memory_items.list_by_workspace_id(
+            workspace.workspace_id,
+            limit=10,
+        )
+        memory_items_by_content = {item.content: item for item in workspace_items}
+
+        assert (
+            "Projection drift root cause identified in deployment workflow"
+            in memory_items_by_content
+        )
+        assert "Background note with no lexical overlap" in memory_items_by_content
+
+        uow.commit()
+
+    search = memory_service.search(
+        SearchMemoryRequest(
+            query="projection drift root cause",
+            workspace_id=str(workspace.workspace_id),
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert search.feature == MemoryFeature.SEARCH
+    assert search.implemented is True
+    assert search.details["search_mode"] == "hybrid_memory_item_search"
+    assert search.details["semantic_candidates_considered"] == 2
+    assert search.details["semantic_query_generated"] is True
+    assert search.details["results_returned"] == 2
+    assert [result.summary for result in search.results] == [
+        "Projection drift root cause identified in deployment workflow",
+        "Background note with no lexical overlap",
+    ]
+
+    lexical_result = search.results[0]
+    semantic_only_result = search.results[1]
+
+    assert lexical_result.lexical_score > 0.0
+    assert lexical_result.semantic_score == 0.0
+    assert lexical_result.ranking_details == {
+        "lexical_component": lexical_result.lexical_score,
+        "semantic_component": 0.0,
+        "score_mode": "lexical_only",
+        "semantic_only_discount_applied": False,
+    }
+
+    assert semantic_only_result.lexical_score == 0.0
+    assert semantic_only_result.semantic_score == 1.0
+    assert semantic_only_result.ranking_details == {
+        "lexical_component": 0.0,
+        "semantic_component": semantic_only_result.semantic_score,
+        "score_mode": "semantic_only_discounted",
+        "semantic_only_discount_applied": True,
+    }
+    assert lexical_result.score > semantic_only_result.score
 
 
 def test_postgres_memory_embedding_repository_find_similar_returns_nearest_matches(

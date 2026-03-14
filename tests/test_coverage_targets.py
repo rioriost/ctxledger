@@ -116,7 +116,6 @@ from ctxledger.workflow.service import (
     WorkflowInstance,
     WorkflowInstanceStatus,
     WorkflowResume,
-    WorkflowService,
     Workspace,
 )
 
@@ -3280,6 +3279,12 @@ def test_serialize_search_memory_response_serializes_results() -> None:
                 matched_fields=("content", "embedding_similarity"),
                 lexical_score=3.0,
                 semantic_score=0.75,
+                ranking_details={
+                    "lexical_component": 3.0,
+                    "semantic_component": 0.75,
+                    "score_mode": "hybrid",
+                    "semantic_only_discount_applied": False,
+                },
                 created_at=created_at,
                 updated_at=created_at,
             ),
@@ -3294,6 +3299,11 @@ def test_serialize_search_memory_response_serializes_results() -> None:
             "memory_items_considered": 2,
             "semantic_candidates_considered": 2,
             "semantic_query_generated": True,
+            "hybrid_scoring": {
+                "lexical_weight": 1.0,
+                "semantic_weight": 1.0,
+                "semantic_only_discount": 0.75,
+            },
             "results_returned": 1,
         },
     )
@@ -3319,6 +3329,11 @@ def test_serialize_search_memory_response_serializes_results() -> None:
         "memory_items_considered": 2,
         "semantic_candidates_considered": 2,
         "semantic_query_generated": True,
+        "hybrid_scoring": {
+            "lexical_weight": 1.0,
+            "semantic_weight": 1.0,
+            "semantic_only_discount": 0.75,
+        },
         "results_returned": 1,
     }
     assert payload["results"] == [
@@ -3334,6 +3349,12 @@ def test_serialize_search_memory_response_serializes_results() -> None:
             "matched_fields": ["content", "embedding_similarity"],
             "lexical_score": 3.0,
             "semantic_score": 0.75,
+            "ranking_details": {
+                "lexical_component": 3.0,
+                "semantic_component": 0.75,
+                "score_mode": "hybrid",
+                "semantic_only_discount_applied": False,
+            },
             "created_at": created_at.isoformat(),
             "updated_at": created_at.isoformat(),
         }
@@ -4132,15 +4153,164 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         semantic_only_memory_id,
     ]
     assert "content" in search_response.results[0].matched_fields
-    assert "embedding_similarity" in search_response.results[0].matched_fields
     assert search_response.results[0].lexical_score > 0.0
-    assert search_response.results[0].semantic_score > 0.0
+    assert search_response.results[0].semantic_score == 0.0
+    assert search_response.results[0].ranking_details == {
+        "lexical_component": search_response.results[0].lexical_score,
+        "semantic_component": 0.0,
+        "score_mode": "lexical_only",
+        "semantic_only_discount_applied": False,
+    }
     assert search_response.results[0].score > search_response.results[1].score
     assert search_response.results[1].lexical_score == 0.0
-    assert (
-        search_response.results[1].semantic_score
-        > search_response.results[0].semantic_score
+    assert search_response.results[1].ranking_details == {
+        "lexical_component": 0.0,
+        "semantic_component": search_response.results[1].semantic_score,
+        "score_mode": "semantic_only_discounted",
+        "semantic_only_discount_applied": True,
+    }
+    assert search_response.results[1].semantic_score == 1.0
+
+
+def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> (
+    None
+):
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_embedding_repository = InMemoryMemoryEmbeddingRepository()
+    workflow_lookup = InMemoryWorkflowLookupRepository(
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TICKET-HYBRID-2",
+            }
+        }
     )
+
+    strongest_memory_id = uuid4()
+    middle_memory_id = uuid4()
+    weakest_memory_id = uuid4()
+    created_at = datetime(2024, 1, 4, tzinfo=UTC)
+
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=strongest_memory_id,
+            workspace_id=UUID("00000000-0000-0000-0000-000000000001"),
+            episode_id=uuid4(),
+            type="episode_note",
+            provenance="episode",
+            content="Semantic strongest memory item",
+            metadata={"kind": "semantic"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=middle_memory_id,
+            workspace_id=UUID("00000000-0000-0000-0000-000000000001"),
+            episode_id=uuid4(),
+            type="episode_note",
+            provenance="episode",
+            content="Semantic middle memory item",
+            metadata={"kind": "semantic"},
+            created_at=datetime(2024, 1, 5, tzinfo=UTC),
+            updated_at=datetime(2024, 1, 5, tzinfo=UTC),
+        )
+    )
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=weakest_memory_id,
+            workspace_id=UUID("00000000-0000-0000-0000-000000000001"),
+            episode_id=uuid4(),
+            type="episode_note",
+            provenance="episode",
+            content="Semantic weakest memory item",
+            metadata={"kind": "semantic"},
+            created_at=datetime(2024, 1, 6, tzinfo=UTC),
+            updated_at=datetime(2024, 1, 6, tzinfo=UTC),
+        )
+    )
+
+    memory_embedding_repository.create(
+        MemoryEmbeddingRecord(
+            memory_embedding_id=uuid4(),
+            memory_id=strongest_memory_id,
+            embedding_model="test-hybrid-v2",
+            embedding=(1.0, 0.0),
+            content_hash="strongest-hash",
+            created_at=created_at,
+        )
+    )
+    memory_embedding_repository.create(
+        MemoryEmbeddingRecord(
+            memory_embedding_id=uuid4(),
+            memory_id=middle_memory_id,
+            embedding_model="test-hybrid-v2",
+            embedding=(0.6, 0.0),
+            content_hash="middle-hash",
+            created_at=datetime(2024, 1, 5, tzinfo=UTC),
+        )
+    )
+    memory_embedding_repository.create(
+        MemoryEmbeddingRecord(
+            memory_embedding_id=uuid4(),
+            memory_id=weakest_memory_id,
+            embedding_model="test-hybrid-v2",
+            embedding=(0.2, 0.0),
+            content_hash="weakest-hash",
+            created_at=datetime(2024, 1, 6, tzinfo=UTC),
+        )
+    )
+
+    class FixedEmbeddingGenerator:
+        def generate(self, request: EmbeddingRequest) -> EmbeddingResult:
+            assert request.text == "semantic query"
+            return EmbeddingResult(
+                provider="test",
+                model="test-hybrid-v2",
+                vector=(1.0, 0.0),
+                content_hash="query-hash",
+            )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_embedding_repository=memory_embedding_repository,
+        embedding_generator=FixedEmbeddingGenerator(),
+        workflow_lookup=workflow_lookup,
+    )
+
+    search_response = service.search(
+        SearchMemoryRequest(
+            query="semantic query",
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert [result.memory_id for result in search_response.results] == [
+        strongest_memory_id,
+        middle_memory_id,
+    ]
+    assert search_response.results[0].semantic_score == pytest.approx(1.0)
+    assert search_response.results[1].semantic_score == pytest.approx(0.390625)
+    assert search_response.results[0].ranking_details == {
+        "lexical_component": 0.0,
+        "semantic_component": search_response.results[0].semantic_score,
+        "score_mode": "semantic_only_discounted",
+        "semantic_only_discount_applied": True,
+    }
+    assert search_response.results[1].ranking_details == {
+        "lexical_component": 0.0,
+        "semantic_component": search_response.results[1].semantic_score,
+        "score_mode": "semantic_only_discounted",
+        "semantic_only_discount_applied": True,
+    }
+    assert search_response.results[0].score == pytest.approx(0.75)
+    assert search_response.results[1].score == pytest.approx(0.29296875)
 
 
 def test_memory_service_raises_validation_errors_for_invalid_requests() -> None:
@@ -5676,9 +5846,7 @@ def test_create_server_uses_provided_dependencies_and_builds_runtime_when_missin
         fake_build_http_runtime_adapter,
     )
 
-    provided = ctxledger_server = __import__(
-        "ctxledger.server", fromlist=["create_server"]
-    )
+    provided = __import__("ctxledger.server", fromlist=["create_server"])
     server_with_provided_runtime = provided.create_server(
         settings,
         db_health_checker=provided_checker,
