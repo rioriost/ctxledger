@@ -11,7 +11,7 @@
 - `0.4`: hierarchical memory retrieval
   - `memory_get_context` は multi-layer context assembly 的な役割へ拡張されうる
 
-この整理に合わせて、README と `docs/roadmap.md` に **tool-to-version mapping の説明を追加済み**です。また、`.rules` にも terminal workflow guidance を追加し、`workflow_complete` は terminal transition であり、close 後の追加作業は新しい workflow を開始すべきことを明記しました。さらに、README の `Agent workflow usage guidance` と `docs/workflow-model.md` にも、terminal workflow は inspect 対象であって continuation 対象ではなく、close 後の追加作業は新しい workflow または適切な continuation path で扱うべきことを追記済みです。
+この整理に合わせて、README と `docs/roadmap.md` に **tool-to-version mapping の説明を追加済み**です。また、`.rules` にも terminal workflow guidance を追加し、`workflow_complete` は terminal transition であり、close 後の追加作業は新しい workflow を開始すべきことを明記しました。さらに、README の `Agent workflow usage guidance` と `docs/workflow-model.md` にも、terminal workflow は inspect 対象であって continuation 対象ではなく、close 後の追加作業は新しい workflow または適切な continuation path で扱うべきことを追記済みです。加えて、`docs/architecture.md` にも同趣旨の説明を追加し、completion semantics・checkpoint semantics・terminal resumable status の各節で、terminal workflow の扱いが `.rules` / README / workflow model と整合するようそろえる方針で進めています。
 
 ## この session で完了したこと
 
@@ -170,12 +170,13 @@ README の手順に沿って、以下を実施しました。
 
 ## 次セッションでやること
 
-1. 実際の Zed などの MCP クライアント上の AI エージェントで、更新後の `.rules` と関連ドキュメントに従った workflow-aware な運用が回るか確認する
-2. 実運用 workflow を開始または再開したら、以下をこの note に記録する
+1. `docs/architecture.md` に追加した terminal workflow / close-after-complete guidance が、`.rules`・README・`docs/workflow-model.md` と矛盾しないか確認する
+2. 実際の Zed などの MCP クライアント上の AI エージェントで、更新後の `.rules` と関連ドキュメントに従った workflow-aware な運用が回るか確認する
+3. 実運用 workflow を開始または再開したら、以下をこの note に記録する
    - `workspace_id`
    - `workflow_instance_id`
    - `attempt_id`
    - `ticket_id`
-3. `.envrc` の扱いを確認し、必要なら整理する
-4. `tests/test_workflow_service.py` の未 commit 差分を確認し、意図した変更なら commit 対象に含める
-5. `README.md` と `.gitignore` の未 commit 差分が残っていれば、必要に応じて整理して commit する
+4. `.envrc` の扱いを確認し、必要なら整理する
+5. `tests/test_workflow_service.py` の未 commit 差分を確認し、意図した変更なら commit 対象に含める
+6. `README.md` と `.gitignore` の未 commit 差分が残っていれば、必要に応じて整理して commit する

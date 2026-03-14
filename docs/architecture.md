@@ -468,6 +468,12 @@ Typical mapping:
 
 The external tool name remains `workflow_complete`, but the architectural meaning is broader than success-only completion.
 
+`workflow_complete` should not be treated as a general-purpose progress-save operation.
+
+If more work may still occur in the current work loop, the system should prefer another checkpoint and delay `workflow_complete` until the work is truly done.
+
+Once a workflow becomes terminal, it should be inspected rather than continued as active work. If additional work is needed after terminal closure, the system should create a new workflow instance or other explicit continuation path rather than appending new checkpoints to the closed workflow.
+
 ---
 
 ## 9. Checkpoint and Resume Architecture
@@ -477,6 +483,8 @@ The external tool name remains `workflow_complete`, but the architectural meanin
 A checkpoint is not merely a lightweight event record.
 
 A checkpoint is a **resume snapshot** that captures enough structured state for safe continuation.
+
+Checkpoint creation applies only to operationally open workflow and attempt state. Once the workflow or active attempt is terminal, the system should reject additional checkpoint creation for that closed execution path.
 
 Checkpoint data should include:
 
@@ -528,6 +536,8 @@ Possible `resumable_status` values include:
 - `terminal`
 - `blocked`
 - `inconsistent`
+
+When `resumable_status = terminal`, clients should interpret the result as “inspect final state” rather than “continue execution”.
 
 Possible warnings/issues include:
 
