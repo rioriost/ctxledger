@@ -1,143 +1,499 @@
-この session では、`ctxledger` の **`0.2.0` release closeout** を進め、`docs/roadmap.md` にある `0.2.0` 必須項目の実装状態を改めて確認したうえで、**release metadata を `0.2.0` に揃える最終段階** に入りました。確認の結果、`memory_search` は引き続き stub のままですが、これは roadmap 上も `0.3` 以降の扱いであり、`0.2.0` closeout criteria には含まれていません。一方で、`memory_remember_episode`、`memory_get_context` の episode-oriented retrieval、PostgreSQL-backed persistence / retrieval、details contract、unit / integration coverage、そして HTTPS/TLS operator path は `0.2.0` の必須実装として概ね揃っていると判断できました。これにより、残作業は主に **version / changelog / release tag / git hygiene** に寄っている状態です。
+今回進めたこと
 
-## この session で確認できたこと
+`0.3.0` memory foundation をさらに進めて、**`memory_search` を episode 直接検索から `memory_items` ベースへ移行**しました。  
+前回までに入っていた
 
-- `docs/roadmap.md` の `0.2.0` 必須項目を再点検した
-  - `memory_remember_episode` は append-only episodic capture として実装済み
-  - `workflow_instance_id` validation は揃っている
-  - optional `attempt_id` validation / canonical persistence も揃っている前提で整理可能
-  - `memory_get_context` は stub ではなく episode-oriented retrieval として機能している
-  - retrieval path は
-    - `workflow_instance_id`
-    - `workspace_id`
-    - `ticket_id`
-    をサポートしている
-  - `limit`
-  - `include_episodes`
-  - summary / metadata keys / metadata values に対する lightweight query filtering
-    が揃っている
-  - details contract として
-    - `query`
-    - `normalized_query`
-    - `lookup_scope`
-    - `workspace_id`
-    - `workflow_instance_id`
-    - `ticket_id`
-    - `limit`
-    - `include_episodes`
-    - `include_memory_items`
-    - `include_summaries`
-    - `resolved_workflow_count`
-    - `resolved_workflow_ids`
-    - `query_filter_applied`
-    - `episodes_before_query_filter`
-    - `matched_episode_count`
-    - `episodes_returned`
-    が実装・テスト・docs でかなり揃っていることを再確認した
-  - unit / PostgreSQL integration coverage も存在する
-  - docs も
-    - implemented `memory_remember_episode`
-    - partial `memory_get_context`
-    - stubbed `memory_search`
-    を区別している
+- repository / unit-of-work wiring
+- episode → memory_item ingest
 
-- `memory_search` が `not_implemented` を返すことを実際に再確認した
-  - ただしこれは `0.2.0` 未達の証拠ではなく、
-    roadmap / README / docs 上でも **`0.3` 向け future work**
-    として整理されている
-  - この点を release 判断に使うなら、
-    **`memory_search` は `0.2.0` blocker ではない**
-    と扱うのが正しい
+の上に、今回は **read path** と **integration coverage** をつなげています。
 
-- `ctxledger` workflow / memory tool surface が live であることを再確認した
-  - `workspace_register` は workspace registered 応答を返せる
-  - `workflow_start` は既存 running workflow の存在を返せる
-  - `memory_get_context` は implemented response を返せる
-  - `memory_search` は visible だが未実装 stub として振る舞う
-  - つまり release closeout の前提となる canonical workflow / memory surfaces 自体は利用可能
+### 1. `src/ctxledger/memory/service.py`
+主に `search()` を更新しました。
 
-- 現在の running workflow を resume し、
-  `ctxledger-memory-closeout-followup`
-  の文脈で closeout を進めていることを確認した
-  - workflow は still `running`
-  - latest checkpoint は HTTPS small-auth path 追加時点の内容
-  - 今回の作業は、その後続として
-    **release closeout metadata を整える段階**
-    に位置づく
+変更したこと:
 
-## この session で着手した closeout 変更
+- `memory_search` の実装を
+  - episode lexical search
+  - → **memory-item-based lexical search**
+  に切り替えた
+- `workspace_id` を UUID として解釈し、
+  `memory_item_repository.list_by_workspace_id()` から検索対象を取るようにした
+- 検索対象は現状:
+  - `content`
+  - metadata key/value
+- scoring も episode 用から memory item 用へ寄せた
+  - `content` match
+  - `metadata_keys` match
+  - `metadata_values` match
 
-- version metadata の更新に着手した
-  - `pyproject.toml`
-    - `version = "0.1.0"` → `version = "0.2.0"`
-  - `src/ctxledger/__init__.py`
-    - fallback version 出力 `0.1.0` → `0.2.0`
+あわせて `SearchResultRecord` も memory-item ベースに広げました。
 
-- `docs/CHANGELOG.md` の release entry 整理に着手した
-  - `0.2.0` entry を切り、
-    episodic memory closeout と HTTPS-enabled MCP operator path を release note としてまとめる方向で更新を開始した
-  - ただし changelog は session 中に複数回整理し直しており、
-    **最終版が意図通りに簡潔・整合しているかの最終確認がまだ必要**
-  - 次回は changelog を必ず再読して、
-    `0.2.0` release note が
-    - memory closeout
-    - HTTPS/TLS operator path
-    - `memory_search` remains stubbed
-    の3点を過不足なく表しているかを見ること
+追加 / 変更されたフィールド:
 
-## release tag 前に重要と判断したこと
+- `memory_id`
+- `workspace_id`
+- `episode_id`
+- `workflow_instance_id` は optional
+- `summary` は memory item の `content` を返す形
+- `attempt_id` は現状 `None`
+- `metadata`
+- `score`
+- `matched_fields`
 
-- 現在の git 状態では、
-  - `last_session.md` に未コミット変更
-  - `docker/traefik/certs/localhost.crt`
-  - `docker/traefik/certs/localhost.key`
-    の未追跡ファイル
-  があることを確認した
-- 特に `localhost.key` は **local private key material**
-  なので、release commit / tag に含めないことを必ず再確認する必要がある
-- `.rules` / cert README の運用方針上も、
-  **secret material を tracked change として混ぜない**
-  ことが重要
-- そのため、release closeout の次アクションは
-  - git status を再確認
-  - local cert files が staging 対象に入っていないことを確認
-  - 必要なら ignore / selection を慎重に行う
-  - そのうえで version + changelog + last_session を commit
-  - 最後に `v0.2.0` tag
-  の順が安全
+現状の result は、**memory item を返しつつ、summary 互換の surface を維持する過渡形**です。
 
-## 次の session でやるべきこと
+### 2. `src/ctxledger/runtime/serializers.py`
+search response serializer も新 shape に合わせて更新しました。
 
-1. `docs/CHANGELOG.md` を再読して、`0.2.0` entry が clean か最終確認する
-   - duplicate section
-   - wording mismatch
-   - `0.2.0` / `0.1.0` の混線
-   がないか見る
+追加で serialize するようになったもの:
 
-2. `pyproject.toml` と `src/ctxledger/__init__.py` の version bump が両方 `0.2.0` で揃っていることを確認する
+- `memory_id`
+- `workspace_id`
+- `episode_id`
+- optional `workflow_instance_id`
 
-3. `last_session.md` を今回の closeout 状態に更新して commit 対象へ含める
+つまり、runtime / MCP 応答でも **memory-item-based result shape** が通るようになりました。
 
-4. git hygiene を確認する
-   - `docker/traefik/certs/localhost.crt`
-   - `docker/traefik/certs/localhost.key`
-   が release commit に入らないことを確認する
-   - 特に `.key` を絶対に含めない
+### 3. `tests/test_coverage_targets.py`
+既存テストを更新しました。
 
-5. 問題なければ release commit を作る
-   - message は `Release 0.2.0` 系でよい
+主に確認するようにしたこと:
 
-6. その後 `v0.2.0` tag を付ける
+- `remember_episode()` 後に作られた `memory_item` が
+  `memory_search` の結果として返る
+- `search_mode == "memory_item_lexical"`
+- `memory_items_considered`
+- hit result に
+  - `memory_id`
+  - `workspace_id`
+  - `episode_id`
+  が入る
+- `matched_fields` が `summary` ではなく **`content`** になる
 
-7. workflow 上も
-   - closeout commit
-   - tag 作成
-   - verification status
-   を checkpoint / complete に反映する
+### 4. `tests/test_mcp_tool_handlers.py`
+MCP tool handler 側の期待値も新 shape に更新しました。
 
-## 現在の判断
+変更したこと:
 
-- **`0.2.0` 必須実装は概ね完了**
-- **`memory_search` stub は `0.2.0` blocker ではない**
-- **残作業は release metadata / changelog / git hygiene / tag**
-- 次回は **tag を打つ直前の最終整合確認** から始めるのが最短
+- success message を
+  - `Episode-based memory search completed successfully.`
+  - → `Memory-item-based lexical search completed successfully.`
+- details を
+  - `search_mode = "memory_item_lexical"`
+  - `memory_items_considered = 1`
+  に更新
+- serialized result に
+  - `memory_id`
+  - `workspace_id`
+  - `episode_id`
+  - `workflow_instance_id = None`
+  を期待するようにした
+- `matched_fields` は `content`
+
+### 5. `tests/test_postgres_integration.py`
+PostgreSQL integration に、**memory search の end-to-end テスト**を追加しました。
+
+追加したテストの流れ:
+
+1. workspace register
+2. workflow start
+3. `remember_episode()` を 2 件実行
+4. `memory_search(query="postgres", workspace_id=...)`
+5. 結果が memory item ベースになっていることを確認
+6. DB 上でも `memory_items` が作られていることを確認
+
+このテストで確認していること:
+
+- write path:
+  - episode persistence
+  - episode → memory_item ingest
+- read path:
+  - workspace-scoped memory item retrieval
+  - lexical hit
+- details:
+  - `search_mode`
+  - `memory_items_considered`
+  - `results_returned`
+
+## ここまでの意味
+
+これで `0.3.0` の memory path は、少なくとも最初の1本として
+
+- repository contract
+- in-memory / PostgreSQL repository
+- unit-of-work wiring
+- episode persistence
+- episode → memory_item ingest
+- **memory_items ベース search**
+- serializer / MCP surface
+- PostgreSQL integration coverage
+
+までつながりました。
+
+つまり、memory subsystem はもう
+
+- 「保存できる器」
+- 「投入できる」
+- 「検索できる」
+
+ところまで一通り通り始めた状態です。
+
+## 現時点でまだ未完了の部分
+
+現状では、まだ次は未実装です。
+
+- `memory_search` の ranking をより洗練すること
+- `attempt_id` / `workflow_instance_id` を search result により豊かに戻すこと
+- embedding の生成/保存
+- `pgvector` 類似検索
+- hybrid ranking
+- type / provenance / filter の活用強化
+
+今の `memory_search` は **semantic search ではなく lexical search のまま** です。  
+ただし検索対象は episode ではなく `memory_items` に移ったので、embedding / vector 検索へ進むための足場はかなりよくなりました。
+
+## 補足
+
+今回の変更で少なくとも以下は diagnostics が clean でした。
+
+- `src/ctxledger/memory/service.py`
+- `src/ctxledger/runtime/serializers.py`
+- `tests/test_coverage_targets.py`
+- `tests/test_mcp_tool_handlers.py`
+- `tests/test_postgres_integration.py`
+
+また、`UnitOfWorkMemoryItemRepository.list_by_episode_id()` に残っていた不自然な error code も、
+`NOT_IMPLEMENTED` 系へ揃え直しました。
+
+## workflow / handoff メモ
+
+この session では `last_session.md` の更新までは進めたが、  
+**workflow checkpoint に必要な正しい `attempt_id` の再取得と canonical 記録はまだ未実施**です。
+
+以前確認できていた running workflow の `workflow_instance_id` はあるが、  
+checkpoint を打つ前に次回はまず resume 情報から **正しい `attempt_id` を確定**すること。
+
+## 次の最短ルート
+
+次はこの順が自然です。
+
+1. workflow resume から `attempt_id` を取り直して checkpoint を打つ
+2. search result に必要なら `workflow_instance_id` / `attempt_id` の復元方針を決める
+3. embedding 生成・保存 path を入れる
+4. `pgvector` 類似検索
+5. hybrid ranking
+
+このまま続けるなら、次にやるべきことは  
+**canonical workflow checkpoint を打ったうえで、embedding / vector search の前段設計に入ること** です。
+
+続けて、**embedding 保存パスのテスト**まで通しました。
+
+## 今回やったこと
+
+### `tests/test_coverage_targets.py`
+追加・修正した内容:
+
+#### 1. `make_settings()` を更新
+- `EmbeddingSettings` の default を含めるようにしました
+- これで config を使う他のテストにも影響が出にくい状態です
+
+#### 2. local stub embedding 保存テストを追加
+- `test_memory_service_persists_local_stub_embedding_after_memory_item_ingest`
+
+確認していること:
+- `remember_episode()` 実行
+- `memory_item` が 1 件作られる
+- `memory_embedding` も 1 件作られる
+- `memory_id` が対応する
+- `embedding_model`
+- vector length
+- `content_hash`
+が期待どおり
+
+#### 3. external provider 未実装時の継続テストを追加
+- `test_memory_service_skips_embedding_persistence_when_external_provider_is_unimplemented`
+
+確認していること:
+- external provider descriptor を使っても
+- `remember_episode()` 自体は成功
+- `memory_item` は保存される
+- `memory_embeddings` は保存されない
+
+#### 4. hash テストの修正
+- local stub は metadata-aware hash を使うようにしたので
+- 期待値も metadata 込みに合わせました
+
+### `src/ctxledger/memory/embeddings.py`
+- `LocalStubEmbeddingGenerator` が
+  `compute_content_hash(text, metadata)` を使うよう修正
+
+## 実行結果
+
+focused test 実行結果:
+
+- `python -m pytest -q tests/test_coverage_targets.py -k 'embedding or persists_local_stub_embedding or skips_embedding_persistence'`
+- **9 passed**
+
+## diagnostics
+
+clean です。
+
+- `ctxledger/tests/test_coverage_targets.py`
+- `ctxledger/src/ctxledger/memory/embeddings.py`
+
+## いまの状態
+
+これで embedding まわりは少なくとも
+
+- provider-selectable config
+- generator abstraction
+- local stub generation
+- ingest 時の embedding 保存
+- external provider 未実装でも write path 継続
+- unit-level verification
+
+まで揃いました。
+
+## 次の最短ルート
+
+次にやる価値が高いのはこのどちらかです。
+
+1. **PostgreSQL integration で local stub embedding 保存を確認**
+   - `remember_episode`
+   - `memory_embeddings` persistence
+   - `list_by_memory_id`
+2. **`custom_http` provider の実 HTTP 実装**
+   - 外部API選択要件をさらに前に進めるならこちら
+
+私のおすすめは、まず  
+**PostgreSQL integration で embedding 保存まで通す**  
+です。  
+そのあと external HTTP provider 実装に進むと壊れにくいです。
+
+## 今回の追記
+
+上のおすすめどおり、**PostgreSQL integration で local stub embedding 保存まで確認済み**です。
+
+### 確認できたこと
+- `tests/test_postgres_integration.py` の
+  `test_postgres_memory_remember_episode_persists_local_stub_embedding`
+  で検証
+- `remember_episode()` 実行後に
+  - `memory_item` が workspace 配下に 1 件作成される
+  - 対応する `memory_embedding` が 1 件保存される
+- 保存された embedding について
+  - `memory_id` が memory item と一致
+  - `embedding_model == "local-stub-v1"`
+  - vector length は `1536`
+  - `content_hash` が入る
+
+### 実行結果
+- `python -m pytest -q tests/test_postgres_integration.py -k 'persists_local_stub_embedding'`
+- **1 passed, 23 deselected**
+
+### diagnostics
+- `tests/test_postgres_integration.py`: clean
+- `src/ctxledger/memory/embeddings.py`: clean
+
+## 次回の続き方
+次は以下のどちらかに進むのが自然です。
+
+1. `custom_http` provider の実 HTTP 実装
+2. vector 類似検索 / `pgvector` query path の導入
+
+引き続き土台固めを優先するなら、次は  
+**`custom_http` provider 実装前に embedding read/query path の要件整理**  
+をしてから進めるとやりやすいです。
+
+## 今回の追記
+
+そのまま続けて、**`custom_http` provider の実 HTTP 実装** と  
+**PostgreSQL integration での custom HTTP embedding 保存確認**、さらに  
+**`pgvector` 類似検索の repository 土台** まで進めました。
+
+### 1. `src/ctxledger/memory/embeddings.py`
+`custom_http` provider の実 HTTP path を追加しました。
+
+入れたこと:
+- `urllib` ベースの `POST` 呼び出し
+- request payload:
+  - `text`
+  - `model`
+  - `metadata`
+- request headers:
+  - `Authorization: Bearer ...`
+  - `Content-Type: application/json`
+  - `Accept: application/json`
+
+response の取り扱い:
+- top-level
+  - `embedding`
+  - `vector`
+- nested
+  - `data[0].embedding`
+  - `data[0].vector`
+のどちらでも読めるようにした
+
+model も
+- top-level `model`
+- nested `data[0].model`
+から拾えるようにしました。
+
+error mapping:
+- HTTP error
+- transport error
+- invalid JSON
+- embedding vector 不在
+を `EmbeddingGenerationError` に正規化しています。
+
+### 2. `tests/test_coverage_targets.py`
+`custom_http` generator 向け focused test を追加・更新しました。
+
+確認していること:
+- top-level payload から embedding を返せる
+- nested `data` payload から embedding を返せる
+- HTTP 503 failure を details 付きで返す
+- invalid JSON failure を返す
+- missing embedding failure を返す
+
+あわせて、既存の external provider の未実装確認は  
+`CUSTOM_HTTP` ではなく `OPENAI` 側の未実装確認に寄せ直しました。
+
+### 3. `tests/test_postgres_integration.py`
+PostgreSQL integration に、**custom HTTP embedding 保存テスト**を追加しました。
+
+追加したもの:
+- `FakeCustomHTTPEmbeddingGenerator`
+- `test_postgres_memory_remember_episode_persists_custom_http_embedding`
+
+確認していること:
+- `MemoryService` に fake custom HTTP generator を注入
+- `remember_episode()` 実行
+- generator に期待どおり
+  - `text`
+  - `metadata`
+  が渡る
+- PostgreSQL 側に
+  - `memory_item`
+  - 対応する `memory_embedding`
+  が保存される
+- 保存された embedding について
+  - `embedding_model == "custom-http-test-model"`
+  - `content_hash == "custom-http-content-hash"`
+  - vector が期待どおり
+  になっている
+
+### 4. integration 実行時に分かったこと
+最初の custom HTTP integration test は一度失敗しました。
+
+原因:
+- PostgreSQL の `memory_embeddings.embedding` は `VECTOR(1536)`
+- fake custom HTTP generator は最初 `4` 次元 vector を返していた
+
+つまり、問題は本体実装というより  
+**integration test fixture の vector dimension 不整合**でした。
+
+そのため fake generator を `1536` 次元に直して再実行し、通ることを確認しました。
+
+### 5. `src/ctxledger/memory/service.py`
+embedding repository contract に、**類似検索用の read path** を追加しました。
+
+追加したもの:
+- `MemoryEmbeddingRepository.find_similar(...)`
+- `InMemoryMemoryEmbeddingRepository.find_similar(...)`
+- `UnitOfWorkMemoryEmbeddingRepository.find_similar(...)`
+
+in-memory 実装は今の段階では
+- query embedding と stored embedding の単純な内積ベース
+- created_at を tie-break
+の最小実装です。
+
+つまり、service/repository contract の上では  
+**embedding write だけでなく similarity read の入口**ができました。
+
+### 6. `src/ctxledger/db/postgres.py`
+PostgreSQL repository に、**`pgvector` 類似検索 query path** を追加しました。
+
+追加したもの:
+- `PostgresMemoryEmbeddingRepository.find_similar(...)`
+
+query の要点:
+- `memory_embeddings` と `memory_items` を join
+- `me.embedding IS NOT NULL`
+- `ORDER BY me.embedding <-> %s::vector ASC`
+- `workspace_id` がある場合は
+  `mi.workspace_id = %s`
+  で workspace scope をかける
+
+つまり、repository 層には少なくとも
+- embedding 保存
+- `memory_id` 単位の取得
+- `pgvector` 類似検索
+が揃い始めた状態です。
+
+## 実行結果
+
+focused custom HTTP unit test:
+- `python -m pytest -q tests/test_coverage_targets.py -k 'custom_http_embedding_generator or external_embedding_generator_reports_not_implemented_provider_details or external_embedding_generator_requires_api_key_at_runtime'`
+- **7 passed**
+
+focused PostgreSQL embedding integration:
+- `python -m pytest -q tests/test_postgres_integration.py -k 'persists_custom_http_embedding or persists_local_stub_embedding'`
+- **2 passed, 23 deselected**
+
+## diagnostics
+
+clean です。
+- `src/ctxledger/memory/embeddings.py`
+- `src/ctxledger/memory/service.py`
+- `src/ctxledger/db/postgres.py`
+- `tests/test_coverage_targets.py`
+- `tests/test_postgres_integration.py`
+
+## いまの状態
+
+これで embedding まわりは少なくとも
+
+- provider-selectable config
+- generator abstraction
+- local stub generation
+- `custom_http` 実 HTTP generation
+- ingest 時の embedding 保存
+- local stub PostgreSQL persistence
+- custom HTTP PostgreSQL persistence
+- embedding repository similarity contract
+- PostgreSQL `pgvector` similarity query の repository 土台
+
+までつながりました。
+
+ただし現時点ではまだ
+**`memory_search` 自体は lexical-only のまま**です。
+
+いま repository 層には
+- vector search path がある
+一方で
+- service / MCP surface にはまだ semantic search を統合していない
+
+という段階です。
+
+## 次の最短ルート
+
+次にやる価値が高いのはこの順です。
+
+1. `find_similar()` の focused test を追加
+   - in-memory
+   - PostgreSQL integration
+2. `MemoryService.search()` に semantic path を足す
+   - query から embedding 生成
+   - similarity candidates を result に反映
+3. lexical + vector の hybrid ranking を入れる
+4. serializer / MCP details に
+   - `search_mode`
+   - semantic candidate count
+   - hybrid ranking 関連情報
+   を広げる
+
+このまま続けるなら、次の最短ルートは  
+**`find_similar()` の test を足してから、`memory_search` へ semantic path を統合すること**  
+です。

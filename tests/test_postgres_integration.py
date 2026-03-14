@@ -3,26 +3,44 @@ from __future__ import annotations
 import os
 import subprocess
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterator
 from uuid import uuid4
 
 import pytest
 
-from ctxledger.config import ProjectionSettings, load_settings
+from ctxledger.config import (
+    EmbeddingProvider,
+    EmbeddingSettings,
+    ProjectionSettings,
+    load_settings,
+)
 from ctxledger.db.postgres import PostgresConfig, build_postgres_uow_factory
+from ctxledger.memory.embeddings import (
+    EmbeddingRequest,
+    EmbeddingResult,
+    build_embedding_generator,
+)
 from ctxledger.memory.service import (
+    EmbeddingGenerator,
     GetMemoryContextRequest,
     MemoryFeature,
     MemoryService,
     RememberEpisodeRequest,
+    SearchMemoryRequest,
     UnitOfWorkEpisodeRepository,
+    UnitOfWorkMemoryEmbeddingRepository,
+    UnitOfWorkMemoryItemRepository,
     UnitOfWorkWorkflowLookupRepository,
+    UnitOfWorkWorkspaceLookupRepository,
 )
 from ctxledger.projection.writer import ResumeProjectionWriter
 from ctxledger.workflow.service import (
     CompleteWorkflowInput,
     CreateCheckpointInput,
+    MemoryEmbeddingRecord,
+    MemoryItemRecord,
     ProjectionArtifactType,
     ProjectionStatus,
     RecordProjectionFailureInput,
@@ -359,6 +377,298 @@ def test_postgres_workflow_service_round_trip_happy_path(
     assert completed.verify_report.status == VerifyStatus.PASSED
 
     assert terminal_resume.resumable_status == ResumableStatus.TERMINAL
+
+
+def test_postgres_memory_search_returns_memory_item_based_results(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(uow_factory)
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-search.git",
+            canonical_path="/tmp/integration-repo-memory-search",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMSEARCH-001",
+        )
+    )
+
+    first_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Investigated relevant postgres root cause",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "investigation", "component": "postgres"},
+        )
+    )
+    second_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Documented release checklist",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "docs", "component": "release"},
+        )
+    )
+
+    search = memory_service.search(
+        SearchMemoryRequest(
+            query="postgres",
+            workspace_id=str(workspace.workspace_id),
+            limit=10,
+            filters={},
+        )
+    )
+
+    assert first_episode.feature == MemoryFeature.REMEMBER_EPISODE
+    assert second_episode.feature == MemoryFeature.REMEMBER_EPISODE
+    assert search.feature == MemoryFeature.SEARCH
+    assert search.implemented is True
+    assert search.message == "Memory-item-based lexical search completed successfully."
+    assert search.details["query"] == "postgres"
+    assert search.details["normalized_query"] == "postgres"
+    assert search.details["workspace_id"] == str(workspace.workspace_id)
+    assert search.details["limit"] == 10
+    assert search.details["filters"] == {}
+    assert search.details["search_mode"] == "memory_item_lexical"
+    assert search.details["memory_items_considered"] == 2
+    assert search.details["results_returned"] == 1
+    assert len(search.results) == 1
+    assert search.results[0].workspace_id == workspace.workspace_id
+    assert search.results[0].workflow_instance_id is None
+    assert search.results[0].attempt_id is None
+    assert search.results[0].episode_id == first_episode.episode.episode_id
+    assert search.results[0].summary == "Investigated relevant postgres root cause"
+    assert search.results[0].metadata == {
+        "kind": "investigation",
+        "component": "postgres",
+    }
+    assert "content" in search.results[0].matched_fields
+    assert search.results[0].score > 0
+
+    with uow_factory() as uow:
+        assert uow.memory_items is not None
+        workspace_items = uow.memory_items.list_by_workspace_id(
+            workspace.workspace_id,
+            limit=10,
+        )
+
+    assert [item.content for item in workspace_items] == [
+        "Documented release checklist",
+        "Investigated relevant postgres root cause",
+    ]
+
+
+def test_postgres_memory_remember_episode_persists_local_stub_embedding(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(uow_factory)
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+        embedding_generator=build_embedding_generator(
+            EmbeddingSettings(
+                provider=EmbeddingProvider.LOCAL_STUB,
+                model="local-stub-v1",
+                api_key=None,
+                base_url=None,
+                dimensions=1536,
+                enabled=True,
+            )
+        ),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-embeddings-local-stub.git",
+            canonical_path="/tmp/integration-repo-memory-embeddings-local-stub",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMEMBED-LOCAL-STUB-001",
+        )
+    )
+
+    episode_response = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Persist local stub embedding for memory item",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "checkpoint", "component": "memory"},
+        )
+    )
+
+    assert episode_response.episode is not None
+
+    with uow_factory() as uow:
+        assert uow.memory_items is not None
+        assert uow.memory_embeddings is not None
+
+        workspace_items = uow.memory_items.list_by_workspace_id(
+            workspace.workspace_id,
+            limit=10,
+        )
+
+        assert len(workspace_items) == 1
+        created_memory_item = workspace_items[0]
+        memory_embeddings = uow.memory_embeddings.list_by_memory_id(
+            created_memory_item.memory_id,
+            limit=10,
+        )
+
+    assert created_memory_item.workspace_id == workspace.workspace_id
+    assert created_memory_item.episode_id == episode_response.episode.episode_id
+    assert created_memory_item.content == "Persist local stub embedding for memory item"
+    assert created_memory_item.metadata == {
+        "kind": "checkpoint",
+        "component": "memory",
+    }
+
+    assert len(memory_embeddings) == 1
+    assert memory_embeddings[0].memory_id == created_memory_item.memory_id
+    assert memory_embeddings[0].embedding_model == "local-stub-v1"
+    assert len(memory_embeddings[0].embedding) == 1536
+    assert memory_embeddings[0].content_hash is not None
+
+
+class FakeCustomHTTPEmbeddingGenerator(EmbeddingGenerator):
+    def __init__(self) -> None:
+        self.requests: list[EmbeddingRequest] = []
+
+    def generate(self, request: EmbeddingRequest) -> EmbeddingResult:
+        self.requests.append(request)
+        return EmbeddingResult(
+            provider="custom_http",
+            model="custom-http-test-model",
+            vector=(0.125,) * 1536,
+            content_hash="custom-http-content-hash",
+        )
+
+
+def test_postgres_memory_remember_episode_persists_custom_http_embedding(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(uow_factory)
+    embedding_generator = FakeCustomHTTPEmbeddingGenerator()
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+        embedding_generator=embedding_generator,
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-embeddings-custom-http.git",
+            canonical_path="/tmp/integration-repo-memory-embeddings-custom-http",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMEMBED-CUSTOM-HTTP-001",
+        )
+    )
+
+    episode_response = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Persist custom HTTP embedding for memory item",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={
+                "kind": "checkpoint",
+                "component": "memory",
+                "provider": "custom_http",
+            },
+        )
+    )
+
+    assert episode_response.episode is not None
+    assert len(embedding_generator.requests) == 1
+    assert embedding_generator.requests[0].text == (
+        "Persist custom HTTP embedding for memory item"
+    )
+    assert embedding_generator.requests[0].metadata == {
+        "kind": "checkpoint",
+        "component": "memory",
+        "provider": "custom_http",
+    }
+
+    with uow_factory() as uow:
+        assert uow.memory_items is not None
+        assert uow.memory_embeddings is not None
+
+        workspace_items = uow.memory_items.list_by_workspace_id(
+            workspace.workspace_id,
+            limit=10,
+        )
+
+        assert len(workspace_items) == 1
+        created_memory_item = workspace_items[0]
+        memory_embeddings = uow.memory_embeddings.list_by_memory_id(
+            created_memory_item.memory_id,
+            limit=10,
+        )
+
+    assert created_memory_item.workspace_id == workspace.workspace_id
+    assert created_memory_item.episode_id == episode_response.episode.episode_id
+    assert (
+        created_memory_item.content == "Persist custom HTTP embedding for memory item"
+    )
+    assert created_memory_item.metadata == {
+        "kind": "checkpoint",
+        "component": "memory",
+        "provider": "custom_http",
+    }
+
+    assert len(memory_embeddings) == 1
+    assert memory_embeddings[0].memory_id == created_memory_item.memory_id
+    assert memory_embeddings[0].embedding_model == "custom-http-test-model"
+    assert memory_embeddings[0].embedding == (0.125,) * 1536
+    assert memory_embeddings[0].content_hash == "custom-http-content-hash"
 
 
 def test_postgres_memory_get_context_returns_multiple_workflow_episodes(
@@ -846,6 +1156,143 @@ def test_postgres_memory_get_context_applies_initial_query_filtering(
     assert metadata_context.details["episodes_before_query_filter"] == 3
     assert metadata_context.details["matched_episode_count"] == 1
     assert metadata_context.details["episodes_returned"] == 1
+
+
+def test_postgres_memory_item_and_embedding_repositories_round_trip(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(uow_factory)
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-items.git",
+            canonical_path="/tmp/integration-repo-memory-items",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMITEM-001",
+        )
+    )
+
+    episode = (
+        MemoryService(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        )
+        .remember_episode(
+            RememberEpisodeRequest(
+                workflow_instance_id=str(
+                    started.workflow_instance.workflow_instance_id
+                ),
+                summary="Episode backing semantic memory items",
+                attempt_id=str(started.attempt.attempt_id),
+                metadata={"kind": "integration"},
+            )
+        )
+        .episode
+    )
+    assert episode is not None
+
+    memory_id = uuid4()
+    episode_id = episode.episode_id
+    older_memory_item = MemoryItemRecord(
+        memory_id=memory_id,
+        workspace_id=workspace.workspace_id,
+        episode_id=episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Older semantic memory item",
+        metadata={"kind": "investigation"},
+        created_at=datetime(2024, 2, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 1, tzinfo=UTC),
+    )
+    newer_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace.workspace_id,
+        episode_id=episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Newer semantic memory item",
+        metadata={"kind": "implementation"},
+        created_at=datetime(2024, 2, 2, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 2, tzinfo=UTC),
+    )
+
+    older_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=memory_id,
+        embedding_model="test-embedding-model",
+        embedding=(0.1,) * 1536,
+        content_hash="older-content-hash",
+        created_at=datetime(2024, 2, 3, tzinfo=UTC),
+    )
+    newer_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=memory_id,
+        embedding_model="test-embedding-model-v2",
+        embedding=(0.4,) * 1536,
+        content_hash="newer-content-hash",
+        created_at=datetime(2024, 2, 4, tzinfo=UTC),
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_items is not None
+        assert uow.memory_embeddings is not None
+
+        created_older_item = uow.memory_items.create(older_memory_item)
+        created_newer_item = uow.memory_items.create(newer_memory_item)
+        created_older_embedding = uow.memory_embeddings.create(older_embedding)
+        created_newer_embedding = uow.memory_embeddings.create(newer_embedding)
+        uow.commit()
+
+    assert created_older_item == older_memory_item
+    assert created_newer_item == newer_memory_item
+    assert created_older_embedding == older_embedding
+    assert created_newer_embedding == newer_embedding
+
+    with uow_factory() as uow:
+        assert uow.memory_items is not None
+        assert uow.memory_embeddings is not None
+
+        workspace_items = uow.memory_items.list_by_workspace_id(
+            workspace.workspace_id,
+            limit=10,
+        )
+        episode_items = uow.memory_items.list_by_episode_id(
+            episode_id,
+            limit=10,
+        )
+        memory_embeddings = uow.memory_embeddings.list_by_memory_id(
+            memory_id,
+            limit=10,
+        )
+
+    assert [item.content for item in workspace_items] == [
+        "Newer semantic memory item",
+        "Older semantic memory item",
+    ]
+    assert [item.content for item in episode_items] == [
+        "Newer semantic memory item",
+        "Older semantic memory item",
+    ]
+    assert [embedding.embedding_model for embedding in memory_embeddings] == [
+        "test-embedding-model-v2",
+        "test-embedding-model",
+    ]
+    assert memory_embeddings[0].embedding == (0.4,) * 1536
+    assert memory_embeddings[1].embedding == (0.1,) * 1536
+    assert started.workflow_instance.workflow_instance_id is not None
 
 
 def test_postgres_terminal_resume_is_for_inspection_not_continuation(

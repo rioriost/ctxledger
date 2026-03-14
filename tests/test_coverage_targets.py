@@ -10,6 +10,7 @@ import types
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from urllib import error as urllib_error
 from uuid import uuid4
 
 import pytest
@@ -19,16 +20,29 @@ from ctxledger.config import (
     AppSettings,
     DatabaseSettings,
     DebugSettings,
+    EmbeddingProvider,
+    EmbeddingSettings,
     HttpSettings,
     LoggingSettings,
     LogLevel,
     ProjectionSettings,
+)
+from ctxledger.memory.embeddings import (
+    DisabledEmbeddingGenerator,
+    EmbeddingGenerationError,
+    EmbeddingRequest,
+    ExternalAPIEmbeddingGenerator,
+    LocalStubEmbeddingGenerator,
+    build_embedding_generator,
+    compute_content_hash,
 )
 from ctxledger.memory.service import (
     EpisodeRecord,
     GetContextResponse,
     GetMemoryContextRequest,
     InMemoryEpisodeRepository,
+    InMemoryMemoryEmbeddingRepository,
+    InMemoryMemoryItemRepository,
     InMemoryWorkflowLookupRepository,
     MemoryErrorCode,
     MemoryFeature,
@@ -37,6 +51,8 @@ from ctxledger.memory.service import (
     RememberEpisodeRequest,
     RememberEpisodeResponse,
     SearchMemoryRequest,
+    SearchMemoryResponse,
+    SearchResultRecord,
     StubResponse,
 )
 from ctxledger.projection.writer import ProjectionWriteError, ResumeProjectionWriter
@@ -62,6 +78,7 @@ from ctxledger.runtime.serializers import (
     serialize_get_context_response,
     serialize_runtime_introspection,
     serialize_runtime_introspection_collection,
+    serialize_search_memory_response,
     serialize_stub_response,
     serialize_workflow_resume,
 )
@@ -134,6 +151,14 @@ def make_settings(
         logging=LoggingSettings(
             level=LogLevel.INFO,
             structured=True,
+        ),
+        embedding=EmbeddingSettings(
+            provider=EmbeddingProvider.DISABLED,
+            model="local-stub-v1",
+            api_key=None,
+            base_url=None,
+            dimensions=None,
+            enabled=False,
         ),
     )
 
@@ -917,7 +942,7 @@ def test_cli_helpers_cover_schema_path_and_version_fallback(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.1.0"
+    assert captured.out.strip() == "0.2.0"
 
 
 def test_cli_apply_schema_covers_missing_url_and_driver_paths(
@@ -3228,6 +3253,513 @@ def test_serialize_stub_response_and_runtime_introspection_helpers() -> None:
     assert serialized_collection == [serialized_runtime]
 
 
+def test_serialize_search_memory_response_serializes_results() -> None:
+    workflow_id = uuid4()
+    attempt_id = uuid4()
+    created_at = datetime(2024, 3, 4, 5, 6, 7, tzinfo=UTC)
+    response = SearchMemoryResponse(
+        feature=MemoryFeature.SEARCH,
+        implemented=True,
+        message="Episode-based memory search completed successfully.",
+        status="ok",
+        available_in_version="0.3.0",
+        timestamp=created_at,
+        results=(
+            SearchResultRecord(
+                memory_id=uuid4(),
+                workspace_id=workflow_id,
+                episode_id=uuid4(),
+                workflow_instance_id=None,
+                summary="Recovered context",
+                attempt_id=attempt_id,
+                metadata={"kind": "root-cause"},
+                score=4.5,
+                matched_fields=("summary", "metadata_values"),
+                created_at=created_at,
+                updated_at=created_at,
+            ),
+        ),
+        details={
+            "query": "root cause",
+            "normalized_query": "root cause",
+            "workspace_id": "ws-1",
+            "limit": 3,
+            "filters": {"kind": "episode"},
+            "search_mode": "episode_lexical",
+            "resolved_workflow_count": 1,
+            "resolved_workflow_ids": [str(workflow_id)],
+            "episodes_considered": 2,
+            "results_returned": 1,
+        },
+    )
+
+    payload = serialize_search_memory_response(response)
+
+    assert payload["feature"] == "memory_search"
+    assert payload["implemented"] is True
+    assert payload["message"] == "Episode-based memory search completed successfully."
+    assert payload["status"] == "ok"
+    assert payload["available_in_version"] == "0.3.0"
+    assert payload["timestamp"] == created_at.isoformat()
+    assert payload["details"] == {
+        "query": "root cause",
+        "normalized_query": "root cause",
+        "workspace_id": "ws-1",
+        "limit": 3,
+        "filters": {"kind": "episode"},
+        "search_mode": "episode_lexical",
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(workflow_id)],
+        "episodes_considered": 2,
+        "results_returned": 1,
+    }
+    assert payload["results"] == [
+        {
+            "memory_id": str(response.results[0].memory_id),
+            "workspace_id": str(workflow_id),
+            "episode_id": str(response.results[0].episode_id),
+            "workflow_instance_id": None,
+            "summary": "Recovered context",
+            "attempt_id": str(attempt_id),
+            "metadata": {"kind": "root-cause"},
+            "score": 4.5,
+            "matched_fields": ["summary", "metadata_values"],
+            "created_at": created_at.isoformat(),
+            "updated_at": created_at.isoformat(),
+        }
+    ]
+
+
+def test_build_embedding_generator_returns_disabled_generator_when_disabled() -> None:
+    generator = build_embedding_generator(
+        EmbeddingSettings(
+            provider=EmbeddingProvider.DISABLED,
+            model="unused",
+            api_key=None,
+            base_url=None,
+            dimensions=None,
+            enabled=False,
+        )
+    )
+
+    assert isinstance(generator, DisabledEmbeddingGenerator)
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="hello"))
+
+    assert exc_info.value.provider == "disabled"
+
+
+def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest() -> (
+    None
+):
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_embedding_repository = InMemoryMemoryEmbeddingRepository()
+    workflow_lookup = InMemoryWorkflowLookupRepository(
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TICKET-EMBED-1",
+            }
+        }
+    )
+    embedding_generator = LocalStubEmbeddingGenerator(
+        model="local-stub-v1",
+        dimensions=8,
+    )
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_embedding_repository=memory_embedding_repository,
+        embedding_generator=embedding_generator,
+        workflow_lookup=workflow_lookup,
+        workspace_lookup=workflow_lookup,
+    )
+
+    response = service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(workflow_id),
+            summary="Persist embedding for this memory item",
+            metadata={"kind": "checkpoint", "component": "memory"},
+        )
+    )
+
+    assert response.feature == MemoryFeature.REMEMBER_EPISODE
+    assert len(memory_item_repository.memory_items) == 1
+    assert len(memory_embedding_repository.embeddings) == 1
+    assert (
+        memory_embedding_repository.embeddings[0].memory_id
+        == memory_item_repository.memory_items[0].memory_id
+    )
+    assert memory_embedding_repository.embeddings[0].embedding_model == "local-stub-v1"
+    assert len(memory_embedding_repository.embeddings[0].embedding) == 8
+    assert memory_embedding_repository.embeddings[
+        0
+    ].content_hash == compute_content_hash(
+        "Persist embedding for this memory item",
+        {"kind": "checkpoint", "component": "memory"},
+    )
+
+
+def test_memory_service_skips_embedding_persistence_when_external_provider_is_unimplemented() -> (
+    None
+):
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_embedding_repository = InMemoryMemoryEmbeddingRepository()
+    workflow_lookup = InMemoryWorkflowLookupRepository(
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TICKET-EMBED-2",
+            }
+        }
+    )
+    embedding_generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.CUSTOM_HTTP,
+        model="custom-model",
+        api_key="secret",
+        base_url="https://embeddings.example.com/v1",
+    )
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_embedding_repository=memory_embedding_repository,
+        embedding_generator=embedding_generator,
+        workflow_lookup=workflow_lookup,
+        workspace_lookup=workflow_lookup,
+    )
+
+    response = service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(workflow_id),
+            summary="External embedding provider remains optional",
+            metadata={"kind": "checkpoint", "component": "memory"},
+        )
+    )
+
+    assert response.feature == MemoryFeature.REMEMBER_EPISODE
+    assert len(memory_item_repository.memory_items) == 1
+    assert memory_embedding_repository.embeddings == ()
+
+
+def test_build_embedding_generator_returns_local_stub_generator() -> None:
+    generator = build_embedding_generator(
+        EmbeddingSettings(
+            provider=EmbeddingProvider.LOCAL_STUB,
+            model="local-stub-v1",
+            api_key=None,
+            base_url=None,
+            dimensions=8,
+            enabled=True,
+        )
+    )
+
+    assert isinstance(generator, LocalStubEmbeddingGenerator)
+
+    result = generator.generate(
+        EmbeddingRequest(
+            text="hello world",
+            metadata={"kind": "checkpoint"},
+        )
+    )
+
+    assert result.provider == "local_stub"
+    assert result.model == "local-stub-v1"
+    assert len(result.vector) == 8
+    assert result.content_hash == compute_content_hash(
+        "hello world",
+        {"kind": "checkpoint"},
+    )
+    assert all(-1.0 <= value <= 1.0 for value in result.vector)
+
+
+def test_local_stub_embedding_generator_is_deterministic() -> None:
+    generator = LocalStubEmbeddingGenerator(model="local-stub-v1", dimensions=6)
+
+    first = generator.generate(
+        EmbeddingRequest(
+            text="deterministic text",
+            metadata={"kind": "episode"},
+        )
+    )
+    second = generator.generate(
+        EmbeddingRequest(
+            text="deterministic text",
+            metadata={"kind": "episode"},
+        )
+    )
+
+    assert first == second
+    assert len(first.vector) == 6
+
+
+def test_local_stub_embedding_generator_rejects_empty_text() -> None:
+    generator = LocalStubEmbeddingGenerator(model="local-stub-v1", dimensions=4)
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="   "))
+
+    assert exc_info.value.provider == "local_stub"
+    assert exc_info.value.details == {"field": "text"}
+
+
+def test_build_embedding_generator_returns_external_provider_descriptor() -> None:
+    generator = build_embedding_generator(
+        EmbeddingSettings(
+            provider=EmbeddingProvider.OPENAI,
+            model="text-embedding-3-small",
+            api_key="secret",
+            base_url="https://api.openai.com/v1",
+            dimensions=1536,
+            enabled=True,
+        )
+    )
+
+    assert isinstance(generator, ExternalAPIEmbeddingGenerator)
+
+
+def test_external_embedding_generator_requires_api_key_at_runtime() -> None:
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.OPENAI,
+        model="text-embedding-3-small",
+        api_key=None,
+        base_url="https://api.openai.com/v1",
+    )
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="hello"))
+
+    assert exc_info.value.provider == "openai"
+    assert exc_info.value.details == {"field": "api_key"}
+
+
+def test_external_embedding_generator_reports_not_implemented_provider_details() -> (
+    None
+):
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.OPENAI,
+        model="text-embedding-3-small",
+        api_key="secret",
+        base_url="https://api.openai.com/v1",
+    )
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="hello world"))
+
+    assert exc_info.value.provider == "openai"
+    assert exc_info.value.details == {
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+        "base_url": "https://api.openai.com/v1",
+    }
+
+
+def test_custom_http_embedding_generator_returns_embedding_from_top_level_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.CUSTOM_HTTP,
+        model="custom-model",
+        api_key="secret",
+        base_url="https://embeddings.example.com/v1",
+    )
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "model": "custom-model-v2",
+                    "embedding": [0.25, -0.5, 1],
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request: object) -> FakeResponse:
+        captured["full_url"] = request.full_url
+        captured["method"] = request.get_method()
+        captured["authorization"] = request.get_header("Authorization")
+        captured["content_type"] = request.get_header("Content-type")
+        captured["accept"] = request.get_header("Accept")
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    result = generator.generate(
+        EmbeddingRequest(
+            text="hello world",
+            metadata={"kind": "episode"},
+        )
+    )
+
+    assert result.provider == "custom_http"
+    assert result.model == "custom-model-v2"
+    assert result.vector == (0.25, -0.5, 1.0)
+    assert result.content_hash == compute_content_hash(
+        "hello world",
+        {"kind": "episode"},
+    )
+    assert captured == {
+        "full_url": "https://embeddings.example.com/v1",
+        "method": "POST",
+        "authorization": "Bearer secret",
+        "content_type": "application/json",
+        "accept": "application/json",
+        "body": {
+            "text": "hello world",
+            "model": "custom-model",
+            "metadata": {"kind": "episode"},
+        },
+    }
+
+
+def test_custom_http_embedding_generator_returns_embedding_from_nested_data_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.CUSTOM_HTTP,
+        model="custom-model",
+        api_key="secret",
+        base_url="https://embeddings.example.com/v1",
+    )
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "data": [
+                        {
+                            "model": "nested-model",
+                            "embedding": [1, 2.5, -3],
+                        }
+                    ]
+                }
+            ).encode("utf-8")
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda _request: FakeResponse())
+
+    result = generator.generate(EmbeddingRequest(text="hello world"))
+
+    assert result.provider == "custom_http"
+    assert result.model == "nested-model"
+    assert result.vector == (1.0, 2.5, -3.0)
+
+
+def test_custom_http_embedding_generator_reports_http_error_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.CUSTOM_HTTP,
+        model="custom-model",
+        api_key="secret",
+        base_url="https://embeddings.example.com/v1",
+    )
+
+    def fake_urlopen(_request: object) -> object:
+        raise urllib_error.HTTPError(
+            url="https://embeddings.example.com/v1",
+            code=503,
+            msg="Service Unavailable",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="hello world"))
+
+    assert exc_info.value.provider == "custom_http"
+    assert exc_info.value.details["status_code"] == 503
+    assert exc_info.value.details["base_url"] == "https://embeddings.example.com/v1"
+
+
+def test_custom_http_embedding_generator_rejects_invalid_json_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.CUSTOM_HTTP,
+        model="custom-model",
+        api_key="secret",
+        base_url="https://embeddings.example.com/v1",
+    )
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"not-json"
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda _request: FakeResponse())
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="hello world"))
+
+    assert exc_info.value.provider == "custom_http"
+    assert exc_info.value.details["base_url"] == "https://embeddings.example.com/v1"
+    assert exc_info.value.details["response_body"] == "not-json"
+
+
+def test_custom_http_embedding_generator_rejects_missing_embedding_vector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.CUSTOM_HTTP,
+        model="custom-model",
+        api_key="secret",
+        base_url="https://embeddings.example.com/v1",
+    )
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps({"data": [{"model": "custom-model"}]}).encode("utf-8")
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda _request: FakeResponse())
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="hello world"))
+
+    assert exc_info.value.provider == "custom_http"
+    assert exc_info.value.details == {"field": "embedding"}
+
+
+def test_compute_content_hash_uses_text_and_metadata() -> None:
+    first = compute_content_hash("same text", {"kind": "episode"})
+    second = compute_content_hash("same text", {"kind": "episode"})
+    different_text = compute_content_hash("other text", {"kind": "episode"})
+    different_metadata = compute_content_hash("same text", {"kind": "checkpoint"})
+
+    assert first == second
+    assert first != different_text
+    assert first != different_metadata
+
+
 def test_build_health_status_handles_missing_runtime() -> None:
     server = make_server(runtime=None)
     server.workflow_service = None
@@ -3274,28 +3806,37 @@ def test_build_readiness_status_covers_not_started_database_unavailable_and_sche
     assert schema_not_ready_status.details["schema_ready"] is False
 
 
-def test_memory_service_records_episodes_and_keeps_stubbed_retrieval_responses() -> (
-    None
-):
+def test_memory_service_records_episodes_and_returns_search_results() -> None:
     workflow_id = uuid4()
     attempt_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()
+    workflow_lookup = InMemoryWorkflowLookupRepository(
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TICKET-1",
+            }
+        }
+    )
+    memory_item_repository = InMemoryMemoryItemRepository()
     service = MemoryService(
         episode_repository=episode_repository,
-        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=workflow_lookup,
+        workspace_lookup=workflow_lookup,
     )
 
     remember_response = service.remember_episode(
         RememberEpisodeRequest(
             workflow_instance_id=str(workflow_id),
-            summary="Episode summary",
+            summary="Episode summary with relevant context",
             attempt_id=str(attempt_id),
-            metadata={"kind": "checkpoint"},
+            metadata={"kind": "checkpoint", "topic": "relevant context"},
         )
     )
     search_response = service.search(
         SearchMemoryRequest(
-            query="find something",
+            query="relevant context",
             workspace_id="ws-1",
             limit=5,
             filters={"kind": "episode"},
@@ -3321,17 +3862,62 @@ def test_memory_service_records_episodes_and_keeps_stubbed_retrieval_responses()
     assert remember_response.episode is not None
     assert remember_response.episode.workflow_instance_id == workflow_id
     assert remember_response.episode.attempt_id == attempt_id
-    assert remember_response.episode.summary == "Episode summary"
-    assert remember_response.episode.metadata == {"kind": "checkpoint"}
+    assert remember_response.episode.summary == "Episode summary with relevant context"
+    assert remember_response.episode.metadata == {
+        "kind": "checkpoint",
+        "topic": "relevant context",
+    }
     assert remember_response.details == {
         "workflow_instance_id": str(workflow_id),
         "attempt_id": str(attempt_id),
     }
     assert len(episode_repository.episodes) == 1
+    assert len(memory_item_repository.memory_items) == 1
+    assert memory_item_repository.memory_items[0].workspace_id == UUID(
+        "00000000-0000-0000-0000-000000000001"
+    )
+    assert (
+        memory_item_repository.memory_items[0].episode_id
+        == remember_response.episode.episode_id
+    )
+    assert memory_item_repository.memory_items[0].type == "episode_note"
+    assert memory_item_repository.memory_items[0].provenance == "episode"
+    assert (
+        memory_item_repository.memory_items[0].content
+        == "Episode summary with relevant context"
+    )
+    assert memory_item_repository.memory_items[0].metadata == {
+        "kind": "checkpoint",
+        "topic": "relevant context",
+    }
 
     assert search_response.feature == MemoryFeature.SEARCH
+    assert search_response.implemented is True
+    assert search_response.status == "ok"
+    assert search_response.available_in_version == "0.3.0"
     assert search_response.details["limit"] == 5
     assert search_response.details["filters"] == {"kind": "episode"}
+    assert search_response.details["search_mode"] == "memory_item_lexical"
+    assert search_response.details["memory_items_considered"] == 1
+    assert search_response.details["results_returned"] == 1
+    assert len(search_response.results) == 1
+    assert (
+        search_response.results[0].memory_id
+        == memory_item_repository.memory_items[0].memory_id
+    )
+    assert search_response.results[0].workspace_id == UUID(
+        "00000000-0000-0000-0000-000000000001"
+    )
+    assert search_response.results[0].episode_id == remember_response.episode.episode_id
+    assert search_response.results[0].workflow_instance_id is None
+    assert search_response.results[0].attempt_id is None
+    assert search_response.results[0].summary == "Episode summary with relevant context"
+    assert search_response.results[0].metadata == {
+        "kind": "checkpoint",
+        "topic": "relevant context",
+    }
+    assert "content" in search_response.results[0].matched_fields
+    assert search_response.results[0].score > 0
 
     assert context_response.feature == MemoryFeature.GET_CONTEXT
     assert context_response.details["include_episodes"] is False

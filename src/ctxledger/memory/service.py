@@ -16,7 +16,14 @@ from enum import StrEnum
 from typing import Any, Callable, Protocol
 from uuid import UUID, uuid4
 
+from ..config import get_settings
 from ..workflow.service import UnitOfWork
+from .embeddings import (
+    EmbeddingGenerationError,
+    EmbeddingGenerator,
+    EmbeddingRequest,
+    build_embedding_generator,
+)
 
 
 class MemoryFeature(StrEnum):
@@ -77,6 +84,33 @@ class EpisodeRecord:
 
 
 @dataclass(slots=True, frozen=True)
+class MemoryItemRecord:
+    """Canonical semantic/procedural memory item record."""
+
+    memory_id: UUID
+    workspace_id: UUID | None = None
+    episode_id: UUID | None = None
+    type: str = "episode_note"
+    provenance: str = "episode"
+    content: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True, frozen=True)
+class MemoryEmbeddingRecord:
+    """Derived embedding index record for a memory item."""
+
+    memory_embedding_id: UUID
+    memory_id: UUID
+    embedding_model: str
+    embedding: tuple[float, ...] = ()
+    content_hash: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True, frozen=True)
 class RememberEpisodeResponse:
     """Response returned when an episode is persisted."""
 
@@ -101,6 +135,37 @@ class GetContextResponse:
     available_in_version: str | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     episodes: tuple[EpisodeRecord, ...] = ()
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True, frozen=True)
+class SearchResultRecord:
+    """Result item returned by memory search."""
+
+    memory_id: UUID
+    workspace_id: UUID | None
+    episode_id: UUID | None = None
+    workflow_instance_id: UUID | None = None
+    summary: str = ""
+    attempt_id: UUID | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    score: float = 0.0
+    matched_fields: tuple[str, ...] = ()
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True, frozen=True)
+class SearchMemoryResponse:
+    """Response returned when memory search results are assembled."""
+
+    feature: MemoryFeature
+    implemented: bool
+    message: str
+    status: str = "ok"
+    available_in_version: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    results: tuple[SearchResultRecord, ...] = ()
     details: dict[str, Any] = field(default_factory=dict)
 
 
@@ -176,6 +241,55 @@ class EpisodeRepository(Protocol):
         *,
         limit: int,
     ) -> tuple[EpisodeRecord, ...]: ...
+
+
+class MemoryItemRepository(Protocol):
+    """Persistence contract for semantic/procedural memory items."""
+
+    def create(self, memory_item: MemoryItemRecord) -> MemoryItemRecord: ...
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]: ...
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]: ...
+
+
+class MemoryEmbeddingRepository(Protocol):
+    """Persistence contract for derived embedding index records."""
+
+    def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord: ...
+
+    def list_by_memory_id(
+        self,
+        memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryEmbeddingRecord, ...]: ...
+
+    def find_similar(
+        self,
+        query_embedding: tuple[float, ...],
+        *,
+        limit: int,
+        workspace_id: UUID | None = None,
+    ) -> tuple[MemoryEmbeddingRecord, ...]: ...
+
+
+class WorkspaceLookupRepository(Protocol):
+    """Minimal workspace lookup contract needed by the memory service."""
+
+    def workspace_id_by_workflow_id(
+        self, workflow_instance_id: UUID
+    ) -> UUID | None: ...
 
 
 class UnitOfWorkWorkflowLookupRepository:
@@ -320,6 +434,16 @@ class InMemoryWorkflowLookupRepository:
         ]
         return tuple(matches[:limit])
 
+    def workspace_id_by_workflow_id(self, workflow_instance_id: UUID) -> UUID | None:
+        workflow_info = self._workflows_by_id.get(workflow_instance_id)
+        if workflow_info is None:
+            return None
+
+        raw_workspace_id = workflow_info.get("workspace_id")
+        if raw_workspace_id is None:
+            return None
+        return UUID(raw_workspace_id)
+
 
 class InMemoryEpisodeRepository:
     """Simple append-only in-memory episode repository."""
@@ -350,6 +474,238 @@ class InMemoryEpisodeRepository:
         return tuple(matches[:limit])
 
 
+class InMemoryMemoryItemRepository:
+    """Simple append-only in-memory semantic/procedural memory repository."""
+
+    def __init__(self) -> None:
+        self._memory_items: list[MemoryItemRecord] = []
+
+    @property
+    def memory_items(self) -> tuple[MemoryItemRecord, ...]:
+        return tuple(self._memory_items)
+
+    def create(self, memory_item: MemoryItemRecord) -> MemoryItemRecord:
+        self._memory_items.append(memory_item)
+        return memory_item
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        matches = [
+            memory_item
+            for memory_item in self._memory_items
+            if memory_item.workspace_id == workspace_id
+        ]
+        matches.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
+        return tuple(matches[:limit])
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        matches = [
+            memory_item
+            for memory_item in self._memory_items
+            if memory_item.episode_id == episode_id
+        ]
+        matches.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
+        return tuple(matches[:limit])
+
+
+class InMemoryMemoryEmbeddingRepository:
+    """Simple append-only in-memory embedding repository."""
+
+    def __init__(self) -> None:
+        self._embeddings: list[MemoryEmbeddingRecord] = []
+
+    @property
+    def embeddings(self) -> tuple[MemoryEmbeddingRecord, ...]:
+        return tuple(self._embeddings)
+
+    def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
+        self._embeddings.append(embedding)
+        return embedding
+
+    def list_by_memory_id(
+        self,
+        memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        matches = [
+            embedding
+            for embedding in self._embeddings
+            if embedding.memory_id == memory_id
+        ]
+        matches.sort(key=lambda embedding: embedding.created_at, reverse=True)
+        return tuple(matches[:limit])
+
+    def find_similar(
+        self,
+        query_embedding: tuple[float, ...],
+        *,
+        limit: int,
+        workspace_id: UUID | None = None,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        if not query_embedding:
+            return ()
+
+        scored_embeddings: list[tuple[float, MemoryEmbeddingRecord]] = []
+        for embedding in self._embeddings:
+            if len(embedding.embedding) != len(query_embedding):
+                continue
+            score = sum(
+                left * right
+                for left, right in zip(
+                    embedding.embedding, query_embedding, strict=False
+                )
+            )
+            scored_embeddings.append((score, embedding))
+
+        scored_embeddings.sort(
+            key=lambda item: (item[0], item[1].created_at),
+            reverse=True,
+        )
+        return tuple(embedding for _, embedding in scored_embeddings[:limit])
+
+
+class UnitOfWorkMemoryItemRepository:
+    """Memory item repository backed by PostgreSQL tables through the unit of work."""
+
+    def __init__(self, uow_factory: Callable[[], UnitOfWork]) -> None:
+        self._uow_factory = uow_factory
+
+    def create(self, memory_item: MemoryItemRecord) -> MemoryItemRecord:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_items") or uow.memory_items is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.REMEMBER_EPISODE,
+                    message="Memory item repository is not configured.",
+                    details={},
+                )
+            created = uow.memory_items.create(memory_item)
+            uow.commit()
+            return created
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_items") or uow.memory_items is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.SEARCH,
+                    message="Memory item repository is not configured.",
+                    details={},
+                )
+            return uow.memory_items.list_by_workspace_id(
+                workspace_id,
+                limit=limit,
+            )
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_items") or uow.memory_items is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory item repository is not configured.",
+                    details={},
+                )
+            return uow.memory_items.list_by_episode_id(
+                episode_id,
+                limit=limit,
+            )
+
+
+class UnitOfWorkWorkspaceLookupRepository:
+    """Workspace lookup backed by the application's unit of work."""
+
+    def __init__(self, uow_factory: Callable[[], UnitOfWork]) -> None:
+        self._uow_factory = uow_factory
+
+    def workspace_id_by_workflow_id(self, workflow_instance_id: UUID) -> UUID | None:
+        with self._uow_factory() as uow:
+            workflow = uow.workflow_instances.get_by_id(workflow_instance_id)
+            if workflow is None:
+                return None
+            return workflow.workspace_id
+
+
+class UnitOfWorkMemoryEmbeddingRepository:
+    """Memory embedding repository backed by PostgreSQL tables through the unit of work."""
+
+    def __init__(self, uow_factory: Callable[[], UnitOfWork]) -> None:
+        self._uow_factory = uow_factory
+
+    def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_embeddings") or uow.memory_embeddings is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.REMEMBER_EPISODE,
+                    message="Memory embedding repository is not configured.",
+                    details={},
+                )
+            created = uow.memory_embeddings.create(embedding)
+            uow.commit()
+            return created
+
+    def list_by_memory_id(
+        self,
+        memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_embeddings") or uow.memory_embeddings is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.SEARCH,
+                    message="Memory embedding repository is not configured.",
+                    details={},
+                )
+            return uow.memory_embeddings.list_by_memory_id(
+                memory_id,
+                limit=limit,
+            )
+
+    def find_similar(
+        self,
+        query_embedding: tuple[float, ...],
+        *,
+        limit: int,
+        workspace_id: UUID | None = None,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_embeddings") or uow.memory_embeddings is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.SEARCH,
+                    message="Memory embedding repository is not configured.",
+                    details={},
+                )
+            return uow.memory_embeddings.find_similar(
+                query_embedding,
+                limit=limit,
+                workspace_id=workspace_id,
+            )
+
+
 class MemoryService:
     """Memory subsystem service.
 
@@ -361,10 +717,27 @@ class MemoryService:
         self,
         *,
         episode_repository: EpisodeRepository | None = None,
+        memory_item_repository: MemoryItemRepository | None = None,
+        memory_embedding_repository: MemoryEmbeddingRepository | None = None,
+        embedding_generator: EmbeddingGenerator | None = None,
         workflow_lookup: WorkflowLookupRepository | None = None,
+        workspace_lookup: WorkspaceLookupRepository | None = None,
     ) -> None:
         self._episode_repository = episode_repository or InMemoryEpisodeRepository()
+        self._memory_item_repository = (
+            memory_item_repository or InMemoryMemoryItemRepository()
+        )
+        self._memory_embedding_repository = memory_embedding_repository
+        if embedding_generator is None:
+            try:
+                embedding_generator = build_embedding_generator(
+                    get_settings().embedding
+                )
+            except Exception:
+                embedding_generator = None
+        self._embedding_generator = embedding_generator
         self._workflow_lookup = workflow_lookup
+        self._workspace_lookup = workspace_lookup
 
     def remember_episode(
         self, request: RememberEpisodeRequest
@@ -416,6 +789,20 @@ class MemoryService:
                 metadata=dict(request.metadata),
             )
         )
+        memory_item = self._memory_item_repository.create(
+            MemoryItemRecord(
+                memory_id=uuid4(),
+                workspace_id=self._resolve_workspace_id(workflow_instance_id),
+                episode_id=episode.episode_id,
+                type="episode_note",
+                provenance="episode",
+                content=episode.summary,
+                metadata=dict(episode.metadata),
+                created_at=episode.created_at,
+                updated_at=episode.updated_at,
+            )
+        )
+        self._maybe_store_embedding(memory_item)
 
         return RememberEpisodeResponse(
             feature=MemoryFeature.REMEMBER_EPISODE,
@@ -432,8 +819,8 @@ class MemoryService:
             },
         )
 
-    def search(self, request: SearchMemoryRequest) -> StubResponse:
-        """Stub for future semantic/procedural memory retrieval."""
+    def search(self, request: SearchMemoryRequest) -> SearchMemoryResponse:
+        """Return initial memory-item-based lexical search results."""
         self._require_non_empty(
             request.query,
             field_name="query",
@@ -444,16 +831,70 @@ class MemoryService:
             feature=MemoryFeature.SEARCH,
         )
 
-        return self._not_implemented(
+        normalized_query = _normalize_query_text(request.query)
+        assert normalized_query is not None
+
+        workspace_id: UUID | None = None
+        if self._has_text(request.workspace_id):
+            workspace_id = self._parse_uuid(
+                request.workspace_id or "",
+                field_name="workspace_id",
+                feature=MemoryFeature.SEARCH,
+            )
+
+        memory_items: tuple[MemoryItemRecord, ...] = ()
+        if workspace_id is not None:
+            memory_items = self._memory_item_repository.list_by_workspace_id(
+                workspace_id,
+                limit=request.limit,
+            )
+
+        scored_results: list[SearchResultRecord] = []
+        for memory_item in memory_items:
+            score, matched_fields = self._score_memory_item_for_query(
+                memory_item=memory_item,
+                normalized_query=normalized_query,
+            )
+            if score <= 0:
+                continue
+            scored_results.append(
+                SearchResultRecord(
+                    memory_id=memory_item.memory_id,
+                    workspace_id=memory_item.workspace_id,
+                    episode_id=memory_item.episode_id,
+                    workflow_instance_id=None,
+                    summary=memory_item.content,
+                    attempt_id=None,
+                    metadata=dict(memory_item.metadata),
+                    score=score,
+                    matched_fields=matched_fields,
+                    created_at=memory_item.created_at,
+                    updated_at=memory_item.updated_at,
+                )
+            )
+
+        scored_results.sort(
+            key=lambda result: (result.score, result.created_at),
+            reverse=True,
+        )
+        limited_results = tuple(scored_results[: request.limit])
+
+        return SearchMemoryResponse(
             feature=MemoryFeature.SEARCH,
-            message=(
-                "Semantic memory search is defined architecturally but is not "
-                "implemented in v0.1.0."
-            ),
+            implemented=True,
+            message="Memory-item-based lexical search completed successfully.",
+            status="ok",
+            available_in_version="0.3.0",
+            results=limited_results,
             details={
+                "query": request.query,
+                "normalized_query": normalized_query,
                 "workspace_id": request.workspace_id,
                 "limit": request.limit,
                 "filters": request.filters,
+                "search_mode": "memory_item_lexical",
+                "memory_items_considered": len(memory_items),
+                "results_returned": len(limited_results),
             },
         )
 
@@ -666,6 +1107,41 @@ class MemoryService:
         episodes.sort(key=lambda episode: episode.created_at, reverse=True)
         return tuple(episodes[:limit])
 
+    def _score_memory_item_for_query(
+        self,
+        *,
+        memory_item: MemoryItemRecord,
+        normalized_query: str,
+    ) -> tuple[float, tuple[str, ...]]:
+        score = 0.0
+        matched_fields: list[str] = []
+
+        content_text = memory_item.content.casefold()
+        if normalized_query in content_text:
+            score += 3.0
+            matched_fields.append("content")
+
+        metadata_strings = _metadata_query_strings(memory_item.metadata)
+        metadata_key_match = False
+        metadata_value_match = False
+
+        for index, metadata_query_string in enumerate(metadata_strings):
+            if normalized_query not in metadata_query_string:
+                continue
+            if index % 2 == 0:
+                metadata_key_match = True
+            else:
+                metadata_value_match = True
+
+        if metadata_key_match:
+            score += 1.5
+            matched_fields.append("metadata_keys")
+        if metadata_value_match:
+            score += 1.5
+            matched_fields.append("metadata_values")
+
+        return score, tuple(matched_fields)
+
     def _parse_uuid(
         self,
         value: str,
@@ -682,6 +1158,39 @@ class MemoryService:
                 message=f"{field_name} must be a valid UUID string.",
                 details={"field": field_name},
             ) from None
+
+    def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> None:
+        if (
+            self._embedding_generator is None
+            or self._memory_embedding_repository is None
+        ):
+            return
+
+        try:
+            result = self._embedding_generator.generate(
+                EmbeddingRequest(
+                    text=memory_item.content,
+                    metadata=memory_item.metadata,
+                )
+            )
+        except EmbeddingGenerationError:
+            return
+
+        self._memory_embedding_repository.create(
+            MemoryEmbeddingRecord(
+                memory_embedding_id=uuid4(),
+                memory_id=memory_item.memory_id,
+                embedding_model=result.model,
+                embedding=result.vector,
+                content_hash=result.content_hash,
+                created_at=memory_item.updated_at,
+            )
+        )
+
+    def _resolve_workspace_id(self, workflow_instance_id: UUID) -> UUID | None:
+        if self._workspace_lookup is None:
+            return None
+        return self._workspace_lookup.workspace_id_by_workflow_id(workflow_instance_id)
 
     @staticmethod
     def _has_text(value: object | None) -> bool:

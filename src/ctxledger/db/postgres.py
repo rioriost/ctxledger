@@ -10,7 +10,11 @@ from uuid import UUID
 
 from ctxledger.workflow.service import (
     EpisodeRecord,
+    MemoryEmbeddingRecord,
+    MemoryEmbeddingRepository,
     MemoryEpisodeRepository,
+    MemoryItemRecord,
+    MemoryItemRepository,
     PersistenceError,
     ProjectionArtifactType,
     ProjectionFailureInfo,
@@ -104,6 +108,58 @@ def _quote_ident(value: str) -> str:
 
 def _episode_status(value: Any) -> str:
     return str(value) if value is not None else "recorded"
+
+
+def _pgvector_literal(values: tuple[float, ...]) -> str:
+    return "[" + ",".join(format(value, ".17g") for value in values) + "]"
+
+
+def _memory_item_row_to_record(row: dict[str, Any]) -> MemoryItemRecord:
+    return MemoryItemRecord(
+        memory_id=_to_uuid(row["memory_id"]),
+        workspace_id=(
+            _to_uuid(row["workspace_id"])
+            if row.get("workspace_id") is not None
+            else None
+        ),
+        episode_id=(
+            _to_uuid(row["episode_id"]) if row.get("episode_id") is not None else None
+        ),
+        type=str(row["type"]),
+        provenance=str(row["provenance"]),
+        content=str(row["content"]),
+        metadata=_json_loads(row["metadata_json"]),
+        created_at=_to_datetime(row["created_at"]),
+        updated_at=_to_datetime(row["updated_at"]),
+    )
+
+
+def _memory_embedding_row_to_record(row: dict[str, Any]) -> MemoryEmbeddingRecord:
+    raw_embedding = row.get("embedding")
+    embedding_values: tuple[float, ...]
+    if raw_embedding is None:
+        embedding_values = ()
+    elif isinstance(raw_embedding, str):
+        normalized = raw_embedding.strip().strip("[]")
+        if not normalized:
+            embedding_values = ()
+        else:
+            embedding_values = tuple(
+                float(part.strip()) for part in normalized.split(",") if part.strip()
+            )
+    else:
+        embedding_values = tuple(float(part) for part in raw_embedding)
+
+    return MemoryEmbeddingRecord(
+        memory_embedding_id=_to_uuid(row["memory_embedding_id"]),
+        memory_id=_to_uuid(row["memory_id"]),
+        embedding_model=str(row["embedding_model"]),
+        embedding=embedding_values,
+        content_hash=str(row["content_hash"])
+        if row.get("content_hash") is not None
+        else None,
+        created_at=_to_datetime(row["created_at"]),
+    )
 
 
 def _connect(database_url: str) -> Connection:
@@ -1004,6 +1060,231 @@ class PostgresMemoryEpisodeRepository(MemoryEpisodeRepository):
         )
 
 
+class PostgresMemoryItemRepository(MemoryItemRepository):
+    def __init__(self, conn: Connection) -> None:
+        self._conn = conn
+
+    def create(self, memory_item: MemoryItemRecord) -> MemoryItemRecord:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO memory_items (
+                    memory_id,
+                    workspace_id,
+                    episode_id,
+                    type,
+                    provenance,
+                    content,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                RETURNING
+                    memory_id,
+                    workspace_id,
+                    episode_id,
+                    type,
+                    provenance,
+                    content,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                """,
+                (
+                    memory_item.memory_id,
+                    memory_item.workspace_id,
+                    memory_item.episode_id,
+                    memory_item.type,
+                    memory_item.provenance,
+                    memory_item.content,
+                    _json_dumps(memory_item.metadata),
+                    memory_item.created_at,
+                    memory_item.updated_at,
+                ),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            raise PersistenceError("Failed to create memory item")
+
+        return _memory_item_row_to_record(row)
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_id,
+                    workspace_id,
+                    episode_id,
+                    type,
+                    provenance,
+                    content,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM memory_items
+                WHERE workspace_id = %s
+                ORDER BY created_at DESC, memory_id DESC
+                LIMIT %s
+                """,
+                (workspace_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_item_row_to_record(row) for row in rows)
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_id,
+                    workspace_id,
+                    episode_id,
+                    type,
+                    provenance,
+                    content,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM memory_items
+                WHERE episode_id = %s
+                ORDER BY created_at DESC, memory_id DESC
+                LIMIT %s
+                """,
+                (episode_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_item_row_to_record(row) for row in rows)
+
+
+class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
+    def __init__(self, conn: Connection) -> None:
+        self._conn = conn
+
+    def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO memory_embeddings (
+                    memory_embedding_id,
+                    memory_id,
+                    embedding_model,
+                    embedding,
+                    content_hash,
+                    created_at
+                )
+                VALUES (%s, %s, %s, %s::vector, %s, %s)
+                RETURNING
+                    memory_embedding_id,
+                    memory_id,
+                    embedding_model,
+                    embedding,
+                    content_hash,
+                    created_at
+                """,
+                (
+                    embedding.memory_embedding_id,
+                    embedding.memory_id,
+                    embedding.embedding_model,
+                    _pgvector_literal(embedding.embedding),
+                    embedding.content_hash,
+                    embedding.created_at,
+                ),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            raise PersistenceError("Failed to create memory embedding")
+
+        return _memory_embedding_row_to_record(row)
+
+    def list_by_memory_id(
+        self,
+        memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_embedding_id,
+                    memory_id,
+                    embedding_model,
+                    embedding,
+                    content_hash,
+                    created_at
+                FROM memory_embeddings
+                WHERE memory_id = %s
+                ORDER BY created_at DESC, memory_embedding_id DESC
+                LIMIT %s
+                """,
+                (memory_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_embedding_row_to_record(row) for row in rows)
+
+    def find_similar(
+        self,
+        query_embedding: tuple[float, ...],
+        *,
+        limit: int,
+        workspace_id: UUID | None = None,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        workspace_filter_sql = ""
+        if workspace_id is None:
+            params: tuple[Any, ...] = (
+                _pgvector_literal(query_embedding),
+                limit,
+            )
+        else:
+            workspace_filter_sql = "AND mi.workspace_id = %s"
+            params = (
+                workspace_id,
+                _pgvector_literal(query_embedding),
+                limit,
+            )
+
+        with self._conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    me.memory_embedding_id,
+                    me.memory_id,
+                    me.embedding_model,
+                    me.embedding,
+                    me.content_hash,
+                    me.created_at
+                FROM memory_embeddings AS me
+                INNER JOIN memory_items AS mi
+                    ON mi.memory_id = me.memory_id
+                WHERE me.embedding IS NOT NULL
+                  {workspace_filter_sql}
+                ORDER BY me.embedding <-> %s::vector ASC, me.created_at DESC, me.memory_embedding_id DESC
+                LIMIT %s
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_embedding_row_to_record(row) for row in rows)
+
+
 class PostgresProjectionStateRepository(ProjectionStateRepository):
     """
     Minimal read-only projection state repository.
@@ -1427,6 +1708,8 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
         self.workflow_checkpoints = PostgresWorkflowCheckpointRepository(self._conn)
         self.verify_reports = PostgresVerifyReportRepository(self._conn)
         self.memory_episodes = PostgresMemoryEpisodeRepository(self._conn)
+        self.memory_items = PostgresMemoryItemRepository(self._conn)
+        self.memory_embeddings = PostgresMemoryEmbeddingRepository(self._conn)
         self.projection_states = PostgresProjectionStateRepository(self._conn)
         self.projection_failures = PostgresProjectionFailureRepository(self._conn)
         self._committed = False
@@ -1486,6 +1769,9 @@ def load_postgres_schema_sql() -> str:
 __all__ = [
     "PostgresConfig",
     "PostgresDatabaseHealthChecker",
+    "PostgresMemoryEmbeddingRepository",
+    "PostgresMemoryEpisodeRepository",
+    "PostgresMemoryItemRepository",
     "PostgresProjectionStateRepository",
     "PostgresUnitOfWork",
     "PostgresVerifyReportRepository",
