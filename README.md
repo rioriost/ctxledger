@@ -69,7 +69,14 @@ If you want to use authenticated access, prepare a bearer token for the proxy la
 
 ## Quick Start
 
-### 1. Start `ctxledger` with Docker Compose
+The recommended local operator path is the **authenticated small-pattern deployment** through Traefik on port `8091`.  
+The direct unauthenticated path on port `8080` is still available for isolated local development and debugging.
+
+### Option A. Start `ctxledger` without authentication
+
+Use this mode when you want the simplest direct local path to the backend.
+
+#### 1. Start PostgreSQL and the direct MCP server
 
 From the repository root, start PostgreSQL and the remote MCP server:
 
@@ -77,7 +84,7 @@ From the repository root, start PostgreSQL and the remote MCP server:
 docker compose -f docker/docker-compose.yml up -d --build
 ```
 
-After startup, the primary MCP endpoint is:
+After startup, the direct MCP endpoint is:
 
 ```/dev/null/txt#L1-1
 http://127.0.0.1:8080/mcp
@@ -89,9 +96,9 @@ You can optionally verify that the local server is up by checking the runtime de
 curl http://127.0.0.1:8080/debug/runtime
 ```
 
-### 2. Configure your MCP client to use `ctxledger`
+#### 2. Configure your MCP client for the unauthenticated local endpoint
 
-#### VS Code
+##### VS Code
 
 Add a remote MCP server entry in your VS Code MCP client configuration.
 
@@ -107,22 +114,7 @@ A representative configuration shape is:
 }
 ```
 
-If you are using the proxy-protected deployment, include the bearer token expected by the proxy layer. A representative authenticated shape is:
-
-```/dev/null/json#L1-11
-{
-  "mcpServers": {
-    "ctxledger": {
-      "url": "http://127.0.0.1:8080/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_TOKEN_HERE"
-      }
-    }
-  }
-}
-```
-
-#### Zed
+##### Zed
 
 Add a remote MCP server entry in your Zed MCP configuration.
 
@@ -138,13 +130,53 @@ A representative configuration shape is:
 }
 ```
 
-If you are using the proxy-protected deployment, provide the bearer token in the request headers. A representative authenticated shape is:
+Once configured, your MCP client should be able to reach `ctxledger` directly over HTTP and use the workflow and memory tool surfaces exposed at `/mcp`.
+
+### Option B. Start `ctxledger` with authentication (recommended)
+
+Use this mode when you want the documented proxy-first deployment shape for local development, operator validation, and IDE clients that can send bearer headers.
+
+#### 1. Start PostgreSQL, the private backend, auth service, and Traefik
+
+From the repository root, start the base compose file plus the auth overlay with a shared bearer token:
+
+```/dev/null/sh#L1-1
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```
+
+After startup, the recommended authenticated MCP endpoint is:
+
+```/dev/null/txt#L1-1
+http://127.0.0.1:8091/mcp
+```
+
+#### 2. Verify authentication behavior
+
+Missing token should be rejected with `401`:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --expect-http-status 401 --expect-auth-failure
+```
+
+A valid token should pass and the workflow/resource smoke should succeed:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+```
+
+#### 3. Configure your MCP client for the authenticated endpoint
+
+##### VS Code
+
+Add a remote MCP server entry in your VS Code MCP client configuration.
+
+A representative authenticated shape is:
 
 ```/dev/null/json#L1-11
 {
-  "mcp_servers": {
+  "mcpServers": {
     "ctxledger": {
-      "url": "http://127.0.0.1:8080/mcp",
+      "url": "http://127.0.0.1:8091/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_TOKEN_HERE"
       }
@@ -153,7 +185,26 @@ If you are using the proxy-protected deployment, provide the bearer token in the
 }
 ```
 
-Once configured, your MCP client should be able to reach `ctxledger` as a remote HTTP MCP server and use the workflow and memory tool surfaces exposed at `/mcp`.
+##### Zed
+
+Add a remote MCP server entry in your Zed MCP configuration.
+
+A representative authenticated shape is:
+
+```/dev/null/json#L1-11
+{
+  "mcp_servers": {
+    "ctxledger": {
+      "url": "http://127.0.0.1:8091/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN_HERE"
+      }
+    }
+  }
+}
+```
+
+Once configured, your MCP client should be able to reach `ctxledger` through the proxy-protected MCP endpoint and use the workflow and memory tool surfaces exposed at `/mcp`.
 
 ### Agent workflow usage guidance
 
