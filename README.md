@@ -167,15 +167,6 @@ export CTXLEDGER_SMALL_AUTH_TOKEN="$(openssl rand -hex 32)"
 echo "$CTXLEDGER_SMALL_AUTH_TOKEN"
 ```
 
-If you use [`envrcctl`](https://github.com/rioriost/homebrew-envrcctl), you can also store the token as a managed secret and run commands with that secret injected into the environment:
-
-```/dev/null/sh#L1-2
-echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_SMALL_AUTH_TOKEN --account 'ctxledger' --stdin
-direnv allow
-```
-
-Then run startup and validation commands through `envrcctl exec -- ...` so the same secret is injected for each command.
-
 For any shared, persistent, or less-trusted environment, use a strong random secret instead of the example placeholder.
 
 #### 1. Start PostgreSQL, the private backend, auth service, and Traefik
@@ -190,12 +181,6 @@ If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` in your shell first, you can also r
 
 ```/dev/null/sh#L1-1
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
-```
-
-If you are using `envrcctl`, a practical startup sequence is:
-
-```/dev/null/sh#L1-3
-envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
 After startup, the recommended authenticated MCP endpoint is:
@@ -228,12 +213,6 @@ If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` already, you can keep the smoke com
 
 ```/dev/null/sh#L1-1
 python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read
-```
-
-The same pattern works when `CTXLEDGER_SMALL_AUTH_TOKEN` is managed with [`envrcctl`](https://github.com/rioriost/homebrew-envrcctl); run the smoke command through `envrcctl exec -- ...` so the secret is injected for that process:
-
-```/dev/null/sh#L1-1
-envrcctl exec -- python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read
 ```
 
 #### 3. Configure your MCP client for the authenticated endpoint
@@ -278,13 +257,33 @@ A representative authenticated shape is:
 }
 ```
 
-Unfortunately, Zed does not expand environment variables in its MCP configuration file. If you use `envrcctl`, you can retrieve the token and paste it into `YOUR_TOKEN_HERE`:
-
-```/dev/null/sh#L1-2
-envrcctl secret get CTXLEDGER_SMALL_AUTH_TOKEN
-```
+Unfortunately, Zed does not expand environment variables in its MCP configuration file, so `YOUR_TOKEN_HERE` must be replaced with the actual token value.
 
 Once configured, your MCP client should be able to reach `ctxledger` through the proxy-protected MCP endpoint and use the workflow and memory tool surfaces exposed at `/mcp`.
+
+#### Optional: use `envrcctl` to manage the token
+
+If you use [`envrcctl`](https://github.com/rioriost/homebrew-envrcctl), you can store the token as a managed secret:
+
+```/dev/null/sh#L1-1
+echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_SMALL_AUTH_TOKEN --account 'ctxledger' --stdin
+```
+
+You can then run startup and validation commands with the secret injected into the environment:
+
+```/dev/null/sh#L1-1
+envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```
+
+```/dev/null/sh#L1-1
+envrcctl exec -- python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read
+```
+
+Because Zed does not expand environment variables in its MCP configuration file, you must still retrieve the token and paste it into `YOUR_TOKEN_HERE` manually:
+
+```/dev/null/sh#L1-1
+envrcctl secret get CTXLEDGER_SMALL_AUTH_TOKEN
+```
 
 ### Agent workflow usage guidance
 
