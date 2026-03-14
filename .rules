@@ -23,6 +23,7 @@
   - prefer reusing an existing workflow when the task objective, repository, or recent work context clearly matches ongoing work
   - avoid creating duplicate workflows for the same task just because context is incomplete
   - if uncertain, try to recover or inspect existing workflow state first, then start a new workflow only if needed
+  - only treat a workflow as resumable when it is still operationally open; terminal workflows should be inspected, not continued
 - During work, record meaningful progress with `workflow_checkpoint`, especially after:
   - planning or narrowing the task
   - identifying a root cause or important technical decision
@@ -38,6 +39,14 @@
   - current verification status
   - any blocker, risk, or open question
 - Use verification-related workflow fields when they meaningfully reflect the current state of the work.
+- Treat `workflow_complete` as a terminal transition, not as a general "save progress" operation.
+- Terminal workflow states include:
+  - `completed`
+  - `failed`
+  - `cancelled`
+- Once a workflow is terminal, do not attempt to add more checkpoints to it.
+- If more work may still occur in the current work loop, prefer another `workflow_checkpoint` and delay `workflow_complete` until the work is truly done.
+- If new work appears after a workflow has already become terminal, start a new workflow instead of trying to continue the closed one.
 - Do not silently skip workflow recording just because the task is small. Short tasks still benefit from start/checkpoint/complete discipline when they are part of tracked work.
 - If workflow operations fail:
   - do not ignore the failure silently

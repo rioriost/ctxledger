@@ -11,7 +11,7 @@
 - `0.4`: hierarchical memory retrieval
   - `memory_get_context` は multi-layer context assembly 的な役割へ拡張されうる
 
-この整理に合わせて、README と `docs/roadmap.md` に **tool-to-version mapping の説明を追加済み**です。
+この整理に合わせて、README と `docs/roadmap.md` に **tool-to-version mapping の説明を追加済み**です。また、`.rules` にも terminal workflow guidance を追加し、`workflow_complete` は terminal transition であり、close 後の追加作業は新しい workflow を開始すべきことを明記しました。
 
 ## この session で完了したこと
 
@@ -164,10 +164,13 @@ README の手順に沿って、以下を実施しました。
   - `memory_get_context` は `0.2`〜`0.4` にまたがる段階実装候補
   と読むのが最も自然、という整理に到達した
 - したがって、`memory_get_context` が `0.2` で完全実装されると断定するのは避け、**episode-oriented initial form → stronger relevance retrieval → multi-layer context assembly** という進化的な説明に寄せるのが安全
+- workflow lifecycle については、`workflow_complete` は **terminal transition** として扱うべきであり、`completed` / `failed` / `cancelled` になった workflow には追加 checkpoint を打てない、という運用ルールを明示化する必要があると確認した
+- 今回の失敗は product bug ではなく、**いったん `workflow_complete` した同じ workflow に対して後から checkpoint を追加しようとした運用ミス** によるものだった
+- そのため、作業継続の可能性があるうちは `workflow_complete` を早まらせず、close 後に新しい作業が発生したら **新しい workflow を開始する** という guidance を `.rules` に追加するのが妥当、という結論に至った
 
 ## 次セッションでやること
 
-1. 実際の Zed などの MCP クライアント上の AI エージェントで、`.rules` に従った workflow-aware な運用が回るか確認する
+1. 実際の Zed などの MCP クライアント上の AI エージェントで、更新後の `.rules` に従った workflow-aware な運用が回るか確認する
 2. 実運用 workflow を開始または再開したら、以下をこの note に記録する
    - `workspace_id`
    - `workflow_instance_id`
