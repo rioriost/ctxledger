@@ -565,3 +565,29 @@ clean です。
 
 必要ならこのまま次に、  
 **serializer と残りの search tests を hybrid 仕様へ揃えるところ**まで続けます。
+
+## 今回の補足
+- 現在の作業ツリーには `last_session.md` 以外にも未コミット変更があります
+- 変更対象には少なくとも以下が含まれています
+  - `src/ctxledger/config.py`
+  - `src/ctxledger/db/__init__.py`
+  - `src/ctxledger/mcp/tool_handlers.py`
+  - `src/ctxledger/memory/service.py`
+  - `src/ctxledger/runtime/serializers.py`
+  - `src/ctxledger/workflow/service.py`
+  - `tests/test_config.py`
+  - `tests/test_coverage_targets.py`
+  - `tests/test_mcp_tool_handlers.py`
+  - `tests/test_postgres_db.py`
+  - `tests/test_postgres_integration.py`
+  - `tests/test_server.py`
+
+## 次回の最短確認
+1. running workflow の resume を再試行して `attempt_id` を確定する
+2. `memory_search` の PostgreSQL integration を hybrid 仕様で見直す
+3. その結果を `last_session.md` と canonical workflow checkpoint に反映する
+
+## commit 前メモ
+- `memory_search` 周辺は lexical-only から hybrid へ進んでいる
+- serializer 側には `lexical_score` / `semantic_score` の出力が入っている前提で確認する
+- commit するなら、search / embedding / serializer / integration test をまとめた説明的なメッセージが自然
