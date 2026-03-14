@@ -151,6 +151,8 @@ class SearchResultRecord:
     metadata: dict[str, Any] = field(default_factory=dict)
     score: float = 0.0
     matched_fields: tuple[str, ...] = ()
+    lexical_score: float = 0.0
+    semantic_score: float = 0.0
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -820,7 +822,7 @@ class MemoryService:
         )
 
     def search(self, request: SearchMemoryRequest) -> SearchMemoryResponse:
-        """Return initial memory-item-based lexical search results."""
+        """Return hybrid lexical + semantic memory-item search results."""
         self._require_non_empty(
             request.query,
             field_name="query",
@@ -849,14 +851,70 @@ class MemoryService:
                 limit=request.limit,
             )
 
+        semantic_matches: tuple[MemoryEmbeddingRecord, ...] = ()
+        semantic_query_generated = False
+        semantic_generation_skipped_reason: str | None = None
+
+        if (
+            self._embedding_generator is None
+            or self._memory_embedding_repository is None
+        ):
+            semantic_generation_skipped_reason = "embedding_search_not_configured"
+        else:
+            try:
+                semantic_query = self._embedding_generator.generate(
+                    EmbeddingRequest(text=request.query)
+                )
+            except EmbeddingGenerationError as exc:
+                semantic_generation_skipped_reason = (
+                    f"embedding_generation_failed:{exc.provider}"
+                )
+            else:
+                semantic_query_generated = True
+                semantic_matches = self._memory_embedding_repository.find_similar(
+                    semantic_query.vector,
+                    limit=request.limit,
+                    workspace_id=workspace_id,
+                )
+
+        semantic_score_by_memory_id: dict[UUID, float] = {}
+        semantic_matched_fields_by_memory_id: dict[UUID, tuple[str, ...]] = {}
+        semantic_result_count = len(semantic_matches)
+
+        if semantic_matches:
+            denominator = max(len(semantic_matches), 1)
+            for index, embedding_match in enumerate(semantic_matches):
+                semantic_score = float(denominator - index) / float(denominator)
+                current_best = semantic_score_by_memory_id.get(
+                    embedding_match.memory_id,
+                    0.0,
+                )
+                if semantic_score > current_best:
+                    semantic_score_by_memory_id[embedding_match.memory_id] = (
+                        semantic_score
+                    )
+                    semantic_matched_fields_by_memory_id[embedding_match.memory_id] = (
+                        "embedding_similarity",
+                    )
+
         scored_results: list[SearchResultRecord] = []
         for memory_item in memory_items:
-            score, matched_fields = self._score_memory_item_for_query(
+            lexical_score, matched_fields = self._score_memory_item_for_query(
                 memory_item=memory_item,
                 normalized_query=normalized_query,
             )
-            if score <= 0:
+            semantic_score = semantic_score_by_memory_id.get(memory_item.memory_id, 0.0)
+            semantic_fields = semantic_matched_fields_by_memory_id.get(
+                memory_item.memory_id,
+                (),
+            )
+
+            combined_fields = tuple(dict.fromkeys((*matched_fields, *semantic_fields)))
+            hybrid_score = lexical_score + (semantic_score * 2.0)
+
+            if hybrid_score <= 0:
                 continue
+
             scored_results.append(
                 SearchResultRecord(
                     memory_id=memory_item.memory_id,
@@ -866,36 +924,62 @@ class MemoryService:
                     summary=memory_item.content,
                     attempt_id=None,
                     metadata=dict(memory_item.metadata),
-                    score=score,
-                    matched_fields=matched_fields,
+                    score=hybrid_score,
+                    matched_fields=combined_fields,
+                    lexical_score=lexical_score,
+                    semantic_score=semantic_score,
                     created_at=memory_item.created_at,
                     updated_at=memory_item.updated_at,
                 )
             )
 
         scored_results.sort(
-            key=lambda result: (result.score, result.created_at),
+            key=lambda result: (
+                result.score,
+                result.semantic_score,
+                result.lexical_score,
+                result.created_at,
+            ),
             reverse=True,
         )
         limited_results = tuple(scored_results[: request.limit])
 
+        search_mode = (
+            "hybrid_memory_item_search"
+            if semantic_query_generated
+            else "memory_item_lexical"
+        )
+        message = (
+            "Hybrid lexical and semantic memory search completed successfully."
+            if semantic_query_generated
+            else "Memory-item-based lexical search completed successfully."
+        )
+
+        details = {
+            "query": request.query,
+            "normalized_query": normalized_query,
+            "workspace_id": request.workspace_id,
+            "limit": request.limit,
+            "filters": request.filters,
+            "search_mode": search_mode,
+            "memory_items_considered": len(memory_items),
+            "semantic_candidates_considered": semantic_result_count,
+            "semantic_query_generated": semantic_query_generated,
+            "results_returned": len(limited_results),
+        }
+        if semantic_generation_skipped_reason is not None:
+            details["semantic_generation_skipped_reason"] = (
+                semantic_generation_skipped_reason
+            )
+
         return SearchMemoryResponse(
             feature=MemoryFeature.SEARCH,
             implemented=True,
-            message="Memory-item-based lexical search completed successfully.",
+            message=message,
             status="ok",
             available_in_version="0.3.0",
             results=limited_results,
-            details={
-                "query": request.query,
-                "normalized_query": normalized_query,
-                "workspace_id": request.workspace_id,
-                "limit": request.limit,
-                "filters": request.filters,
-                "search_mode": "memory_item_lexical",
-                "memory_items_considered": len(memory_items),
-                "results_returned": len(limited_results),
-            },
+            details=details,
         )
 
     def get_context(self, request: GetMemoryContextRequest) -> GetContextResponse:

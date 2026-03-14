@@ -10,7 +10,10 @@ from ..memory.service import (
     RememberEpisodeRequest,
     SearchMemoryRequest,
     UnitOfWorkEpisodeRepository,
+    UnitOfWorkMemoryEmbeddingRepository,
+    UnitOfWorkMemoryItemRepository,
     UnitOfWorkWorkflowLookupRepository,
+    UnitOfWorkWorkspaceLookupRepository,
 )
 from ..workflow.service import (
     CompleteWorkflowInput,
@@ -790,9 +793,11 @@ def build_memory_search_tool_handler(
                     ),
                 )
             )
-            from ..runtime.serializers import serialize_stub_response
+            from ..runtime.serializers import serialize_search_memory_response
 
-            return build_mcp_success_response(serialize_stub_response(response))
+            return build_mcp_success_response(
+                serialize_search_memory_response(response)
+            )
         except MemoryServiceError as exc:
             return build_mcp_error_response(
                 code=exc.code.value,
@@ -874,5 +879,8 @@ def build_workflow_backed_memory_service(
     uow_factory = server.workflow_service._uow_factory
     return MemoryService(
         episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
         workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
     )

@@ -6,6 +6,7 @@ from uuid import UUID
 from ctxledger.memory.service import (
     GetContextResponse,
     RememberEpisodeResponse,
+    SearchMemoryResponse,
     StubResponse,
 )
 
@@ -180,6 +181,50 @@ def serialize_stub_response(response: StubResponse) -> dict[str, Any]:
     }
 
 
+def serialize_search_memory_response(
+    response: SearchMemoryResponse,
+) -> dict[str, Any]:
+    return {
+        "feature": response.feature.value,
+        "implemented": response.implemented,
+        "message": response.message,
+        "status": response.status,
+        "available_in_version": response.available_in_version,
+        "timestamp": response.timestamp.isoformat(),
+        "results": [
+            {
+                "memory_id": str(result.memory_id),
+                "workspace_id": (
+                    str(result.workspace_id)
+                    if result.workspace_id is not None
+                    else None
+                ),
+                "episode_id": (
+                    str(result.episode_id) if result.episode_id is not None else None
+                ),
+                "workflow_instance_id": (
+                    str(result.workflow_instance_id)
+                    if result.workflow_instance_id is not None
+                    else None
+                ),
+                "summary": result.summary,
+                "attempt_id": (
+                    str(result.attempt_id) if result.attempt_id is not None else None
+                ),
+                "metadata": result.metadata,
+                "score": result.score,
+                "matched_fields": list(result.matched_fields),
+                "lexical_score": result.lexical_score,
+                "semantic_score": result.semantic_score,
+                "created_at": result.created_at.isoformat(),
+                "updated_at": result.updated_at.isoformat(),
+            }
+            for result in response.results
+        ],
+        "details": response.details,
+    }
+
+
 def serialize_remember_episode_response(
     response: RememberEpisodeResponse,
 ) -> dict[str, Any]:
@@ -265,6 +310,7 @@ __all__ = [
     "serialize_remember_episode_response",
     "serialize_runtime_introspection",
     "serialize_runtime_introspection_collection",
+    "serialize_search_memory_response",
     "serialize_stub_response",
     "serialize_workflow_resume",
 ]

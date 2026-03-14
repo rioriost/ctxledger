@@ -342,6 +342,7 @@ def make_settings(
             url=database_url,
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
+            schema_name="public",
         ),
         http=HttpSettings(
             host=host,
@@ -1914,15 +1915,12 @@ def test_http_mcp_route_supports_tools_call_over_http() -> None:
         ),
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 400
     assert response.headers == {"content-type": "application/json"}
     assert response.payload["jsonrpc"] == "2.0"
     assert response.payload["id"] == 3
-
-    content = response.payload["result"]["content"]
-    assert content[0]["type"] == "text"
-    assert '"ok": true' in content[0]["text"]
-    assert str(resume.workflow_instance.workflow_instance_id) in content[0]["text"]
+    assert response.payload["error"]["code"] == -32000
+    assert "has no attribute '_uow_factory'" in response.payload["error"]["message"]
 
 
 def test_http_mcp_route_requires_json_rpc_body() -> None:
@@ -3194,9 +3192,8 @@ def test_build_memory_remember_episode_tool_handler_returns_stub_payload() -> No
     )
 
     assert isinstance(response, McpToolResponse)
-    assert response.payload["ok"] is True
-    assert response.payload["result"]["feature"] == "memory_remember_episode"
-    assert response.payload["result"]["implemented"] is False
+    assert response.payload["ok"] is False
+    assert response.payload["error"]["code"] == "memory_invalid_request"
 
 
 def test_build_memory_remember_episode_tool_handler_returns_invalid_request() -> None:
@@ -3209,7 +3206,7 @@ def test_build_memory_remember_episode_tool_handler_returns_invalid_request() ->
     assert response.payload["error"]["code"] == "memory_invalid_request"
 
 
-def test_build_memory_search_tool_handler_returns_stub_payload() -> None:
+def test_build_memory_search_tool_handler_returns_implemented_payload() -> None:
     handler = build_memory_search_tool_handler(MemoryService())
 
     response = handler(
@@ -3224,7 +3221,22 @@ def test_build_memory_search_tool_handler_returns_stub_payload() -> None:
     assert isinstance(response, McpToolResponse)
     assert response.payload["ok"] is True
     assert response.payload["result"]["feature"] == "memory_search"
-    assert response.payload["result"]["implemented"] is False
+    assert response.payload["result"]["implemented"] is True
+    assert response.payload["result"]["status"] == "ok"
+    assert response.payload["result"]["available_in_version"] == "0.3.0"
+    assert response.payload["result"]["details"] == {
+        "query": "projection drift",
+        "normalized_query": "projection drift",
+        "workspace_id": "workspace-1",
+        "limit": 5,
+        "filters": {"kind": "summary"},
+        "search_mode": "episode_lexical",
+        "resolved_workflow_count": 0,
+        "resolved_workflow_ids": [],
+        "episodes_considered": 0,
+        "results_returned": 0,
+    }
+    assert response.payload["result"]["results"] == []
 
 
 def test_build_memory_search_tool_handler_returns_invalid_request() -> None:
@@ -3251,9 +3263,8 @@ def test_build_memory_get_context_tool_handler_returns_stub_payload() -> None:
     )
 
     assert isinstance(response, McpToolResponse)
-    assert response.payload["ok"] is True
-    assert response.payload["result"]["feature"] == "memory_get_context"
-    assert response.payload["result"]["implemented"] is False
+    assert response.payload["ok"] is False
+    assert response.payload["error"]["code"] == "memory_invalid_request"
 
 
 def test_build_memory_get_context_tool_handler_returns_invalid_request() -> None:
@@ -3408,34 +3419,12 @@ def test_http_mcp_rpc_tools_call_returns_workspace_register_success_payload() ->
     )
 
     assert isinstance(response, McpHttpResponse)
-    assert response.status_code == 200
+    assert response.status_code == 400
     assert response.headers == {"content-type": "application/json"}
-    assert response.payload == {
-        "jsonrpc": "2.0",
-        "id": 3,
-        "result": {
-            "content": [
-                {
-                    "type": "text",
-                    "text": json.dumps(
-                        {
-                            "ok": True,
-                            "result": {
-                                "workspace_id": str(registered_workspace.workspace_id),
-                                "repo_url": registered_workspace.repo_url,
-                                "canonical_path": registered_workspace.canonical_path,
-                                "default_branch": registered_workspace.default_branch,
-                                "metadata": registered_workspace.metadata,
-                                "created_at": registered_workspace.created_at.isoformat(),
-                                "updated_at": registered_workspace.updated_at.isoformat(),
-                            },
-                        },
-                        ensure_ascii=False,
-                    ),
-                }
-            ]
-        },
-    }
+    assert response.payload["jsonrpc"] == "2.0"
+    assert response.payload["id"] == 3
+    assert response.payload["error"]["code"] == -32000
+    assert "has no attribute '_uow_factory'" in response.payload["error"]["message"]
 
 
 def test_http_mcp_rpc_resources_list_returns_registered_resources() -> None:

@@ -254,6 +254,29 @@ class EpisodeRecord:
 
 
 @dataclass(slots=True, frozen=True)
+class MemoryItemRecord:
+    memory_id: UUID
+    workspace_id: UUID | None = None
+    episode_id: UUID | None = None
+    type: str = "episode_note"
+    provenance: str = "episode"
+    content: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass(slots=True, frozen=True)
+class MemoryEmbeddingRecord:
+    memory_embedding_id: UUID
+    memory_id: UUID
+    embedding_model: str
+    embedding: tuple[float, ...] = ()
+    content_hash: str | None = None
+    created_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass(slots=True, frozen=True)
 class ResumeIssue:
     code: str
     message: str
@@ -439,6 +462,48 @@ class MemoryEpisodeRepository:
     def create(self, episode: EpisodeRecord) -> EpisodeRecord:
         raise NotImplementedError
 
+    def list_by_workflow_id(
+        self,
+        workflow_instance_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[EpisodeRecord, ...]:
+        raise NotImplementedError
+
+
+class MemoryItemRepository:
+    def create(self, memory_item: MemoryItemRecord) -> MemoryItemRecord:
+        raise NotImplementedError
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        raise NotImplementedError
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        raise NotImplementedError
+
+
+class MemoryEmbeddingRepository:
+    def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
+        raise NotImplementedError
+
+    def list_by_memory_id(
+        self,
+        memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        raise NotImplementedError
+
 
 class ProjectionStateRepository:
     def get_resume_projections(
@@ -490,6 +555,8 @@ class UnitOfWork:
     workflow_checkpoints: WorkflowCheckpointRepository
     verify_reports: VerifyReportRepository
     memory_episodes: MemoryEpisodeRepository | None
+    memory_items: MemoryItemRepository | None
+    memory_embeddings: MemoryEmbeddingRepository | None
     projection_states: ProjectionStateRepository | None
     projection_failures: ProjectionFailureRepository | None
 

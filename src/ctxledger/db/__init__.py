@@ -10,6 +10,10 @@ from ctxledger.db.postgres import (
 )
 from ctxledger.workflow.service import (
     EpisodeRecord,
+    MemoryEmbeddingRecord,
+    MemoryEmbeddingRepository,
+    MemoryItemRecord,
+    MemoryItemRepository,
     ProjectionArtifactType,
     ProjectionFailureInfo,
     ProjectionFailureRepository,
@@ -249,6 +253,83 @@ class InMemoryMemoryEpisodeRepository:
     def create(self, episode: EpisodeRecord) -> EpisodeRecord:
         self._episodes_by_id[episode.episode_id] = episode
         return episode
+
+    def list_by_workflow_id(
+        self,
+        workflow_instance_id: object,
+        *,
+        limit: int,
+    ) -> tuple[EpisodeRecord, ...]:
+        episodes = [
+            episode
+            for episode in self._episodes_by_id.values()
+            if episode.workflow_instance_id == workflow_instance_id
+        ]
+        episodes.sort(key=lambda episode: episode.created_at, reverse=True)
+        return tuple(episodes[:limit])
+
+
+class InMemoryMemoryItemRepository(MemoryItemRepository):
+    def __init__(self, memory_items_by_id: dict[object, MemoryItemRecord]) -> None:
+        self._memory_items_by_id = memory_items_by_id
+
+    def create(self, memory_item: MemoryItemRecord) -> MemoryItemRecord:
+        self._memory_items_by_id[memory_item.memory_id] = memory_item
+        return memory_item
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: object,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        memory_items = [
+            memory_item
+            for memory_item in self._memory_items_by_id.values()
+            if memory_item.workspace_id == workspace_id
+        ]
+        memory_items.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
+        return tuple(memory_items[:limit])
+
+    def list_by_episode_id(
+        self,
+        episode_id: object,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        memory_items = [
+            memory_item
+            for memory_item in self._memory_items_by_id.values()
+            if memory_item.episode_id == episode_id
+        ]
+        memory_items.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
+        return tuple(memory_items[:limit])
+
+
+class InMemoryMemoryEmbeddingRepository(MemoryEmbeddingRepository):
+    def __init__(
+        self,
+        memory_embeddings_by_id: dict[object, MemoryEmbeddingRecord],
+    ) -> None:
+        self._memory_embeddings_by_id = memory_embeddings_by_id
+
+    def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
+        self._memory_embeddings_by_id[embedding.memory_embedding_id] = embedding
+        return embedding
+
+    def list_by_memory_id(
+        self,
+        memory_id: object,
+        *,
+        limit: int,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        embeddings = [
+            embedding
+            for embedding in self._memory_embeddings_by_id.values()
+            if embedding.memory_id == memory_id
+        ]
+        embeddings.sort(key=lambda embedding: embedding.created_at, reverse=True)
+        return tuple(embeddings[:limit])
 
 
 class InMemoryProjectionStateRepository(ProjectionStateRepository):
@@ -535,6 +616,8 @@ class InMemoryUnitOfWork(UnitOfWork):
         checkpoints_by_id: dict[object, WorkflowCheckpoint] | None = None,
         verify_reports_by_id: dict[object, VerifyReport] | None = None,
         episodes_by_id: dict[object, EpisodeRecord] | None = None,
+        memory_items_by_id: dict[object, MemoryItemRecord] | None = None,
+        memory_embeddings_by_id: dict[object, MemoryEmbeddingRecord] | None = None,
         projection_states_by_key: dict[
             tuple[object, object, ProjectionArtifactType], ProjectionInfo
         ]
@@ -561,6 +644,12 @@ class InMemoryUnitOfWork(UnitOfWork):
             verify_reports_by_id if verify_reports_by_id is not None else {}
         )
         self._episodes_by_id = episodes_by_id if episodes_by_id is not None else {}
+        self._memory_items_by_id = (
+            memory_items_by_id if memory_items_by_id is not None else {}
+        )
+        self._memory_embeddings_by_id = (
+            memory_embeddings_by_id if memory_embeddings_by_id is not None else {}
+        )
         self._projection_states_by_key = (
             projection_states_by_key if projection_states_by_key is not None else {}
         )
@@ -584,6 +673,10 @@ class InMemoryUnitOfWork(UnitOfWork):
         )
         self.verify_reports = InMemoryVerifyReportRepository(self._verify_reports_by_id)
         self.memory_episodes = InMemoryMemoryEpisodeRepository(self._episodes_by_id)
+        self.memory_items = InMemoryMemoryItemRepository(self._memory_items_by_id)
+        self.memory_embeddings = InMemoryMemoryEmbeddingRepository(
+            self._memory_embeddings_by_id
+        )
         self.projection_states = InMemoryProjectionStateRepository(
             self._projection_states_by_key
         )
@@ -615,6 +708,8 @@ class InMemoryStore:
     checkpoints_by_id: dict[object, WorkflowCheckpoint]
     verify_reports_by_id: dict[object, VerifyReport]
     episodes_by_id: dict[object, EpisodeRecord]
+    memory_items_by_id: dict[object, MemoryItemRecord]
+    memory_embeddings_by_id: dict[object, MemoryEmbeddingRecord]
     projection_states_by_key: dict[
         tuple[object, object, ProjectionArtifactType], ProjectionInfo
     ]
@@ -632,6 +727,8 @@ class InMemoryStore:
             checkpoints_by_id={},
             verify_reports_by_id={},
             episodes_by_id={},
+            memory_items_by_id={},
+            memory_embeddings_by_id={},
             projection_states_by_key={},
             projection_failures_by_key={},
         )
@@ -645,6 +742,8 @@ class InMemoryStore:
             checkpoints_by_id=dict(self.checkpoints_by_id),
             verify_reports_by_id=dict(self.verify_reports_by_id),
             episodes_by_id=dict(self.episodes_by_id),
+            memory_items_by_id=dict(self.memory_items_by_id),
+            memory_embeddings_by_id=dict(self.memory_embeddings_by_id),
             projection_states_by_key=dict(self.projection_states_by_key),
             projection_failures_by_key={
                 key: list(value)
@@ -667,6 +766,8 @@ def build_in_memory_uow_factory(
             checkpoints_by_id=backing_store.checkpoints_by_id,
             verify_reports_by_id=backing_store.verify_reports_by_id,
             episodes_by_id=backing_store.episodes_by_id,
+            memory_items_by_id=backing_store.memory_items_by_id,
+            memory_embeddings_by_id=backing_store.memory_embeddings_by_id,
             projection_states_by_key=backing_store.projection_states_by_key,
             projection_failures_by_key=backing_store.projection_failures_by_key,
         )
@@ -675,9 +776,11 @@ def build_in_memory_uow_factory(
 
 
 __all__ = [
+    InMemoryMemoryEmbeddingRepository,
+    InMemoryMemoryEpisodeRepository,
+    InMemoryMemoryItemRepository,
     InMemoryProjectionFailureRepository,
     InMemoryProjectionStateRepository,
-    InMemoryMemoryEpisodeRepository,
     InMemoryStore,
     "InMemoryUnitOfWork",
     "InMemoryVerifyReportRepository",
@@ -688,5 +791,4 @@ __all__ = [
     "build_in_memory_uow_factory",
     "PostgresDatabaseHealthChecker",
     "PostgresUnitOfWork",
-    "build_postgres_uow_factory",
 ]

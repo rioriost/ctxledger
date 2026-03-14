@@ -10,6 +10,10 @@ from uuid import UUID, uuid4
 import pytest
 
 from ctxledger.workflow.service import (
+    MemoryEmbeddingRecord,
+    MemoryEmbeddingRepository,
+    MemoryItemRecord,
+    MemoryItemRepository,
     PersistenceError,
     ProjectionArtifactType,
     ProjectionFailureInfo,
@@ -211,6 +215,8 @@ def test_unit_of_work_contract_shape_can_be_satisfied_by_postgres_impl() -> None
             self.workflow_attempts = _WorkflowAttemptRepoStub()
             self.workflow_checkpoints = _WorkflowCheckpointRepoStub()
             self.verify_reports = _VerifyReportRepoStub()
+            self.memory_items = _MemoryItemRepoStub()
+            self.memory_embeddings = _MemoryEmbeddingRepoStub()
             self.projection_states = _ProjectionStateRepoStub()
             self.committed = False
             self.rolled_back = False
@@ -228,6 +234,8 @@ def test_unit_of_work_contract_shape_can_be_satisfied_by_postgres_impl() -> None
     assert isinstance(uow.workflow_attempts, WorkflowAttemptRepository)
     assert isinstance(uow.workflow_checkpoints, WorkflowCheckpointRepository)
     assert isinstance(uow.verify_reports, VerifyReportRepository)
+    assert isinstance(uow.memory_items, MemoryItemRepository)
+    assert isinstance(uow.memory_embeddings, MemoryEmbeddingRepository)
     assert isinstance(uow.projection_states, ProjectionStateRepository)
 
     uow.commit()
@@ -235,6 +243,33 @@ def test_unit_of_work_contract_shape_can_be_satisfied_by_postgres_impl() -> None
 
     assert uow.committed is True
     assert uow.rolled_back is True
+
+
+def test_memory_embedding_repository_contract_exposes_similarity_query() -> None:
+    repo = _MemoryEmbeddingRepoStub()
+    first_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=uuid4(),
+        embedding_model="local-stub-v1",
+        embedding=(1.0, 0.0, 0.0),
+        content_hash="first",
+        created_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    second_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=uuid4(),
+        embedding_model="local-stub-v1",
+        embedding=(0.0, 1.0, 0.0),
+        content_hash="second",
+        created_at=datetime(2024, 1, 2, tzinfo=UTC),
+    )
+
+    repo.create(first_embedding)
+    repo.create(second_embedding)
+
+    matches = repo.find_similar((1.0, 0.0, 0.0), limit=3)
+
+    assert matches == ()
 
 
 def test_workspace_repository_contract_can_round_trip_entity() -> None:
@@ -301,6 +336,96 @@ def test_verify_report_repository_contract_returns_latest_by_attempt() -> None:
 
     assert created == verify_report
     assert repo.get_latest_by_attempt_id(attempt.attempt_id) == verify_report
+
+
+def test_memory_item_repository_contract_tracks_workspace_and_episode_items() -> None:
+    repo = _MemoryItemRepoStub()
+    workspace = sample_workspace()
+    workflow = sample_workflow(workspace.workspace_id)
+    older_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace.workspace_id,
+        episode_id=uuid4(),
+        type="episode_note",
+        provenance="episode",
+        content="Older memory item",
+        metadata={"kind": "investigation"},
+        created_at=datetime(2024, 1, 8, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 8, tzinfo=UTC),
+    )
+    newer_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace.workspace_id,
+        episode_id=older_item.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Newer memory item",
+        metadata={"kind": "implementation"},
+        created_at=datetime(2024, 1, 9, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 9, tzinfo=UTC),
+    )
+    unrelated_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=uuid4(),
+        episode_id=uuid4(),
+        type="episode_note",
+        provenance="episode",
+        content="Unrelated memory item",
+        metadata={"kind": "other"},
+        created_at=datetime(2024, 1, 10, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 10, tzinfo=UTC),
+    )
+
+    assert repo.create(older_item) == older_item
+    assert repo.create(newer_item) == newer_item
+    assert repo.create(unrelated_item) == unrelated_item
+    assert repo.list_by_workspace_id(workspace.workspace_id, limit=10) == (
+        newer_item,
+        older_item,
+    )
+    assert repo.list_by_episode_id(older_item.episode_id, limit=10) == (
+        newer_item,
+        older_item,
+    )
+
+
+def test_memory_embedding_repository_contract_tracks_embeddings_by_memory_item() -> (
+    None
+):
+    repo = _MemoryEmbeddingRepoStub()
+    memory_id = uuid4()
+    older_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=memory_id,
+        embedding_model="test-model",
+        embedding=(0.1, 0.2, 0.3),
+        content_hash="older-hash",
+        created_at=datetime(2024, 1, 8, tzinfo=UTC),
+    )
+    newer_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=memory_id,
+        embedding_model="test-model-v2",
+        embedding=(0.4, 0.5, 0.6),
+        content_hash="newer-hash",
+        created_at=datetime(2024, 1, 9, tzinfo=UTC),
+    )
+    unrelated_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=uuid4(),
+        embedding_model="other-model",
+        embedding=(0.7, 0.8, 0.9),
+        content_hash="other-hash",
+        created_at=datetime(2024, 1, 10, tzinfo=UTC),
+    )
+
+    assert repo.create(older_embedding) == older_embedding
+    assert repo.create(newer_embedding) == newer_embedding
+    assert repo.create(unrelated_embedding) == unrelated_embedding
+    assert repo.list_by_memory_id(memory_id, limit=10) == (
+        newer_embedding,
+        older_embedding,
+    )
 
 
 def test_projection_state_repository_contract_returns_resume_projection() -> None:
@@ -518,6 +643,75 @@ class _VerifyReportRepoStub(VerifyReportRepository):
     def create(self, verify_report: VerifyReport) -> VerifyReport:
         self.items[verify_report.verify_id] = verify_report
         return verify_report
+
+
+class _MemoryItemRepoStub(MemoryItemRepository):
+    def __init__(self) -> None:
+        self.items: dict[UUID, MemoryItemRecord] = {}
+
+    def create(self, memory_item: MemoryItemRecord) -> MemoryItemRecord:
+        self.items[memory_item.memory_id] = memory_item
+        return memory_item
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        candidates = [
+            memory_item
+            for memory_item in self.items.values()
+            if memory_item.workspace_id == workspace_id
+        ]
+        candidates.sort(key=lambda item: item.created_at, reverse=True)
+        return tuple(candidates[:limit])
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        candidates = [
+            memory_item
+            for memory_item in self.items.values()
+            if memory_item.episode_id == episode_id
+        ]
+        candidates.sort(key=lambda item: item.created_at, reverse=True)
+        return tuple(candidates[:limit])
+
+
+class _MemoryEmbeddingRepoStub(MemoryEmbeddingRepository):
+    def __init__(self) -> None:
+        self.items: dict[UUID, MemoryEmbeddingRecord] = {}
+
+    def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
+        self.items[embedding.memory_embedding_id] = embedding
+        return embedding
+
+    def list_by_memory_id(
+        self,
+        memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        matches = [
+            embedding
+            for embedding in self.items.values()
+            if embedding.memory_id == memory_id
+        ]
+        matches.sort(key=lambda embedding: embedding.created_at, reverse=True)
+        return tuple(matches[:limit])
+
+    def find_similar(
+        self,
+        query_embedding: tuple[float, ...],
+        *,
+        limit: int,
+        workspace_id: UUID | None = None,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        return ()
 
 
 class _ProjectionStateRepoStub(ProjectionStateRepository):

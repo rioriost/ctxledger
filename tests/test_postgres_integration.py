@@ -21,6 +21,7 @@ from ctxledger.memory.embeddings import (
     EmbeddingRequest,
     EmbeddingResult,
     build_embedding_generator,
+    compute_content_hash,
 )
 from ctxledger.memory.service import (
     EmbeddingGenerator,
@@ -669,6 +670,166 @@ def test_postgres_memory_remember_episode_persists_custom_http_embedding(
     assert memory_embeddings[0].embedding_model == "custom-http-test-model"
     assert memory_embeddings[0].embedding == (0.125,) * 1536
     assert memory_embeddings[0].content_hash == "custom-http-content-hash"
+
+
+def test_postgres_memory_embedding_repository_find_similar_returns_nearest_matches(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(uow_factory)
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-embedding-similarity.git",
+            canonical_path="/tmp/integration-repo-memory-embedding-similarity",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMEMBED-SIMILARITY-001",
+        )
+    )
+
+    episode = (
+        MemoryService(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        )
+        .remember_episode(
+            RememberEpisodeRequest(
+                workflow_instance_id=str(
+                    started.workflow_instance.workflow_instance_id
+                ),
+                summary="Episode backing similarity query test",
+                attempt_id=str(started.attempt.attempt_id),
+                metadata={"kind": "integration"},
+            )
+        )
+        .episode
+    )
+    assert episode is not None
+
+    nearest_memory_id = uuid4()
+    middle_memory_id = uuid4()
+    farthest_memory_id = uuid4()
+
+    nearest_item = MemoryItemRecord(
+        memory_id=nearest_memory_id,
+        workspace_id=workspace.workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Nearest semantic memory item",
+        metadata={"kind": "similarity", "rank": "nearest"},
+        created_at=datetime(2024, 2, 10, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 10, tzinfo=UTC),
+    )
+    middle_item = MemoryItemRecord(
+        memory_id=middle_memory_id,
+        workspace_id=workspace.workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Middle semantic memory item",
+        metadata={"kind": "similarity", "rank": "middle"},
+        created_at=datetime(2024, 2, 11, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 11, tzinfo=UTC),
+    )
+    farthest_item = MemoryItemRecord(
+        memory_id=farthest_memory_id,
+        workspace_id=workspace.workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Farthest semantic memory item",
+        metadata={"kind": "similarity", "rank": "farthest"},
+        created_at=datetime(2024, 2, 12, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 12, tzinfo=UTC),
+    )
+
+    nearest_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=nearest_memory_id,
+        embedding_model="test-embedding-model",
+        embedding=(0.0,) * 1535 + (0.0,),
+        content_hash=compute_content_hash(
+            nearest_item.content,
+            nearest_item.metadata,
+        ),
+        created_at=datetime(2024, 2, 13, tzinfo=UTC),
+    )
+    middle_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=middle_memory_id,
+        embedding_model="test-embedding-model",
+        embedding=(0.0,) * 1534 + (0.25, 0.0),
+        content_hash=compute_content_hash(
+            middle_item.content,
+            middle_item.metadata,
+        ),
+        created_at=datetime(2024, 2, 14, tzinfo=UTC),
+    )
+    farthest_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=farthest_memory_id,
+        embedding_model="test-embedding-model",
+        embedding=(0.0,) * 1534 + (1.0, 1.0),
+        content_hash=compute_content_hash(
+            farthest_item.content,
+            farthest_item.metadata,
+        ),
+        created_at=datetime(2024, 2, 15, tzinfo=UTC),
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_items is not None
+        assert uow.memory_embeddings is not None
+
+        uow.memory_items.create(nearest_item)
+        uow.memory_items.create(middle_item)
+        uow.memory_items.create(farthest_item)
+        uow.memory_embeddings.create(nearest_embedding)
+        uow.memory_embeddings.create(middle_embedding)
+        uow.memory_embeddings.create(farthest_embedding)
+        uow.commit()
+
+    query_embedding = (0.0,) * 1536
+
+    with uow_factory() as uow:
+        assert uow.memory_embeddings is not None
+
+        scoped_matches = uow.memory_embeddings.find_similar(
+            query_embedding,
+            limit=3,
+            workspace_id=workspace.workspace_id,
+        )
+        unscoped_matches = uow.memory_embeddings.find_similar(
+            query_embedding,
+            limit=2,
+        )
+
+    assert [embedding.memory_id for embedding in scoped_matches] == [
+        nearest_memory_id,
+        middle_memory_id,
+        farthest_memory_id,
+    ]
+    assert [embedding.memory_id for embedding in unscoped_matches] == [
+        nearest_memory_id,
+        middle_memory_id,
+    ]
+    assert all(
+        embedding.embedding_model == "test-embedding-model"
+        for embedding in scoped_matches
+    )
 
 
 def test_postgres_memory_get_context_returns_multiple_workflow_episodes(

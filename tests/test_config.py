@@ -11,6 +11,8 @@ from ctxledger.config import (
     ConfigError,
     DatabaseSettings,
     DebugSettings,
+    EmbeddingProvider,
+    EmbeddingSettings,
     HttpSettings,
     LoggingSettings,
     LogLevel,
@@ -18,9 +20,11 @@ from ctxledger.config import (
     _format_expected_values,
     _get_env,
     _parse_bool,
+    _parse_embedding_provider,
     _parse_int,
     _parse_log_level,
     _parse_optional_int,
+    _validate_optional_url,
     get_settings,
     load_settings,
 )
@@ -63,6 +67,9 @@ def minimum_valid_env() -> dict[str, str]:
         "CTXLEDGER_LOG_LEVEL": "info",
         "CTXLEDGER_LOG_STRUCTURED": "true",
         "CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS": "5",
+        "CTXLEDGER_EMBEDDING_ENABLED": "false",
+        "CTXLEDGER_EMBEDDING_PROVIDER": "disabled",
+        "CTXLEDGER_EMBEDDING_MODEL": "local-stub-v1",
     }
 
 
@@ -93,6 +100,12 @@ def test_load_settings_with_minimum_valid_env(clean_ctxledger_env: None) -> None
     assert settings.debug.enabled is True
     assert settings.projection.enabled is True
     assert settings.projection.directory_name == ".agent"
+    assert settings.embedding.enabled is False
+    assert settings.embedding.provider is EmbeddingProvider.DISABLED
+    assert settings.embedding.model == "local-stub-v1"
+    assert settings.embedding.api_key is None
+    assert settings.embedding.base_url is None
+    assert settings.embedding.dimensions is None
 
 
 def test_get_settings_returns_validated_settings(clean_ctxledger_env: None) -> None:
@@ -249,6 +262,64 @@ def test_optional_statement_timeout_can_be_omitted(clean_ctxledger_env: None) ->
     assert settings.database.statement_timeout_ms is None
 
 
+def test_parse_embedding_provider_returns_default_when_missing(
+    clean_ctxledger_env: None,
+) -> None:
+    with patched_env(CTXLEDGER_EMBEDDING_PROVIDER=None):
+        assert (
+            _parse_embedding_provider(
+                "CTXLEDGER_EMBEDDING_PROVIDER",
+                EmbeddingProvider.DISABLED,
+            )
+            is EmbeddingProvider.DISABLED
+        )
+
+
+def test_parse_embedding_provider_accepts_supported_value(
+    clean_ctxledger_env: None,
+) -> None:
+    with patched_env(CTXLEDGER_EMBEDDING_PROVIDER="voyageai"):
+        assert (
+            _parse_embedding_provider(
+                "CTXLEDGER_EMBEDDING_PROVIDER",
+                EmbeddingProvider.DISABLED,
+            )
+            is EmbeddingProvider.VOYAGEAI
+        )
+
+
+def test_parse_embedding_provider_rejects_unknown_value(
+    clean_ctxledger_env: None,
+) -> None:
+    with patched_env(CTXLEDGER_EMBEDDING_PROVIDER="weird"):
+        with pytest.raises(
+            ConfigError,
+            match="CTXLEDGER_EMBEDDING_PROVIDER must be one of",
+        ):
+            _parse_embedding_provider(
+                "CTXLEDGER_EMBEDDING_PROVIDER",
+                EmbeddingProvider.DISABLED,
+            )
+
+
+def test_validate_optional_url_accepts_absolute_url() -> None:
+    _validate_optional_url(
+        name="CTXLEDGER_EMBEDDING_BASE_URL",
+        value="https://api.example.com/v1",
+    )
+
+
+def test_validate_optional_url_rejects_invalid_url() -> None:
+    with pytest.raises(
+        ConfigError,
+        match="CTXLEDGER_EMBEDDING_BASE_URL must be a valid absolute URL",
+    ):
+        _validate_optional_url(
+            name="CTXLEDGER_EMBEDDING_BASE_URL",
+            value="not-a-url",
+        )
+
+
 def test_get_env_returns_default_for_missing_value(clean_ctxledger_env: None) -> None:
     with patched_env(CTXLEDGER_SAMPLE=None):
         assert _get_env("CTXLEDGER_SAMPLE", "fallback") == "fallback"
@@ -320,11 +391,13 @@ def test_database_settings_is_configured_reflects_url_presence() -> None:
         url="postgresql://example/db",
         connect_timeout_seconds=5,
         statement_timeout_ms=None,
+        schema_name="public",
     )
     missing = DatabaseSettings(
         url="",
         connect_timeout_seconds=5,
         statement_timeout_ms=None,
+        schema_name="public",
     )
 
     assert configured.is_configured is True
@@ -347,6 +420,7 @@ def test_app_settings_validate_rejects_empty_host() -> None:
             url="postgresql://example/db",
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
+            schema_name="public",
         ),
         http=HttpSettings(host="", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -357,6 +431,14 @@ def test_app_settings_validate_rejects_empty_host() -> None:
             write_json=True,
         ),
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
+        embedding=EmbeddingSettings(
+            enabled=False,
+            provider=EmbeddingProvider.DISABLED,
+            model="local-stub-v1",
+            api_key=None,
+            base_url=None,
+            dimensions=None,
+        ),
     )
 
     with pytest.raises(ConfigError, match="CTXLEDGER_HOST must not be empty"):
@@ -372,6 +454,7 @@ def test_app_settings_validate_rejects_empty_http_path() -> None:
             url="postgresql://example/db",
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
+            schema_name="public",
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path=""),
         debug=DebugSettings(enabled=True),
@@ -382,9 +465,168 @@ def test_app_settings_validate_rejects_empty_http_path() -> None:
             write_json=True,
         ),
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
+        embedding=EmbeddingSettings(
+            enabled=False,
+            provider=EmbeddingProvider.DISABLED,
+            model="local-stub-v1",
+            api_key=None,
+            base_url=None,
+            dimensions=None,
+        ),
     )
 
     with pytest.raises(ConfigError, match="CTXLEDGER_HTTP_PATH must not be empty"):
+        settings.validate()
+
+
+def test_app_settings_validate_requires_embedding_model_when_enabled() -> None:
+    settings = AppSettings(
+        app_name="ctxledger",
+        app_version="0.1.0",
+        environment="test",
+        database=DatabaseSettings(
+            url="postgresql://example/db",
+            connect_timeout_seconds=5,
+            statement_timeout_ms=None,
+            schema_name="public",
+        ),
+        http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
+        debug=DebugSettings(enabled=True),
+        projection=ProjectionSettings(
+            enabled=True,
+            directory_name=".agent",
+            write_markdown=True,
+            write_json=True,
+        ),
+        logging=LoggingSettings(level=LogLevel.INFO, structured=True),
+        embedding=EmbeddingSettings(
+            enabled=True,
+            provider=EmbeddingProvider.LOCAL_STUB,
+            model="",
+            api_key=None,
+            base_url=None,
+            dimensions=None,
+        ),
+    )
+
+    with pytest.raises(
+        ConfigError, match="CTXLEDGER_EMBEDDING_MODEL must not be empty"
+    ):
+        settings.validate()
+
+
+def test_app_settings_validate_requires_api_key_for_external_embedding_provider() -> (
+    None
+):
+    settings = AppSettings(
+        app_name="ctxledger",
+        app_version="0.1.0",
+        environment="test",
+        database=DatabaseSettings(
+            url="postgresql://example/db",
+            connect_timeout_seconds=5,
+            statement_timeout_ms=None,
+            schema_name="public",
+        ),
+        http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
+        debug=DebugSettings(enabled=True),
+        projection=ProjectionSettings(
+            enabled=True,
+            directory_name=".agent",
+            write_markdown=True,
+            write_json=True,
+        ),
+        logging=LoggingSettings(level=LogLevel.INFO, structured=True),
+        embedding=EmbeddingSettings(
+            enabled=True,
+            provider=EmbeddingProvider.OPENAI,
+            model="text-embedding-3-small",
+            api_key=None,
+            base_url=None,
+            dimensions=None,
+        ),
+    )
+
+    with pytest.raises(
+        ConfigError,
+        match="CTXLEDGER_EMBEDDING_API_KEY is required for the selected embedding provider",
+    ):
+        settings.validate()
+
+
+def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provider() -> (
+    None
+):
+    settings = AppSettings(
+        app_name="ctxledger",
+        app_version="0.1.0",
+        environment="test",
+        database=DatabaseSettings(
+            url="postgresql://example/db",
+            connect_timeout_seconds=5,
+            statement_timeout_ms=None,
+            schema_name="public",
+        ),
+        http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
+        debug=DebugSettings(enabled=True),
+        projection=ProjectionSettings(
+            enabled=True,
+            directory_name=".agent",
+            write_markdown=True,
+            write_json=True,
+        ),
+        logging=LoggingSettings(level=LogLevel.INFO, structured=True),
+        embedding=EmbeddingSettings(
+            enabled=True,
+            provider=EmbeddingProvider.CUSTOM_HTTP,
+            model="custom-model",
+            api_key="secret",
+            base_url=None,
+            dimensions=None,
+        ),
+    )
+
+    with pytest.raises(
+        ConfigError,
+        match="CTXLEDGER_EMBEDDING_BASE_URL is required when CTXLEDGER_EMBEDDING_PROVIDER=custom_http",
+    ):
+        settings.validate()
+
+
+def test_app_settings_validate_rejects_non_positive_embedding_dimensions() -> None:
+    settings = AppSettings(
+        app_name="ctxledger",
+        app_version="0.1.0",
+        environment="test",
+        database=DatabaseSettings(
+            url="postgresql://example/db",
+            connect_timeout_seconds=5,
+            statement_timeout_ms=None,
+            schema_name="public",
+        ),
+        http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
+        debug=DebugSettings(enabled=True),
+        projection=ProjectionSettings(
+            enabled=True,
+            directory_name=".agent",
+            write_markdown=True,
+            write_json=True,
+        ),
+        logging=LoggingSettings(level=LogLevel.INFO, structured=True),
+        embedding=EmbeddingSettings(
+            enabled=True,
+            provider=EmbeddingProvider.LOCAL_STUB,
+            model="local-stub-v1",
+            api_key=None,
+            base_url=None,
+            dimensions=0,
+        ),
+    )
+
+    with pytest.raises(
+        ConfigError,
+        match="CTXLEDGER_EMBEDDING_DIMENSIONS must be greater than 0 when provided",
+    ):
         settings.validate()
 
 
@@ -409,3 +651,9 @@ def test_load_settings_uses_defaults_for_optional_values(
     assert settings.logging.structured is True
     assert settings.database.connect_timeout_seconds == 5
     assert settings.database.statement_timeout_ms is None
+    assert settings.embedding.enabled is False
+    assert settings.embedding.provider is EmbeddingProvider.DISABLED
+    assert settings.embedding.model == "local-stub-v1"
+    assert settings.embedding.api_key is None
+    assert settings.embedding.base_url is None
+    assert settings.embedding.dimensions is None

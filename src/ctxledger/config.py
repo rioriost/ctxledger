@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
+from urllib.parse import urlparse
 
 
 class ConfigError(ValueError):
@@ -16,6 +17,15 @@ class LogLevel(StrEnum):
     WARNING = "warning"
     ERROR = "error"
     CRITICAL = "critical"
+
+
+class EmbeddingProvider(StrEnum):
+    DISABLED = "disabled"
+    LOCAL_STUB = "local_stub"
+    OPENAI = "openai"
+    VOYAGEAI = "voyageai"
+    COHERE = "cohere"
+    CUSTOM_HTTP = "custom_http"
 
 
 _TRUE_VALUES: Final[set[str]] = {"1", "true", "t", "yes", "y", "on"}
@@ -77,6 +87,35 @@ def _parse_log_level(name: str, default: LogLevel) -> LogLevel:
         raise ConfigError(f"{name} must be one of {expected}") from exc
 
 
+def _parse_embedding_provider(
+    name: str,
+    default: EmbeddingProvider,
+) -> EmbeddingProvider:
+    raw = _get_env(name)
+    if raw is None:
+        return default
+    try:
+        return EmbeddingProvider(raw.lower())
+    except ValueError as exc:
+        expected = _format_expected_values(
+            provider.value for provider in EmbeddingProvider
+        )
+        raise ConfigError(f"{name} must be one of {expected}") from exc
+
+
+def _validate_optional_url(
+    *,
+    name: str,
+    value: str | None,
+) -> None:
+    if value is None:
+        return
+
+    parsed = urlparse(value)
+    if not parsed.scheme or not parsed.netloc:
+        raise ConfigError(f"{name} must be a valid absolute URL")
+
+
 def _format_expected_values(
     values: list[str] | set[str] | tuple[str, ...] | object,
 ) -> str:
@@ -133,6 +172,25 @@ class LoggingSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class EmbeddingSettings:
+    provider: EmbeddingProvider
+    model: str
+    api_key: str | None
+    base_url: str | None
+    dimensions: int | None
+    enabled: bool
+
+    @property
+    def requires_external_api(self) -> bool:
+        return self.provider in {
+            EmbeddingProvider.OPENAI,
+            EmbeddingProvider.VOYAGEAI,
+            EmbeddingProvider.COHERE,
+            EmbeddingProvider.CUSTOM_HTTP,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class AppSettings:
     app_name: str
     app_version: str
@@ -142,6 +200,7 @@ class AppSettings:
     debug: DebugSettings
     projection: ProjectionSettings
     logging: LoggingSettings
+    embedding: EmbeddingSettings
 
     def validate(self) -> None:
         if not self.database.url:
@@ -178,6 +237,33 @@ class AppSettings:
         if not self.database.schema_name:
             raise ConfigError("CTXLEDGER_DB_SCHEMA_NAME must not be empty")
 
+        if self.embedding.enabled:
+            if not self.embedding.model:
+                raise ConfigError("CTXLEDGER_EMBEDDING_MODEL must not be empty")
+
+            if self.embedding.requires_external_api and not self.embedding.api_key:
+                raise ConfigError(
+                    "CTXLEDGER_EMBEDDING_API_KEY is required for the selected embedding provider"
+                )
+
+            if (
+                self.embedding.provider is EmbeddingProvider.CUSTOM_HTTP
+                and not self.embedding.base_url
+            ):
+                raise ConfigError(
+                    "CTXLEDGER_EMBEDDING_BASE_URL is required when CTXLEDGER_EMBEDDING_PROVIDER=custom_http"
+                )
+
+            _validate_optional_url(
+                name="CTXLEDGER_EMBEDDING_BASE_URL",
+                value=self.embedding.base_url,
+            )
+
+            if self.embedding.dimensions is not None and self.embedding.dimensions <= 0:
+                raise ConfigError(
+                    "CTXLEDGER_EMBEDDING_DIMENSIONS must be greater than 0 when provided"
+                )
+
 
 def load_settings() -> AppSettings:
     settings = AppSettings(
@@ -211,6 +297,18 @@ def load_settings() -> AppSettings:
         logging=LoggingSettings(
             level=_parse_log_level("CTXLEDGER_LOG_LEVEL", LogLevel.INFO),
             structured=_parse_bool("CTXLEDGER_LOG_STRUCTURED", True),
+        ),
+        embedding=EmbeddingSettings(
+            provider=_parse_embedding_provider(
+                "CTXLEDGER_EMBEDDING_PROVIDER",
+                EmbeddingProvider.DISABLED,
+            ),
+            model=_get_env("CTXLEDGER_EMBEDDING_MODEL", "local-stub-v1")
+            or "local-stub-v1",
+            api_key=_get_env("CTXLEDGER_EMBEDDING_API_KEY"),
+            base_url=_get_env("CTXLEDGER_EMBEDDING_BASE_URL"),
+            dimensions=_parse_optional_int("CTXLEDGER_EMBEDDING_DIMENSIONS"),
+            enabled=_parse_bool("CTXLEDGER_EMBEDDING_ENABLED", False),
         ),
     )
 

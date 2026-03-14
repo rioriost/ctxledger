@@ -36,6 +36,8 @@ from ctxledger.memory.service import (
     MemoryFeature,
     MemoryServiceError,
     RememberEpisodeResponse,
+    SearchMemoryResponse,
+    SearchResultRecord,
     StubResponse,
 )
 from ctxledger.runtime.types import McpToolResponse, WorkflowResumeResponse
@@ -1553,8 +1555,6 @@ class FakeMemoryService:
 
 
 def make_stub_response() -> StubResponse:
-    from ctxledger.memory.service import MemoryFeature
-
     return StubResponse(
         feature=MemoryFeature.REMEMBER_EPISODE,
         implemented=False,
@@ -1655,7 +1655,50 @@ def test_build_memory_remember_episode_tool_handler_maps_memory_error() -> None:
 def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_values() -> (
     None
 ):
-    service = FakeMemoryService(search_result=make_stub_response())
+    created_at = datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)
+    workspace_id = uuid4()
+    attempt_id = uuid4()
+    episode_id = uuid4()
+    memory_id = uuid4()
+    service = FakeMemoryService(
+        search_result=SearchMemoryResponse(
+            feature=MemoryFeature.SEARCH,
+            implemented=True,
+            message="Hybrid lexical and semantic memory search completed successfully.",
+            status="ok",
+            available_in_version="0.3.0",
+            timestamp=created_at,
+            results=(
+                SearchResultRecord(
+                    memory_id=memory_id,
+                    workspace_id=workspace_id,
+                    episode_id=episode_id,
+                    workflow_instance_id=None,
+                    summary="needle found in summary",
+                    attempt_id=attempt_id,
+                    metadata={"kind": "checkpoint"},
+                    score=3.0,
+                    matched_fields=("content",),
+                    lexical_score=3.0,
+                    semantic_score=0.0,
+                    created_at=created_at,
+                    updated_at=created_at,
+                ),
+            ),
+            details={
+                "query": "needle",
+                "normalized_query": "needle",
+                "workspace_id": str(workspace_id),
+                "limit": 10,
+                "filters": {},
+                "search_mode": "hybrid_memory_item_search",
+                "memory_items_considered": 1,
+                "semantic_candidates_considered": 1,
+                "semantic_query_generated": True,
+                "results_returned": 1,
+            },
+        )
+    )
     handler = build_memory_search_tool_handler(service)
 
     response = handler(
@@ -1668,13 +1711,42 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
     )
 
     assert response.payload["ok"] is True
-    assert response.payload["result"]["feature"] == "memory_remember_episode"
-    assert response.payload["result"]["implemented"] is False
-    assert response.payload["result"]["message"] == "ok"
-    assert response.payload["result"]["status"] == "not_implemented"
-    assert response.payload["result"]["available_in_version"] == "0.1.0"
-    assert response.payload["result"]["details"] == {"value": 1, "source": "test"}
+    assert response.payload["result"]["feature"] == "memory_search"
+    assert response.payload["result"]["implemented"] is True
+    assert (
+        response.payload["result"]["message"]
+        == "Hybrid lexical and semantic memory search completed successfully."
+    )
+    assert response.payload["result"]["status"] == "ok"
+    assert response.payload["result"]["available_in_version"] == "0.3.0"
+    assert response.payload["result"]["details"] == {
+        "query": "needle",
+        "normalized_query": "needle",
+        "workspace_id": str(workspace_id),
+        "limit": 10,
+        "filters": {},
+        "search_mode": "hybrid_memory_item_search",
+        "memory_items_considered": 1,
+        "semantic_candidates_considered": 1,
+        "semantic_query_generated": True,
+        "results_returned": 1,
+    }
     assert "timestamp" in response.payload["result"]
+    assert response.payload["result"]["results"] == [
+        {
+            "memory_id": str(memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": str(episode_id),
+            "workflow_instance_id": None,
+            "summary": "needle found in summary",
+            "attempt_id": str(attempt_id),
+            "metadata": {"kind": "checkpoint"},
+            "score": 3.0,
+            "matched_fields": ["content"],
+            "created_at": created_at.isoformat(),
+            "updated_at": created_at.isoformat(),
+        }
+    ]
     assert service.search_calls is not None
     call = service.search_calls[0]
     assert call.query == "needle"

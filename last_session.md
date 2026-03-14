@@ -497,3 +497,71 @@ clean です。
 このまま続けるなら、次の最短ルートは  
 **`find_similar()` の test を足してから、`memory_search` へ semantic path を統合すること**  
 です。
+
+進めました。`memory_search` に **semantic / hybrid の入口**を入れています。
+
+### 今回やったこと
+- `src/ctxledger/memory/service.py`
+  - `SearchResultRecord` に以下を追加
+    - `lexical_score`
+    - `semantic_score`
+  - `MemoryService.search()` を更新
+    - embedding generator と embedding repository がある場合:
+      - query から embedding 生成
+      - `find_similar()` 実行
+      - lexical score と semantic score を合成
+    - ない場合:
+      - 従来どおり lexical-only fallback
+  - details に追加
+    - `semantic_candidates_considered`
+    - `semantic_query_generated`
+    - `semantic_generation_skipped_reason`
+  - hybrid 有効時の message / mode を変更
+    - `search_mode = "hybrid_memory_item_search"`
+    - message: `Hybrid lexical and semantic memory search completed successfully.`
+
+- `tests/test_coverage_targets.py`
+  - in-memory search path の既存テスト期待値を更新
+  - lexical-only fallback 時の
+    - semantic candidate count
+    - skipped reason
+    - score breakdown
+    を確認するように変更
+
+- `tests/test_mcp_tool_handlers.py`
+  - hybrid path の message / details 期待値に更新
+
+### 検証したもの
+- `python -m pytest -q tests/test_coverage_targets.py -k 'memory_service_records_episodes_and_returns_search_results'`
+  - **1 passed**
+- `python -m pytest -q tests/test_mcp_tool_handlers.py -k 'build_memory_search_tool_handler_uses_defaults_for_invalid_optional_values'`
+  - **1 passed**
+
+### diagnostics
+clean です。
+- `src/ctxledger/memory/service.py`
+- `tests/test_coverage_targets.py`
+- `tests/test_mcp_tool_handlers.py`
+
+### 今の状態
+いまはこうです。
+
+- repository 層
+  - embedding save
+  - `find_similar()`
+  - PostgreSQL `pgvector` similarity
+- service 層
+  - lexical fallback
+  - semantic candidate retrieval
+  - hybrid score 合成の初期版
+
+ただし、まだ **surface 全体の整合** は終わっていません。  
+特に次は以下が必要です。
+
+1. `runtime/serializers.py` に `lexical_score` / `semantic_score` を出すか決めて反映
+2. 残りの search 関連テストを hybrid-aware に更新
+3. PostgreSQL integration で `memory_search` 自体の hybrid path を通す
+4. 必要なら ranking を調整
+
+必要ならこのまま次に、  
+**serializer と残りの search tests を hybrid 仕様へ揃えるところ**まで続けます。

@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from urllib import error as urllib_error
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -44,6 +44,7 @@ from ctxledger.memory.service import (
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
     InMemoryWorkflowLookupRepository,
+    MemoryEmbeddingRecord,
     MemoryErrorCode,
     MemoryFeature,
     MemoryService,
@@ -3260,7 +3261,7 @@ def test_serialize_search_memory_response_serializes_results() -> None:
     response = SearchMemoryResponse(
         feature=MemoryFeature.SEARCH,
         implemented=True,
-        message="Episode-based memory search completed successfully.",
+        message="Hybrid lexical and semantic memory search completed successfully.",
         status="ok",
         available_in_version="0.3.0",
         timestamp=created_at,
@@ -3274,7 +3275,9 @@ def test_serialize_search_memory_response_serializes_results() -> None:
                 attempt_id=attempt_id,
                 metadata={"kind": "root-cause"},
                 score=4.5,
-                matched_fields=("summary", "metadata_values"),
+                matched_fields=("content", "embedding_similarity"),
+                lexical_score=3.0,
+                semantic_score=0.75,
                 created_at=created_at,
                 updated_at=created_at,
             ),
@@ -3282,13 +3285,13 @@ def test_serialize_search_memory_response_serializes_results() -> None:
         details={
             "query": "root cause",
             "normalized_query": "root cause",
-            "workspace_id": "ws-1",
+            "workspace_id": str(workflow_id),
             "limit": 3,
             "filters": {"kind": "episode"},
-            "search_mode": "episode_lexical",
-            "resolved_workflow_count": 1,
-            "resolved_workflow_ids": [str(workflow_id)],
-            "episodes_considered": 2,
+            "search_mode": "hybrid_memory_item_search",
+            "memory_items_considered": 2,
+            "semantic_candidates_considered": 2,
+            "semantic_query_generated": True,
             "results_returned": 1,
         },
     )
@@ -3297,20 +3300,23 @@ def test_serialize_search_memory_response_serializes_results() -> None:
 
     assert payload["feature"] == "memory_search"
     assert payload["implemented"] is True
-    assert payload["message"] == "Episode-based memory search completed successfully."
+    assert (
+        payload["message"]
+        == "Hybrid lexical and semantic memory search completed successfully."
+    )
     assert payload["status"] == "ok"
     assert payload["available_in_version"] == "0.3.0"
     assert payload["timestamp"] == created_at.isoformat()
     assert payload["details"] == {
         "query": "root cause",
         "normalized_query": "root cause",
-        "workspace_id": "ws-1",
+        "workspace_id": str(workflow_id),
         "limit": 3,
         "filters": {"kind": "episode"},
-        "search_mode": "episode_lexical",
-        "resolved_workflow_count": 1,
-        "resolved_workflow_ids": [str(workflow_id)],
-        "episodes_considered": 2,
+        "search_mode": "hybrid_memory_item_search",
+        "memory_items_considered": 2,
+        "semantic_candidates_considered": 2,
+        "semantic_query_generated": True,
         "results_returned": 1,
     }
     assert payload["results"] == [
@@ -3323,7 +3329,9 @@ def test_serialize_search_memory_response_serializes_results() -> None:
             "attempt_id": str(attempt_id),
             "metadata": {"kind": "root-cause"},
             "score": 4.5,
-            "matched_fields": ["summary", "metadata_values"],
+            "matched_fields": ["content", "embedding_similarity"],
+            "lexical_score": 3.0,
+            "semantic_score": 0.75,
             "created_at": created_at.isoformat(),
             "updated_at": created_at.isoformat(),
         }
@@ -3749,6 +3757,93 @@ def test_custom_http_embedding_generator_rejects_missing_embedding_vector(
     assert exc_info.value.details == {"field": "embedding"}
 
 
+def test_in_memory_memory_embedding_repository_find_similar_orders_by_similarity() -> (
+    None
+):
+    repository = InMemoryMemoryEmbeddingRepository()
+    first_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=uuid4(),
+        embedding_model="local-stub-v1",
+        embedding=(1.0, 0.0, 0.0),
+        content_hash="first-hash",
+        created_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    second_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=uuid4(),
+        embedding_model="local-stub-v1",
+        embedding=(0.5, 0.5, 0.0),
+        content_hash="second-hash",
+        created_at=datetime(2024, 1, 2, tzinfo=UTC),
+    )
+    third_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=uuid4(),
+        embedding_model="local-stub-v1",
+        embedding=(0.0, 1.0, 0.0),
+        content_hash="third-hash",
+        created_at=datetime(2024, 1, 3, tzinfo=UTC),
+    )
+
+    repository.create(first_embedding)
+    repository.create(second_embedding)
+    repository.create(third_embedding)
+
+    matches = repository.find_similar((1.0, 0.0, 0.0), limit=2)
+
+    assert matches == (first_embedding, second_embedding)
+
+
+def test_in_memory_memory_embedding_repository_find_similar_ignores_dimension_mismatch() -> (
+    None
+):
+    repository = InMemoryMemoryEmbeddingRepository()
+    matching_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=uuid4(),
+        embedding_model="local-stub-v1",
+        embedding=(0.0, 1.0),
+        content_hash="matching-hash",
+        created_at=datetime(2024, 1, 2, tzinfo=UTC),
+    )
+    mismatched_embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=uuid4(),
+        embedding_model="local-stub-v1",
+        embedding=(1.0, 0.0, 0.0),
+        content_hash="mismatched-hash",
+        created_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+
+    repository.create(matching_embedding)
+    repository.create(mismatched_embedding)
+
+    matches = repository.find_similar((0.0, 1.0), limit=5)
+
+    assert matches == (matching_embedding,)
+
+
+def test_in_memory_memory_embedding_repository_find_similar_returns_empty_for_empty_query() -> (
+    None
+):
+    repository = InMemoryMemoryEmbeddingRepository()
+    repository.create(
+        MemoryEmbeddingRecord(
+            memory_embedding_id=uuid4(),
+            memory_id=uuid4(),
+            embedding_model="local-stub-v1",
+            embedding=(1.0, 0.0),
+            content_hash="hash",
+            created_at=datetime(2024, 1, 1, tzinfo=UTC),
+        )
+    )
+
+    matches = repository.find_similar((), limit=5)
+
+    assert matches == ()
+
+
 def test_compute_content_hash_uses_text_and_metadata() -> None:
     first = compute_content_hash("same text", {"kind": "episode"})
     second = compute_content_hash("same text", {"kind": "episode"})
@@ -3837,7 +3932,7 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     search_response = service.search(
         SearchMemoryRequest(
             query="relevant context",
-            workspace_id="ws-1",
+            workspace_id="00000000-0000-0000-0000-000000000001",
             limit=5,
             filters={"kind": "episode"},
         )
@@ -3899,6 +3994,12 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert search_response.details["filters"] == {"kind": "episode"}
     assert search_response.details["search_mode"] == "memory_item_lexical"
     assert search_response.details["memory_items_considered"] == 1
+    assert search_response.details["semantic_candidates_considered"] == 0
+    assert search_response.details["semantic_query_generated"] is False
+    assert (
+        search_response.details["semantic_generation_skipped_reason"]
+        == "embedding_search_not_configured"
+    )
     assert search_response.details["results_returned"] == 1
     assert len(search_response.results) == 1
     assert (
@@ -3917,7 +4018,9 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
         "topic": "relevant context",
     }
     assert "content" in search_response.results[0].matched_fields
-    assert search_response.results[0].score > 0
+    assert search_response.results[0].lexical_score > 0
+    assert search_response.results[0].semantic_score == 0.0
+    assert search_response.results[0].score == search_response.results[0].lexical_score
 
     assert context_response.feature == MemoryFeature.GET_CONTEXT
     assert context_response.details["include_episodes"] is False
