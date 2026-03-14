@@ -513,6 +513,48 @@ def test_resume_workflow_returns_terminal_for_completed_workflow() -> None:
     )
 
 
+def test_resume_workflow_terminal_result_is_for_inspection_not_continuation() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INSPECT-ONLY",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="finalize",
+            checkpoint_json={"next_intended_action": "No further execution"},
+        )
+    )
+    service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+        )
+    )
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert resume.resumable_status == ResumableStatus.TERMINAL
+    assert resume.attempt is not None
+    assert resume.attempt.status == WorkflowAttemptStatus.SUCCEEDED
+    assert resume.latest_checkpoint is not None
+    assert resume.latest_checkpoint.step_name == "finalize"
+    assert (
+        resume.next_hint
+        == "Workflow is terminal. Inspect the final state instead of resuming execution."
+    )
+
+
 def test_resume_workflow_raises_for_unknown_workflow() -> None:
     service, _ = make_service_and_uow()
 
@@ -1130,6 +1172,33 @@ def test_create_checkpoint_rejects_terminal_attempt() -> None:
         assert "terminal attempt" in str(exc)
     else:
         raise AssertionError("Expected InvalidStateTransitionError")
+
+
+def test_completed_workflow_requires_new_workflow_for_additional_work() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    first = service.start_workflow(
+        StartWorkflowInput(workspace_id=workspace.workspace_id, ticket_id="CLOSED-1")
+    )
+    service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=first.workflow_instance.workflow_instance_id,
+            attempt_id=first.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+        )
+    )
+
+    second = service.start_workflow(
+        StartWorkflowInput(workspace_id=workspace.workspace_id, ticket_id="CLOSED-2")
+    )
+
+    assert (
+        second.workflow_instance.workflow_instance_id
+        != first.workflow_instance.workflow_instance_id
+    )
+    assert second.workflow_instance.status == WorkflowInstanceStatus.RUNNING
+    assert second.attempt.status == WorkflowAttemptStatus.RUNNING
+    assert second.attempt.attempt_number == 1
 
 
 def test_record_resume_projection_raises_when_projection_repository_is_unavailable() -> (
