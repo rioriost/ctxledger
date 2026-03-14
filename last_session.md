@@ -1,13 +1,10 @@
 # ctxledger last session
 
 ## 直近で完了していること
-- `memory_search.details` の aggregate explanation として `result_composition` が追加済みです。
-- `result_composition` は以下 3 指標を明示します。
-  - `with_lexical_signal`
-  - `with_semantic_signal`
-  - `with_both_signals`
-- 既存の `result_mode_counts` とあわせて、mode ベースと signal ベースの両方から検索結果の構成を説明できる状態です。
-- server / MCP handler / coverage / PostgreSQL integration test の expectation は更新済みです。
+- `memory_get_context` の relevance を小さく安全に改善しました。
+- query filtering は従来の単純な substring match を維持しつつ、multi-token query にも対応しました。
+- `details` に `query_tokens` を追加し、なぜ一致したかを追いやすくしました。
+- `memory_search.details` 側では引き続き `result_mode_counts` と `result_composition` が利用可能です。
 - targeted validation は通過しています。
   - `tests/test_server.py`
   - `tests/test_mcp_tool_handlers.py`
@@ -16,73 +13,62 @@
 
 ## 今回やったこと
 1. `src/ctxledger/memory/service.py`
-   - `limited_results` の集計に `result_composition` を追加
-   - 以下の 3 count を `details["result_composition"]` として返すようにした
-     - `with_lexical_signal`
-     - `with_semantic_signal`
-     - `with_both_signals`
+   - `memory_get_context` の query filtering に token-aware matching を追加
+   - 従来の `normalized_query in text.casefold()` は維持
+   - 追加で、query を token 分割し、summary または metadata string に全 token が含まれる場合も match するようにした
+   - `details["query_tokens"]` を返すようにした
 
-2. `tests/test_server.py`
-   - empty-result の `memory_search` details expectation に `result_composition` を追加
-
-3. `tests/test_mcp_tool_handlers.py`
-   - serialized `memory_search` details expectation に `result_composition` を追加
-   - lexical-only ケースで signal count が正しく出ることを確認
-
-4. `tests/test_coverage_targets.py`
-   - search response serialization expectation に `result_composition` を追加
-   - in-memory hybrid ranking test expectation に `result_composition` を追加
-   - semantic-only ranking test expectation に `result_composition` を追加
-
-5. `tests/test_postgres_integration.py`
-   - PostgreSQL-backed hybrid ranking test に `result_composition` assertion を追加
-   - PostgreSQL integration の 3 mode 同居ケースで以下を確認済み
-     - `hybrid`
-     - `lexical_only`
-     - `semantic_only_discounted`
-   - 同ケースで `result_composition` が以下になることを確認済み
-     - `with_lexical_signal = 2`
-     - `with_semantic_signal = 2`
-     - `with_both_signals = 1`
+2. `tests/test_coverage_targets.py`
+   - `memory_get_context` の既存 details expectation に `query_tokens` を追加
+   - multi-token query が summary に一致するケースを追加
+   - multi-token query が metadata に一致するケースを追加
 
 ## 検証
 実行済み:
+- `python -m pytest -q tests/test_coverage_targets.py -k "memory_get_context or serialize_get_context_response"`
+  - `8 passed`
 - `python -m pytest -q tests/test_server.py tests/test_mcp_tool_handlers.py tests/test_coverage_targets.py tests/test_postgres_integration.py`
-  - `423 passed`
+  - `425 passed`
+
+## 今回の commit
+- まだ commit していません
 
 ## 現在の状態
-- `result_composition` は実装・検証まで完了している状態です。
-- この時点で、`last_session.md` に書かれていた「次にやる候補」だった追加説明指標はすでに codebase に反映済みです。
-- repository の次の自然な作業は、aggregate explanation のさらに先か、ranking / relevance 改善です。
+- `memory_get_context` の token-aware relevance 改善は実装済み・検証済みです。
+- tracked changes は残っています。
+- repository に未追跡 cert もありますが、通常どおり無視でよいです。
+
+未追跡:
+- `docker/traefik/certs/localhost.crt`
+- `docker/traefik/certs/localhost.key`
 
 ## 補足
-- `result_mode_counts` は zero-count mode も明示的に返します。
-- `result_composition` も zero-count を含めて明示的に返します。
-- `result_composition` の意味は以下です。
-  - `with_lexical_signal`: `lexical_score > 0`
-  - `with_semantic_signal`: `semantic_score > 0`
-  - `with_both_signals`: `lexical_score > 0 and semantic_score > 0`
-- `memory_search` の strongest supported embedding execution path は引き続き `local_stub` と `custom_http` です。
+- 新しい matching は「全文一致」ではなく「全 token が含まれるか」を見る軽量拡張です。
+- そのため、大きな ranking 変更や workflow resume の canonical behavior 変更は入れていません。
+- `memory_get_context` は引き続き workflow state の代替ではなく、auxiliary context retrieval の位置づけです。
+- `query_tokens` は explanation / debugging 向けの追加情報です。
+- `memory_search` 側の `result_mode_counts` / `result_composition` はそのまま維持されています。
 
 ## いまの状態の短い総括
-- `memory_search` は hybrid lexical + semantic ranking、`ranking_details`、`result_mode_counts`、`result_composition` まで揃っている
-- PostgreSQL integration でも mode / signal の aggregate explanation が裏付けられている
-- 現在の課題は未実装の core というより、relevance と explanation の次段階の磨き込み
+- `memory_search` は aggregate explanation までかなり揃っている
+- `memory_get_context` は token-aware filtering により query relevance が一段よくなった
+- 残る自然な課題は relevance の次段階か、lookup / assembly の改善
 
 ## 次の最短ルート
-1. ranking / relevance 改善を進める
-   - semantic score weighting
-   - lexical / semantic balance tuning
-   - score explanation の精度改善
+1. 今回の `memory_get_context` 改善を commit する
+   - `memory/service.py`
+   - `tests/test_coverage_targets.py`
 
-2. `memory_get_context` の relevance 強化
-   - query / workflow / ticket / workspace の組み合わせ最適化
+2. その次に `memory_get_context` の scope 解決を強化する
+   - `workspace_id` と `ticket_id` を query と組み合わせたときの拾い方改善
+   - 複数 workflow にまたがる候補の絞り込み改善
    - context assembly の選別改善
 
-3. 必要なら aggregate explanation をさらに拡張
-   - ただし `result_mode_counts` と `result_composition` がすでに入っているので、次は本当に価値が増える追加だけに絞るのがよい
+3. 必要なら signal / explanation をさらに足す
+   - ただし次は query explanation や candidate narrowing に直接効くものを優先するとよい
 
 ## 次回再開時の一言メモ
-- `result_composition` はすでに実装されていて、targeted test も通過済み
-- PostgreSQL 3 mode 同居ケースも確認済み
-- 次は explanation の小拡張より、ranking / relevance か `memory_get_context` 強化に進むのが自然
+- `memory_get_context` に token-aware query matching を追加済み
+- `details["query_tokens"]` も追加済み
+- targeted / broad targeted pytest は通過済みで `425 passed`
+- 次は commit してから、workspace / ticket 併用時の relevance 改善に進むのが自然

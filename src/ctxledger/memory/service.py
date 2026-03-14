@@ -340,6 +340,27 @@ def _normalize_query_text(value: str | None) -> str | None:
     return normalized.casefold() if normalized else None
 
 
+def _query_tokens(normalized_query: str | None) -> tuple[str, ...]:
+    if normalized_query is None:
+        return ()
+
+    return tuple(token for token in normalized_query.split() if token)
+
+
+def _text_matches_query(
+    *,
+    text: str,
+    normalized_query: str,
+    query_tokens: tuple[str, ...],
+) -> bool:
+    normalized_text = text.casefold()
+    if normalized_query in normalized_text:
+        return True
+    return bool(query_tokens) and all(
+        token in normalized_text for token in query_tokens
+    )
+
+
 def _metadata_query_strings(metadata: dict[str, Any]) -> tuple[str, ...]:
     query_strings: list[str] = []
 
@@ -1124,6 +1145,7 @@ class MemoryService:
         resolved_workflow_ids: tuple[UUID, ...] = ()
         resolved_workflow_instance_id: str | None = None
         normalized_query = _normalize_query_text(request.query)
+        query_tokens = _query_tokens(normalized_query)
 
         if self._has_text(request.workflow_instance_id):
             lookup_scope = "workflow_instance"
@@ -1160,6 +1182,7 @@ class MemoryService:
         details = {
             "query": request.query,
             "normalized_query": normalized_query,
+            "query_tokens": list(query_tokens),
             "lookup_scope": lookup_scope,
             "workspace_id": request.workspace_id,
             "workflow_instance_id": resolved_workflow_instance_id,
@@ -1201,9 +1224,17 @@ class MemoryService:
             episodes = tuple(
                 episode
                 for episode in episodes
-                if normalized_query in episode.summary.casefold()
+                if _text_matches_query(
+                    text=episode.summary,
+                    normalized_query=normalized_query,
+                    query_tokens=query_tokens,
+                )
                 or any(
-                    normalized_query in metadata_query_string
+                    _text_matches_query(
+                        text=metadata_query_string,
+                        normalized_query=normalized_query,
+                        query_tokens=query_tokens,
+                    )
                     for metadata_query_string in _metadata_query_strings(
                         episode.metadata
                     )

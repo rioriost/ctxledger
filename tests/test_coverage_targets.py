@@ -4489,6 +4489,7 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
     assert response.details == {
         "query": None,
         "normalized_query": None,
+        "query_tokens": [],
         "lookup_scope": "workflow_instance",
         "workspace_id": None,
         "workflow_instance_id": str(workflow_id),
@@ -4559,6 +4560,7 @@ def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
     assert no_episode_response.details["lookup_scope"] == "workflow_instance"
     assert no_episode_response.details["resolved_workflow_count"] == 1
     assert no_episode_response.details["resolved_workflow_ids"] == [str(workflow_id)]
+    assert no_episode_response.details["query_tokens"] == []
     assert no_episode_response.details["query_filter_applied"] is False
     assert no_episode_response.details["episodes_before_query_filter"] == 0
     assert no_episode_response.details["matched_episode_count"] == 0
@@ -4614,6 +4616,7 @@ def test_memory_get_context_applies_initial_query_filtering() -> None:
     assert response.details == {
         "query": "postgres",
         "normalized_query": "postgres",
+        "query_tokens": ["postgres"],
         "lookup_scope": "workflow_instance",
         "workspace_id": None,
         "workflow_instance_id": str(workflow_id),
@@ -4679,6 +4682,7 @@ def test_memory_get_context_matches_query_against_metadata_keys() -> None:
     assert response.details == {
         "query": "component",
         "normalized_query": "component",
+        "query_tokens": ["component"],
         "lookup_scope": "workflow_instance",
         "workspace_id": None,
         "workflow_instance_id": str(workflow_id),
@@ -4744,6 +4748,139 @@ def test_memory_get_context_matches_query_against_metadata_values() -> None:
     assert response.details == {
         "query": "release",
         "normalized_query": "release",
+        "query_tokens": ["release"],
+        "lookup_scope": "workflow_instance",
+        "workspace_id": None,
+        "workflow_instance_id": str(workflow_id),
+        "ticket_id": None,
+        "limit": 10,
+        "include_episodes": True,
+        "include_memory_items": False,
+        "include_summaries": False,
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(workflow_id)],
+        "query_filter_applied": True,
+        "episodes_before_query_filter": 2,
+        "matched_episode_count": 1,
+        "episodes_returned": 1,
+    }
+
+
+def test_memory_get_context_matches_multi_token_query_against_summary() -> None:
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    created_at = datetime(2024, 3, 9, tzinfo=UTC)
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Fix postgres startup ordering in docker compose",
+            metadata={"kind": "stabilization"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Fix startup race in compose stack",
+            metadata={"kind": "stabilization"},
+            created_at=created_at.replace(day=10),
+            updated_at=created_at.replace(day=10),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            query="postgres ordering",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Fix postgres startup ordering in docker compose"
+    ]
+    assert response.details == {
+        "query": "postgres ordering",
+        "normalized_query": "postgres ordering",
+        "query_tokens": ["postgres", "ordering"],
+        "lookup_scope": "workflow_instance",
+        "workspace_id": None,
+        "workflow_instance_id": str(workflow_id),
+        "ticket_id": None,
+        "limit": 10,
+        "include_episodes": True,
+        "include_memory_items": False,
+        "include_summaries": False,
+        "resolved_workflow_count": 1,
+        "resolved_workflow_ids": [str(workflow_id)],
+        "query_filter_applied": True,
+        "episodes_before_query_filter": 2,
+        "matched_episode_count": 1,
+        "episodes_returned": 1,
+    }
+
+
+def test_memory_get_context_matches_multi_token_query_against_metadata() -> None:
+    workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    created_at = datetime(2024, 3, 11, tzinfo=UTC)
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Capture workflow evidence",
+            metadata={"service": "postgres primary", "kind": "ops"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            summary="Document release checklist",
+            metadata={"service": "release automation", "kind": "docs"},
+            created_at=created_at.replace(day=12),
+            updated_at=created_at.replace(day=12),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            query="postgres primary",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Capture workflow evidence"
+    ]
+    assert response.details == {
+        "query": "postgres primary",
+        "normalized_query": "postgres primary",
+        "query_tokens": ["postgres", "primary"],
         "lookup_scope": "workflow_instance",
         "workspace_id": None,
         "workflow_instance_id": str(workflow_id),
