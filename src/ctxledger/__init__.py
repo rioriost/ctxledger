@@ -96,7 +96,7 @@ def _print_version() -> int:
 
         print(version("ctxledger"))
     except Exception:
-        print("0.1.0")
+        print("0.2.0")
     return 0
 
 

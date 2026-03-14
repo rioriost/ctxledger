@@ -1,246 +1,143 @@
-この session では、`ctxledger` の **`0.2` memory closeout の残整理を確認したうえで、TLS / HTTPS workstream を実装・検証し、さらに small-auth の公開面を HTTPS-only に寄せるところまで進めました**。前回メモ時点では `memory_get_context` の details / observability contract、field-based query filtering、PostgreSQL integration test isolation はかなり揃っており、実際に今回の確認でも **memory closeout の主要部分はすでにコード・tests・docs に反映済み** であることを確かめられました。そのため今回の主眼は、**small-auth Traefik path に現実的な HTTPS entrypoint を追加し、それを public / operator-facing path として実運用検証すること**、さらに **direct host-exposed HTTP path を段階的に落としていくこと** に置きました。version は引き続き `0.1.0` のまま維持し、memory / deployment / docs の closeout が揃うまで tag を打たない方針も継続です。
+この session では、`ctxledger` の **`0.2.0` release closeout** を進め、`docs/roadmap.md` にある `0.2.0` 必須項目の実装状態を改めて確認したうえで、**release metadata を `0.2.0` に揃える最終段階** に入りました。確認の結果、`memory_search` は引き続き stub のままですが、これは roadmap 上も `0.3` 以降の扱いであり、`0.2.0` closeout criteria には含まれていません。一方で、`memory_remember_episode`、`memory_get_context` の episode-oriented retrieval、PostgreSQL-backed persistence / retrieval、details contract、unit / integration coverage、そして HTTPS/TLS operator path は `0.2.0` の必須実装として概ね揃っていると判断できました。これにより、残作業は主に **version / changelog / release tag / git hygiene** に寄っている状態です。
 
-## この session で完了したこと
+## この session で確認できたこと
 
-- `memory closeout` の current state を再確認した
-  - `src/ctxledger/memory/service.py`
-  - `tests/test_coverage_targets.py`
-  - `tests/test_postgres_integration.py`
-  - `tests/test_mcp_tool_handlers.py`
-  - `README.md`
-  - `docs/mcp-api.md`
-  - `docs/memory-model.md`
-  - `docs/roadmap.md`
-  を見直し、前回 session メモにある
-  - `resolved_workflow_ids`
-  - `matched_episode_count`
-  - field-based query filtering
-  - PostgreSQL temporary schema isolation
-  が実際にかなり揃っていることを確認した
-  - つまり今回時点の主な未完了領域は memory そのものより **TLS / HTTPS deployment workstream** だと判断した
+- `docs/roadmap.md` の `0.2.0` 必須項目を再点検した
+  - `memory_remember_episode` は append-only episodic capture として実装済み
+  - `workflow_instance_id` validation は揃っている
+  - optional `attempt_id` validation / canonical persistence も揃っている前提で整理可能
+  - `memory_get_context` は stub ではなく episode-oriented retrieval として機能している
+  - retrieval path は
+    - `workflow_instance_id`
+    - `workspace_id`
+    - `ticket_id`
+    をサポートしている
+  - `limit`
+  - `include_episodes`
+  - summary / metadata keys / metadata values に対する lightweight query filtering
+    が揃っている
+  - details contract として
+    - `query`
+    - `normalized_query`
+    - `lookup_scope`
+    - `workspace_id`
+    - `workflow_instance_id`
+    - `ticket_id`
+    - `limit`
+    - `include_episodes`
+    - `include_memory_items`
+    - `include_summaries`
+    - `resolved_workflow_count`
+    - `resolved_workflow_ids`
+    - `query_filter_applied`
+    - `episodes_before_query_filter`
+    - `matched_episode_count`
+    - `episodes_returned`
+    が実装・テスト・docs でかなり揃っていることを再確認した
+  - unit / PostgreSQL integration coverage も存在する
+  - docs も
+    - implemented `memory_remember_episode`
+    - partial `memory_get_context`
+    - stubbed `memory_search`
+    を区別している
 
-- `scripts/mcp_http_smoke.py` を更新した
-  - `--insecure` を追加した
-  - local self-signed / untrusted cert を使った HTTPS validation ができるようにした
-  - MCP / workflow / resource smoke の既存 flow を壊さないようにした
-  - HTTP / HTTPS 両方の JSON-RPC / resource-read / workflow scenario path で使える状態にした
+- `memory_search` が `not_implemented` を返すことを実際に再確認した
+  - ただしこれは `0.2.0` 未達の証拠ではなく、
+    roadmap / README / docs 上でも **`0.3` 向け future work**
+    として整理されている
+  - この点を release 判断に使うなら、
+    **`memory_search` は `0.2.0` blocker ではない**
+    と扱うのが正しい
 
-- `docker/docker-compose.small-auth.yml` を更新した
-  - Traefik に `websecure` entrypoint を追加した
-  - initially `8443` を公開し、HTTPS listener を持てるようにした
-  - その後さらに **HTTP public listener を削除** し、
-    - `8091`
-    - `web`
-    を落として **HTTPS-only public entrypoint**
-    - `8443`
-    のみ残す形へ整理した
-  - small-auth overlay における operator-facing path は now HTTPS-only
+- `ctxledger` workflow / memory tool surface が live であることを再確認した
+  - `workspace_register` は workspace registered 応答を返せる
+  - `workflow_start` は既存 running workflow の存在を返せる
+  - `memory_get_context` は implemented response を返せる
+  - `memory_search` は visible だが未実装 stub として振る舞う
+  - つまり release closeout の前提となる canonical workflow / memory surfaces 自体は利用可能
 
-- `docker/traefik/dynamic.yml` を更新した
-  - HTTPS router を追加した
-  - TLS certificate wiring を追加した
-  - initially HTTP router と HTTPS router の両方を持たせたが、その後 **HTTP router を削除**
-  - final state は
-    - `websecure`
-    - `tls`
-    - forward-auth
-    のみを使う構成
-  - `ctxledger` backend は internal HTTP のまま private network 側で受けるが、public side は HTTPS-only
+- 現在の running workflow を resume し、
+  `ctxledger-memory-closeout-followup`
+  の文脈で closeout を進めていることを確認した
+  - workflow は still `running`
+  - latest checkpoint は HTTPS small-auth path 追加時点の内容
+  - 今回の作業は、その後続として
+    **release closeout metadata を整える段階**
+    に位置づく
 
-- `docker/traefik/certs/README.md` を新規作成した
-  - local TLS cert placement を明記した
-  - 期待ファイル名
-    - `localhost.crt`
-    - `localhost.key`
-  - `mkcert`
-  - `openssl`
-  の生成例を追記した
-  - private key を commit しない運用注意を明記した
+## この session で着手した closeout 変更
 
-- `docker/docker-compose.yml` を更新した
-  - `ctxledger` service の host port mapping
-    - `8080:8080`
-    を削除した
-  - `expose: 8080` の internal-only exposure に変えた
-  - これにより、base compose 上の backend は compose network 内で HTTP のまま動くが、**host から direct に `http://127.0.0.1:8080` で叩けない** 状態になった
-  - public/operator-facing access は proxy-terminated HTTPS path に寄せる方向へ前進した
+- version metadata の更新に着手した
+  - `pyproject.toml`
+    - `version = "0.1.0"` → `version = "0.2.0"`
+  - `src/ctxledger/__init__.py`
+    - fallback version 出力 `0.1.0` → `0.2.0`
 
-- `README.md` を更新した
-  - small-auth recommended path を `8443` ベースに変更した
-  - `https://127.0.0.1:8443/mcp` を operator-facing endpoint として明記した
-  - `--insecure` を使った local self-signed validation 例を追加した
-  - VS Code / Zed examples も HTTPS endpoint に寄せた
-  - `envrcctl` examples も HTTPS endpoint に寄せた
-  - ただし、README 全体にはまだ direct `8080` path の historical sections が残っている
+- `docs/CHANGELOG.md` の release entry 整理に着手した
+  - `0.2.0` entry を切り、
+    episodic memory closeout と HTTPS-enabled MCP operator path を release note としてまとめる方向で更新を開始した
+  - ただし changelog は session 中に複数回整理し直しており、
+    **最終版が意図通りに簡潔・整合しているかの最終確認がまだ必要**
+  - 次回は changelog を必ず再読して、
+    `0.2.0` release note が
+    - memory closeout
+    - HTTPS/TLS operator path
+    - `memory_search` remains stubbed
+    の3点を過不足なく表しているかを見ること
 
-- `docs/deployment.md` を更新した
-  - local HTTPS small-auth path を docs 化した
-  - さらに **HTTPS-only small-auth path** として wording を更新した
-  - `8443` endpoint
-  - cert placement
-  - `mkcert`
-  - `--insecure`
-  - public HTTP listener を残さない intent
-  を明記した
-  - ただし、同ファイル内にはまだ
-    - `http://127.0.0.1:8080`
-    - `http://localhost:8080`
-    ベースの general HTTP runtime sections が残っている
+## release tag 前に重要と判断したこと
 
-- `docs/CONTRIBUTING.md` を更新した
-  - small-auth validation flow を HTTPS-only に変更した
-  - contributor validation として
-    - cert file 作成
-    - `8443`
-    - `--insecure`
-    を使う path を明記した
-  - `http://127.0.0.1:8091` を small-auth public path として document しないよう明記した
+- 現在の git 状態では、
+  - `last_session.md` に未コミット変更
+  - `docker/traefik/certs/localhost.crt`
+  - `docker/traefik/certs/localhost.key`
+    の未追跡ファイル
+  があることを確認した
+- 特に `localhost.key` は **local private key material**
+  なので、release commit / tag に含めないことを必ず再確認する必要がある
+- `.rules` / cert README の運用方針上も、
+  **secret material を tracked change として混ぜない**
+  ことが重要
+- そのため、release closeout の次アクションは
+  - git status を再確認
+  - local cert files が staging 対象に入っていないことを確認
+  - 必要なら ignore / selection を慎重に行う
+  - そのうえで version + changelog + last_session を commit
+  - 最後に `v0.2.0` tag
+  の順が安全
 
-- `docs/small_auth_operator_runbook.md` を更新した
-  - runbook を全面的に HTTPS-only に寄せた
-  - `8091` → `8443`
-  - `http://127.0.0.1:8091/mcp` → `https://127.0.0.1:8443/mcp`
-  - cert file existence を precondition に追加した
-  - missing token / invalid token / valid token validation examples を HTTPS-only にした
-  - stale direct-local `8080` path は historical / stale path 扱いにした
+## 次の session でやるべきこと
 
-- `docs/mcp-api.md` を更新した
-  - public/operator-facing validation examples を direct `8080` ではなく
-    - `https://127.0.0.1:8443`
-    ベースへ変更した
-  - `/mcp` surface の current live validation path は now proxy-terminated HTTPS だと説明した
-  - ただし同ファイルには
-    - trusted direct local path without proxy auth
-    の historical HTTP examples が一部まだ残っている
+1. `docs/CHANGELOG.md` を再読して、`0.2.0` entry が clean か最終確認する
+   - duplicate section
+   - wording mismatch
+   - `0.2.0` / `0.1.0` の混線
+   がないか見る
 
-- `tests/test_cli.py` を更新した
-  - startup summary expectation の `mcp_endpoint` を
-    - `http://127.0.0.1:8080/mcp`
-    から
-    - `/mcp`
-    に変更した
-  - これにより、server runtime summary が direct host-exposed URL を前提にしない expectation に寄せた
+2. `pyproject.toml` と `src/ctxledger/__init__.py` の version bump が両方 `0.2.0` で揃っていることを確認する
 
-- `tests/test_coverage_targets.py` を更新した
-  - runtime summary expectation を同様に
-    - `mcp_endpoint=http://127.0.0.1:8080/mcp`
-    から
-    - `mcp_endpoint=/mcp`
-    に変更した
+3. `last_session.md` を今回の closeout 状態に更新して commit 対象へ含める
 
-## 実運用検証で確認できたこと
+4. git hygiene を確認する
+   - `docker/traefik/certs/localhost.crt`
+   - `docker/traefik/certs/localhost.key`
+   が release commit に入らないことを確認する
+   - 特に `.key` を絶対に含めない
 
-今回の session では、local self-signed cert をその場で生成して、実際に compose stack を起動・再起動しながら以下を検証した。
+5. 問題なければ release commit を作る
+   - message は `Release 0.2.0` 系でよい
 
-- small-auth stack で local cert を生成して起動できる
-- `https://127.0.0.1:8443`
-  の public entrypoint で TLS-terminated MCP access ができる
-- missing token は `401`
-- valid token では
-  - `initialize`
-  - `tools/list`
-  - `tools/call`
-  - `resources/list`
-  - `resources/read`
-  - `workspace_register`
-  - `workflow_start`
-  - `workflow_checkpoint`
-  - `workflow_resume`
-  - `workflow_complete`
-  が通る
-- `--insecure` を使うことで self-signed cert でも smoke が可能
-- old public HTTP path
-  - `http://127.0.0.1:8091`
-  は **connection refused**
-- direct backend host path
-  - `http://127.0.0.1:8080`
-  も **connection refused**
-- つまり **public/operator-facing access path は now effectively HTTPS-only**
-  になった
+6. その後 `v0.2.0` tag を付ける
 
-## 今回の session で重要だった発見
+7. workflow 上も
+   - closeout commit
+   - tag 作成
+   - verification status
+   を checkpoint / complete に反映する
 
-- 現時点の architecture では、**“http を完全廃止”** をそのまま app-internal まで厳密に適用するより、
-  **public surface から HTTP を消し、Traefik TLS termination + private backend HTTP**
-  とするのが最も自然
-- small-auth overlay だけ HTTPS 化するのは比較的容易だったが、
-  **base compose の direct host exposure を落とす** と docs / tests / operator guidance に広く影響する
-- runtime summary の `mcp_endpoint=http://...` みたいな expectation は、
-  **public operator endpoint** と **private route surface**
-  が分かれてくると曖昧になる
-- そのため `mcp_endpoint=/mcp` のような **route-oriented summary** に寄せる方が今の deployment posture と整合しやすい
-- local self-signed cert path は実用上有効だが、
-  **鍵を repo に残さないこと**、
-  **trusted cert でない場合は `--insecure` が必要**
-  という注意がかなり重要
-- memory closeout 本体はこの session 開始時点ですでにかなり揃っており、
-  むしろ今回の実作業価値は **deployment closeout を HTTPS-only operator path に寄せたこと** にあった
+## 現在の判断
 
-## 現在のコード状態に関する重要点
-
-- `memory_remember_episode` は functional
-- `memory_get_context` の details / filtering / tests / docs は引き続き揃っている
-- PostgreSQL integration test isolation は temporary schema 方式のまま
-- small-auth public path は now:
-  - `https://127.0.0.1:8443/mcp`
-- small-auth old public HTTP path:
-  - `http://127.0.0.1:8091`
-  は removed
-- base compose backend host path:
-  - `http://127.0.0.1:8080`
-  は no longer host-exposed
-- backend app 自体は still:
-  - internal HTTP on compose network
-  - Traefik TLS termination in front
-- つまり **public HTTPS-only**
-  だが **app-internal TLS serving ではない**
-- local cert helper doc は:
-  - `docker/traefik/certs/README.md`
-- smoke script は:
-  - `--insecure`
-  を持つ
-- README / deployment / contributing / small_auth runbook / mcp-api はかなり HTTPS-only path に寄せた
-- ただし repo 全体にはまだ historical direct HTTP references が残る
-
-## まだ残っている作業 / 次の session でやるとよいこと
-
-次の session では、まず **残存する historical HTTP / 8080 / direct-path references の整理 closeout** をやるのが自然。
-
-優先度が高い残件:
-
-- `README.md`
-  - still direct `8080` / Option A / Dockerfile startup / local startup sections が残る
-  - “public operator path is HTTPS-only” と整合するよう further cleanup が必要
-- `docs/deployment.md`
-  - still `http://127.0.0.1:8080`
-  - `http://localhost:8080`
-  - local HTTP validation examples
-  が残る
-- `docs/mcp-api.md`
-  - `Representative HTTP request examples on a trusted direct local path without proxy auth`
-    のような section が still 残る
-- `docs/CHANGELOG.md`
-  - “direct local path simple” など old posture wording が残る
-- `docs/SECURITY.md`
-  - local direct local development wording の見直し余地あり
-- `docs/imple_plan_0.1.0.md`
-- `docs/imple_plan_review_0.1.0.md`
-  - historical planning docs なのでどこまで current-state cleanup するか判断が必要
-- tests
-  - current changed files の diagnostics は良いが、
-    full suite rerun と必要なら expectation fallout を確認したい
-- `last_session.md`
-  - 次回はこのメモを current canonical continuation としてさらに更新
-
-次の session 開始時にまず見るべきポイント:
-
-1. `git diff` / `git status`
-2. `README.md` に残る direct `8080` sections
-3. `docs/deployment.md` に残る `http://127.0.0.1:8080` / `http://localhost:8080` sections
-4. `docs/mcp-api.md` の direct local HTTP examples
-5. 必要なら full test rerun
-6. 最後に closeout commit
-
-## 次の session への短い引き継ぎ
-
-次は **“公開面は HTTPS-only” の posture を docs / tests 全体へ最後まで揃える closeout** をやる。small-auth overlay はすでに `8443` HTTPS-only で動き、`8091` と direct host `8080` は connection refused まで確認済み。残るのは主に **README / deployment / mcp-api / changelog / security / historical plan docs に残る direct HTTP / 8080 references の整理** と、必要なら full suite rerun、最後の continuation note と commit。
+- **`0.2.0` 必須実装は概ね完了**
+- **`memory_search` stub は `0.2.0` blocker ではない**
+- **残作業は release metadata / changelog / git hygiene / tag**
+- 次回は **tag を打つ直前の最終整合確認** から始めるのが最短
