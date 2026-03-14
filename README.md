@@ -150,6 +150,25 @@ For local experiments, the examples below use:
 replace-me-with-a-strong-secret
 ```
 
+To generate a stronger token, you can use either of these examples:
+
+```/dev/null/sh#L1-1
+openssl rand -hex 32
+```
+
+```/dev/null/sh#L1-1
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+A practical shell pattern is:
+
+```/dev/null/sh#L1-2
+export CTXLEDGER_SMALL_AUTH_TOKEN="$(openssl rand -hex 32)"
+echo "$CTXLEDGER_SMALL_AUTH_TOKEN"
+```
+
+Then reuse that same value in your startup command, smoke validation, and MCP client configuration.
+
 For any shared, persistent, or less-trusted environment, use a strong random secret instead of the example placeholder.
 
 #### 1. Start PostgreSQL, the private backend, auth service, and Traefik
@@ -158,6 +177,12 @@ From the repository root, start the base compose file plus the auth overlay with
 
 ```/dev/null/sh#L1-1
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```
+
+If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` in your shell first, you can also run:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
 After startup, the recommended authenticated MCP endpoint is:
@@ -184,6 +209,12 @@ A valid token should pass and the workflow/resource smoke should succeed:
 
 ```/dev/null/sh#L1-1
 python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read
+```
+
+If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` already, you can keep the smoke command aligned with the startup token like this:
+
+```/dev/null/sh#L1-1
+python scripts/mcp_http_smoke.py --base-url http://127.0.0.1:8091 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read
 ```
 
 #### 3. Configure your MCP client for the authenticated endpoint
