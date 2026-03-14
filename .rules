@@ -1,7 +1,16 @@
-# Session and Workflow Rules
+# ctxledger Development Housekeeping
 
-- When a new session starts, read `last_session.md` first.
-- At the beginning of work, use the ctxledger MCP workflow tools to ensure the current repository is tracked:
+- These `last_session.md` rules apply only when developing `ctxledger` itself.
+- When a new `ctxledger` development session starts, read `last_session.md` first.
+- When a `ctxledger` development work loop is done, update `last_session.md` with a concise continuation note for the next session.
+- Keep the git repository up-to-date with descriptive commits.
+- Ignore the status of `.gitignore`.
+- When developing `ctxledger` itself, the general agent workflow rules below also apply in addition to this housekeeping section.
+
+# General Agent Workflow Rules for Repositories Using ctxledger
+
+- Use `ctxledger` as the canonical workflow system of record.
+- At the beginning of work, use `ctxledger` workflow tools to ensure the current repository is tracked:
   - register or confirm the workspace with `workspace_register`
   - if continuing existing work, use `workflow_resume`
   - if starting new work, use `workflow_start`
@@ -11,8 +20,7 @@
   - adding or updating tests
   - finishing validation or debugging steps
 - When the task or work loop is done:
-  - update `last_session.md` with a concise continuation note for the next session
   - mark the workflow as finished with `workflow_complete`
-  - keep git repo up-to-date by running `git commit` with a descriptive message
+  - keep the git repository up-to-date with a descriptive commit if code or tracked files changed
 - If resume projections are part of the current workflow, keep them up-to-date as part of the checkpoint or close-out flow.
-- Ignore the status of `.gitignore`.
+- If the repository maintains its own continuation notes or resume artifacts, treat them as derived or auxiliary context, not the canonical source of workflow truth.

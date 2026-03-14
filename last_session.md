@@ -1,11 +1,24 @@
-この session では、`ctxledger` の MCP サーバ機能そのものではなく、**MCP クライアント上の AI エージェントが `.rules` に従って workflow を記録する運用になっているか** を確認し、その運用前提が README・`.rules`・`last_session.md` に一貫して反映されるよう整理しました。加えて、README の Quick Start を **認証なし** と **認証付き（推奨）** に分け、認証付きでは **bearer token が必須であり、起動・smoke・MCP クライアント設定で同じ token を揃える必要がある** こと、**token の具体的な生成例**、および **`envrcctl secret set` / `envrcctl exec -- ...` を使う optional な運用** まで反映しました。さらに、検証により **Zed は MCP 設定ファイル中の環境変数を展開しない** ことが分かったため、その注意書きも README に追記済みです。
+この session では、`ctxledger` の MCP サーバ機能そのものではなく、**MCP クライアント上の AI エージェントが `.rules` に従って workflow を記録する運用になっているか** を確認し、その運用前提が README・`.rules`・`last_session.md` に一貫して反映されるよう整理しました。加えて、README の Quick Start を **認証なし** と **認証付き（推奨）** に分け、認証付きでは **bearer token が必須であり、起動・smoke・MCP クライアント設定で同じ token を揃える必要がある** こと、**token の具体的な生成例**、および **`envrcctl secret set` / `envrcctl exec -- ...` を使う optional な運用** まで反映しました。さらに、検証により **Zed は MCP 設定ファイル中の環境変数を展開しない** ことが分かったため、その注意書きも README に追記済みです。最後に、`.rules` を整理し、**`last_session.md` は `ctxledger` 開発時だけの housekeeping** として分離しつつ、**一般の `ctxledger` 利用プロジェクト向け workflow ルール** を独立させました。
 
 ## この session で完了したこと
 
-- `ctxledger/.rules` を housekeeping 中心の内容から、**workflow-aware な運用ルール** に更新した
+- `ctxledger/.rules` を housekeeping 中心の内容から、**2層構造のルール**に整理した
+  - `ctxledger` 開発専用 housekeeping
+  - `ctxledger` 利用プロジェクト向け一般 workflow rules
+- `last_session.md` については、
+  - **`ctxledger` 自体を開発する時だけ必要**
+  - 一般の利用プロジェクトでは前提にしない
+  という位置づけを `.rules` 上で明確にした
+- ただし、`ctxledger` 開発時でも下の一般 workflow rules は適用されることを `.rules` に明記した
+- 一般 workflow rules から
+  - `last_session.md` の存在に依存するよう読める文言
+  を外し、repo 内の continuation note や resume artifact は **derived / auxiliary context** 扱いに整理した
 - `README.md` に `Agent workflow usage guidance` を追加し、AI エージェントが
-  - `last_session.md` を読む
-  - `workspace_register` / `workflow_start` / `workflow_resume` / `workflow_checkpoint` / `workflow_complete`
+  - `workspace_register`
+  - `workflow_start`
+  - `workflow_resume`
+  - `workflow_checkpoint`
+  - `workflow_complete`
   を使うべきことを明示した
 - README の Quick Start を以下の 2 系統に整理した
   - **認証なし**: `http://127.0.0.1:8080/mcp`
@@ -42,6 +55,7 @@
   を求めていませんでした。
 - このため、**現状の `.rules` に従うだけでは、AI エージェントが workflow 記録フローを実行する保証がない**、という問題を確認しました。
 - 検証の結果、**Zed は MCP 設定ファイル中の環境変数を展開しない** ことも確認しました。
+- また、`last_session.md` は **`ctxledger` 開発時のブートストラップ補助ファイル**であり、一般の利用プロジェクト向け rules の前提にしてはいけないことも整理しました。
 
 ## Workflow handoff identifiers
 
@@ -109,17 +123,20 @@ README の手順に沿って、以下を実施しました。
   - `test_record_resume_projection_fresh_status_fills_missing_timestamps()`
 - `.coverage` は削除して、生成物由来のノイズは整理しました。
 - 作業ツリー上では `.envrc` が未追跡の可能性があるため、次セッションで扱いを確認すると安全です。
+- `.gitignore` や `README.md` に未 commit 差分が残っている可能性があるため、次にまとめて確認するとよいです。
 
 ## 今回の主な結論
 
 - **README の手順でサーバを起動して Zed などを接続すれば、workflow 記録機能を使える状態ではある** に留まらず、実際に Docker Compose / debug endpoint / workflow smoke / resource read smoke まで成功した
 - ただし、**AI エージェントにその記録を継続的に実行させるには `.rules` の明示的な運用指示が必要**
 - `.rules` と README の両方に workflow-aware な guidance を入れたため、エージェント運用ルールはかなり明確になった
+- `last_session.md` は **`ctxledger` 開発専用 housekeeping** として扱い、一般の利用プロジェクト向け rules からは分離した方が自然
 - 認証付き Quick Start は、**token の決め方・生成・再利用・`401` 条件** を含めて説明できる状態になった
 - `envrcctl` は有用だが **optional** 扱いにした方が Quick Start の主線が見えやすい
 - **Zed は MCP 設定ファイル中の環境変数を展開しない** ため、`envrcctl` は AI エージェントや shell 実行時の参照には有効でも、Zed の MCP 設定 JSON 中の `YOUR_TOKEN_HERE` を自動置換する用途には使えない
 - そのため、Zed では `envrcctl secret get CTXLEDGER_SMALL_AUTH_TOKEN` などで取得した実 token を貼り付ける必要がある
 - README 本文は、現時点では大きな破綻はなく、主に `envrcctl` 周りを optional に落としたことでかなり読みやすくなった
+- `.rules` も、`ctxledger` 開発専用 housekeeping と一般 workflow rules を分けたことで、目的がかなり明確になった
 
 ## 次セッションでやること
 
@@ -131,3 +148,4 @@ README の手順に沿って、以下を実施しました。
    - `ticket_id`
 3. `.envrc` の扱いを確認し、必要なら整理する
 4. `tests/test_workflow_service.py` の未 commit 差分を確認し、意図した変更なら commit 対象に含める
+5. `README.md` と `.gitignore` の未 commit 差分が残っていれば、必要に応じて整理して commit する
