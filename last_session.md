@@ -676,3 +676,56 @@ canonical checkpoint を記録済み:
 1. compatibility / expectation sync ではなく、`memory_search` の ranking 改善へ戻る
 2. semantic behavior の重み付けや hybrid score 調整を進める
 3. 必要なら追加 integration / end-to-end coverage を広げる
+
+## 今回の追記
+- `src/ctxledger/memory/service.py` の hybrid score weighting を調整
+- 変更前
+  - `hybrid_score = lexical_score + (semantic_score * 2.0)`
+- 変更後
+  - lexical hit がある場合:
+    - `hybrid_score = lexical_score + semantic_score`
+  - lexical hit がない semantic-only result:
+    - `hybrid_score = semantic_score * 0.75`
+
+### 今回の意図
+- semantic-only result が強く出すぎるのを少し抑える
+- lexical evidence を持つ result をより上位にしやすくする
+- ただし semantic-only fallback 自体は残す
+
+### 追加した focused test
+- `tests/test_coverage_targets.py`
+  - `test_memory_service_hybrid_ranking_prefers_lexical_evidence`
+
+この test で固定したこと:
+- lexical + semantic の両方に当たる result が
+- semantic-only result より上位になること
+- semantic-only result の `semantic_score` 自体がやや高くても、
+  最終順位は lexical evidence 側が勝つこと
+
+### 実行結果
+- `python -m pytest -q tests/test_coverage_targets.py -k 'hybrid_ranking_prefers_lexical_evidence or memory_service_records_episodes_and_returns_search_results'`
+  - **2 passed**
+- `python -m pytest -q tests/test_mcp_tool_handlers.py -k 'memory_search'`
+  - **2 passed**
+- `python -m pytest -q tests/test_server.py -k 'memory_search'`
+  - **2 passed**
+- `python -m pytest -q tests/test_postgres_integration.py -k 'memory_search or find_similar'`
+  - **2 passed**
+
+### diagnostics
+- `src/ctxledger/memory/service.py`: clean
+- `tests/test_coverage_targets.py`: clean
+
+### いまの状態
+これで `memory_search` の hybrid path は
+- lexical-only fallback
+- semantic candidate retrieval
+- lexical evidence を優先する初期 weighting
+- focused regression coverage
+
+まで揃いました。
+
+### 次回の最短ルート
+1. 今回の weighting 調整を commit する
+2. 必要なら broader suite に再投入する
+3. その後に semantic score の式自体や ranking details の拡張へ進む
