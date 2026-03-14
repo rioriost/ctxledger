@@ -192,11 +192,9 @@ If you exported `CTXLEDGER_SMALL_AUTH_TOKEN` in your shell first, you can also r
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
-If you are using [`envrcctl`](https://github.com/rioriost/homebrew-envrcctl), a practical startup sequence is:
+If you are using `envrcctl`, a practical startup sequence is:
 
 ```/dev/null/sh#L1-3
-echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_SMALL_AUTH_TOKEN --stdin
-direnv allow
 envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
