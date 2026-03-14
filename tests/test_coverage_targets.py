@@ -1836,9 +1836,10 @@ def test_build_workflow_resume_response_uses_default_string_when_bootstrap_error
         def __str__(self) -> str:
             return ""
 
-    server.get_workflow_resume = lambda _workflow_instance_id: (_ for _ in ()).throw(
-        SilentBootstrapError("silent")
-    )
+    def raise_silent_bootstrap_error(_workflow_instance_id: object) -> object:
+        return (_ for _ in ()).throw(SilentBootstrapError("silent"))
+
+    server.get_workflow_resume = raise_silent_bootstrap_error
 
     response = build_workflow_resume_response(server, workflow_instance_id)
 
@@ -5109,17 +5110,32 @@ def test_mcp_handle_request_returns_none_for_notification_and_lifecycle_none() -
 def test_mcp_handle_request_returns_none_for_notification_without_id() -> None:
     from ctxledger.mcp.rpc import handle_mcp_rpc_request
 
+    def dispatch_tool(name: object, arguments: object) -> SimpleNamespace:
+        return SimpleNamespace(payload={"ok": True})
+
+    def registered_tools() -> tuple[()]:
+        return ()
+
+    def registered_resources() -> tuple[()]:
+        return ()
+
+    def tool_schema(tool_name: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            type="object",
+            properties={},
+            required=(),
+        )
+
+    def dispatch_resource(uri: object) -> SimpleNamespace:
+        return SimpleNamespace(payload={"ok": True})
+
     runtime = SimpleNamespace(
-        dispatch_tool=lambda name, arguments: SimpleNamespace(payload={"ok": True}),
+        dispatch_tool=dispatch_tool,
     )
-    runtime.registered_tools = lambda: ()
-    runtime.registered_resources = lambda: ()
-    runtime.tool_schema = lambda tool_name: SimpleNamespace(
-        type="object",
-        properties={},
-        required=(),
-    )
-    runtime.dispatch_resource = lambda uri: SimpleNamespace(payload={"ok": True})
+    runtime.registered_tools = registered_tools
+    runtime.registered_resources = registered_resources
+    runtime.tool_schema = tool_schema
+    runtime.dispatch_resource = dispatch_resource
 
     response = handle_mcp_rpc_request(
         runtime,
@@ -5833,7 +5849,9 @@ def test_create_server_uses_provided_dependencies_and_builds_runtime_when_missin
     settings = make_settings()
     provided_checker = FakeDbChecker()
     provided_runtime = FakeRuntime()
-    provided_factory = lambda: "workflow-service"
+
+    def workflow_service_factory_stub() -> str:
+        return "workflow-service"
 
     created_servers: list[object] = []
 
@@ -5851,20 +5869,26 @@ def test_create_server_uses_provided_dependencies_and_builds_runtime_when_missin
         settings,
         db_health_checker=provided_checker,
         runtime=provided_runtime,
-        workflow_service_factory=provided_factory,
+        workflow_service_factory=workflow_service_factory_stub,
     )
     server_with_built_runtime = provided.create_server(
         settings,
         db_health_checker=provided_checker,
         runtime=None,
-        workflow_service_factory=provided_factory,
+        workflow_service_factory=workflow_service_factory_stub,
     )
 
     assert server_with_provided_runtime.db_health_checker is provided_checker
     assert server_with_provided_runtime.runtime is provided_runtime
-    assert server_with_provided_runtime.workflow_service_factory is provided_factory
+    assert (
+        server_with_provided_runtime.workflow_service_factory
+        is workflow_service_factory_stub
+    )
 
     assert server_with_built_runtime.db_health_checker is provided_checker
     assert server_with_built_runtime.runtime == "built-runtime"
-    assert server_with_built_runtime.workflow_service_factory is provided_factory
+    assert (
+        server_with_built_runtime.workflow_service_factory
+        is workflow_service_factory_stub
+    )
     assert created_servers == [server_with_built_runtime]
