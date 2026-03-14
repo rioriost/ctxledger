@@ -12,6 +12,8 @@ from ctxledger.config import (
     AppSettings,
     DatabaseSettings,
     DebugSettings,
+    EmbeddingProvider,
+    EmbeddingSettings,
     HttpSettings,
     LoggingSettings,
     LogLevel,
@@ -361,6 +363,14 @@ def make_settings(
         logging=LoggingSettings(
             level=LogLevel.INFO,
             structured=True,
+        ),
+        embedding=EmbeddingSettings(
+            enabled=False,
+            provider=EmbeddingProvider.DISABLED,
+            model="local-stub-v1",
+            api_key=None,
+            base_url=None,
+            dimensions=None,
         ),
     )
 
