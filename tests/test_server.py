@@ -3212,7 +3212,7 @@ def test_build_memory_search_tool_handler_returns_implemented_payload() -> None:
     response = handler(
         {
             "query": "projection drift",
-            "workspace_id": "workspace-1",
+            "workspace_id": "00000000-0000-0000-0000-000000000001",
             "limit": 5,
             "filters": {"kind": "summary"},
         }
@@ -3227,14 +3227,15 @@ def test_build_memory_search_tool_handler_returns_implemented_payload() -> None:
     assert response.payload["result"]["details"] == {
         "query": "projection drift",
         "normalized_query": "projection drift",
-        "workspace_id": "workspace-1",
+        "workspace_id": "00000000-0000-0000-0000-000000000001",
         "limit": 5,
         "filters": {"kind": "summary"},
-        "search_mode": "episode_lexical",
-        "resolved_workflow_count": 0,
-        "resolved_workflow_ids": [],
-        "episodes_considered": 0,
+        "search_mode": "memory_item_lexical",
+        "memory_items_considered": 0,
+        "semantic_candidates_considered": 0,
+        "semantic_query_generated": False,
         "results_returned": 0,
+        "semantic_generation_skipped_reason": "embedding_search_not_configured",
     }
     assert response.payload["result"]["results"] == []
 
