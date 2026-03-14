@@ -743,6 +743,15 @@ Failure to write a projection must not invalidate canonical workflow persistence
 - `ctxledger` server container
 - environment injection for DB connection and server settings
 
+Historical note:
+This section is part of the original `v0.1.0` implementation planning material.
+It should not be read as the canonical description of the repository's current
+operator-facing deployment posture.
+For current deployment guidance, use:
+- `README.md`
+- `docs/deployment.md`
+- `docs/SECURITY.md`
+
 ### 12.2 Recommended Compose Additions
 
 - PostgreSQL port exposure for local debugging
@@ -751,11 +760,24 @@ Failure to write a projection must not invalidate canonical workflow persistence
 - optional bind mount for local development
 - startup ordering / healthcheck dependency if supported
 
+Historical note:
+The `8080` host-exposed MCP path described here reflects the planning posture at
+the time this document was written.
+It is not the current recommended public/operator-facing access path.
+
 ### 12.3 Container Runtime Goal
 
 After startup, the documented MCP endpoint should be available at:
 
 - `http://localhost:8080/mcp`
+
+Historical note:
+The endpoint above is preserved here as part of the original implementation
+plan.
+For the current repository state, treat this as historical planning context
+rather than current operator guidance.
+Refer to `README.md` and `docs/deployment.md` for the current HTTPS-oriented
+operator-facing path.
 
 ---
 
