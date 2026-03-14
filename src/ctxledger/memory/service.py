@@ -1146,6 +1146,8 @@ class MemoryService:
         resolved_workflow_instance_id: str | None = None
         normalized_query = _normalize_query_text(request.query)
         query_tokens = _query_tokens(normalized_query)
+        workspace_workflow_ids: tuple[UUID, ...] = ()
+        ticket_workflow_ids: tuple[UUID, ...] = ()
 
         if self._has_text(request.workflow_instance_id):
             lookup_scope = "workflow_instance"
@@ -1167,9 +1169,6 @@ class MemoryService:
             resolved_workflow_ids = (workflow_instance_id,)
             resolved_workflow_instance_id = str(workflow_instance_id)
         elif self._workflow_lookup is not None:
-            workspace_workflow_ids: tuple[UUID, ...] = ()
-            ticket_workflow_ids: tuple[UUID, ...] = ()
-
             if self._has_text(request.workspace_id):
                 workspace_workflow_ids = (
                     self._workflow_lookup.workflow_ids_by_workspace_id(
@@ -1211,6 +1210,21 @@ class MemoryService:
             "include_episodes": request.include_episodes,
             "include_memory_items": request.include_memory_items,
             "include_summaries": request.include_summaries,
+            "workflow_candidate_ordering": {
+                "ordering_basis": "resolver_order",
+                "workflow_instance_id_priority_applied": (
+                    resolved_workflow_instance_id is not None
+                ),
+                "workspace_candidate_ids": [
+                    str(workflow_id) for workflow_id in workspace_workflow_ids
+                ],
+                "ticket_candidate_ids": [
+                    str(workflow_id) for workflow_id in ticket_workflow_ids
+                ],
+                "final_candidate_ids": [
+                    str(workflow_id) for workflow_id in resolved_workflow_ids
+                ],
+            },
             "resolved_workflow_count": len(resolved_workflow_ids),
             "resolved_workflow_ids": [
                 str(workflow_id) for workflow_id in resolved_workflow_ids
