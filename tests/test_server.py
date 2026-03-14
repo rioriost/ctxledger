@@ -3249,6 +3249,11 @@ def test_build_memory_search_tool_handler_returns_implemented_payload() -> None:
             "semantic_weight": 1.0,
             "semantic_only_discount": 0.75,
         },
+        "result_mode_counts": {
+            "hybrid": 0,
+            "lexical_only": 0,
+            "semantic_only_discounted": 0,
+        },
         "results_returned": 0,
         "semantic_generation_skipped_reason": "embedding_search_not_configured",
     }

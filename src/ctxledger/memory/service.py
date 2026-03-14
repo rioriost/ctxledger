@@ -1031,6 +1031,16 @@ class MemoryService:
             else "Memory-item-based lexical search completed successfully."
         )
 
+        result_mode_counts = {
+            "hybrid": 0,
+            "lexical_only": 0,
+            "semantic_only_discounted": 0,
+        }
+        for result in limited_results:
+            score_mode = str(result.ranking_details.get("score_mode", "hybrid"))
+            if score_mode in result_mode_counts:
+                result_mode_counts[score_mode] += 1
+
         details = {
             "query": request.query,
             "normalized_query": normalized_query,
@@ -1046,6 +1056,7 @@ class MemoryService:
                 "semantic_weight": semantic_weight,
                 "semantic_only_discount": semantic_only_discount,
             },
+            "result_mode_counts": result_mode_counts,
             "results_returned": len(limited_results),
         }
         if semantic_generation_skipped_reason is not None:

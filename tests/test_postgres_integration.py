@@ -810,6 +810,11 @@ def test_postgres_memory_search_hybrid_results_include_ranking_details(
     assert search.details["search_mode"] == "hybrid_memory_item_search"
     assert search.details["semantic_candidates_considered"] == 2
     assert search.details["semantic_query_generated"] is True
+    assert search.details["result_mode_counts"] == {
+        "hybrid": 0,
+        "lexical_only": 1,
+        "semantic_only_discounted": 1,
+    }
     assert search.details["results_returned"] == 2
     assert [result.summary for result in search.results] == [
         "Projection drift root cause identified in deployment workflow",

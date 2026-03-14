@@ -3305,6 +3305,11 @@ def test_serialize_search_memory_response_serializes_results() -> None:
                 "semantic_weight": 1.0,
                 "semantic_only_discount": 0.75,
             },
+            "result_mode_counts": {
+                "hybrid": 1,
+                "lexical_only": 0,
+                "semantic_only_discounted": 0,
+            },
             "results_returned": 1,
         },
     )
@@ -3334,6 +3339,11 @@ def test_serialize_search_memory_response_serializes_results() -> None:
             "lexical_weight": 1.0,
             "semantic_weight": 1.0,
             "semantic_only_discount": 0.75,
+        },
+        "result_mode_counts": {
+            "hybrid": 1,
+            "lexical_only": 0,
+            "semantic_only_discounted": 0,
         },
         "results_returned": 1,
     }
@@ -4148,6 +4158,11 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
     assert search_response.details["search_mode"] == "hybrid_memory_item_search"
     assert search_response.details["semantic_candidates_considered"] == 2
     assert search_response.details["semantic_query_generated"] is True
+    assert search_response.details["result_mode_counts"] == {
+        "hybrid": 0,
+        "lexical_only": 1,
+        "semantic_only_discounted": 1,
+    }
     assert search_response.details["results_returned"] == 2
     assert [result.memory_id for result in search_response.results] == [
         lexical_and_semantic_memory_id,
@@ -4296,6 +4311,11 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
         strongest_memory_id,
         middle_memory_id,
     ]
+    assert search_response.details["result_mode_counts"] == {
+        "hybrid": 0,
+        "lexical_only": 0,
+        "semantic_only_discounted": 2,
+    }
     assert search_response.results[0].semantic_score == pytest.approx(1.0)
     assert search_response.results[1].semantic_score == pytest.approx(0.390625)
     assert search_response.results[0].ranking_details == {
