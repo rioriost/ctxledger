@@ -830,6 +830,50 @@ def test_runtime_introspection_response_uses_runtime_collection() -> None:
     }
 
 
+def test_runtime_introspection_and_tool_route_responses_handle_generic_error_mapping() -> (
+    None
+):
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+    ready_server = make_server()
+    ready_server.workflow_service = SimpleNamespace(
+        ignore_resume_projection_failures=lambda **kwargs: (_ for _ in ()).throw(
+            RuntimeError("")
+        ),
+        resolve_resume_projection_failures=lambda **kwargs: (_ for _ in ()).throw(
+            RuntimeError("")
+        ),
+    )
+
+    ignore_response = build_projection_failures_ignore_response(
+        ready_server,
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+    )
+    resolve_response = build_projection_failures_resolve_response(
+        ready_server,
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+    )
+
+    assert ignore_response.status_code == 500
+    assert ignore_response.payload == {
+        "error": {
+            "code": "server_error",
+            "message": "failed to ignore projection failures",
+        }
+    }
+    assert ignore_response.headers == {"content-type": "application/json"}
+    assert resolve_response.status_code == 500
+    assert resolve_response.payload == {
+        "error": {
+            "code": "server_error",
+            "message": "failed to resolve projection failures",
+        }
+    }
+    assert resolve_response.headers == {"content-type": "application/json"}
+
+
 def test_cli_helpers_cover_schema_path_and_version_fallback(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1605,6 +1649,61 @@ def test_http_handlers_build_runtime_debug_handlers_return_404_for_wrong_paths()
     assert build_runtime_tools_http_handler(server)("/wrong").status_code == 404
 
 
+def test_http_handlers_parse_projection_type_accepts_missing_value() -> None:
+    from ctxledger.runtime.http_handlers import (
+        parse_optional_projection_type_argument,
+    )
+
+    parsed = parse_optional_projection_type_argument({})
+
+    assert parsed is None
+
+
+def test_http_handlers_build_projection_failure_http_handlers_accept_valid_projection_type() -> (
+    None
+):
+    from ctxledger.runtime.http_handlers import (
+        build_projection_failures_ignore_http_handler,
+        build_projection_failures_resolve_http_handler,
+    )
+
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    ignore_server = make_server()
+    ignore_server.workflow_service = SimpleNamespace(
+        ignore_resume_projection_failures=lambda **kwargs: 3
+    )
+    resolve_server = make_server()
+    resolve_server.workflow_service = SimpleNamespace(
+        resolve_resume_projection_failures=lambda **kwargs: 4
+    )
+
+    ignore_response = build_projection_failures_ignore_http_handler(ignore_server)(
+        f"/projection_failures_ignore?workspace_id={workspace_id}&workflow_instance_id={workflow_instance_id}&projection_type=resume_json"
+    )
+    resolve_response = build_projection_failures_resolve_http_handler(resolve_server)(
+        f"/projection_failures_resolve?workspace_id={workspace_id}&workflow_instance_id={workflow_instance_id}&projection_type=resume_md"
+    )
+
+    assert ignore_response.status_code == 200
+    assert ignore_response.payload == {
+        "workspace_id": str(workspace_id),
+        "workflow_instance_id": str(workflow_instance_id),
+        "projection_type": "resume_json",
+        "updated_failure_count": 3,
+        "status": "ignored",
+    }
+    assert resolve_response.status_code == 200
+    assert resolve_response.payload == {
+        "workspace_id": str(workspace_id),
+        "workflow_instance_id": str(workflow_instance_id),
+        "projection_type": "resume_md",
+        "updated_failure_count": 4,
+        "status": "resolved",
+    }
+
+
 def test_http_handlers_build_runtime_debug_handlers_accept_query_string() -> None:
     from ctxledger.runtime.http_handlers import (
         build_runtime_introspection_http_handler,
@@ -1688,6 +1787,32 @@ def test_build_workflow_resume_response_returns_server_not_ready() -> None:
         "error": {
             "code": "server_not_ready",
             "message": "workflow service is not initialized",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_resume_response_uses_default_string_when_bootstrap_error_has_no_message() -> (
+    None
+):
+    workflow_instance_id = uuid4()
+    server = make_server()
+
+    class SilentBootstrapError(ServerBootstrapError):
+        def __str__(self) -> str:
+            return ""
+
+    server.get_workflow_resume = lambda _workflow_instance_id: (_ for _ in ()).throw(
+        SilentBootstrapError("silent")
+    )
+
+    response = build_workflow_resume_response(server, workflow_instance_id)
+
+    assert response.status_code == 503
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "",
         }
     }
     assert response.headers == {"content-type": "application/json"}

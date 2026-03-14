@@ -32,6 +32,7 @@ from ctxledger.workflow.service import (
     WorkflowAttemptStatus,
     WorkflowCheckpoint,
     WorkflowCompleteResult,
+    WorkflowError,
     WorkflowInstance,
     WorkflowInstanceStatus,
     WorkflowNotFoundError,
@@ -1931,3 +1932,241 @@ def test_derive_next_hint_covers_inconsistent_and_blocked_without_checkpoint() -
         blocked_without_checkpoint_hint
         == "Create an initial checkpoint to establish resumable state."
     )
+
+
+def test_workflow_error_hierarchy_exposes_expected_codes_and_details() -> None:
+    validation_error = ValidationError(
+        "validation failed",
+        details={"field": "ticket_id"},
+    )
+    workspace_not_found = WorkspaceNotFoundError(
+        "workspace not found",
+        details={"workspace_id": "abc"},
+    )
+    workflow_not_found = WorkflowNotFoundError(
+        "workflow not found",
+        details={"workflow_instance_id": "wf-1"},
+    )
+    attempt_not_found = AttemptNotFoundError(
+        "attempt not found",
+        details={"attempt_id": "att-1"},
+    )
+    active_workflow_exists = ActiveWorkflowExistsError(
+        "workspace already has a running workflow",
+        details={"workspace_id": "ws-1"},
+    )
+    workspace_conflict = WorkspaceRegistrationConflictError(
+        "repo_url belongs to another workspace",
+        details={"repo_url": "https://example.com/repo.git"},
+    )
+    invalid_transition = InvalidStateTransitionError(
+        "workflow is already terminal",
+        details={"status": "completed"},
+    )
+    workflow_attempt_mismatch = WorkflowAttemptMismatchError(
+        "attempt does not belong to workflow",
+        details={"attempt_id": "att-2"},
+    )
+
+    assert isinstance(validation_error, WorkflowError)
+    assert validation_error.code == "validation_error"
+    assert validation_error.details == {"field": "ticket_id"}
+
+    assert workspace_not_found.code == "workspace_not_found"
+    assert workspace_not_found.details == {"workspace_id": "abc"}
+
+    assert workflow_not_found.code == "workflow_not_found"
+    assert workflow_not_found.details == {"workflow_instance_id": "wf-1"}
+
+    assert attempt_not_found.code == "attempt_not_found"
+    assert attempt_not_found.details == {"attempt_id": "att-1"}
+
+    assert active_workflow_exists.code == "active_workflow_exists"
+    assert active_workflow_exists.details == {"workspace_id": "ws-1"}
+
+    assert workspace_conflict.code == "workspace_registration_conflict"
+    assert workspace_conflict.details == {"repo_url": "https://example.com/repo.git"}
+
+    assert invalid_transition.code == "invalid_state_transition"
+    assert invalid_transition.details == {"status": "completed"}
+
+    assert workflow_attempt_mismatch.code == "workflow_attempt_mismatch"
+    assert workflow_attempt_mismatch.details == {"attempt_id": "att-2"}
+
+
+def test_repository_contract_base_classes_raise_not_implemented() -> None:
+    from ctxledger.workflow.service import (
+        ProjectionFailureRepository,
+        ProjectionStateRepository,
+        UnitOfWork,
+        VerifyReportRepository,
+        WorkflowAttemptRepository,
+        WorkflowCheckpointRepository,
+        WorkflowInstanceRepository,
+        WorkspaceRepository,
+    )
+
+    workspace_repo = WorkspaceRepository()
+    workflow_repo = WorkflowInstanceRepository()
+    attempt_repo = WorkflowAttemptRepository()
+    checkpoint_repo = WorkflowCheckpointRepository()
+    verify_repo = VerifyReportRepository()
+    projection_state_repo = ProjectionStateRepository()
+    projection_failure_repo = ProjectionFailureRepository()
+    uow = UnitOfWork()
+
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+    attempt_id = uuid4()
+    projection = RecordProjectionStateInput(
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        status=ProjectionStatus.FRESH,
+        target_path=".agent/resume.json",
+    )
+    failure = RecordProjectionFailureInput(
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        attempt_id=attempt_id,
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        target_path=".agent/resume.json",
+        error_message="write failed",
+    )
+
+    with pytest.raises(NotImplementedError):
+        workspace_repo.get_by_id(workspace_id)
+    with pytest.raises(NotImplementedError):
+        workspace_repo.get_by_canonical_path("/tmp/repo")
+    with pytest.raises(NotImplementedError):
+        workspace_repo.get_by_repo_url("https://example.com/repo.git")
+    with pytest.raises(NotImplementedError):
+        workspace_repo.create(
+            Workspace(
+                workspace_id=workspace_id,
+                repo_url="https://example.com/repo.git",
+                canonical_path="/tmp/repo",
+                default_branch="main",
+            )
+        )
+    with pytest.raises(NotImplementedError):
+        workspace_repo.update(
+            Workspace(
+                workspace_id=workspace_id,
+                repo_url="https://example.com/repo.git",
+                canonical_path="/tmp/repo",
+                default_branch="main",
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        workflow_repo.get_by_id(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        workflow_repo.get_running_by_workspace_id(workspace_id)
+    with pytest.raises(NotImplementedError):
+        workflow_repo.get_latest_by_workspace_id(workspace_id)
+    with pytest.raises(NotImplementedError):
+        workflow_repo.create(
+            WorkflowInstance(
+                workflow_instance_id=workflow_instance_id,
+                workspace_id=workspace_id,
+                ticket_id="WF-1",
+                status=WorkflowInstanceStatus.RUNNING,
+            )
+        )
+    with pytest.raises(NotImplementedError):
+        workflow_repo.update(
+            WorkflowInstance(
+                workflow_instance_id=workflow_instance_id,
+                workspace_id=workspace_id,
+                ticket_id="WF-1",
+                status=WorkflowInstanceStatus.RUNNING,
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        attempt_repo.get_by_id(attempt_id)
+    with pytest.raises(NotImplementedError):
+        attempt_repo.get_running_by_workflow_id(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        attempt_repo.get_latest_by_workflow_id(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        attempt_repo.get_next_attempt_number(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        attempt_repo.create(
+            WorkflowAttempt(
+                attempt_id=attempt_id,
+                workflow_instance_id=workflow_instance_id,
+                attempt_number=1,
+                status=WorkflowAttemptStatus.RUNNING,
+                started_at=datetime(2024, 1, 1, tzinfo=UTC),
+            )
+        )
+    with pytest.raises(NotImplementedError):
+        attempt_repo.update(
+            WorkflowAttempt(
+                attempt_id=attempt_id,
+                workflow_instance_id=workflow_instance_id,
+                attempt_number=1,
+                status=WorkflowAttemptStatus.RUNNING,
+                started_at=datetime(2024, 1, 1, tzinfo=UTC),
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        checkpoint_repo.get_latest_by_workflow_id(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        checkpoint_repo.get_latest_by_attempt_id(attempt_id)
+    with pytest.raises(NotImplementedError):
+        checkpoint_repo.create(
+            WorkflowCheckpoint(
+                checkpoint_id=uuid4(),
+                workflow_instance_id=workflow_instance_id,
+                attempt_id=attempt_id,
+                step_name="checkpoint",
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        verify_repo.get_latest_by_attempt_id(attempt_id)
+    with pytest.raises(NotImplementedError):
+        verify_repo.create(
+            VerifyReport(
+                verify_id=uuid4(),
+                attempt_id=attempt_id,
+                status=VerifyStatus.PASSED,
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        projection_state_repo.get_resume_projections(workspace_id, workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        projection_state_repo.record_resume_projection(projection)
+
+    with pytest.raises(NotImplementedError):
+        projection_failure_repo.get_open_failures_by_workflow_id(
+            workspace_id, workflow_instance_id
+        )
+    with pytest.raises(NotImplementedError):
+        projection_failure_repo.get_closed_failures_by_workflow_id(
+            workspace_id, workflow_instance_id
+        )
+    with pytest.raises(NotImplementedError):
+        projection_failure_repo.record_resume_projection_failure(failure)
+    with pytest.raises(NotImplementedError):
+        projection_failure_repo.resolve_resume_projection_failures(
+            workspace_id,
+            workflow_instance_id,
+        )
+    with pytest.raises(NotImplementedError):
+        projection_failure_repo.ignore_resume_projection_failures(
+            workspace_id,
+            workflow_instance_id,
+        )
+
+    assert uow.__enter__() is uow
+    assert uow.__exit__(None, None, None) is None
+    with pytest.raises(NotImplementedError):
+        uow.commit()
+    with pytest.raises(NotImplementedError):
+        uow.rollback()
