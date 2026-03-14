@@ -1,4 +1,4 @@
-この session では、`ctxledger` の MCP サーバ機能そのものではなく、**MCP クライアント上の AI エージェントが `.rules` に従って workflow を記録する運用になっているか** を確認し、workflow-aware な handoff 情報を次セッションへ残しやすい形に整理しました。
+この session では、`ctxledger` の MCP サーバ機能そのものではなく、**MCP クライアント上の AI エージェントが `.rules` に従って workflow を記録する運用になっているか** を確認し、workflow-aware な handoff 情報を次セッションへ残しやすい形に整理しました。加えて、README に agent workflow usage guidance を追記し、`.coverage` を削除して作業ツリーのノイズも整理しました。
 
 ## 確認したこと
 
@@ -50,19 +50,32 @@
 - `attempt_id`: `(record when available)`
 - `ticket_id`: `rules-workflow-tracking`
 
+## この session で追加した README guidance
+
+README には、MCP クライアント上の AI エージェントが `.rules` に従って workflow を記録する運用を明示するため、`Agent workflow usage guidance` を追記しました。主な内容は以下です。
+
+- session start で `last_session.md` を読む
+- current repository workspace を登録または確認する
+- 継続作業では current workflow を resume する
+- 新規作業では new workflow を start する
+- planning / code changes / test updates / validation-debugging milestones ごとに progress checkpoint を残す
+- session close / task completion 時に `last_session.md` を更新し、workflow を complete する
+- handoff のため `workspace_id` / `workflow_instance_id` / `attempt_id` / `ticket_id` を `last_session.md` に残すとよい
+
 ## 現在のコード状態に関する補足
 
 - `tests/test_workflow_service.py` の `test_record_resume_projection_fresh_status_fills_missing_timestamps()` は未完成ではなく、既に存在しており、`FRESH` 状態記録時に不足 timestamp を補完することを検証するテストです。
 - 同ファイルには未 commit の追加テスト差分があり、少なくとも以下の観点が含まれています。
   - `test_complete_workflow_writes_verify_report_when_requested()`
   - `test_record_resume_projection_fresh_status_fills_missing_timestamps()`
-- `.coverage` も未追跡/未整理の可能性があるため、次の session では commit 対象を切り分けて確認すると安全です。
+- `.coverage` は削除して、生成物由来のノイズは整理しました。
 
 ## 今回の主な結論
 
 - **README の手順でサーバを起動して Zed などを接続すれば、workflow 記録機能を使える状態ではある**
 - ただし、**AI エージェントにその記録を継続的に実行させるには `.rules` の明示的な運用指示が必要**
 - 次セッションでは、`.rules` に加えて **handoff identifiers を `last_session.md` に残す運用** を併用すると、`workflow_resume` の成功率が上がります
+- README にも agent workflow usage guidance を入れたため、エージェント運用ルールは `.rules` と README の両方から参照できる状態になりました
 
 ## 次セッションでやること
 
@@ -72,5 +85,5 @@
    - `attempt_id`
    - `ticket_id`
 2. `tests/test_workflow_service.py` の未 commit 差分を確認し、意図した変更なら commit 対象に含める
-3. `.coverage` は必要なら破棄または除外し、commit 対象を明確にする
-4. workflow-aware な運用が実際に Zed などの MCP クライアントで回るか、必要なら実地確認する
+3. workflow-aware な運用が実際に Zed などの MCP クライアントで回るか、必要なら実地確認する
+4. 必要なら README の agent workflow usage guidance をさらに具体化し、workspace / workflow 識別子の残し方をテンプレート化する

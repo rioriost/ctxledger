@@ -155,6 +155,26 @@ If you are using the proxy-protected deployment, provide the bearer token in the
 
 Once configured, your MCP client should be able to reach `ctxledger` as a remote HTTP MCP server and use the workflow and memory tool surfaces exposed at `/mcp`.
 
+### Agent workflow usage guidance
+
+If your MCP client hosts an AI agent that follows repository instructions such as `.rules`, you should make workflow tracking part of the agent's normal work loop.
+
+Recommended agent behavior:
+
+- at session start:
+  - read `last_session.md`
+  - register or confirm the current repository workspace
+  - resume the current workflow when continuing existing work
+  - start a new workflow when beginning a new task
+- during work:
+  - record meaningful progress checkpoints after planning, code changes, test updates, and validation/debugging milestones
+- at session close or task completion:
+  - update `last_session.md`
+  - complete the workflow
+  - keep resume projections current when they are part of the operating flow
+
+For reliable handoff between agent sessions, it is also helpful to keep the current `workspace_id`, `workflow_instance_id`, `attempt_id`, and `ticket_id` in `last_session.md` when they are available.
+
 ---
 
 ## Current Scope (`v0.1.0`)
