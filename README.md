@@ -298,10 +298,19 @@ Recommended agent behavior:
   - start a new workflow when beginning a new task
 - during work:
   - record meaningful progress checkpoints after planning, code changes, test updates, and validation/debugging milestones
+  - treat `workflow_complete` as a terminal transition, not as a general progress-save operation
+  - if more work may still occur in the current work loop, prefer another checkpoint and delay `workflow_complete` until the work is truly done
 - at session close or task completion:
   - update `last_session.md`
   - complete the workflow
   - keep resume projections current when they are part of the operating flow
+
+Important workflow lifecycle notes:
+
+- terminal workflow states include `completed`, `failed`, and `cancelled`
+- once a workflow is terminal, do not attempt to add more checkpoints to it
+- terminal workflows should be inspected, not continued as active work
+- if new work appears after a workflow has already become terminal, start a new workflow instead of trying to continue the closed one
 
 For reliable handoff between agent sessions, it is also helpful to keep the current `workspace_id`, `workflow_instance_id`, `attempt_id`, and `ticket_id` in `last_session.md` when they are available.
 

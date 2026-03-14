@@ -164,6 +164,14 @@ The normal lifecycle is:
 8. termination as completed, failed, or cancelled
 9. optional episode formation in the memory subsystem
 
+`workflow_complete` is the terminal transition for a workflow work loop.
+
+It is not a general-purpose “save progress” operation.
+
+If more work may still occur in the current work loop, prefer another checkpoint and delay `workflow_complete` until the work is truly done.
+
+If new work appears after a workflow has already become terminal, start a new workflow or new attempt through the appropriate lifecycle path rather than trying to continue the closed workflow as active work.
+
 This model prioritizes safe recovery over minimal record keeping.
 
 ---
@@ -201,6 +209,12 @@ The workflow reached terminal failure and is not being retried further.
 The workflow was intentionally terminated by external/operator decision.
 
 `cancelled` is terminal.
+
+All workflow terminal states share these operational consequences:
+
+- they are not resumed as active work
+- they should be inspected rather than continued
+- new checkpoints must not be appended after the workflow becomes terminal
 
 ## 6.2 Workflow Attempt States
 
@@ -275,6 +289,8 @@ A checkpoint is a durable resume snapshot.
 
 It should support safe continuation by capturing the current execution situation, not just a label.
 
+Checkpoint creation applies only to operationally open workflow/attempt state. Once the workflow or active attempt is terminal, the system should reject additional checkpoint creation for that closed execution path.
+
 Recommended checkpoint fields include:
 
 - `workflow_instance_id`
@@ -335,6 +351,8 @@ There is sufficient canonical state to continue safely.
 
 ### `terminal`
 The workflow is already in a terminal state and is not to be resumed as active work.
+
+Clients should interpret this as “inspect final state” rather than “continue execution”. If additional work is needed after a terminal result, that work should proceed through a new workflow or other explicit retry/continuation mechanism rather than by appending checkpoints to the closed workflow.
 
 ### `blocked`
 The workflow is not terminal, but continuation is not currently safe or possible without intervention.
