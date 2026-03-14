@@ -631,3 +631,48 @@ canonical checkpoint を記録済み:
 1. `tests/test_mcp_tool_handlers.py` の修正を commit する
 2. 必要なら server/search 周辺のもう少し広い suite を回す
 3. その後に ranking 調整や PostgreSQL hybrid path の追加確認へ進む
+
+## 今回の追記
+- `tests/test_server.py` の `make_settings()` が `EmbeddingSettings` 未対応のままで、
+  `AppSettings` 初期化時に `embedding` 必須化へ追従できていないことが、
+  広めの suite 実行でまとめて表面化した
+- 対応として `tests/test_server.py` に以下を追加
+  - `EmbeddingProvider`
+  - `EmbeddingSettings`
+- `make_settings()` に disabled の embedding default を追加
+  - `enabled=False`
+  - `provider=EmbeddingProvider.DISABLED`
+  - `model="local-stub-v1"`
+  - `api_key=None`
+  - `base_url=None`
+  - `dimensions=None`
+
+### 今回分かったこと
+今回の大量失敗は `memory_search` 本体の回帰ではなく、  
+**server テスト共通ヘルパーが embedding config 追加へ未追従だったこと** が原因でした。
+
+### 実行結果
+- `python -m pytest -q tests/test_server.py`
+  - **134 passed**
+- `python -m pytest -q tests/test_coverage_targets.py tests/test_mcp_tool_handlers.py tests/test_server.py tests/test_postgres_integration.py`
+  - **419 passed in 10.58s**
+
+### diagnostics
+- `tests/test_server.py`: clean
+
+### いまの状態
+少なくとも今回の対象範囲では以下が揃っています。
+
+- embedding config 追加
+- serializer shape
+- MCP handler response
+- server wrapper expectations
+- PostgreSQL integration
+- server test scaffolding
+
+つまり、**memory-search 関連の focused 〜 broader validation は一通り通った状態**です。
+
+### 次回の最短ルート
+1. compatibility / expectation sync ではなく、`memory_search` の ranking 改善へ戻る
+2. semantic behavior の重み付けや hybrid score 調整を進める
+3. 必要なら追加 integration / end-to-end coverage を広げる
