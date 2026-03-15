@@ -52,8 +52,12 @@ from ctxledger.workflow.service import (
     ResumableStatus,
     ResumeWorkflowInput,
     StartWorkflowInput,
+    VerifyReport,
     VerifyStatus,
+    WorkflowAttempt,
     WorkflowAttemptStatus,
+    WorkflowCheckpoint,
+    WorkflowInstance,
     WorkflowInstanceStatus,
     WorkflowService,
 )
@@ -1138,6 +1142,1394 @@ def test_postgres_workflow_complete_auto_memory_is_searchable(
     assert (
         "embedding_similarity" in top_result.matched_fields
         or "content" in top_result.matched_fields
+    )
+
+
+def test_postgres_workflow_complete_auto_memory_skips_low_signal_closeout(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-low-signal.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-low-signal",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-LOW-SIGNAL-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="minor_note",
+            summary="Tiny progress note",
+            checkpoint_json={},
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Completed a low-signal pass",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        assert uow.memory_items is not None
+
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+        workspace_items = uow.memory_items.list_by_workspace_id(
+            workspace.workspace_id,
+            limit=10,
+        )
+
+    assert completed.workflow_instance.status == WorkflowInstanceStatus.COMPLETED
+    assert completed.attempt.status == WorkflowAttemptStatus.SUCCEEDED
+    assert completed.auto_memory_details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "low_signal_checkpoint_closeout",
+    }
+    assert completed.warnings == ()
+    assert auto_episodes == []
+    assert workspace_items == ()
+
+
+def test_postgres_workflow_complete_auto_memory_suppresses_duplicate_closeout(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-duplicate.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-duplicate",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-DUPE-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Checkpoint summary for duplicate suppression",
+            checkpoint_json={
+                "next_intended_action": "Implement the minimum heuristic path"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Completed heuristic planning pass",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    reopened_attempt = workflow_service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+    assert reopened_attempt.resumable_status == ResumableStatus.TERMINAL
+
+    duplicate_result = (
+        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+            workflow=first_completed.workflow_instance,
+            attempt=first_completed.attempt,
+            latest_checkpoint=WorkflowCheckpoint(
+                checkpoint_id=uuid4(),
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                step_name="design_phase2",
+                summary="Checkpoint summary for duplicate suppression",
+                checkpoint_json={
+                    "next_intended_action": "Implement the minimum heuristic path"
+                },
+            ),
+            verify_report=VerifyReport(
+                verify_id=uuid4(),
+                attempt_id=started.attempt.attempt_id,
+                status=VerifyStatus.PASSED,
+                report_json={"checks": ["pytest"], "status": "passed"},
+            ),
+            summary="Completed heuristic planning pass",
+            failure_reason=None,
+        )
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert first_completed.auto_memory_details == {
+        "auto_memory_recorded": True,
+        "embedding_persistence_status": "stored",
+        "embedding_generation_skipped_reason": None,
+        "embedding_provider": "local_stub",
+        "embedding_model": "local-stub-v1",
+        "embedding_vector_dimensions": 1536,
+        "embedding_content_hash": first_completed.auto_memory_details[
+            "embedding_content_hash"
+        ],
+    }
+    assert duplicate_result is not None
+    assert duplicate_result.details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "duplicate_closeout_auto_memory",
+    }
+    assert len(auto_episodes) == 1
+
+
+def test_postgres_workflow_complete_auto_memory_suppresses_near_duplicate_closeout(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-near-duplicate.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-near-duplicate",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-NEAR-DUPE-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="First checkpoint summary",
+            checkpoint_json={
+                "next_intended_action": "Implement the minimum heuristic path"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="First completion summary",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    near_duplicate_result = (
+        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+            workflow=first_completed.workflow_instance,
+            attempt=WorkflowAttemptStatus.SUCCEEDED and first_completed.attempt,
+            latest_checkpoint=WorkflowCheckpoint(
+                checkpoint_id=uuid4(),
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                step_name="design_phase2",
+                summary="Second checkpoint summary",
+                checkpoint_json={
+                    "next_intended_action": "Implement the minimum heuristic path"
+                },
+            ),
+            verify_report=VerifyReport(
+                verify_id=uuid4(),
+                attempt_id=started.attempt.attempt_id,
+                status=VerifyStatus.PASSED,
+                report_json={"checks": ["pytest"], "status": "passed"},
+            ),
+            summary="Second completion summary",
+            failure_reason=None,
+        )
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+    assert near_duplicate_result is not None
+    assert near_duplicate_result.details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "near_duplicate_checkpoint_closeout",
+    }
+    assert len(auto_episodes) == 1
+
+
+def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_with_high_summary_similarity(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-summary-similar.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-summary-similar",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-SUMMARY-SIMILAR-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Investigated duplicate suppression behavior",
+            checkpoint_json={
+                "next_intended_action": "Implement summary similarity gating"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Implemented summary similarity gating for duplicate suppression",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    near_duplicate_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+        workflow=first_completed.workflow_instance,
+        attempt=first_completed.attempt,
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Investigated duplicate suppression behavior again",
+            checkpoint_json={
+                "next_intended_action": "Implement summary similarity gating"
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=started.attempt.attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"], "status": "passed"},
+        ),
+        summary="Implemented gating for summary similarity in duplicate suppression",
+        failure_reason=None,
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+    assert near_duplicate_result is not None
+    assert near_duplicate_result.details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "near_duplicate_checkpoint_closeout",
+    }
+    assert len(auto_episodes) == 1
+
+
+def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_when_similarity_is_only_boilerplate_driven(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-summary-boilerplate.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-summary-boilerplate",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-SUMMARY-BOILERPLATE-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Investigated duplicate suppression behavior",
+            checkpoint_json={
+                "next_intended_action": "Implement summary similarity gating"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Implemented summary similarity gating for duplicate suppression",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    near_duplicate_result = (
+        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+            workflow=first_completed.workflow_instance,
+            attempt=first_completed.attempt,
+            latest_checkpoint=WorkflowCheckpoint(
+                checkpoint_id=uuid4(),
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                step_name="design_phase2",
+                summary="Investigated duplicate suppression behavior for another path",
+                checkpoint_json={
+                    "next_intended_action": "Implement summary similarity gating"
+                },
+            ),
+            verify_report=VerifyReport(
+                verify_id=uuid4(),
+                attempt_id=started.attempt.attempt_id,
+                status=VerifyStatus.PASSED,
+                report_json={"checks": ["pytest"], "status": "passed"},
+            ),
+            summary="Implemented summary similarity gating for duplicate suppression",
+            failure_reason=None,
+        )
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+    assert near_duplicate_result is not None
+    assert near_duplicate_result.details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "near_duplicate_checkpoint_closeout",
+    }
+    assert len(auto_episodes) == 1
+
+
+def test_postgres_workflow_complete_auto_memory_does_not_treat_old_closeout_as_near_duplicate(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-old-near-duplicate.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-old-near-duplicate",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-OLD-NEAR-DUPE-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="First checkpoint summary",
+            checkpoint_json={
+                "next_intended_action": "Implement the minimum heuristic path"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="First completion summary",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        existing_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in existing_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+        assert len(auto_episodes) == 1
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        existing_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in existing_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+        assert len(auto_episodes) == 1
+
+        aged_episode = auto_episodes[0]
+        assert hasattr(uow, "_conn")
+        with uow._conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE episodes
+                SET created_at = %s, updated_at = %s
+                WHERE episode_id = %s
+                """,
+                (
+                    datetime(2024, 1, 1, tzinfo=UTC),
+                    datetime(2024, 1, 1, tzinfo=UTC),
+                    str(aged_episode.episode_id),
+                ),
+            )
+        uow.commit()
+
+    later_result = (
+        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+            workflow=first_completed.workflow_instance,
+            attempt=first_completed.attempt,
+            latest_checkpoint=WorkflowCheckpoint(
+                checkpoint_id=uuid4(),
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                step_name="design_phase2",
+                summary="Second checkpoint summary",
+                checkpoint_json={
+                    "next_intended_action": "Implement the minimum heuristic path"
+                },
+            ),
+            verify_report=VerifyReport(
+                verify_id=uuid4(),
+                attempt_id=started.attempt.attempt_id,
+                status=VerifyStatus.PASSED,
+                report_json={"checks": ["pytest"], "status": "passed"},
+            ),
+            summary="Second completion summary",
+            failure_reason=None,
+        )
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        refreshed_auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert later_result is not None
+    assert later_result.details["auto_memory_recorded"] is True
+    assert later_result.details["embedding_persistence_status"] == "stored"
+    assert later_result.details["embedding_generation_skipped_reason"] is None
+    assert later_result.details["embedding_provider"] == "local_stub"
+    assert later_result.details["embedding_model"] == "local-stub-v1"
+    assert later_result.details["embedding_vector_dimensions"] == 1536
+    assert later_result.details["embedding_content_hash"] is not None
+    assert len(refreshed_auto_episodes) == 2
+
+
+def test_postgres_workflow_complete_auto_memory_records_when_summary_similarity_is_below_threshold(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-summary-dissimilar.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-summary-dissimilar",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-SUMMARY-DISSIMILAR-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Investigated duplicate suppression behavior",
+            checkpoint_json={
+                "next_intended_action": "Implement summary similarity gating"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Implemented summary similarity gating for duplicate suppression",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    different_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+        workflow=first_completed.workflow_instance,
+        attempt=first_completed.attempt,
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Documented operator-facing rollout guidance for the refined suppression logic",
+            checkpoint_json={
+                "next_intended_action": "Publish operator-facing duplicate suppression notes"
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=started.attempt.attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"], "status": "passed"},
+        ),
+        summary="Documented rollout notes for operators after validation",
+        failure_reason=None,
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+    assert different_result is not None
+    assert different_result.details == {
+        "auto_memory_recorded": True,
+        "embedding_persistence_status": "stored",
+        "embedding_generation_skipped_reason": None,
+        "embedding_provider": "local_stub",
+        "embedding_model": "local-stub-v1",
+        "embedding_vector_dimensions": 1536,
+        "embedding_content_hash": different_result.details["embedding_content_hash"],
+    }
+    assert len(auto_episodes) == 2
+
+
+def test_postgres_workflow_complete_auto_memory_uses_extracted_and_metadata_fields_for_near_duplicate_matching(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-metadata-aware.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-metadata-aware",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-METADATA-AWARE-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Compared extracted closeout fields",
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Refined metadata-aware closeout duplicate detection",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    near_duplicate_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+        workflow=first_completed.workflow_instance,
+        attempt=first_completed.attempt,
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Compared extracted closeout fields again",
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=started.attempt.attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"], "status": "passed"},
+        ),
+        summary="Refined duplicate detection with metadata-aware closeout matching",
+        failure_reason=None,
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+    assert near_duplicate_result is not None
+    assert near_duplicate_result.details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "near_duplicate_checkpoint_closeout",
+    }
+    assert len(auto_episodes) == 1
+
+
+def test_postgres_workflow_complete_auto_memory_does_not_treat_different_attempt_status_as_near_duplicate(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-attempt-status-diff.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-attempt-status-diff",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-ATTEMPT-STATUS-DIFF-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Compared weighted closeout fields",
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Completed weighted duplicate matching refinement",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    attempt_different_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+        workflow=first_completed.workflow_instance,
+        attempt=WorkflowAttempt(
+            attempt_id=started.attempt.attempt_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_number=2,
+            status=WorkflowAttemptStatus.FAILED,
+            verify_status=VerifyStatus.PASSED,
+            started_at=started.attempt.started_at,
+            finished_at=datetime.now(UTC),
+            created_at=started.attempt.created_at,
+            updated_at=datetime.now(UTC),
+        ),
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Compared weighted closeout fields again",
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=started.attempt.attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"], "status": "passed"},
+        ),
+        summary="Completed weighted closeout duplicate matching refinement",
+        failure_reason=None,
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+    assert attempt_different_result is not None
+    assert attempt_different_result.details == {
+        "auto_memory_recorded": True,
+        "embedding_persistence_status": "stored",
+        "embedding_generation_skipped_reason": None,
+        "embedding_provider": "local_stub",
+        "embedding_model": "local-stub-v1",
+        "embedding_vector_dimensions": 1536,
+        "embedding_content_hash": attempt_different_result.details[
+            "embedding_content_hash"
+        ],
+    }
+    assert len(auto_episodes) == 2
+    assert any(
+        episode.metadata.get("attempt_status") == "failed" for episode in auto_episodes
+    )
+
+
+def test_postgres_workflow_complete_auto_memory_does_not_treat_different_failure_reason_as_near_duplicate(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-failure-reason-diff.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-failure-reason-diff",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-FAILURE-REASON-DIFF-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Compared weighted closeout fields",
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
+            verify_status=VerifyStatus.FAILED,
+            verify_report={"checks": ["pytest"], "status": "failed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.FAILED,
+            summary="Failed while refining metadata-aware duplicate matching",
+            verify_status=VerifyStatus.FAILED,
+            verify_report={"checks": ["pytest"], "status": "failed"},
+            failure_reason="first failure path",
+        )
+    )
+
+    failure_reason_different_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+        workflow=first_completed.workflow_instance,
+        attempt=WorkflowAttempt(
+            attempt_id=started.attempt.attempt_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_number=2,
+            status=WorkflowAttemptStatus.FAILED,
+            verify_status=VerifyStatus.FAILED,
+            failure_reason="second failure path",
+            started_at=started.attempt.started_at,
+            finished_at=datetime.now(UTC),
+            created_at=started.attempt.created_at,
+            updated_at=datetime.now(UTC),
+        ),
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Compared weighted closeout fields again",
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=started.attempt.attempt_id,
+            status=VerifyStatus.FAILED,
+            report_json={"checks": ["pytest"], "status": "failed"},
+        ),
+        summary="Failed while refining duplicate matching with metadata-aware fields",
+        failure_reason="second failure path",
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+    assert failure_reason_different_result is not None
+    assert failure_reason_different_result.details == {
+        "auto_memory_recorded": True,
+        "embedding_persistence_status": "stored",
+        "embedding_generation_skipped_reason": None,
+        "embedding_provider": "local_stub",
+        "embedding_model": "local-stub-v1",
+        "embedding_vector_dimensions": 1536,
+        "embedding_content_hash": failure_reason_different_result.details[
+            "embedding_content_hash"
+        ],
+    }
+    assert len(auto_episodes) == 2
+    assert any(
+        episode.metadata.get("failure_reason") == "second failure path"
+        for episode in auto_episodes
+    )
+
+
+def test_postgres_workflow_complete_auto_memory_does_not_treat_different_verify_status_as_near_duplicate(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-verify-diff.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-verify-diff",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-VERIFY-DIFF-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="First checkpoint summary",
+            checkpoint_json={
+                "next_intended_action": "Implement the minimum heuristic path"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    first_completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="First completion summary",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    verify_different_result = (
+        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+            workflow=first_completed.workflow_instance,
+            attempt=WorkflowAttempt(
+                attempt_id=started.attempt.attempt_id,
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_number=started.attempt.attempt_number,
+                status=WorkflowAttemptStatus.SUCCEEDED,
+                verify_status=VerifyStatus.FAILED,
+                started_at=started.attempt.started_at,
+                finished_at=datetime.now(UTC),
+                created_at=started.attempt.created_at,
+                updated_at=datetime.now(UTC),
+            ),
+            latest_checkpoint=WorkflowCheckpoint(
+                checkpoint_id=uuid4(),
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                step_name="design_phase2",
+                summary="Second checkpoint summary",
+                checkpoint_json={
+                    "next_intended_action": "Implement the minimum heuristic path"
+                },
+            ),
+            verify_report=VerifyReport(
+                verify_id=uuid4(),
+                attempt_id=started.attempt.attempt_id,
+                status=VerifyStatus.FAILED,
+                report_json={"checks": ["pytest"], "status": "failed"},
+            ),
+            summary="Second completion summary",
+            failure_reason=None,
+        )
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+    assert verify_different_result is not None
+    assert verify_different_result.details == {
+        "auto_memory_recorded": True,
+        "embedding_persistence_status": "stored",
+        "embedding_generation_skipped_reason": None,
+        "embedding_provider": "local_stub",
+        "embedding_model": "local-stub-v1",
+        "embedding_vector_dimensions": 1536,
+        "embedding_content_hash": verify_different_result.details[
+            "embedding_content_hash"
+        ],
+    }
+    assert len(auto_episodes) == 2
+    assert any(
+        episode.metadata.get("verify_status") == "failed" for episode in auto_episodes
     )
 
 
