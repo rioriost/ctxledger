@@ -294,6 +294,7 @@ The initial release is centered on the workflow kernel, while the memory layer h
 ### Memory status in the current repository
 - `memory_remember_episode` is implemented for append-only episodic recording
   - `attempt_id` is now persisted canonically with the episode record when provided
+  - memory-item embeddings may also be generated and stored during episode persistence when embedding storage is configured and enabled
 - `memory_get_context` is partially implemented as an episode-oriented retrieval path
   - direct `workflow_instance_id` lookup is supported
   - workflow lookup by `workspace_id` is supported
@@ -302,8 +303,9 @@ The initial release is centered on the workflow kernel, while the memory layer h
   - `limit` is supported
   - initial lightweight query filtering over episode summary and explicit metadata fields is supported
   - broader retrieval behavior remains early-stage
-- `memory_search` remains a stub
-- semantic memory, embedding-backed retrieval, hierarchical summaries, and relation-aware retrieval remain future work
+- `memory_search` is implemented as an initial hybrid lexical and embedding-backed retrieval surface over stored memory items
+- semantic memory and embedding-backed retrieval are now present in an initial form
+- hierarchical summaries and relation-aware retrieval remain future work
 
 ---
 
@@ -476,7 +478,7 @@ Current implementation status:
   - currently supports workspace-scoped search, result limits, and optional structured filters
   - returns lexical score, semantic score, and ranking explanation details for each result
   - falls back to lexical-only behavior when embedding generation or semantic lookup is unavailable
-  - the most concrete currently supported embedding execution paths are `local_stub` and `custom_http`
+  - validated embedding execution paths now include `openai` in addition to `local_stub` and `custom_http`
   - broader provider-specific integrations and richer multi-layer retrieval remain follow-up work
 
 The intended staged roadmap is still:
@@ -513,8 +515,8 @@ The repository should treat `0.2.0` memory closeout as satisfied only when the f
 - docs clearly distinguish:
   - implemented episodic memory behavior
   - partially implemented context retrieval behavior
-  - stubbed `memory_search`
-- semantic retrieval, embeddings, relations, and hierarchical summaries remain explicitly out of scope for `0.2.0`
+  - the earlier `0.2.0` scope boundary where `memory_search` was still stubbed
+- semantic retrieval, embeddings, relations, and hierarchical summaries remained explicitly out of scope for `0.2.0` at that time
 - TLS / HTTPS deployment work may proceed as part of the broader `0.2.0` stream, but only after the memory-focused closeout work is considered sufficiently complete
 
 ### Workflow HTTP read endpoints

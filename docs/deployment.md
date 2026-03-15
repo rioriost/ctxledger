@@ -136,7 +136,8 @@ This should be understood as an initial semantic retrieval layer rather than a c
 - PostgreSQL-backed storage for memory embeddings
 - vector similarity lookup used by `memory_search`
 - hybrid lexical + embedding-backed ranking over stored memory items
-- additional provider-specific embedding integrations and richer multi-layer retrieval still remaining as follow-up work
+- validated provider-specific embedding support for `openai`, alongside `local_stub`, `custom_http`, and the broader embedding provider scaffolding
+- richer multi-layer retrieval still remaining as follow-up work
 
 Operators should therefore treat `pgvector` as part of the active memory-search path, not merely as dormant future-proofing infrastructure.
 

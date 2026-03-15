@@ -1,7 +1,7 @@
 # ctxledger last session
 
 ## Session summary
-This work loop finished the OpenAI-default embedding integration validation and cleanup pass for `ctxledger`.
+This work loop finished the OpenAI-default embedding integration validation and cleanup pass for `ctxledger`, and a follow-up doc-alignment pass corrected stale repository docs that still understated current memory and embedding support. It also recovered an interrupted uncommitted workstream for automatic workflow-completion memory capture.
 
 Main outcomes:
 - OpenAI remains the default embedding provider in config.
@@ -9,6 +9,8 @@ Main outcomes:
 - `remember_episode` now exposes embedding persistence outcomes instead of hiding failures.
 - OpenAI-related environment variable naming was standardized toward common OpenAI conventions where appropriate.
 - The broader targeted regression suite is green.
+- `README.md`, `docs/CHANGELOG.md`, `docs/deployment.md`, and `docs/roadmap.md` now reflect the current implemented state for `memory_search`, semantic retrieval, and validated OpenAI embedding support.
+- An interrupted, uncommitted `workflow_complete` auto-memory workstream was identified from the working tree and recovered to a targeted-pass state.
 
 ---
 
@@ -359,6 +361,22 @@ This commit included:
 At session close:
 
 - main implementation work is committed
+- follow-up doc alignment updated:
+  - `README.md`
+  - `docs/CHANGELOG.md`
+  - `docs/deployment.md`
+  - `docs/roadmap.md`
+- interrupted uncommitted auto-memory recovery work is present in the working tree:
+  - `src/ctxledger/workflow/memory_bridge.py`
+  - `src/ctxledger/workflow/service.py`
+  - `src/ctxledger/runtime/server_factory.py`
+  - `tests/test_coverage_targets.py`
+  - `tests/test_postgres_integration.py`
+  - `schemas/postgres.sql`
+- that interrupted work is now at a targeted validated state after recovery:
+  - fixed test wiring away from env-dependent service construction for the targeted integration path
+  - aligned schema provenance constraint with `workflow_complete_auto`
+  - aligned the targeted PostgreSQL integration test with the actual local-stub bridge wiring used there
 - workflow is complete in canonical tracking
 - untracked cert files are still ignorable:
   - `docker/traefik/certs/localhost.crt`
@@ -381,12 +399,14 @@ Still worth remembering:
 ---
 
 ## Natural next candidates
-1. If desired, add a tiny operator-facing helper script or docs snippet for:
+1. Decide whether the interrupted `workflow_complete` auto-memory work should keep the current local-stub-focused targeted integration test shape or be rewritten to validate the default OpenAI runtime path explicitly.
+2. Review the runtime/behavior design for auto-memory failures after `workflow_complete`, especially whether best-effort failure should be surfaced more explicitly.
+3. If desired, add a tiny operator-facing helper script or docs snippet for:
    - running the real OpenAI integration test
    - manually inspecting `memory_embeddings`
-2. Review any remaining docs outside the updated plan file for outdated env names
-3. If another embedding provider is next, extend the same provider-specific pattern used for OpenAI
-4. If Azure/OpenAI-compatible support matters soon, clarify header/auth compatibility explicitly
+4. Review any remaining docs outside `README.md`, `docs/CHANGELOG.md`, `docs/deployment.md`, `docs/roadmap.md`, and the updated plan file for outdated embedding-support wording or env names.
+5. If another embedding provider is next, extend the same provider-specific pattern used for OpenAI.
+6. If Azure/OpenAI-compatible support matters soon, clarify header/auth compatibility explicitly.
 
 ---
 
@@ -402,8 +422,151 @@ Still worth remembering:
 - real PostgreSQL + OpenAI integration test passes
 - broader targeted regression is green:
   - `485 passed, 1 skipped`
+- stale doc wording was aligned with current implementation in:
+  - `README.md`
+  - `docs/CHANGELOG.md`
+  - `docs/deployment.md`
+  - `docs/roadmap.md`
+- interrupted uncommitted `workflow_complete` auto-memory work was identified from the working tree and partially recovered:
+  - target files:
+    - `src/ctxledger/workflow/memory_bridge.py`
+    - `src/ctxledger/workflow/service.py`
+    - `src/ctxledger/runtime/server_factory.py`
+    - `tests/test_coverage_targets.py`
+    - `tests/test_postgres_integration.py`
+    - `schemas/postgres.sql`
+  - targeted recovery points confirmed:
+    - schema allows `workflow_complete_auto` provenance
+    - targeted PostgreSQL integration test for `workflow_complete_auto` passes
+    - targeted workflow bridge / factory coverage passes
 - commit created:
   - `68fa351 Validate OpenAI embedding integration end to end`
 - if testing real persistence again, use:
   - `envrcctl exec -- python -m pytest tests/test_postgres_integration.py -q -k openai`
 - ignore untracked cert files
+
+embedding 生成トリガー一覧
+### 生成する
+- `memory_remember_episode`
+  - 内部的には `MemoryService.remember_episode()`
+  - その中で:
+    - memory item 作成
+    - `_maybe_store_embedding()`
+    - `memory_embeddings` への保存
+  - まで進みます
+
+### 生成しない
+以下は embedding 生成トリガーではありません。
+
+- `workspace_register`
+- `workflow_start`
+- `workflow_resume`
+- `workflow_checkpoint`
+- `workflow_complete`
+- `projection_failures_ignore`
+- `projection_failures_resolve`
+- `memory_get_context`
+- `memory_search`
+
+---
+
+## `memory_search` は生成しないの？
+少しだけ補足すると、**保存用 embedding は生成しません**。  
+ただし `memory_search` は semantic search 用に **クエリ embedding** をその場で生成することがあります。
+
+つまり:
+
+- `memory_remember_episode`
+  - **memory item の embedding を保存**
+- `memory_search`
+  - **検索クエリ用 embedding を一時生成**
+  - でも通常は DB に保存しない
+
+---
+
+## 2種類の embedding
+整理すると、今の `ctxledger` には embedding の使い方が 2 つあります。
+
+### 1. 永続化される embedding
+用途:
+- memory item の意味検索用 index
+
+トリガー:
+- `memory_remember_episode`
+
+保存先:
+- PostgreSQL の `memory_embeddings`
+
+### 2. 一時的な query embedding
+用途:
+- `memory_search` の semantic / hybrid retrieval
+
+トリガー:
+- `memory_search`
+
+保存:
+- 通常しない
+
+---
+
+## `.rules` 運用で重要なこと
+`.rules` は memory tool 利用を推奨していますが、embedding 蓄積という観点では次が重要です。
+
+### embedding を蓄積したいなら
+AI エージェントは、作業知見を残すときに **`memory_remember_episode` を使う必要があります**。
+
+### workflow だけでは足りない
+たとえば以下だけでは embedding は増えません。
+
+- `workflow_start`
+- `workflow_checkpoint`
+- `workflow_complete`
+
+この場合、workflow の canonical state は残るけど、semantic memory index は増えないです。
+
+---
+
+## 運用上の実務的な見方
+もしあなたが
+> AI エージェントが ctxledger を使うだけで記憶がどんどん semantic search 対応になるのか
+
+を気にしているなら、答えは:
+
+- **workflow tool だけではならない**
+- **memory_remember_episode をちゃんと使う運用ならなる**
+
+です。
+
+---
+
+## 望ましいエージェント行動
+embedding 蓄積まで含めて `.rules` をうまく活かすなら、各 work loop で例えばこういう流れが理想です。
+
+1. `workspace_register`
+2. `workflow_resume` or `workflow_start`
+3. `workflow_checkpoint`
+4. 実作業
+5. 学びや判断を `memory_remember_episode`
+6. 検証
+7. `workflow_checkpoint`
+8. `workflow_complete`
+
+この 5 があると semantic memory が育ちます。
+
+---
+
+## 今後の改善余地
+もし「workflow checkpoint からも自動で embedding を残したい」という思想なら、将来はこういう設計もありえます。
+
+- `workflow_checkpoint` 完了時に自動 episode 化
+- checkpoint summary から memory item を派生生成
+- projection 書き込み時に memory 更新
+- workflow closeout 時に自動 summary memory を作成
+
+ただし **現状はそうなっていません**。  
+今は明示的に `memory_remember_episode` を使ったときが主トリガーです。
+
+---
+
+必要なら次に、  
+**「AI エージェントが `.rules` に従って embedding を確実に残すための実践プロンプト指針」** をまとめます。

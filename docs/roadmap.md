@@ -136,14 +136,14 @@ Current progress already landed toward `0.3`:
 
 Current `0.3.0` positioning:
 
-- the most concrete currently supported embedding execution paths are `local_stub` and `custom_http`
-- `openai`, `voyageai`, and `cohere` configuration surfaces exist, but full provider-specific runtime integrations remain incomplete
+- validated embedding execution paths now include `openai` in addition to `local_stub` and `custom_http`
+- `voyageai` and `cohere` configuration surfaces exist, but their full provider-specific runtime integrations remain incomplete
 - `memory_get_context` remains primarily an episode-oriented retrieval surface from `0.2.0`, not yet a richer multi-layer relevance assembly path
 
 Remaining work to close out `0.3` more confidently:
 
-- align README, changelog, and operator-facing docs with the now-implemented `memory_search` surface
-- decide the exact `0.3.0` release boundary for provider-specific embedding integrations
+- align remaining operator-facing docs with the current `memory_search` and embedding-support surface
+- decide the exact `0.3.0` release boundary for provider-specific embedding integrations beyond the already validated OpenAI path
 - clarify which semantic retrieval behaviors are considered in-scope for `0.3.0` versus later iterative releases
 - continue improving relevance tuning and explanation quality without overstating retrieval guarantees
 - defer broader hierarchical and relation-aware retrieval expansion to later milestones

@@ -24,8 +24,10 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ### Notes
 
-- the most concrete currently supported embedding execution paths are `local_stub` and `custom_http`
-- `openai`, `voyageai`, and `cohere` configuration surfaces exist, but full provider-specific runtime support remains incomplete
+- `memory_search` now uses the active hybrid lexical and embedding-backed retrieval path over stored memory items
+- validated embedding execution paths now include `openai` in addition to `local_stub` and `custom_http`
+- OpenAI embedding generation was validated end-to-end against PostgreSQL persistence and semantic retrieval
+- `voyageai` and `cohere` configuration surfaces exist, but their full provider-specific runtime support remains incomplete
 - `memory_get_context` remains primarily episode-oriented in `0.3.0`; richer multi-layer and relation-aware context assembly remain future work
 
 ## [0.2.0] - 2026-03-14
