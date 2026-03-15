@@ -469,7 +469,7 @@ CREATE TABLE IF NOT EXISTS memory_items (
   CONSTRAINT memory_items_type_not_empty
     CHECK (btrim(type) <> ''),
   CONSTRAINT memory_items_provenance_valid
-    CHECK (provenance IN ('episode', 'explicit', 'derived', 'imported')),
+    CHECK (provenance IN ('episode', 'explicit', 'derived', 'imported', 'workflow_complete_auto')),
   CONSTRAINT memory_items_content_not_empty
     CHECK (btrim(content) <> '')
 );

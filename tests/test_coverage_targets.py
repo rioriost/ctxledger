@@ -1172,8 +1172,9 @@ def test_build_workflow_service_factory_builds_workflow_service(
         return _uow_factory
 
     class FakeWorkflowService:
-        def __init__(self, uow_factory) -> None:
+        def __init__(self, uow_factory, **kwargs: object) -> None:
             self.uow_factory = uow_factory
+            self.kwargs = kwargs
 
     monkeypatch.setattr(
         "ctxledger.runtime.server_factory.PostgresConfig",
@@ -4425,6 +4426,161 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
     }
     assert search_response.results[0].score == pytest.approx(0.75)
     assert search_response.results[1].score == pytest.approx(0.29296875)
+
+
+def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> None:
+    from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
+
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    attempt_id = uuid4()
+    checkpoint_id = uuid4()
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_embedding_repository = InMemoryMemoryEmbeddingRepository()
+
+    workflow = WorkflowInstance(
+        workflow_instance_id=workflow_id,
+        workspace_id=workspace_id,
+        ticket_id="TICKET-AUTO-MEM-1",
+        status=WorkflowInstanceStatus.COMPLETED,
+    )
+    attempt = WorkflowAttempt(
+        attempt_id=attempt_id,
+        workflow_instance_id=workflow_id,
+        attempt_number=1,
+        status=WorkflowAttemptStatus.SUCCEEDED,
+        verify_status=VerifyStatus.PASSED,
+    )
+    latest_checkpoint = WorkflowCheckpoint(
+        checkpoint_id=checkpoint_id,
+        workflow_instance_id=workflow_id,
+        attempt_id=attempt_id,
+        step_name="validate_openai",
+        summary="Broader targeted regression is green",
+        checkpoint_json={"next_intended_action": "Review diff and commit"},
+    )
+    verify_report = VerifyReport(
+        verify_id=uuid4(),
+        attempt_id=attempt_id,
+        status=VerifyStatus.PASSED,
+        report_json={"checks": ["pytest"]},
+    )
+
+    bridge = WorkflowMemoryBridge(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_embedding_repository=memory_embedding_repository,
+        embedding_generator=LocalStubEmbeddingGenerator(
+            model="local-stub-v1",
+            dimensions=8,
+        ),
+    )
+
+    result = bridge.record_workflow_completion_memory(
+        workflow=workflow,
+        attempt=attempt,
+        latest_checkpoint=latest_checkpoint,
+        verify_report=verify_report,
+        summary="Validated OpenAI embedding integration end to end",
+        failure_reason=None,
+    )
+
+    assert result is not None
+    assert result.episode.workflow_instance_id == workflow_id
+    assert result.episode.attempt_id == attempt_id
+    assert result.episode.metadata == {
+        "auto_generated": True,
+        "memory_origin": "workflow_complete_auto",
+        "workflow_status": "completed",
+        "attempt_status": "succeeded",
+        "attempt_number": 1,
+        "verify_status": "passed",
+        "step_name": "validate_openai",
+        "next_intended_action": "Review diff and commit",
+    }
+    assert "Completion summary: Validated OpenAI embedding integration end to end" in (
+        result.episode.summary
+    )
+    assert "Latest checkpoint summary: Broader targeted regression is green" in (
+        result.episode.summary
+    )
+    assert "Last planned next action: Review diff and commit" in result.episode.summary
+    assert "Verify status: passed" in result.episode.summary
+
+    assert result.memory_item.workspace_id == workspace_id
+    assert result.memory_item.episode_id == result.episode.episode_id
+    assert result.memory_item.type == "workflow_completion_note"
+    assert result.memory_item.provenance == "workflow_complete_auto"
+    assert result.memory_item.metadata == result.episode.metadata
+    assert result.memory_item.content == result.episode.summary
+
+    assert result.details["embedding_persistence_status"] == "stored"
+    assert result.details["embedding_generation_skipped_reason"] is None
+    assert result.details["embedding_provider"] == "local_stub"
+    assert result.details["embedding_model"] == "local-stub-v1"
+    assert result.details["embedding_vector_dimensions"] == 8
+    assert result.details["embedding_content_hash"] == compute_content_hash(
+        result.memory_item.content,
+        result.memory_item.metadata,
+    )
+
+    assert len(episode_repository.episodes) == 1
+    assert len(memory_item_repository.memory_items) == 1
+    assert len(memory_embedding_repository.embeddings) == 1
+    assert (
+        memory_embedding_repository.embeddings[0].memory_id
+        == result.memory_item.memory_id
+    )
+
+
+def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources() -> (
+    None
+):
+    from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
+
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    attempt_id = uuid4()
+
+    bridge = WorkflowMemoryBridge(
+        episode_repository=InMemoryEpisodeRepository(),
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        embedding_generator=LocalStubEmbeddingGenerator(
+            model="local-stub-v1",
+            dimensions=8,
+        ),
+    )
+
+    result = bridge.record_workflow_completion_memory(
+        workflow=WorkflowInstance(
+            workflow_instance_id=workflow_id,
+            workspace_id=workspace_id,
+            ticket_id="TICKET-AUTO-MEM-2",
+            status=WorkflowInstanceStatus.COMPLETED,
+        ),
+        attempt=WorkflowAttempt(
+            attempt_id=attempt_id,
+            workflow_instance_id=workflow_id,
+            attempt_number=1,
+            status=WorkflowAttemptStatus.SUCCEEDED,
+        ),
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            attempt_id=attempt_id,
+            step_name="checkpointed",
+            summary=None,
+            checkpoint_json={},
+        ),
+        verify_report=None,
+        summary=None,
+        failure_reason=None,
+    )
+
+    assert result is None
 
 
 def test_memory_service_raises_validation_errors_for_invalid_requests() -> None:

@@ -6,6 +6,8 @@ from enum import StrEnum
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
+from .memory_bridge import WorkflowCompletionMemoryRecordResult, WorkflowMemoryBridge
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -574,8 +576,14 @@ class UnitOfWork:
 
 
 class WorkflowService:
-    def __init__(self, uow_factory: Any) -> None:
+    def __init__(
+        self,
+        uow_factory: Any,
+        *,
+        workflow_memory_bridge: WorkflowMemoryBridge | None = None,
+    ) -> None:
         self._uow_factory = uow_factory
+        self._workflow_memory_bridge = workflow_memory_bridge
 
     def register_workspace(self, data: RegisterWorkspaceInput) -> Workspace:
         self._validate_workspace_input(data)
@@ -1057,7 +1065,22 @@ class WorkflowService:
                 )
                 verify_report = uow.verify_reports.create(verify_report)
 
+            latest_checkpoint = uow.workflow_checkpoints.get_latest_by_workflow_id(
+                workflow.workflow_instance_id
+            )
+
             uow.commit()
+
+            if self._workflow_memory_bridge is not None:
+                self._workflow_memory_bridge.record_workflow_completion_memory(
+                    workflow=updated_workflow,
+                    attempt=updated_attempt,
+                    latest_checkpoint=latest_checkpoint,
+                    verify_report=verify_report,
+                    summary=data.summary,
+                    failure_reason=data.failure_reason,
+                )
+
             return WorkflowCompleteResult(
                 workflow_instance=updated_workflow,
                 attempt=updated_attempt,

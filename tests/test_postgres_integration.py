@@ -38,6 +38,7 @@ from ctxledger.memory.service import (
     UnitOfWorkWorkspaceLookupRepository,
 )
 from ctxledger.projection.writer import ResumeProjectionWriter
+from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 from ctxledger.workflow.service import (
     CompleteWorkflowInput,
     CreateCheckpointInput,
@@ -859,6 +860,146 @@ def test_postgres_memory_remember_episode_and_search_with_real_openai_embeddings
     )
     assert top_result.score > 0.0
     assert top_result.ranking_details["semantic_component"] > 0.0
+
+
+def test_postgres_workflow_complete_auto_records_memory_and_embedding(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-memory.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-memory",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-COMPLETE-001",
+        )
+    )
+    checkpoint_result = workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="validate_openai",
+            summary="Broader targeted regression is green",
+            checkpoint_json={"next_intended_action": "Review diff and commit"},
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Validated OpenAI embedding integration end to end",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        assert uow.memory_items is not None
+        assert uow.memory_embeddings is not None
+
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+        assert len(auto_episodes) == 1
+        auto_episode = auto_episodes[0]
+
+        episode_memory_items = uow.memory_items.list_by_episode_id(
+            auto_episode.episode_id,
+            limit=10,
+        )
+        assert len(episode_memory_items) == 1
+        auto_memory_item = episode_memory_items[0]
+
+        memory_embeddings = uow.memory_embeddings.list_by_memory_id(
+            auto_memory_item.memory_id,
+            limit=10,
+        )
+
+    assert completed.workflow_instance.status == WorkflowInstanceStatus.COMPLETED
+    assert completed.attempt.status == WorkflowAttemptStatus.SUCCEEDED
+    assert checkpoint_result.verify_report is not None
+    assert checkpoint_result.verify_report.status == VerifyStatus.PASSED
+
+    assert auto_episode.workflow_instance_id == (
+        started.workflow_instance.workflow_instance_id
+    )
+    assert auto_episode.attempt_id == started.attempt.attempt_id
+    assert auto_episode.metadata == {
+        "auto_generated": True,
+        "memory_origin": "workflow_complete_auto",
+        "workflow_status": "completed",
+        "attempt_status": "succeeded",
+        "attempt_number": 1,
+        "verify_status": "passed",
+        "step_name": "validate_openai",
+        "next_intended_action": "Review diff and commit",
+    }
+    assert "Completion summary: Validated OpenAI embedding integration end to end" in (
+        auto_episode.summary
+    )
+    assert "Latest checkpoint summary: Broader targeted regression is green" in (
+        auto_episode.summary
+    )
+    assert "Last planned next action: Review diff and commit" in auto_episode.summary
+    assert "Verify status: passed" in auto_episode.summary
+
+    assert auto_memory_item.workspace_id == workspace.workspace_id
+    assert auto_memory_item.episode_id == auto_episode.episode_id
+    assert auto_memory_item.type == "workflow_completion_note"
+    assert auto_memory_item.provenance == "workflow_complete_auto"
+    assert auto_memory_item.content == auto_episode.summary
+    assert auto_memory_item.metadata == auto_episode.metadata
+
+    assert len(memory_embeddings) == 1
+    assert memory_embeddings[0].memory_id == auto_memory_item.memory_id
+    assert memory_embeddings[0].embedding_model == "local-stub-v1"
+    assert len(memory_embeddings[0].embedding) == 1536
+    assert memory_embeddings[0].content_hash is not None
 
 
 def test_postgres_memory_search_hybrid_results_include_ranking_details(
