@@ -4501,10 +4501,27 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
         "workflow_candidate_ordering": {
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
+            "signal_priority": [
+                "latest_checkpoint_created_at",
+                "latest_episode_created_at",
+                "latest_attempt_started_at",
+                "workflow_updated_at",
+                "resolver_order",
+            ],
             "workspace_candidate_ids": [],
             "ticket_candidate_ids": [],
             "resolver_candidate_ids": [],
             "final_candidate_ids": [str(workflow_id)],
+            "candidate_signals": {
+                str(workflow_id): {
+                    "latest_checkpoint_created_at": None,
+                    "latest_episode_created_at": datetime(
+                        2024, 1, 11, tzinfo=UTC
+                    ).isoformat(),
+                    "latest_attempt_started_at": None,
+                    "workflow_updated_at": None,
+                }
+            },
         },
         "resolved_workflow_count": 1,
         "resolved_workflow_ids": [str(workflow_id)],
@@ -4636,10 +4653,25 @@ def test_memory_get_context_applies_initial_query_filtering() -> None:
         "workflow_candidate_ordering": {
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
+            "signal_priority": [
+                "latest_checkpoint_created_at",
+                "latest_episode_created_at",
+                "latest_attempt_started_at",
+                "workflow_updated_at",
+                "resolver_order",
+            ],
             "workspace_candidate_ids": [],
             "ticket_candidate_ids": [],
             "resolver_candidate_ids": [],
             "final_candidate_ids": [str(workflow_id)],
+            "candidate_signals": {
+                str(workflow_id): {
+                    "latest_checkpoint_created_at": None,
+                    "latest_episode_created_at": created_at.replace(day=2).isoformat(),
+                    "latest_attempt_started_at": None,
+                    "workflow_updated_at": None,
+                }
+            },
         },
         "resolved_workflow_count": 1,
         "resolved_workflow_ids": [str(workflow_id)],
@@ -4710,10 +4742,25 @@ def test_memory_get_context_matches_query_against_metadata_keys() -> None:
         "workflow_candidate_ordering": {
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
+            "signal_priority": [
+                "latest_checkpoint_created_at",
+                "latest_episode_created_at",
+                "latest_attempt_started_at",
+                "workflow_updated_at",
+                "resolver_order",
+            ],
             "workspace_candidate_ids": [],
             "ticket_candidate_ids": [],
             "resolver_candidate_ids": [],
             "final_candidate_ids": [str(workflow_id)],
+            "candidate_signals": {
+                str(workflow_id): {
+                    "latest_checkpoint_created_at": None,
+                    "latest_episode_created_at": created_at.replace(day=6).isoformat(),
+                    "latest_attempt_started_at": None,
+                    "workflow_updated_at": None,
+                }
+            },
         },
         "resolved_workflow_count": 1,
         "resolved_workflow_ids": [str(workflow_id)],
@@ -4784,10 +4831,25 @@ def test_memory_get_context_matches_query_against_metadata_values() -> None:
         "workflow_candidate_ordering": {
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
+            "signal_priority": [
+                "latest_checkpoint_created_at",
+                "latest_episode_created_at",
+                "latest_attempt_started_at",
+                "workflow_updated_at",
+                "resolver_order",
+            ],
             "workspace_candidate_ids": [],
             "ticket_candidate_ids": [],
             "resolver_candidate_ids": [],
             "final_candidate_ids": [str(workflow_id)],
+            "candidate_signals": {
+                str(workflow_id): {
+                    "latest_checkpoint_created_at": None,
+                    "latest_episode_created_at": created_at.replace(day=8).isoformat(),
+                    "latest_attempt_started_at": None,
+                    "workflow_updated_at": None,
+                }
+            },
         },
         "resolved_workflow_count": 1,
         "resolved_workflow_ids": [str(workflow_id)],
@@ -4858,10 +4920,25 @@ def test_memory_get_context_matches_multi_token_query_against_summary() -> None:
         "workflow_candidate_ordering": {
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
+            "signal_priority": [
+                "latest_checkpoint_created_at",
+                "latest_episode_created_at",
+                "latest_attempt_started_at",
+                "workflow_updated_at",
+                "resolver_order",
+            ],
             "workspace_candidate_ids": [],
             "ticket_candidate_ids": [],
             "resolver_candidate_ids": [],
             "final_candidate_ids": [str(workflow_id)],
+            "candidate_signals": {
+                str(workflow_id): {
+                    "latest_checkpoint_created_at": None,
+                    "latest_episode_created_at": created_at.replace(day=10).isoformat(),
+                    "latest_attempt_started_at": None,
+                    "workflow_updated_at": None,
+                }
+            },
         },
         "resolved_workflow_count": 1,
         "resolved_workflow_ids": [str(workflow_id)],
@@ -4932,10 +5009,25 @@ def test_memory_get_context_matches_multi_token_query_against_metadata() -> None
         "workflow_candidate_ordering": {
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
+            "signal_priority": [
+                "latest_checkpoint_created_at",
+                "latest_episode_created_at",
+                "latest_attempt_started_at",
+                "workflow_updated_at",
+                "resolver_order",
+            ],
             "workspace_candidate_ids": [],
             "ticket_candidate_ids": [],
             "resolver_candidate_ids": [],
             "final_candidate_ids": [str(workflow_id)],
+            "candidate_signals": {
+                str(workflow_id): {
+                    "latest_checkpoint_created_at": None,
+                    "latest_episode_created_at": created_at.replace(day=12).isoformat(),
+                    "latest_attempt_started_at": None,
+                    "workflow_updated_at": None,
+                }
+            },
         },
         "resolved_workflow_count": 1,
         "resolved_workflow_ids": [str(workflow_id)],
@@ -5031,8 +5123,15 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
         "include_memory_items": False,
         "include_summaries": False,
         "workflow_candidate_ordering": {
-            "ordering_basis": "latest_episode_recency",
+            "ordering_basis": "workflow_freshness_signals",
             "workflow_instance_id_priority_applied": False,
+            "signal_priority": [
+                "latest_checkpoint_created_at",
+                "latest_episode_created_at",
+                "latest_attempt_started_at",
+                "workflow_updated_at",
+                "resolver_order",
+            ],
             "workspace_candidate_ids": [
                 str(matching_workflow_id),
                 str(same_workspace_workflow_id),
@@ -5043,6 +5142,14 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
             ],
             "resolver_candidate_ids": [str(matching_workflow_id)],
             "final_candidate_ids": [str(matching_workflow_id)],
+            "candidate_signals": {
+                str(matching_workflow_id): {
+                    "latest_checkpoint_created_at": None,
+                    "latest_episode_created_at": created_at.isoformat(),
+                    "latest_attempt_started_at": None,
+                    "workflow_updated_at": None,
+                }
+            },
         },
         "resolved_workflow_count": 1,
         "resolved_workflow_ids": [str(matching_workflow_id)],
@@ -5141,8 +5248,15 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
         "include_memory_items": False,
         "include_summaries": False,
         "workflow_candidate_ordering": {
-            "ordering_basis": "latest_episode_recency",
+            "ordering_basis": "workflow_freshness_signals",
             "workflow_instance_id_priority_applied": False,
+            "signal_priority": [
+                "latest_checkpoint_created_at",
+                "latest_episode_created_at",
+                "latest_attempt_started_at",
+                "workflow_updated_at",
+                "resolver_order",
+            ],
             "workspace_candidate_ids": [
                 str(matching_workflow_id),
                 str(same_workspace_workflow_id),
@@ -5153,6 +5267,14 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
             ],
             "resolver_candidate_ids": [str(matching_workflow_id)],
             "final_candidate_ids": [str(matching_workflow_id)],
+            "candidate_signals": {
+                str(matching_workflow_id): {
+                    "latest_checkpoint_created_at": None,
+                    "latest_episode_created_at": created_at.isoformat(),
+                    "latest_attempt_started_at": None,
+                    "workflow_updated_at": None,
+                }
+            },
         },
         "resolved_workflow_count": 1,
         "resolved_workflow_ids": [str(matching_workflow_id)],
@@ -5160,6 +5282,216 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
         "episodes_before_query_filter": 1,
         "matched_episode_count": 1,
         "episodes_returned": 1,
+    }
+
+
+def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() -> None:
+    checkpoint_fresh_workflow_id = uuid4()
+    episode_fresh_workflow_id = uuid4()
+    created_at = datetime(2024, 3, 16, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=checkpoint_fresh_workflow_id,
+            summary="Checkpoint freshness winner",
+            metadata={"kind": "checkpoint-fresh"},
+            created_at=created_at.replace(day=10),
+            updated_at=created_at.replace(day=10),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=episode_fresh_workflow_id,
+            summary="Episode recency only",
+            metadata={"kind": "episode-fresh"},
+            created_at=created_at.replace(day=20),
+            updated_at=created_at.replace(day=20),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                checkpoint_fresh_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000020",
+                    "ticket_id": "TICKET-FRESHNESS",
+                    "latest_checkpoint_created_at": created_at.replace(day=21),
+                    "latest_attempt_started_at": created_at.replace(day=19),
+                    "workflow_updated_at": created_at.replace(day=18),
+                },
+                episode_fresh_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000020",
+                    "ticket_id": "TICKET-FRESHNESS",
+                    "latest_checkpoint_created_at": created_at.replace(day=11),
+                    "latest_attempt_started_at": created_at.replace(day=17),
+                    "workflow_updated_at": created_at.replace(day=17),
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id="00000000-0000-0000-0000-000000000020",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Episode recency only",
+        "Checkpoint freshness winner",
+    ]
+    assert response.details["workflow_candidate_ordering"] == {
+        "ordering_basis": "workflow_freshness_signals",
+        "workflow_instance_id_priority_applied": False,
+        "signal_priority": [
+            "latest_checkpoint_created_at",
+            "latest_episode_created_at",
+            "latest_attempt_started_at",
+            "workflow_updated_at",
+            "resolver_order",
+        ],
+        "workspace_candidate_ids": [
+            str(checkpoint_fresh_workflow_id),
+            str(episode_fresh_workflow_id),
+        ],
+        "ticket_candidate_ids": [],
+        "resolver_candidate_ids": [
+            str(checkpoint_fresh_workflow_id),
+            str(episode_fresh_workflow_id),
+        ],
+        "final_candidate_ids": [
+            str(checkpoint_fresh_workflow_id),
+            str(episode_fresh_workflow_id),
+        ],
+        "candidate_signals": {
+            str(checkpoint_fresh_workflow_id): {
+                "latest_checkpoint_created_at": (
+                    created_at.replace(day=21).isoformat()
+                ),
+                "latest_episode_created_at": (created_at.replace(day=10).isoformat()),
+                "latest_attempt_started_at": (created_at.replace(day=19).isoformat()),
+                "workflow_updated_at": created_at.replace(day=18).isoformat(),
+            },
+            str(episode_fresh_workflow_id): {
+                "latest_checkpoint_created_at": (
+                    created_at.replace(day=11).isoformat()
+                ),
+                "latest_episode_created_at": (created_at.replace(day=20).isoformat()),
+                "latest_attempt_started_at": (created_at.replace(day=17).isoformat()),
+                "workflow_updated_at": created_at.replace(day=17).isoformat(),
+            },
+        },
+    }
+
+
+def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_signal() -> (
+    None
+):
+    older_episode_workflow_id = uuid4()
+    newer_episode_workflow_id = uuid4()
+    created_at = datetime(2024, 4, 1, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=older_episode_workflow_id,
+            summary="Older episode workflow",
+            metadata={"kind": "older"},
+            created_at=created_at.replace(day=2),
+            updated_at=created_at.replace(day=2),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=newer_episode_workflow_id,
+            summary="Newer episode workflow",
+            metadata={"kind": "newer"},
+            created_at=created_at.replace(day=5),
+            updated_at=created_at.replace(day=5),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                older_episode_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000021",
+                    "ticket_id": "TICKET-FALLBACK",
+                    "latest_attempt_started_at": created_at.replace(day=1),
+                    "workflow_updated_at": created_at.replace(day=1),
+                },
+                newer_episode_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000021",
+                    "ticket_id": "TICKET-FALLBACK",
+                    "latest_attempt_started_at": created_at.replace(day=1),
+                    "workflow_updated_at": created_at.replace(day=1),
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id="00000000-0000-0000-0000-000000000021",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Newer episode workflow",
+        "Older episode workflow",
+    ]
+    assert response.details["workflow_candidate_ordering"] == {
+        "ordering_basis": "workflow_freshness_signals",
+        "workflow_instance_id_priority_applied": False,
+        "signal_priority": [
+            "latest_checkpoint_created_at",
+            "latest_episode_created_at",
+            "latest_attempt_started_at",
+            "workflow_updated_at",
+            "resolver_order",
+        ],
+        "workspace_candidate_ids": [
+            str(older_episode_workflow_id),
+            str(newer_episode_workflow_id),
+        ],
+        "ticket_candidate_ids": [],
+        "resolver_candidate_ids": [
+            str(older_episode_workflow_id),
+            str(newer_episode_workflow_id),
+        ],
+        "final_candidate_ids": [
+            str(newer_episode_workflow_id),
+            str(older_episode_workflow_id),
+        ],
+        "candidate_signals": {
+            str(newer_episode_workflow_id): {
+                "latest_checkpoint_created_at": None,
+                "latest_episode_created_at": (created_at.replace(day=5).isoformat()),
+                "latest_attempt_started_at": (created_at.replace(day=1).isoformat()),
+                "workflow_updated_at": created_at.replace(day=1).isoformat(),
+            },
+            str(older_episode_workflow_id): {
+                "latest_checkpoint_created_at": None,
+                "latest_episode_created_at": (created_at.replace(day=2).isoformat()),
+                "latest_attempt_started_at": (created_at.replace(day=1).isoformat()),
+                "workflow_updated_at": created_at.replace(day=1).isoformat(),
+            },
+        },
     }
 
 

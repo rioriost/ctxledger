@@ -232,6 +232,11 @@ class WorkflowLookupRepository(Protocol):
         limit: int,
     ) -> tuple[UUID, ...]: ...
 
+    def workflow_freshness_by_id(
+        self,
+        workflow_instance_id: UUID,
+    ) -> dict[str, datetime | None]: ...
+
 
 class EpisodeRepository(Protocol):
     """Persistence contract for episodic memory records."""
@@ -331,6 +336,37 @@ class UnitOfWorkWorkflowLookupRepository:
                 limit=limit,
             )
             return tuple(workflow.workflow_instance_id for workflow in workflows)
+
+    def workflow_freshness_by_id(
+        self,
+        workflow_instance_id: UUID,
+    ) -> dict[str, datetime | None]:
+        with self._uow_factory() as uow:
+            workflow = uow.workflow_instances.get_by_id(workflow_instance_id)
+            if workflow is None:
+                return {
+                    "workflow_updated_at": None,
+                    "latest_attempt_started_at": None,
+                    "latest_checkpoint_created_at": None,
+                }
+
+            latest_attempt = uow.workflow_attempts.get_latest_by_workflow_id(
+                workflow_instance_id
+            )
+            latest_checkpoint = uow.workflow_checkpoints.get_latest_by_workflow_id(
+                workflow_instance_id
+            )
+            return {
+                "workflow_updated_at": workflow.updated_at,
+                "latest_attempt_started_at": (
+                    latest_attempt.started_at if latest_attempt is not None else None
+                ),
+                "latest_checkpoint_created_at": (
+                    latest_checkpoint.created_at
+                    if latest_checkpoint is not None
+                    else None
+                ),
+            }
 
 
 def _normalize_query_text(value: str | None) -> str | None:
@@ -434,7 +470,7 @@ class InMemoryWorkflowLookupRepository:
     def __init__(
         self,
         workflow_ids: set[UUID] | None = None,
-        workflows_by_id: dict[UUID, dict[str, str]] | None = None,
+        workflows_by_id: dict[UUID, dict[str, Any]] | None = None,
     ) -> None:
         self._workflow_ids = workflow_ids if workflow_ids is not None else set()
         self._workflows_by_id = workflows_by_id if workflows_by_id is not None else {}
@@ -470,6 +506,19 @@ class InMemoryWorkflowLookupRepository:
             if workflow_info.get("ticket_id") == ticket_id
         ]
         return tuple(matches[:limit])
+
+    def workflow_freshness_by_id(
+        self,
+        workflow_instance_id: UUID,
+    ) -> dict[str, datetime | None]:
+        workflow_info = self._workflows_by_id.get(workflow_instance_id, {})
+        return {
+            "workflow_updated_at": workflow_info.get("workflow_updated_at"),
+            "latest_attempt_started_at": workflow_info.get("latest_attempt_started_at"),
+            "latest_checkpoint_created_at": workflow_info.get(
+                "latest_checkpoint_created_at"
+            ),
+        }
 
     def workspace_id_by_workflow_id(self, workflow_instance_id: UUID) -> UUID | None:
         workflow_info = self._workflows_by_id.get(workflow_instance_id)
@@ -1149,6 +1198,7 @@ class MemoryService:
         workspace_workflow_ids: tuple[UUID, ...] = ()
         ticket_workflow_ids: tuple[UUID, ...] = ()
         resolver_ordered_workflow_ids: tuple[UUID, ...] = ()
+        ordering_signals: dict[str, dict[str, str | None]] = {}
 
         if self._has_text(request.workflow_instance_id):
             lookup_scope = "workflow_instance"
@@ -1199,8 +1249,8 @@ class MemoryService:
                 lookup_scope = "ticket"
                 resolver_ordered_workflow_ids = ticket_workflow_ids
 
-        recency_ordered_workflow_ids = (
-            self._order_workflow_ids_by_episode_recency(
+        signal_ordered_workflow_ids = (
+            self._order_workflow_ids_by_freshness_signals(
                 workflow_ids=resolver_ordered_workflow_ids,
                 limit=request.limit,
             )
@@ -1208,7 +1258,14 @@ class MemoryService:
             else resolved_workflow_ids
         )
         if resolved_workflow_instance_id is None:
-            resolved_workflow_ids = recency_ordered_workflow_ids
+            resolved_workflow_ids = signal_ordered_workflow_ids
+            ordering_signals = self._workflow_ordering_signals(
+                workflow_ids=resolved_workflow_ids
+            )
+        elif resolved_workflow_ids:
+            ordering_signals = self._workflow_ordering_signals(
+                workflow_ids=resolved_workflow_ids
+            )
 
         details = {
             "query": request.query,
@@ -1226,11 +1283,18 @@ class MemoryService:
                 "ordering_basis": (
                     "workflow_instance_id_priority"
                     if resolved_workflow_instance_id is not None
-                    else "latest_episode_recency"
+                    else "workflow_freshness_signals"
                 ),
                 "workflow_instance_id_priority_applied": (
                     resolved_workflow_instance_id is not None
                 ),
+                "signal_priority": [
+                    "latest_checkpoint_created_at",
+                    "latest_episode_created_at",
+                    "latest_attempt_started_at",
+                    "workflow_updated_at",
+                    "resolver_order",
+                ],
                 "workspace_candidate_ids": [
                     str(workflow_id) for workflow_id in workspace_workflow_ids
                 ],
@@ -1243,6 +1307,7 @@ class MemoryService:
                 "final_candidate_ids": [
                     str(workflow_id) for workflow_id in resolved_workflow_ids
                 ],
+                "candidate_signals": ordering_signals,
             },
             "resolved_workflow_count": len(resolved_workflow_ids),
             "resolved_workflow_ids": [
@@ -1381,7 +1446,7 @@ class MemoryService:
         episodes.sort(key=lambda episode: episode.created_at, reverse=True)
         return tuple(episodes[:limit])
 
-    def _order_workflow_ids_by_episode_recency(
+    def _order_workflow_ids_by_freshness_signals(
         self,
         *,
         workflow_ids: tuple[UUID, ...],
@@ -1390,22 +1455,87 @@ class MemoryService:
         if not workflow_ids:
             return ()
 
-        workflow_recencies: list[tuple[datetime, int, UUID]] = []
+        workflow_recencies: list[
+            tuple[datetime, datetime, datetime, datetime, int, UUID]
+        ] = []
 
         for index, workflow_id in enumerate(workflow_ids):
+            freshness = (
+                self._workflow_lookup.workflow_freshness_by_id(workflow_id)
+                if self._workflow_lookup is not None
+                else {}
+            )
             latest_episode = self._episode_repository.list_by_workflow_id(
                 workflow_id,
                 limit=1,
             )
-            latest_created_at = (
+            latest_checkpoint_created_at = freshness.get(
+                "latest_checkpoint_created_at"
+            ) or datetime.min.replace(tzinfo=timezone.utc)
+            latest_episode_created_at = (
                 latest_episode[0].created_at
                 if latest_episode
                 else datetime.min.replace(tzinfo=timezone.utc)
             )
-            workflow_recencies.append((latest_created_at, -index, workflow_id))
+            latest_attempt_started_at = freshness.get(
+                "latest_attempt_started_at"
+            ) or datetime.min.replace(tzinfo=timezone.utc)
+            workflow_updated_at = freshness.get(
+                "workflow_updated_at"
+            ) or datetime.min.replace(tzinfo=timezone.utc)
+            workflow_recencies.append(
+                (
+                    latest_checkpoint_created_at,
+                    latest_episode_created_at,
+                    latest_attempt_started_at,
+                    workflow_updated_at,
+                    -index,
+                    workflow_id,
+                )
+            )
 
         workflow_recencies.sort(reverse=True)
-        return tuple(workflow_id for _, _, workflow_id in workflow_recencies[:limit])
+        return tuple(workflow_id for *_, workflow_id in workflow_recencies[:limit])
+
+    def _workflow_ordering_signals(
+        self,
+        *,
+        workflow_ids: tuple[UUID, ...],
+    ) -> dict[str, dict[str, str | None]]:
+        signals: dict[str, dict[str, str | None]] = {}
+
+        for workflow_id in workflow_ids:
+            freshness = (
+                self._workflow_lookup.workflow_freshness_by_id(workflow_id)
+                if self._workflow_lookup is not None
+                else {}
+            )
+            latest_episode = self._episode_repository.list_by_workflow_id(
+                workflow_id,
+                limit=1,
+            )
+            signals[str(workflow_id)] = {
+                "latest_checkpoint_created_at": (
+                    freshness.get("latest_checkpoint_created_at").isoformat()
+                    if freshness.get("latest_checkpoint_created_at") is not None
+                    else None
+                ),
+                "latest_episode_created_at": (
+                    latest_episode[0].created_at.isoformat() if latest_episode else None
+                ),
+                "latest_attempt_started_at": (
+                    freshness.get("latest_attempt_started_at").isoformat()
+                    if freshness.get("latest_attempt_started_at") is not None
+                    else None
+                ),
+                "workflow_updated_at": (
+                    freshness.get("workflow_updated_at").isoformat()
+                    if freshness.get("workflow_updated_at") is not None
+                    else None
+                ),
+            }
+
+        return signals
 
     def _score_memory_item_for_query(
         self,
