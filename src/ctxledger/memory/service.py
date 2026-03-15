@@ -1447,6 +1447,10 @@ class MemoryService:
                     "episodes_before_query_filter": 0,
                     "matched_episode_count": 0,
                     "episodes_returned": 0,
+                    "episode_explanations": [],
+                    "memory_items": [],
+                    "memory_item_counts_by_episode": {},
+                    "summaries": [],
                 },
             )
 
@@ -1455,29 +1459,48 @@ class MemoryService:
             limit=request.limit,
         )
         episodes_before_query_filter = len(episodes)
+        episode_explanations_before_query_filter = self._build_episode_explanations(
+            episodes=episodes,
+            normalized_query=normalized_query,
+            query_tokens=query_tokens,
+        )
+        memory_item_details_before_query_filter = (
+            self._build_memory_item_details_for_episodes(
+                episodes=episodes,
+                include_memory_items=request.include_memory_items,
+                include_summaries=request.include_summaries,
+            )
+        )
 
         if normalized_query is not None:
-            episodes = tuple(
-                episode
-                for episode in episodes
-                if _text_matches_query(
-                    text=episode.summary,
-                    normalized_query=normalized_query,
-                    query_tokens=query_tokens,
-                )
-                or any(
-                    _text_matches_query(
-                        text=metadata_query_string,
-                        normalized_query=normalized_query,
-                        query_tokens=query_tokens,
-                    )
-                    for metadata_query_string in _metadata_query_strings(
-                        episode.metadata
-                    )
-                )
-            )
+            filtered_episodes: list[EpisodeRecord] = []
+            filtered_episode_explanations: list[dict[str, Any]] = []
+            filtered_memory_item_details: list[dict[str, Any]] = []
+
+            for episode, explanation, memory_item_detail in zip(
+                episodes,
+                episode_explanations_before_query_filter,
+                memory_item_details_before_query_filter,
+                strict=False,
+            ):
+                if bool(explanation["matched"]):
+                    filtered_episodes.append(episode)
+                    filtered_episode_explanations.append(explanation)
+                    filtered_memory_item_details.append(memory_item_detail)
+
+            episodes = tuple(filtered_episodes)
+            episode_explanations = tuple(filtered_episode_explanations)
+            memory_item_details = tuple(filtered_memory_item_details)
+        else:
+            episode_explanations = tuple(episode_explanations_before_query_filter)
+            memory_item_details = tuple(memory_item_details_before_query_filter)
 
         matched_episode_count = len(episodes)
+        summaries = tuple(
+            detail["summary"]
+            for detail in memory_item_details
+            if isinstance(detail.get("summary"), dict)
+        )
 
         return GetContextResponse(
             feature=MemoryFeature.GET_CONTEXT,
@@ -1492,6 +1515,17 @@ class MemoryService:
                 "episodes_before_query_filter": episodes_before_query_filter,
                 "matched_episode_count": matched_episode_count,
                 "episodes_returned": len(episodes),
+                "episode_explanations": list(episode_explanations),
+                "memory_items": [
+                    detail["memory_items"]
+                    for detail in memory_item_details
+                    if isinstance(detail.get("memory_items"), list)
+                ],
+                "memory_item_counts_by_episode": {
+                    detail["episode_id"]: detail["memory_item_count"]
+                    for detail in memory_item_details
+                },
+                "summaries": list(summaries),
             },
         )
 
@@ -1548,18 +1582,40 @@ class MemoryService:
         if not workflow_ids:
             return ()
 
-        episodes: list[EpisodeRecord] = []
-        seen_episode_ids: set[UUID] = set()
-
-        for workflow_id in workflow_ids:
-            for episode in self._episode_repository.list_by_workflow_id(
+        workflow_episode_lists = [
+            self._episode_repository.list_by_workflow_id(
                 workflow_id,
                 limit=limit,
-            ):
+            )
+            for workflow_id in workflow_ids
+        ]
+
+        episodes: list[EpisodeRecord] = []
+        seen_episode_ids: set[UUID] = set()
+        round_index = 0
+
+        while len(episodes) < limit:
+            added_in_round = False
+
+            for workflow_episodes in workflow_episode_lists:
+                if round_index >= len(workflow_episodes):
+                    continue
+
+                episode = workflow_episodes[round_index]
                 if episode.episode_id in seen_episode_ids:
                     continue
+
                 seen_episode_ids.add(episode.episode_id)
                 episodes.append(episode)
+                added_in_round = True
+
+                if len(episodes) >= limit:
+                    break
+
+            if not added_in_round:
+                break
+
+            round_index += 1
 
         episodes.sort(key=lambda episode: episode.created_at, reverse=True)
         return tuple(episodes[:limit])
@@ -1752,6 +1808,118 @@ class MemoryService:
             }
 
         return signals
+
+    def _build_episode_explanations(
+        self,
+        *,
+        episodes: tuple[EpisodeRecord, ...],
+        normalized_query: str | None,
+        query_tokens: tuple[str, ...],
+    ) -> tuple[dict[str, Any], ...]:
+        explanations: list[dict[str, Any]] = []
+
+        for episode in episodes:
+            summary_match = False
+            metadata_matches: list[str] = []
+
+            if normalized_query is None:
+                explanation_basis = "unfiltered_episode_context"
+            else:
+                summary_match = _text_matches_query(
+                    text=episode.summary,
+                    normalized_query=normalized_query,
+                    query_tokens=query_tokens,
+                )
+                metadata_matches = [
+                    metadata_query_string
+                    for metadata_query_string in _metadata_query_strings(
+                        episode.metadata
+                    )
+                    if _text_matches_query(
+                        text=metadata_query_string,
+                        normalized_query=normalized_query,
+                        query_tokens=query_tokens,
+                    )
+                ]
+                explanation_basis = "query_match_evaluation"
+
+            explanations.append(
+                {
+                    "episode_id": str(episode.episode_id),
+                    "workflow_instance_id": str(episode.workflow_instance_id),
+                    "matched": (
+                        True
+                        if normalized_query is None
+                        else summary_match or bool(metadata_matches)
+                    ),
+                    "explanation_basis": explanation_basis,
+                    "matched_summary": summary_match,
+                    "matched_metadata_values": metadata_matches,
+                }
+            )
+
+        return tuple(explanations)
+
+    def _build_memory_item_details_for_episodes(
+        self,
+        *,
+        episodes: tuple[EpisodeRecord, ...],
+        include_memory_items: bool,
+        include_summaries: bool,
+    ) -> tuple[dict[str, Any], ...]:
+        details: list[dict[str, Any]] = []
+
+        for episode in episodes:
+            memory_items = self._memory_item_repository.list_by_episode_id(
+                episode.episode_id,
+                limit=100,
+            )
+            memory_item_count = len(memory_items)
+            detail: dict[str, Any] = {
+                "episode_id": str(episode.episode_id),
+                "memory_item_count": memory_item_count,
+            }
+
+            if include_memory_items:
+                detail["memory_items"] = [
+                    {
+                        "memory_id": str(memory_item.memory_id),
+                        "workspace_id": (
+                            str(memory_item.workspace_id)
+                            if memory_item.workspace_id is not None
+                            else None
+                        ),
+                        "episode_id": (
+                            str(memory_item.episode_id)
+                            if memory_item.episode_id is not None
+                            else None
+                        ),
+                        "type": memory_item.type,
+                        "provenance": memory_item.provenance,
+                        "content": memory_item.content,
+                        "metadata": dict(memory_item.metadata),
+                        "created_at": memory_item.created_at.isoformat(),
+                        "updated_at": memory_item.updated_at.isoformat(),
+                    }
+                    for memory_item in memory_items
+                ]
+
+            if include_summaries:
+                detail["summary"] = {
+                    "episode_id": str(episode.episode_id),
+                    "workflow_instance_id": str(episode.workflow_instance_id),
+                    "memory_item_count": memory_item_count,
+                    "memory_item_types": [
+                        memory_item.type for memory_item in memory_items
+                    ],
+                    "memory_item_provenance": [
+                        memory_item.provenance for memory_item in memory_items
+                    ],
+                }
+
+            details.append(detail)
+
+        return tuple(details)
 
     def _score_memory_item_for_query(
         self,

@@ -259,6 +259,11 @@ def serialize_remember_episode_response(
 def serialize_get_context_response(
     response: GetContextResponse,
 ) -> dict[str, Any]:
+    details = dict(response.details)
+    details.setdefault("memory_items", [])
+    details.setdefault("memory_item_counts_by_episode", {})
+    details.setdefault("summaries", [])
+
     return {
         "feature": response.feature.value,
         "implemented": response.implemented,
@@ -281,7 +286,7 @@ def serialize_get_context_response(
             }
             for episode in response.episodes
         ],
-        "details": response.details,
+        "details": details,
     }
 
 

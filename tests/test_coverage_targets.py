@@ -4503,6 +4503,24 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
     assert response.details["episodes_before_query_filter"] == 2
     assert response.details["matched_episode_count"] == 2
     assert response.details["episodes_returned"] == 2
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(newer_episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "unfiltered_episode_context",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        },
+        {
+            "episode_id": str(older_episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "unfiltered_episode_context",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        },
+    ]
     assert response.details["workflow_candidate_ordering"] == {
         "ordering_basis": "workflow_instance_id_priority",
         "workflow_instance_id_priority_applied": True,
@@ -4597,6 +4615,36 @@ def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
     assert limited_response.details["episodes_before_query_filter"] == 2
     assert limited_response.details["matched_episode_count"] == 2
     assert limited_response.details["episodes_returned"] == 2
+    assert limited_response.details["episode_explanations"] == [
+        {
+            "episode_id": str(
+                next(
+                    episode.episode_id
+                    for episode in limited_response.episodes
+                    if episode.summary == "Episode 2"
+                )
+            ),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "unfiltered_episode_context",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        },
+        {
+            "episode_id": str(
+                next(
+                    episode.episode_id
+                    for episode in limited_response.episodes
+                    if episode.summary == "Episode 1"
+                )
+            ),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "unfiltered_episode_context",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        },
+    ]
 
     assert no_episode_response.episodes == ()
     assert no_episode_response.details["lookup_scope"] == "workflow_instance"
@@ -4607,6 +4655,10 @@ def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
     assert no_episode_response.details["episodes_before_query_filter"] == 0
     assert no_episode_response.details["matched_episode_count"] == 0
     assert no_episode_response.details["episodes_returned"] == 0
+    assert no_episode_response.details["episode_explanations"] == []
+    assert no_episode_response.details["memory_items"] == []
+    assert no_episode_response.details["memory_item_counts_by_episode"] == {}
+    assert no_episode_response.details["summaries"] == []
     assert no_episode_response.details["workflow_instance_id"] == str(workflow_id)
 
 
@@ -4672,6 +4724,16 @@ def test_memory_get_context_applies_initial_query_filtering() -> None:
     assert response.details["episodes_before_query_filter"] == 2
     assert response.details["matched_episode_count"] == 1
     assert response.details["episodes_returned"] == 1
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(response.episodes[0].episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "query_match_evaluation",
+            "matched_summary": True,
+            "matched_metadata_values": ["postgres"],
+        }
+    ]
     assert response.details["workflow_candidate_ordering"] == {
         "ordering_basis": "workflow_instance_id_priority",
         "workflow_instance_id_priority_applied": True,
@@ -4778,6 +4840,16 @@ def test_memory_get_context_matches_query_against_metadata_keys() -> None:
     assert response.details["episodes_before_query_filter"] == 2
     assert response.details["matched_episode_count"] == 1
     assert response.details["episodes_returned"] == 1
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(response.episodes[0].episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "query_match_evaluation",
+            "matched_summary": False,
+            "matched_metadata_values": ["component"],
+        }
+    ]
     assert response.details["workflow_candidate_ordering"] == {
         "ordering_basis": "workflow_instance_id_priority",
         "workflow_instance_id_priority_applied": True,
@@ -4884,6 +4956,16 @@ def test_memory_get_context_matches_query_against_metadata_values() -> None:
     assert response.details["episodes_before_query_filter"] == 2
     assert response.details["matched_episode_count"] == 1
     assert response.details["episodes_returned"] == 1
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(response.episodes[0].episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "query_match_evaluation",
+            "matched_summary": True,
+            "matched_metadata_values": ["release"],
+        }
+    ]
     assert response.details["workflow_candidate_ordering"] == {
         "ordering_basis": "workflow_instance_id_priority",
         "workflow_instance_id_priority_applied": True,
@@ -4990,6 +5072,16 @@ def test_memory_get_context_matches_multi_token_query_against_summary() -> None:
     assert response.details["episodes_before_query_filter"] == 2
     assert response.details["matched_episode_count"] == 1
     assert response.details["episodes_returned"] == 1
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(response.episodes[0].episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "query_match_evaluation",
+            "matched_summary": True,
+            "matched_metadata_values": [],
+        }
+    ]
     assert response.details["workflow_candidate_ordering"] == {
         "ordering_basis": "workflow_instance_id_priority",
         "workflow_instance_id_priority_applied": True,
@@ -5096,6 +5188,16 @@ def test_memory_get_context_matches_multi_token_query_against_metadata() -> None
     assert response.details["episodes_before_query_filter"] == 2
     assert response.details["matched_episode_count"] == 1
     assert response.details["episodes_returned"] == 1
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(response.episodes[0].episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "query_match_evaluation",
+            "matched_summary": False,
+            "matched_metadata_values": ["postgres primary"],
+        }
+    ]
     assert response.details["workflow_candidate_ordering"] == {
         "ordering_basis": "workflow_instance_id_priority",
         "workflow_instance_id_priority_applied": True,
@@ -5278,6 +5380,21 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
         "episodes_before_query_filter": 1,
         "matched_episode_count": 1,
         "episodes_returned": 1,
+        "episode_explanations": [
+            {
+                "episode_id": str(response.episodes[0].episode_id),
+                "workflow_instance_id": str(matching_workflow_id),
+                "matched": True,
+                "explanation_basis": "unfiltered_episode_context",
+                "matched_summary": False,
+                "matched_metadata_values": [],
+            }
+        ],
+        "memory_items": [],
+        "memory_item_counts_by_episode": {
+            str(response.episodes[0].episode_id): 0,
+        },
+        "summaries": [],
     }
 
 
@@ -5422,6 +5539,21 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
         "episodes_before_query_filter": 1,
         "matched_episode_count": 1,
         "episodes_returned": 1,
+        "episode_explanations": [
+            {
+                "episode_id": str(response.episodes[0].episode_id),
+                "workflow_instance_id": str(matching_workflow_id),
+                "matched": True,
+                "explanation_basis": "query_match_evaluation",
+                "matched_summary": True,
+                "matched_metadata_values": [],
+            }
+        ],
+        "memory_items": [],
+        "memory_item_counts_by_episode": {
+            str(response.episodes[0].episode_id): 0,
+        },
+        "summaries": [],
     }
 
 
@@ -6337,6 +6469,236 @@ def test_memory_get_context_falls_back_to_episode_recency_after_projection_failu
     }
 
 
+def test_memory_get_context_balances_episode_collection_across_workflows() -> None:
+    first_workflow_id = uuid4()
+    second_workflow_id = uuid4()
+    created_at = datetime(2024, 9, 1, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=first_workflow_id,
+            summary="First workflow newest episode",
+            metadata={"kind": "first-newest"},
+            created_at=created_at.replace(day=6),
+            updated_at=created_at.replace(day=6),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=first_workflow_id,
+            summary="First workflow older episode",
+            metadata={"kind": "first-older"},
+            created_at=created_at.replace(day=5),
+            updated_at=created_at.replace(day=5),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=second_workflow_id,
+            summary="Second workflow newest episode",
+            metadata={"kind": "second-newest"},
+            created_at=created_at.replace(day=4),
+            updated_at=created_at.replace(day=4),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=second_workflow_id,
+            summary="Second workflow older episode",
+            metadata={"kind": "second-older"},
+            created_at=created_at.replace(day=3),
+            updated_at=created_at.replace(day=3),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                first_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000029",
+                    "ticket_id": "TICKET-BALANCED-COLLECTION",
+                    "has_latest_attempt": True,
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=8),
+                    "latest_verify_report_created_at": created_at.replace(day=8),
+                    "latest_projection_canonical_update_at": created_at.replace(day=8),
+                    "latest_projection_successful_write_at": created_at.replace(day=8),
+                    "projection_open_failure_count": 0,
+                    "latest_attempt_started_at": created_at.replace(day=8),
+                    "workflow_updated_at": created_at.replace(day=8),
+                },
+                second_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000029",
+                    "ticket_id": "TICKET-BALANCED-COLLECTION",
+                    "has_latest_attempt": True,
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=7),
+                    "latest_verify_report_created_at": created_at.replace(day=7),
+                    "latest_projection_canonical_update_at": created_at.replace(day=7),
+                    "latest_projection_successful_write_at": created_at.replace(day=7),
+                    "projection_open_failure_count": 0,
+                    "latest_attempt_started_at": created_at.replace(day=7),
+                    "workflow_updated_at": created_at.replace(day=7),
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id="00000000-0000-0000-0000-000000000029",
+            limit=3,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "First workflow newest episode",
+        "First workflow older episode",
+        "Second workflow newest episode",
+    ]
+    assert response.details["resolved_workflow_ids"] == [
+        str(first_workflow_id),
+        str(second_workflow_id),
+    ]
+    assert response.details["episodes_before_query_filter"] == 3
+    assert response.details["matched_episode_count"] == 3
+    assert response.details["episodes_returned"] == 3
+
+
+def test_memory_get_context_includes_episode_explanations_without_query_filter() -> (
+    None
+):
+    workflow_id = uuid4()
+    created_at = datetime(2024, 9, 10, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    first_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Recent unfiltered episode",
+        metadata={"kind": "recent"},
+        created_at=created_at.replace(day=3),
+        updated_at=created_at.replace(day=3),
+    )
+    second_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Older unfiltered episode",
+        metadata={"kind": "older"},
+        created_at=created_at.replace(day=2),
+        updated_at=created_at.replace(day=2),
+    )
+    episode_repository.create(first_episode)
+    episode_repository.create(second_episode)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=5,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(first_episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "unfiltered_episode_context",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        },
+        {
+            "episode_id": str(second_episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "unfiltered_episode_context",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        },
+    ]
+
+
+def test_memory_get_context_includes_episode_explanations_for_query_matches() -> None:
+    workflow_id = uuid4()
+    created_at = datetime(2024, 9, 20, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    summary_match_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Investigate postgres startup ordering",
+        metadata={"kind": "summary-match"},
+        created_at=created_at.replace(day=2),
+        updated_at=created_at.replace(day=2),
+    )
+    metadata_match_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Capture workflow evidence",
+        metadata={"service": "postgres primary", "kind": "metadata-match"},
+        created_at=created_at.replace(day=3),
+        updated_at=created_at.replace(day=3),
+    )
+    no_match_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Document release checklist",
+        metadata={"service": "release automation", "kind": "no-match"},
+        created_at=created_at.replace(day=4),
+        updated_at=created_at.replace(day=4),
+    )
+    episode_repository.create(summary_match_episode)
+    episode_repository.create(metadata_match_episode)
+    episode_repository.create(no_match_episode)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            query="postgres ordering",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Investigate postgres startup ordering",
+    ]
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(summary_match_episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "query_match_evaluation",
+            "matched_summary": True,
+            "matched_metadata_values": [],
+        },
+    ]
+
+
 def test_memory_get_context_prefers_non_terminal_workflow_over_terminal_workflow() -> (
     None
 ):
@@ -6794,6 +7156,16 @@ def test_serialize_get_context_response_serializes_episode_payloads() -> None:
             "episodes_before_query_filter": 3,
             "matched_episode_count": 1,
             "episodes_returned": 1,
+            "episode_explanations": [
+                {
+                    "episode_id": None,
+                    "workflow_instance_id": str(workflow_id),
+                    "matched": True,
+                    "explanation_basis": "query_match_evaluation",
+                    "matched_summary": False,
+                    "matched_metadata_values": ["root-cause"],
+                }
+            ],
         },
     )
 
@@ -6818,7 +7190,29 @@ def test_serialize_get_context_response_serializes_episode_payloads() -> None:
         "episodes_before_query_filter": 3,
         "matched_episode_count": 1,
         "episodes_returned": 1,
+        "episode_explanations": [
+            {
+                "episode_id": None,
+                "workflow_instance_id": str(workflow_id),
+                "matched": True,
+                "explanation_basis": "query_match_evaluation",
+                "matched_summary": False,
+                "matched_metadata_values": ["root-cause"],
+            }
+        ],
+        "memory_items": [],
+        "memory_item_counts_by_episode": {},
+        "summaries": [],
     }
+    assert payload["details"]["episode_explanations"][0]["matched"] is True
+    assert (
+        payload["details"]["episode_explanations"][0]["explanation_basis"]
+        == "query_match_evaluation"
+    )
+    assert payload["details"]["episode_explanations"][0]["matched_summary"] is False
+    assert payload["details"]["episode_explanations"][0]["matched_metadata_values"] == [
+        "root-cause"
+    ]
     assert payload["episodes"] == [
         {
             "episode_id": str(response.episodes[0].episode_id),
@@ -6829,6 +7223,511 @@ def test_serialize_get_context_response_serializes_episode_payloads() -> None:
             "status": "recorded",
             "created_at": created_at.isoformat(),
             "updated_at": created_at.isoformat(),
+        }
+    ]
+
+
+def test_memory_get_context_includes_memory_items_and_summaries_details() -> None:
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000031"
+    created_at = datetime(2024, 10, 1, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    first_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode with two memory items",
+        metadata={"kind": "first"},
+        created_at=created_at.replace(day=2),
+        updated_at=created_at.replace(day=2),
+    )
+    second_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode with one memory item",
+        metadata={"kind": "second"},
+        created_at=created_at.replace(day=1),
+        updated_at=created_at.replace(day=1),
+    )
+    episode_repository.create(first_episode)
+    episode_repository.create(second_episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=first_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="First episode note",
+        metadata={"kind": "note"},
+        created_at=created_at.replace(day=2, hour=1),
+        updated_at=created_at.replace(day=2, hour=1),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=first_episode.episode_id,
+        type="checkpoint_note",
+        provenance="checkpoint",
+        content="First episode checkpoint",
+        metadata={"kind": "checkpoint"},
+        created_at=created_at.replace(day=2, hour=2),
+        updated_at=created_at.replace(day=2, hour=2),
+    )
+    third_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=second_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Second episode note",
+        metadata={"kind": "note"},
+        created_at=created_at.replace(day=1, hour=1),
+        updated_at=created_at.replace(day=1, hour=1),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+    memory_item_repository.create(third_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-DETAILS",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=True,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Episode with two memory items",
+        "Episode with one memory item",
+    ]
+    assert response.details["memory_items"] == [
+        [
+            {
+                "memory_id": str(second_memory_item.memory_id),
+                "workspace_id": workspace_id,
+                "episode_id": str(first_episode.episode_id),
+                "type": "checkpoint_note",
+                "provenance": "checkpoint",
+                "content": "First episode checkpoint",
+                "metadata": {"kind": "checkpoint"},
+                "created_at": second_memory_item.created_at.isoformat(),
+                "updated_at": second_memory_item.updated_at.isoformat(),
+            },
+            {
+                "memory_id": str(first_memory_item.memory_id),
+                "workspace_id": workspace_id,
+                "episode_id": str(first_episode.episode_id),
+                "type": "episode_note",
+                "provenance": "episode",
+                "content": "First episode note",
+                "metadata": {"kind": "note"},
+                "created_at": first_memory_item.created_at.isoformat(),
+                "updated_at": first_memory_item.updated_at.isoformat(),
+            },
+        ],
+        [
+            {
+                "memory_id": str(third_memory_item.memory_id),
+                "workspace_id": workspace_id,
+                "episode_id": str(second_episode.episode_id),
+                "type": "episode_note",
+                "provenance": "episode",
+                "content": "Second episode note",
+                "metadata": {"kind": "note"},
+                "created_at": third_memory_item.created_at.isoformat(),
+                "updated_at": third_memory_item.updated_at.isoformat(),
+            }
+        ],
+    ]
+    assert response.details["memory_item_counts_by_episode"] == {
+        str(first_episode.episode_id): 2,
+        str(second_episode.episode_id): 1,
+    }
+    assert response.details["summaries"] == [
+        {
+            "episode_id": str(first_episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "memory_item_count": 2,
+            "memory_item_types": ["checkpoint_note", "episode_note"],
+            "memory_item_provenance": ["checkpoint", "episode"],
+        },
+        {
+            "episode_id": str(second_episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "memory_item_count": 1,
+            "memory_item_types": ["episode_note"],
+            "memory_item_provenance": ["episode"],
+        },
+    ]
+
+
+def test_memory_get_context_omits_memory_items_and_summaries_when_disabled() -> None:
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000032"
+    created_at = datetime(2024, 10, 5, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode without extra detail output",
+        metadata={"kind": "single"},
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=uuid4(),
+            workspace_id=UUID(workspace_id),
+            episode_id=episode.episode_id,
+            type="episode_note",
+            provenance="episode",
+            content="Stored memory item",
+            metadata={"kind": "note"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-DISABLED",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Episode without extra detail output"
+    ]
+    assert response.details["memory_items"] == []
+    assert response.details["memory_item_counts_by_episode"] == {
+        str(episode.episode_id): 1
+    }
+    assert response.details["summaries"] == []
+
+
+def test_memory_get_context_includes_only_summaries_when_memory_items_disabled() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000033"
+    created_at = datetime(2024, 10, 6, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode with summary-only detail output",
+        metadata={"kind": "summary-only"},
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Stored episode detail",
+        metadata={"kind": "note"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="checkpoint_note",
+        provenance="checkpoint",
+        content="Stored checkpoint detail",
+        metadata={"kind": "checkpoint"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-SUMMARIES-ONLY",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=True,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Episode with summary-only detail output"
+    ]
+    assert response.details["memory_items"] == []
+    assert response.details["memory_item_counts_by_episode"] == {
+        str(episode.episode_id): 2
+    }
+    assert response.details["summaries"] == [
+        {
+            "episode_id": str(episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "memory_item_count": 2,
+            "memory_item_types": ["checkpoint_note", "episode_note"],
+            "memory_item_provenance": ["checkpoint", "episode"],
+        }
+    ]
+
+
+def test_memory_get_context_includes_only_memory_items_when_summaries_disabled() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000034"
+    created_at = datetime(2024, 10, 8, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode with memory-item-only detail output",
+        metadata={"kind": "memory-items-only"},
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Stored episode detail",
+        metadata={"kind": "note"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="checkpoint_note",
+        provenance="checkpoint",
+        content="Stored checkpoint detail",
+        metadata={"kind": "checkpoint"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-MEMORY-ITEMS-ONLY",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Episode with memory-item-only detail output"
+    ]
+    assert response.details["memory_items"] == [
+        [
+            {
+                "memory_id": str(second_memory_item.memory_id),
+                "workspace_id": workspace_id,
+                "episode_id": str(episode.episode_id),
+                "type": "checkpoint_note",
+                "provenance": "checkpoint",
+                "content": "Stored checkpoint detail",
+                "metadata": {"kind": "checkpoint"},
+                "created_at": second_memory_item.created_at.isoformat(),
+                "updated_at": second_memory_item.updated_at.isoformat(),
+            },
+            {
+                "memory_id": str(first_memory_item.memory_id),
+                "workspace_id": workspace_id,
+                "episode_id": str(episode.episode_id),
+                "type": "episode_note",
+                "provenance": "episode",
+                "content": "Stored episode detail",
+                "metadata": {"kind": "note"},
+                "created_at": first_memory_item.created_at.isoformat(),
+                "updated_at": first_memory_item.updated_at.isoformat(),
+            },
+        ]
+    ]
+    assert response.details["memory_item_counts_by_episode"] == {
+        str(episode.episode_id): 2
+    }
+    assert response.details["summaries"] == []
+
+
+def test_serialize_get_context_response_preserves_memory_item_and_summary_details() -> (
+    None
+):
+    workflow_id = uuid4()
+    episode_id = uuid4()
+    memory_id = uuid4()
+    created_at = datetime(2024, 10, 7, 1, 2, 3, tzinfo=UTC)
+
+    response = GetContextResponse(
+        feature=MemoryFeature.GET_CONTEXT,
+        implemented=True,
+        message="Episode-oriented memory context retrieved successfully.",
+        status="ok",
+        available_in_version="0.2.0",
+        timestamp=created_at,
+        episodes=(
+            EpisodeRecord(
+                episode_id=episode_id,
+                workflow_instance_id=workflow_id,
+                summary="Serializer detail episode",
+                attempt_id=None,
+                metadata={"kind": "serializer"},
+                status="recorded",
+                created_at=created_at,
+                updated_at=created_at,
+            ),
+        ),
+        details={
+            "query": None,
+            "normalized_query": None,
+            "lookup_scope": "workflow_instance",
+            "workflow_instance_id": str(workflow_id),
+            "resolved_workflow_count": 1,
+            "resolved_workflow_ids": [str(workflow_id)],
+            "query_filter_applied": False,
+            "episodes_before_query_filter": 1,
+            "matched_episode_count": 1,
+            "episodes_returned": 1,
+            "episode_explanations": [],
+            "memory_items": [
+                [
+                    {
+                        "memory_id": str(memory_id),
+                        "workspace_id": str(workflow_id),
+                        "episode_id": str(episode_id),
+                        "type": "episode_note",
+                        "provenance": "episode",
+                        "content": "Serialized memory item",
+                        "metadata": {"kind": "note"},
+                        "created_at": created_at.isoformat(),
+                        "updated_at": created_at.isoformat(),
+                    }
+                ]
+            ],
+            "memory_item_counts_by_episode": {
+                str(episode_id): 1,
+            },
+            "summaries": [
+                {
+                    "episode_id": str(episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                }
+            ],
+        },
+    )
+
+    payload = serialize_get_context_response(response)
+
+    assert payload["details"]["memory_items"] == [
+        [
+            {
+                "memory_id": str(memory_id),
+                "workspace_id": str(workflow_id),
+                "episode_id": str(episode_id),
+                "type": "episode_note",
+                "provenance": "episode",
+                "content": "Serialized memory item",
+                "metadata": {"kind": "note"},
+                "created_at": created_at.isoformat(),
+                "updated_at": created_at.isoformat(),
+            }
+        ]
+    ]
+    assert payload["details"]["memory_item_counts_by_episode"] == {
+        str(episode_id): 1,
+    }
+    assert payload["details"]["summaries"] == [
+        {
+            "episode_id": str(episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "memory_item_count": 1,
+            "memory_item_types": ["episode_note"],
+            "memory_item_provenance": ["episode"],
         }
     ]
 

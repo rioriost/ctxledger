@@ -1863,7 +1863,12 @@ def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values
     )
     assert response.payload["result"]["status"] == "ok"
     assert response.payload["result"]["available_in_version"] == "0.2.0"
-    assert response.payload["result"]["details"] == {"episodes_returned": 0}
+    assert response.payload["result"]["details"] == {
+        "episodes_returned": 0,
+        "memory_items": [],
+        "memory_item_counts_by_episode": {},
+        "summaries": [],
+    }
     assert response.payload["result"]["episodes"] == []
     assert response.payload["result"]["timestamp"] == created_at.isoformat()
     assert service.context_calls is not None
