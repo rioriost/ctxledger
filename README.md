@@ -425,7 +425,7 @@ Acceptance-boundary note for `v0.1.0`:
 - `workflow_complete`
   - can auto-create workflow closeout memory when sufficient summary/checkpoint signal exists
   - returns auto-memory outcome details through `auto_memory_details`
-  - current closeout duplicate suppression rejects exact duplicates and suppresses near-duplicates using workflow-local, metadata-aware matching plus weighted similarity over extracted summary fields
+  - current closeout duplicate suppression rejects exact duplicates and suppresses near-duplicates only within the same workflow and matching `step_name`, using workflow-local, metadata-aware matching plus weighted similarity over extracted summary fields
 
 Tool argument discovery is available through `tools/list`, and visible tools expose a concrete `inputSchema`.
 
