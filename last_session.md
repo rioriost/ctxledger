@@ -127,6 +127,8 @@ Relevant recent commit/tag state:
   - `Align coverage tests and document schema drift recovery`
 - `8e4f3fb`
   - `Finalize 0.3.0 docs and observability roadmap`
+- `d627f25`
+  - `Add 0.4.0 observability implementation plan`
 - git tag:
   - `v0.3.0`
 
@@ -137,21 +139,36 @@ Relevant recent commit/tag state:
 - `docs/deployment.md`
 - `docs/mcp-api.md`
 - `docs/CHANGELOG.md`
+- `src/ctxledger/__init__.py`
+- `src/ctxledger/db/postgres.py`
+- `src/ctxledger/workflow/service.py`
 - `src/ctxledger/workflow/memory_bridge.py`
 - `src/ctxledger/memory/service.py`
+- `tests/test_cli.py`
 - `tests/test_coverage_targets.py`
 
 ## Next recommended action
-Start concrete `0.4.0` implementation work from the observability plan.
+Continue concrete `0.4.0` implementation work from the observability plan.
 
-Recommended first sequence:
-1. implement CLI summary surfaces:
-   - `ctxledger stats`
+Current progress:
+- `ctxledger stats` has now been implemented as the first observability CLI surface
+- the CLI supports:
+  - text output
+  - `--format json`
+- canonical aggregation support was added across the workflow service and PostgreSQL repositories
+- focused CLI validation passed:
+  - `python -m pytest tests/test_cli.py -q`
+  - `31 passed`
+- live manual verification against the running Docker PostgreSQL also succeeded using:
+  - `CTXLEDGER_DATABASE_URL=postgresql://ctxledger:ctxledger@localhost:5432/ctxledger ctxledger stats`
+
+Recommended next sequence:
+1. implement:
    - `ctxledger workflows`
    - `ctxledger memory-stats`
    - `ctxledger failures`
-2. add shared DB-backed summary queries
-3. add CLI tests
+2. continue expanding shared DB-backed summary/query helpers as needed
+3. add/extend CLI tests for the new observability commands
 4. add Grafana compose overlay
 5. define initial dashboard provisioning/query set
 6. write Grafana operator runbook

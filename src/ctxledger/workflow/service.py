@@ -326,6 +326,25 @@ class WorkflowCompleteResult:
 
 
 @dataclass(slots=True, frozen=True)
+class WorkflowStats:
+    workspace_count: int
+    workflow_status_counts: dict[str, int]
+    attempt_status_counts: dict[str, int]
+    verify_status_counts: dict[str, int]
+    checkpoint_count: int
+    episode_count: int
+    memory_item_count: int
+    memory_embedding_count: int
+    open_projection_failure_count: int
+    latest_workflow_updated_at: datetime | None = None
+    latest_checkpoint_created_at: datetime | None = None
+    latest_verify_report_created_at: datetime | None = None
+    latest_episode_created_at: datetime | None = None
+    latest_memory_item_created_at: datetime | None = None
+    latest_memory_embedding_created_at: datetime | None = None
+
+
+@dataclass(slots=True, frozen=True)
 class RegisterWorkspaceInput:
     repo_url: str
     canonical_path: str
@@ -580,6 +599,13 @@ class UnitOfWork:
         raise NotImplementedError
 
 
+def _status_count_dict(
+    values: tuple[str, ...],
+    counts: dict[str, int],
+) -> dict[str, int]:
+    return {value: int(counts.get(value, 0)) for value in values}
+
+
 class WorkflowService:
     def __init__(
         self,
@@ -589,6 +615,96 @@ class WorkflowService:
     ) -> None:
         self._uow_factory = uow_factory
         self._workflow_memory_bridge = workflow_memory_bridge
+
+    def get_stats(self) -> WorkflowStats:
+        with self._uow_factory() as uow:
+            workspace_count = self._count_rows(uow, "workspaces")
+            checkpoint_count = self._count_rows(uow, "workflow_checkpoints")
+            episode_count = self._count_rows(uow, "memory_episodes")
+            memory_item_count = self._count_rows(uow, "memory_items")
+            memory_embedding_count = self._count_rows(uow, "memory_embeddings")
+
+            workflow_status_counts = self._count_grouped_statuses(
+                uow,
+                repository_name="workflow_instances",
+                allowed_statuses=(
+                    WorkflowInstanceStatus.RUNNING.value,
+                    WorkflowInstanceStatus.COMPLETED.value,
+                    WorkflowInstanceStatus.FAILED.value,
+                    WorkflowInstanceStatus.CANCELLED.value,
+                ),
+            )
+            attempt_status_counts = self._count_grouped_statuses(
+                uow,
+                repository_name="workflow_attempts",
+                allowed_statuses=(
+                    WorkflowAttemptStatus.RUNNING.value,
+                    WorkflowAttemptStatus.SUCCEEDED.value,
+                    WorkflowAttemptStatus.FAILED.value,
+                    WorkflowAttemptStatus.CANCELLED.value,
+                ),
+            )
+            verify_status_counts = self._count_grouped_statuses(
+                uow,
+                repository_name="verify_reports",
+                allowed_statuses=(
+                    VerifyStatus.PENDING.value,
+                    VerifyStatus.PASSED.value,
+                    VerifyStatus.FAILED.value,
+                    VerifyStatus.SKIPPED.value,
+                ),
+            )
+
+            latest_workflow_updated_at = self._max_datetime_field(
+                uow,
+                repository_name="workflow_instances",
+                field_name="updated_at",
+            )
+            latest_checkpoint_created_at = self._max_datetime_field(
+                uow,
+                repository_name="workflow_checkpoints",
+                field_name="created_at",
+            )
+            latest_verify_report_created_at = self._max_datetime_field(
+                uow,
+                repository_name="verify_reports",
+                field_name="created_at",
+            )
+            latest_episode_created_at = self._max_datetime_field(
+                uow,
+                repository_name="memory_episodes",
+                field_name="created_at",
+            )
+            latest_memory_item_created_at = self._max_datetime_field(
+                uow,
+                repository_name="memory_items",
+                field_name="created_at",
+            )
+            latest_memory_embedding_created_at = self._max_datetime_field(
+                uow,
+                repository_name="memory_embeddings",
+                field_name="created_at",
+            )
+
+            open_projection_failure_count = self._count_open_projection_failures(uow)
+
+            return WorkflowStats(
+                workspace_count=workspace_count,
+                workflow_status_counts=workflow_status_counts,
+                attempt_status_counts=attempt_status_counts,
+                verify_status_counts=verify_status_counts,
+                checkpoint_count=checkpoint_count,
+                episode_count=episode_count,
+                memory_item_count=memory_item_count,
+                memory_embedding_count=memory_embedding_count,
+                open_projection_failure_count=open_projection_failure_count,
+                latest_workflow_updated_at=latest_workflow_updated_at,
+                latest_checkpoint_created_at=latest_checkpoint_created_at,
+                latest_verify_report_created_at=latest_verify_report_created_at,
+                latest_episode_created_at=latest_episode_created_at,
+                latest_memory_item_created_at=latest_memory_item_created_at,
+                latest_memory_embedding_created_at=latest_memory_embedding_created_at,
+            )
 
     def register_workspace(self, data: RegisterWorkspaceInput) -> Workspace:
         self._validate_workspace_input(data)
@@ -1473,6 +1589,144 @@ class WorkflowService:
             return f"Resume from step '{latest_checkpoint.step_name}' using the latest checkpoint summary."
 
         return f"Resume from step '{latest_checkpoint.step_name}'."
+
+    def _count_rows(
+        self,
+        uow: UnitOfWork,
+        repository_name: str,
+    ) -> int:
+        repository = getattr(uow, repository_name, None)
+        if repository is None:
+            return 0
+
+        records_by_id = getattr(repository, "_records_by_id", None)
+        if isinstance(records_by_id, dict):
+            return len(records_by_id)
+
+        workspaces_by_id = getattr(repository, "_workspaces_by_id", None)
+        if isinstance(workspaces_by_id, dict):
+            return len(workspaces_by_id)
+
+        values_by_id = getattr(repository, "_values_by_id", None)
+        if isinstance(values_by_id, dict):
+            return len(values_by_id)
+
+        if repository_name == "projection_failures":
+            failures_by_key = getattr(repository, "_failures_by_key", None)
+            if isinstance(failures_by_key, dict):
+                return sum(len(failures) for failures in failures_by_key.values())
+
+        if repository_name == "projection_states":
+            projection_states_by_key = getattr(
+                repository, "_projection_states_by_key", None
+            )
+            if isinstance(projection_states_by_key, dict):
+                return len(projection_states_by_key)
+
+        count_method = getattr(repository, "count_all", None)
+        if callable(count_method):
+            return int(count_method())
+
+        raise PersistenceError(
+            f"stats counting is not supported for repository '{repository_name}'"
+        )
+
+    def _count_grouped_statuses(
+        self,
+        uow: UnitOfWork,
+        *,
+        repository_name: str,
+        allowed_statuses: tuple[str, ...],
+    ) -> dict[str, int]:
+        repository = getattr(uow, repository_name, None)
+        if repository is None:
+            return _status_count_dict(allowed_statuses, {})
+
+        records_by_id = getattr(repository, "_records_by_id", None)
+        if records_by_id is None:
+            values_by_id = getattr(repository, "_values_by_id", None)
+            if isinstance(values_by_id, dict):
+                records_by_id = values_by_id
+
+        if isinstance(records_by_id, dict):
+            counts: dict[str, int] = {}
+            for record in records_by_id.values():
+                status = getattr(record, "status", None)
+                if status is None:
+                    continue
+                status_value = getattr(status, "value", status)
+                normalized_status = str(status_value)
+                counts[normalized_status] = counts.get(normalized_status, 0) + 1
+            return _status_count_dict(allowed_statuses, counts)
+
+        count_method = getattr(repository, "count_by_status", None)
+        if callable(count_method):
+            return _status_count_dict(
+                allowed_statuses,
+                {str(key): int(value) for key, value in count_method().items()},
+            )
+
+        raise PersistenceError(
+            f"stats status aggregation is not supported for repository '{repository_name}'"
+        )
+
+    def _max_datetime_field(
+        self,
+        uow: UnitOfWork,
+        *,
+        repository_name: str,
+        field_name: str,
+    ) -> datetime | None:
+        repository = getattr(uow, repository_name, None)
+        if repository is None:
+            return None
+
+        records_by_id = getattr(repository, "_records_by_id", None)
+        if records_by_id is None:
+            values_by_id = getattr(repository, "_values_by_id", None)
+            if isinstance(values_by_id, dict):
+                records_by_id = values_by_id
+
+        if isinstance(records_by_id, dict):
+            timestamps = [
+                value
+                for record in records_by_id.values()
+                if isinstance((value := getattr(record, field_name, None)), datetime)
+            ]
+            if not timestamps:
+                return None
+            return max(timestamps)
+
+        max_method = getattr(repository, "max_datetime", None)
+        if callable(max_method):
+            value = max_method(field_name)
+            return value if isinstance(value, datetime) or value is None else None
+
+        raise PersistenceError(
+            f"stats datetime aggregation is not supported for repository '{repository_name}'"
+        )
+
+    def _count_open_projection_failures(self, uow: UnitOfWork) -> int:
+        repository = getattr(uow, "projection_failures", None)
+        if repository is None:
+            return 0
+
+        failures_by_key = getattr(repository, "_failures_by_key", None)
+        if isinstance(failures_by_key, dict):
+            return sum(
+                1
+                for failures in failures_by_key.values()
+                for failure in failures
+                if getattr(failure, "status", None) == "open"
+            )
+
+        count_method = getattr(repository, "count_open_failures", None)
+        if callable(count_method):
+            return int(count_method())
+
+        raise PersistenceError(
+            "stats failure aggregation is not supported for projection failures"
+        )
 
     def _map_workflow_status_to_attempt_status(
         self,

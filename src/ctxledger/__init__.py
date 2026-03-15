@@ -14,6 +14,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
 
+    stats_parser = subparsers.add_parser(
+        "stats",
+        help="Display workflow and memory observability summary",
+    )
+    stats_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format",
+    )
+
     serve_parser = subparsers.add_parser(
         "serve",
         help="Start the ctxledger server",
@@ -198,6 +209,136 @@ def _write_resume_projection(args: argparse.Namespace) -> int:
         return 1
 
 
+def _format_stats_text(stats: object) -> str:
+    workflow_status_counts = getattr(stats, "workflow_status_counts", {})
+    attempt_status_counts = getattr(stats, "attempt_status_counts", {})
+    verify_status_counts = getattr(stats, "verify_status_counts", {})
+
+    lines = [
+        "ctxledger stats",
+        "",
+        "Workspaces:",
+        f"- total: {getattr(stats, 'workspace_count', 0)}",
+        "",
+        "Workflows:",
+        f"- running: {workflow_status_counts.get('running', 0)}",
+        f"- completed: {workflow_status_counts.get('completed', 0)}",
+        f"- failed: {workflow_status_counts.get('failed', 0)}",
+        f"- cancelled: {workflow_status_counts.get('cancelled', 0)}",
+        "",
+        "Attempts:",
+        f"- running: {attempt_status_counts.get('running', 0)}",
+        f"- succeeded: {attempt_status_counts.get('succeeded', 0)}",
+        f"- failed: {attempt_status_counts.get('failed', 0)}",
+        f"- cancelled: {attempt_status_counts.get('cancelled', 0)}",
+        "",
+        "Verify reports:",
+        f"- pending: {verify_status_counts.get('pending', 0)}",
+        f"- passed: {verify_status_counts.get('passed', 0)}",
+        f"- failed: {verify_status_counts.get('failed', 0)}",
+        f"- skipped: {verify_status_counts.get('skipped', 0)}",
+        "",
+        "Memory:",
+        f"- episodes: {getattr(stats, 'episode_count', 0)}",
+        f"- memory_items: {getattr(stats, 'memory_item_count', 0)}",
+        f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
+        "",
+        "Other:",
+        f"- checkpoints: {getattr(stats, 'checkpoint_count', 0)}",
+        f"- open_projection_failures: {getattr(stats, 'open_projection_failure_count', 0)}",
+        "",
+        "Latest activity:",
+        f"- workflow_updated_at: {getattr(stats, 'latest_workflow_updated_at', None)}",
+        f"- checkpoint_created_at: {getattr(stats, 'latest_checkpoint_created_at', None)}",
+        f"- verify_report_created_at: {getattr(stats, 'latest_verify_report_created_at', None)}",
+        f"- episode_created_at: {getattr(stats, 'latest_episode_created_at', None)}",
+        f"- memory_item_created_at: {getattr(stats, 'latest_memory_item_created_at', None)}",
+        f"- memory_embedding_created_at: {getattr(stats, 'latest_memory_embedding_created_at', None)}",
+    ]
+    return "\n".join(lines)
+
+
+def _stats(args: argparse.Namespace) -> int:
+    try:
+        import json
+
+        from .config import get_settings
+        from .db.postgres import PostgresConfig, build_postgres_uow_factory
+        from .workflow.service import WorkflowService
+
+        settings = get_settings()
+
+        if not settings.database.url:
+            print(
+                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
+                file=sys.stderr,
+            )
+            return 1
+
+        workflow_service = WorkflowService(
+            build_postgres_uow_factory(PostgresConfig.from_settings(settings))
+        )
+        stats = workflow_service.get_stats()
+
+        if args.format == "json":
+            print(
+                json.dumps(
+                    {
+                        "workspace_count": stats.workspace_count,
+                        "workflow_status_counts": stats.workflow_status_counts,
+                        "attempt_status_counts": stats.attempt_status_counts,
+                        "verify_status_counts": stats.verify_status_counts,
+                        "checkpoint_count": stats.checkpoint_count,
+                        "episode_count": stats.episode_count,
+                        "memory_item_count": stats.memory_item_count,
+                        "memory_embedding_count": stats.memory_embedding_count,
+                        "open_projection_failure_count": (
+                            stats.open_projection_failure_count
+                        ),
+                        "latest_workflow_updated_at": (
+                            stats.latest_workflow_updated_at.isoformat()
+                            if stats.latest_workflow_updated_at is not None
+                            else None
+                        ),
+                        "latest_checkpoint_created_at": (
+                            stats.latest_checkpoint_created_at.isoformat()
+                            if stats.latest_checkpoint_created_at is not None
+                            else None
+                        ),
+                        "latest_verify_report_created_at": (
+                            stats.latest_verify_report_created_at.isoformat()
+                            if stats.latest_verify_report_created_at is not None
+                            else None
+                        ),
+                        "latest_episode_created_at": (
+                            stats.latest_episode_created_at.isoformat()
+                            if stats.latest_episode_created_at is not None
+                            else None
+                        ),
+                        "latest_memory_item_created_at": (
+                            stats.latest_memory_item_created_at.isoformat()
+                            if stats.latest_memory_item_created_at is not None
+                            else None
+                        ),
+                        "latest_memory_embedding_created_at": (
+                            stats.latest_memory_embedding_created_at.isoformat()
+                            if stats.latest_memory_embedding_created_at is not None
+                            else None
+                        ),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(_format_stats_text(stats))
+
+        return 0
+    except Exception as exc:
+        print(f"Failed to load stats: {exc}", file=sys.stderr)
+        return 1
+
+
 def _resume_workflow(args: argparse.Namespace) -> int:
     try:
         import json
@@ -345,6 +486,8 @@ def main(argv: list[str] | None = None) -> int:
 
     command = args.command or "serve"
 
+    if command == "stats":
+        return _stats(args)
     if command == "serve":
         return _serve(args)
     if command == "print-schema-path":

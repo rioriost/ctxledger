@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -28,6 +29,7 @@ from ctxledger.workflow.service import (
     RegisterWorkspaceInput,
     ResumeIssue,
     StartWorkflowInput,
+    WorkflowStats,
 )
 
 
@@ -365,6 +367,252 @@ def test_main_write_resume_projection_wires_real_command_arguments(
         ".agent/resume.md",
     }
     assert all(projection.open_failure_count == 0 for projection in resume.projections)
+
+
+def test_main_stats_renders_text_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stats = WorkflowStats(
+        workspace_count=40,
+        workflow_status_counts={
+            "running": 28,
+            "completed": 30,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        attempt_status_counts={
+            "running": 28,
+            "succeeded": 30,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        verify_status_counts={
+            "pending": 109,
+            "passed": 239,
+            "failed": 20,
+            "skipped": 1,
+        },
+        checkpoint_count=369,
+        episode_count=34,
+        memory_item_count=24,
+        memory_embedding_count=3,
+        open_projection_failure_count=11,
+        latest_workflow_updated_at=datetime(2026, 3, 15, 9, 45, 52, tzinfo=UTC),
+        latest_checkpoint_created_at=datetime(2026, 3, 15, 10, 55, 8, tzinfo=UTC),
+        latest_verify_report_created_at=datetime(2026, 3, 15, 10, 55, 8, tzinfo=UTC),
+        latest_episode_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_item_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_embedding_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+    )
+
+    class FakeStatsWorkflowService:
+        def __init__(self, stats_result: WorkflowStats) -> None:
+            self.stats_result = stats_result
+            self.get_stats_calls = 0
+
+        def get_stats(self) -> WorkflowStats:
+            self.get_stats_calls += 1
+            return self.stats_result
+
+    settings = make_settings()
+    fake_service = FakeStatsWorkflowService(stats)
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: fake_service,
+    )
+
+    exit_code = cli_module.main(["stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "ctxledger stats" in captured.out
+    assert "Workspaces:" in captured.out
+    assert "- total: 40" in captured.out
+    assert "Workflows:" in captured.out
+    assert "- running: 28" in captured.out
+    assert "- completed: 30" in captured.out
+    assert "Attempts:" in captured.out
+    assert "- succeeded: 30" in captured.out
+    assert "Verify reports:" in captured.out
+    assert "- passed: 239" in captured.out
+    assert "Memory:" in captured.out
+    assert "- episodes: 34" in captured.out
+    assert "- memory_items: 24" in captured.out
+    assert "- memory_embeddings: 3" in captured.out
+    assert "Other:" in captured.out
+    assert "- checkpoints: 369" in captured.out
+    assert "- open_projection_failures: 11" in captured.out
+    assert "Latest activity:" in captured.out
+    assert "2026-03-15 09:45:52+00:00" in captured.out
+    assert captured.err == ""
+    assert fake_service.get_stats_calls == 1
+
+
+def test_main_stats_renders_json_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stats = WorkflowStats(
+        workspace_count=2,
+        workflow_status_counts={
+            "running": 1,
+            "completed": 1,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        attempt_status_counts={
+            "running": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        verify_status_counts={
+            "pending": 0,
+            "passed": 2,
+            "failed": 0,
+            "skipped": 0,
+        },
+        checkpoint_count=5,
+        episode_count=3,
+        memory_item_count=4,
+        memory_embedding_count=1,
+        open_projection_failure_count=0,
+        latest_workflow_updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
+        latest_checkpoint_created_at=None,
+        latest_verify_report_created_at=None,
+        latest_episode_created_at=None,
+        latest_memory_item_created_at=None,
+        latest_memory_embedding_created_at=None,
+    )
+
+    class FakeStatsWorkflowService:
+        def __init__(self, stats_result: WorkflowStats) -> None:
+            self.stats_result = stats_result
+
+        def get_stats(self) -> WorkflowStats:
+            return self.stats_result
+
+    settings = make_settings()
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: FakeStatsWorkflowService(stats),
+    )
+
+    exit_code = cli_module.main(["stats", "--format", "json"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload == {
+        "attempt_status_counts": {
+            "cancelled": 0,
+            "failed": 0,
+            "running": 1,
+            "succeeded": 1,
+        },
+        "checkpoint_count": 5,
+        "episode_count": 3,
+        "latest_checkpoint_created_at": None,
+        "latest_episode_created_at": None,
+        "latest_memory_embedding_created_at": None,
+        "latest_memory_item_created_at": None,
+        "latest_verify_report_created_at": None,
+        "latest_workflow_updated_at": "2026-03-15T09:00:00+00:00",
+        "memory_embedding_count": 1,
+        "memory_item_count": 4,
+        "open_projection_failure_count": 0,
+        "verify_status_counts": {
+            "failed": 0,
+            "passed": 2,
+            "pending": 0,
+            "skipped": 0,
+        },
+        "workflow_status_counts": {
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "running": 1,
+        },
+        "workspace_count": 2,
+    }
+    assert captured.err == ""
+
+
+def test_main_stats_reports_missing_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url=""),
+    )
+
+    exit_code = cli_module.main(["stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+
+
+def test_main_stats_returns_error_when_stats_loading_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+
+    class ExplodingWorkflowService:
+        def __init__(self, uow_factory: object) -> None:
+            self.uow_factory = uow_factory
+
+        def get_stats(self) -> WorkflowStats:
+            raise RuntimeError("stats exploded")
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        ExplodingWorkflowService,
+    )
+
+    exit_code = cli_module.main(["stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to load stats: stats exploded" in captured.err
 
 
 def test_main_resume_workflow_renders_text_output(
@@ -826,6 +1074,7 @@ def test_build_parser_includes_expected_subcommands() -> None:
 
     subcommands = set(actions[0].choices)
     assert subcommands == {
+        "stats",
         "serve",
         "print-schema-path",
         "apply-schema",

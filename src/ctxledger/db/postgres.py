@@ -243,6 +243,22 @@ class PostgresWorkspaceRepository(WorkspaceRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
 
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM workspaces")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
+    def max_datetime(self, field_name: str) -> datetime | None:
+        if field_name not in {"created_at", "updated_at"}:
+            raise PersistenceError(
+                f"Unsupported datetime field '{field_name}' for workspaces"
+            )
+        with self._conn.cursor() as cur:
+            cur.execute(f"SELECT MAX({field_name}) AS value FROM workspaces")
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
+
     def get_by_id(self, workspace_id: UUID) -> Workspace | None:
         with self._conn.cursor() as cur:
             cur.execute(
@@ -392,6 +408,34 @@ class PostgresWorkspaceRepository(WorkspaceRepository):
 class PostgresWorkflowInstanceRepository(WorkflowInstanceRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
+
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM workflow_instances")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
+    def count_by_status(self) -> dict[str, int]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM workflow_instances
+                GROUP BY status
+                """
+            )
+            rows = cur.fetchall()
+        return {str(row["status"]): int(row["count"]) for row in rows}
+
+    def max_datetime(self, field_name: str) -> datetime | None:
+        if field_name not in {"created_at", "updated_at"}:
+            raise PersistenceError(
+                f"Unsupported datetime field '{field_name}' for workflow_instances"
+            )
+        with self._conn.cursor() as cur:
+            cur.execute(f"SELECT MAX({field_name}) AS value FROM workflow_instances")
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
 
     def get_by_id(self, workflow_instance_id: UUID) -> WorkflowInstance | None:
         with self._conn.cursor() as cur:
@@ -599,6 +643,34 @@ class PostgresWorkflowAttemptRepository(WorkflowAttemptRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
 
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM workflow_attempts")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
+    def count_by_status(self) -> dict[str, int]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM workflow_attempts
+                GROUP BY status
+                """
+            )
+            rows = cur.fetchall()
+        return {str(row["status"]): int(row["count"]) for row in rows}
+
+    def max_datetime(self, field_name: str) -> datetime | None:
+        if field_name not in {"started_at", "finished_at", "created_at", "updated_at"}:
+            raise PersistenceError(
+                f"Unsupported datetime field '{field_name}' for workflow_attempts"
+            )
+        with self._conn.cursor() as cur:
+            cur.execute(f"SELECT MAX({field_name}) AS value FROM workflow_attempts")
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
+
     def get_by_id(self, attempt_id: UUID) -> WorkflowAttempt | None:
         with self._conn.cursor() as cur:
             cur.execute(
@@ -802,6 +874,22 @@ class PostgresWorkflowCheckpointRepository(WorkflowCheckpointRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
 
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM workflow_checkpoints")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
+    def max_datetime(self, field_name: str) -> datetime | None:
+        if field_name != "created_at":
+            raise PersistenceError(
+                f"Unsupported datetime field '{field_name}' for workflow_checkpoints"
+            )
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT MAX(created_at) AS value FROM workflow_checkpoints")
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
+
     def get_latest_by_workflow_id(
         self, workflow_instance_id: UUID
     ) -> WorkflowCheckpoint | None:
@@ -902,6 +990,34 @@ class PostgresVerifyReportRepository(VerifyReportRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
 
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM verify_reports")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
+    def count_by_status(self) -> dict[str, int]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM verify_reports
+                GROUP BY status
+                """
+            )
+            rows = cur.fetchall()
+        return {str(row["status"]): int(row["count"]) for row in rows}
+
+    def max_datetime(self, field_name: str) -> datetime | None:
+        if field_name != "created_at":
+            raise PersistenceError(
+                f"Unsupported datetime field '{field_name}' for verify_reports"
+            )
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT MAX(created_at) AS value FROM verify_reports")
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
+
     def get_latest_by_attempt_id(self, attempt_id: UUID) -> VerifyReport | None:
         with self._conn.cursor() as cur:
             cur.execute(
@@ -967,6 +1083,22 @@ class PostgresVerifyReportRepository(VerifyReportRepository):
 class PostgresMemoryEpisodeRepository(MemoryEpisodeRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
+
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM episodes")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
+    def max_datetime(self, field_name: str) -> datetime | None:
+        if field_name not in {"created_at", "updated_at"}:
+            raise PersistenceError(
+                f"Unsupported datetime field '{field_name}' for episodes"
+            )
+        with self._conn.cursor() as cur:
+            cur.execute(f"SELECT MAX({field_name}) AS value FROM episodes")
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
 
     def create(self, episode: EpisodeRecord) -> EpisodeRecord:
         with self._conn.cursor() as cur:
@@ -1063,6 +1195,22 @@ class PostgresMemoryEpisodeRepository(MemoryEpisodeRepository):
 class PostgresMemoryItemRepository(MemoryItemRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
+
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM memory_items")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
+    def max_datetime(self, field_name: str) -> datetime | None:
+        if field_name not in {"created_at", "updated_at"}:
+            raise PersistenceError(
+                f"Unsupported datetime field '{field_name}' for memory_items"
+            )
+        with self._conn.cursor() as cur:
+            cur.execute(f"SELECT MAX({field_name}) AS value FROM memory_items")
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
 
     def create(self, memory_item: MemoryItemRecord) -> MemoryItemRecord:
         with self._conn.cursor() as cur:
@@ -1174,6 +1322,22 @@ class PostgresMemoryItemRepository(MemoryItemRepository):
 class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
+
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM memory_embeddings")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
+    def max_datetime(self, field_name: str) -> datetime | None:
+        if field_name != "created_at":
+            raise PersistenceError(
+                f"Unsupported datetime field '{field_name}' for memory_embeddings"
+            )
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT MAX(created_at) AS value FROM memory_embeddings")
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
 
     def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
         with self._conn.cursor() as cur:
@@ -1401,6 +1565,18 @@ class PostgresProjectionStateRepository(ProjectionStateRepository):
 class PostgresProjectionFailureRepository(ProjectionFailureRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
+
+    def count_open_failures(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM projection_failures
+                WHERE status = 'open'
+                """
+            )
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
 
     def get_open_failures_by_workflow_id(
         self,
