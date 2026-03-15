@@ -38,6 +38,13 @@ The system is built on a simple architectural principle:
 - MCP is the **public interface**
 - workflow control and memory retrieval are **separate subsystems**
 
+Near-term roadmap emphasis is also important to read correctly:
+
+- `0.4.0` is intended to focus on operator-facing observability
+  - CLI inspection/reporting for workflow and memory state
+  - optional deployable Grafana-based dashboard support
+- broader hierarchical memory retrieval is planned later in `0.5.0`
+
 In `v0.1.0`, the primary focus is the durable workflow control layer.
 
 ---
@@ -524,6 +531,9 @@ The repository should treat `0.2.0` memory closeout as satisfied only when the f
   - the earlier `0.2.0` scope boundary where `memory_search` was still stubbed
 - semantic retrieval, embeddings, relations, and hierarchical summaries remained explicitly out of scope for `0.2.0` at that time
 - TLS / HTTPS deployment work may proceed as part of the broader `0.2.0` stream, but only after the memory-focused closeout work is considered sufficiently complete
+- later roadmap framing should continue to distinguish:
+  - `0.4.0` observability-oriented operator surfaces
+  - `0.5.0` hierarchical memory retrieval expansion
 
 ### Workflow HTTP read endpoints
 - `/workflow-resume/{workflow_instance_id}`

@@ -382,8 +382,47 @@ Latest validation completed:
 - full suite rerun:
   - `python -m pytest -q`
   - `780 passed, 1 skipped`
+- the single skipped test is the expected real OpenAI integration case gated on `OPENAI_API_KEY`
+
+Release/readiness outcome now captured:
+- `0.3.0` was assessed as ready to ship for the implemented scope
+- internal release judgment is effectively GO
+- provider wording still needs to stay honest:
+  - `openai`, `local_stub`, and `custom_http` are the strongest validated paths
+  - `voyageai` and `cohere` configuration surfaces exist, but full provider-specific runtime support remains incomplete
+- `memory_get_context` should still be described as episode-oriented rather than as a finished hierarchical retrieval surface
+
+Roadmap/docs direction was then shifted:
+- hierarchical memory retrieval was moved from `0.4.0` to `0.5.0`
+- `0.4.0` is now the observability milestone:
+  - operator-facing CLI inspection/reporting for workflow and memory state
+  - optional deployable Grafana-based dashboard support
+- related docs were updated to align around that shift:
+  - `README.md`
+  - `docs/roadmap.md`
+  - `docs/mcp-api.md`
+  - `docs/deployment.md`
+  - `docs/CHANGELOG.md`
+
+Operational/product insight from the live PostgreSQL inspection:
+- the canonical database already contains enough durable activity that observability is now more valuable than repository projection files for day-to-day operator visibility
+- representative live indicators observed during this session included:
+  - `40` workspaces
+  - `58` workflow instances
+  - `369` checkpoints
+  - `34` episodes
+  - `24` memory items
+  - `3` memory embeddings
+- projection exists as implemented derived behavior, but it no longer feels central to the product direction compared with direct workflow/memory observability
 
 If continuing next:
+- update `last_session.md`
+- commit the current docs/README updates cleanly
+- tag the release as `v0.3.0`
+- then begin a concrete `0.4.0` observability implementation plan centered on:
+  - CLI status/stats surfaces
+  - Grafana container deployment
+  - dashboard queries over canonical PostgreSQL state
 - capture the live-schema update path in a more durable migration/recovery note
 - make a descriptive commit for the latest release-QA test-alignment pass if that is not done yet
 - then decide whether the heuristic is now good enough

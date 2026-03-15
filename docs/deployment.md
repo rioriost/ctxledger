@@ -137,7 +137,8 @@ This should be understood as an initial semantic retrieval layer rather than a c
 - vector similarity lookup used by `memory_search`
 - hybrid lexical + embedding-backed ranking over stored memory items
 - validated provider-specific embedding support for `openai`, alongside `local_stub`, `custom_http`, and the broader embedding provider scaffolding
-- richer multi-layer retrieval still remaining as follow-up work
+- richer multi-layer retrieval still remaining as follow-up work beyond `0.4.0`
+- `0.4.0` is instead intended to focus on operator-facing observability surfaces such as CLI inspection and optionally deployable Grafana-based dashboard support
 
 Operators should therefore treat `pgvector` as part of the active memory-search path, not merely as dormant future-proofing infrastructure.
 
@@ -784,6 +785,18 @@ They should not be hardcoded into repository files.
 
 Structured logging is the primary observability mechanism in `v0.1.0`.
 
+For the current roadmap direction, structured logging should also be treated as the foundation for a broader `0.4.0` observability workstream centered on operator-facing visibility into:
+
+- workflow volume and status
+- attempt and verification activity
+- episodic and semantic memory state
+- canonical failure and persistence health
+
+That `0.4.0` work is expected to expand beyond logs alone into:
+
+- CLI inspection/reporting surfaces
+- optional deployable Grafana-based dashboard support for lightweight dashboard-style visibility
+
 Important logged events should include:
 
 - startup
@@ -871,6 +884,9 @@ Recommended future improvements include:
 - managed migrations
 - metrics and tracing
 - audit logging
+- operator-facing observability CLI surfaces targeted for `0.4.0`
+- optional deployable Grafana-based dashboard support targeted for `0.4.0`
+- hierarchical memory retrieval and summary-layer expansion targeted for `0.5.0`
 - background workers for embedding/index pipelines
 - stronger authorization controls
 

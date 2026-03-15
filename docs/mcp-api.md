@@ -141,8 +141,9 @@ Typical resource responsibilities:
 - expose current workflow state
 - expose exact workflow detail
 - expose episode records
-- expose hierarchical summaries
 - expose memory-derived context views
+- later expose hierarchical summaries once the post-`0.4.0` retrieval layers are implemented
+- near-term dashboard observability may use an optional Grafana-based surface in the `0.4.0` workstream
 
 Examples:
 
@@ -150,6 +151,7 @@ Examples:
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
+- future operator-observability resources or Grafana-backed dashboard views introduced alongside the `0.4.0` observability workstream
 
 Implemented in the current repository runtime surface as supporting MCP resources:
 
@@ -166,6 +168,11 @@ Not yet implemented and still future-facing/stubbed as resources:
 This distinction matters because the current memory progress is tool-oriented first:
 episodic recording and initial episode-oriented context retrieval are available
 through MCP tools, while dedicated memory resources remain future work.
+
+It also matters for roadmap alignment:
+the near-term `0.4.0` emphasis is shifting toward operator observability surfaces,
+including CLI inspection and optionally deployable Grafana-based dashboard support,
+while broader hierarchical retrieval and summary-layer resource expansion move later.
 
 The current episode-oriented retrieval path is also intentionally conservative:
 it is still driven by canonical workflow linkage first, with only a light initial
@@ -206,8 +213,10 @@ At the current implementation stage, `matched_episode_count` and
 details surface can remain useful if later `0.2.x` behavior adds post-match
 truncation, ranking, or other assembly steps.
 They should not yet be interpreted as a stable semantic-retrieval contract, since
-broader ranking, relevance, relation-aware retrieval, and hierarchical summary
-assembly are still future work.
+broader ranking, relevance, and relation-aware retrieval remain future work, and
+hierarchical summary assembly is now intended for a later milestone than `0.4.0`
+while `0.4.0` focuses on observability-oriented operator surfaces, with Grafana
+as the named near-term optional dashboard deployment path.
 
 ## 3.3 Special Case: `workflow_resume`
 

@@ -29,6 +29,8 @@ The project currently follows a lightweight, human-maintained changelog style.
 - OpenAI embedding generation was validated end-to-end against PostgreSQL persistence and semantic retrieval
 - `voyageai` and `cohere` configuration surfaces exist, but their full provider-specific runtime support remains incomplete
 - `memory_get_context` remains primarily episode-oriented in `0.3.0`; richer multi-layer and relation-aware context assembly remain future work
+- the roadmap now treats `0.4.0` as the observability milestone for operator-facing CLI inspection and optional deployable Grafana-based dashboard support
+- hierarchical memory retrieval and summary-layer expansion are planned later in `0.5.0`
 
 ## [0.2.0] - 2026-03-14
 
@@ -84,5 +86,5 @@ The project currently follows a lightweight, human-maintained changelog style.
 ### Notes
 
 - `memory_search` remained intentionally stubbed in `0.2.0` and was deferred to later semantic retrieval work
-- `memory_get_context` remains intentionally partial and episode-oriented in `0.2.0`; broader semantic, hierarchical, and relation-aware retrieval remain future work
+- `memory_get_context` remains intentionally partial and episode-oriented in `0.2.0`; broader semantic, relation-aware, and later hierarchical retrieval remain future work
 - `0.2.0` closes out the episodic memory milestone and establishes an HTTPS-enabled MCP deployment path after that memory closeout work

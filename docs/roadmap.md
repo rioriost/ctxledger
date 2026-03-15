@@ -152,6 +152,22 @@ Remaining work to close out `0.3` more confidently:
 
 Planned focus:
 
+- workflow and memory observability
+- operator-facing CLI inspection tools
+- optional deployable Grafana-based dashboard support
+- better runtime visibility into canonical workflow and memory state
+
+Expected themes:
+
+- CLI status / stats views for workflow activity
+- CLI views for memory, embedding, and failure state
+- dashboard-oriented Grafana deployment as an optional surface
+- stronger operator insight into durable runtime health and usage patterns
+
+## 0.5
+
+Planned focus:
+
 - hierarchical memory retrieval
 - summary layers
 - relation-aware context assembly
@@ -177,7 +193,7 @@ Expected themes:
 - finish aligning release-facing docs with the implemented `0.3.0` memory search surface
 - keep the documented `memory_get_context` details contract aligned with the implemented episode-oriented `0.2.0` scope
 - clarify the intended meaning difference between `matched_episode_count` and `episodes_returned`
-- continue refining lightweight filtering and relevance behavior without conflating it with later hierarchical retrieval work
+- continue refining lightweight filtering and relevance behavior without conflating it with later `0.5` hierarchical retrieval work
 - refresh README and API docs to reflect the current memory tool reality
 - decide the `0.3.0` release boundary for embedding provider support and document it explicitly
 - keep versioning aligned with the highest release scope that the implementation and docs can honestly support
