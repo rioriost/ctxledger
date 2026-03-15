@@ -1,429 +1,157 @@
 # ctxledger last session
 
 ## Summary
-This session refined workflow closeout duplicate / near-duplicate matching quality beyond plain token overlap and then verified the real runtime path for `workflow_complete` auto-memory with OpenAI embeddings.
+`0.3.0` is now effectively closed out.
 
-The closeout matcher now extracts semantic fields from generated summaries, compares richer metadata, and uses weighted similarity that emphasizes completion summaries while further down-weighting boilerplate workflow-closeout wording.
+The repository was revalidated after stale test expectations were corrected, the docs were aligned with the actual implemented scope, and the release tag was created.
 
-A runtime failure in `workflow_complete` auto-memory turned out not to be an environment-variable forwarding problem after all. The actual blocker was an older live PostgreSQL `memory_items_provenance_valid` constraint that still rejected `workflow_complete_auto`, so auto-memory could create the episode but failed while inserting the corresponding memory item. After updating the live constraint, the MCP/runtime path successfully recorded closeout auto-memory and persisted an OpenAI embedding.
+The next planned work is `0.4.0`, which is now defined as the **observability milestone**:
+- operator-facing CLI inspection/reporting
+- optional deployable **Grafana-based** dashboard support
 
-A follow-up release-QA pass then ran the full test suite with coverage for `0.3.0`. That run was green after aligning several stale test expectations with the current runtime/config surface. The main issues were outdated test fixtures that did not include the newer `embedding` and `schema_name` settings fields, older assertions for workflow auto-memory skip/detail payloads, and PostgreSQL helper expectations that did not account for schema-aware `search_path` session setup. After updating those tests, the repository-wide coverage run passed at `723 passed, 1 skipped` with total coverage at `96%`.
+Hierarchical memory retrieval is no longer the `0.4.0` focus.
+That work has been shifted to `0.5.0`.
 
-## What is already done
-
-### OpenAI-default embedding path
-- default embedding provider is `openai`
-- default embedding model is `text-embedding-3-small`
-- embedding execution is still opt-in via:
-  - `CTXLEDGER_EMBEDDING_ENABLED`
-- OpenAI env naming is aligned around:
-  - `OPENAI_API_KEY`
-  - `OPENAI_MODEL`
-  - `OPENAI_BASE_URL`
-- `docker/docker-compose.small-auth.yml` now enables and forwards the runtime embedding path through:
-  - `CTXLEDGER_EMBEDDING_ENABLED`
-  - `CTXLEDGER_EMBEDDING_PROVIDER`
-  - `CTXLEDGER_EMBEDDING_MODEL`
-  - `OPENAI_API_KEY`
-- important runtime detail:
-  - passing an empty `CTXLEDGER_EMBEDDING_BASE_URL` breaks startup because config validation requires an absolute URL when the setting is present
-  - leaving the setting unset is valid and uses the normal default path
-
-### Validation already completed
-- real PostgreSQL + OpenAI integration test passed
-- broader targeted regression was previously green:
-  - `485 passed, 1 skipped`
-- direct runtime embedding verification now also passed:
-  - manual `memory_remember_episode` persisted an OpenAI embedding to `memory_embeddings`
-  - MCP/runtime `workflow_complete` auto-memory also persisted an OpenAI embedding after the live PostgreSQL constraint fix
-- full repository QA/coverage validation is now green:
-  - `723 passed, 1 skipped`
-  - total coverage: `96%`
-
-Useful command if re-running real OpenAI validation:
-```/dev/null/sh#L1-1
-envrcctl exec -- python -m pytest tests/test_postgres_integration.py -q -k openai
-```
-
-Useful command for the full release-QA coverage pass:
-```/dev/null/sh#L1-1
-python -m pytest --cov=src/ctxledger --cov-report=term-missing -q
-```
-
-### Memory observability
-`MemoryService.remember_episode()` surfaces embedding persistence outcomes instead of hiding failures.
-
-Important detail fields include:
-- `embedding_persistence_status`
-- `embedding_generation_skipped_reason`
-
-Possible states:
-- `stored`
-- `skipped`
-- `failed`
-
-### `workflow_complete` auto-memory state
-The automatic workflow-completion memory path is now implemented and surfaced through:
-- `warnings`
-- `auto_memory_details`
-
-Schema / persistence expectations already align with:
-- `workflow_complete_auto`
-
-## Completed Phase 2 progress
-
-### 1. Explicit heuristic gating
-`src/ctxledger/workflow/memory_bridge.py` now applies a minimum heuristic before recording closeout auto-memory.
-
-Current behavior:
-- record when latest checkpoint has explicit signal such as:
-  - `next_intended_action`
-  - `current_objective`
-  - `decision`
-  - `risk`
-  - `blocker`
-  - `open_question`
-- also record when verification failed
-- also record when workflow closed as `failed` or `cancelled`
-- otherwise skip low-signal closeout memory
-
-### 2. Skip reason split
-Low-signal skips are no longer reported with only the old generic reason.
-
-Current skip reasons now include:
-- `no_completion_summary_source`
-- `low_signal_checkpoint_closeout`
-
-Intent:
-- `no_completion_summary_source`
-  - true missing-source case
-- `low_signal_checkpoint_closeout`
-  - heuristic said the closeout was too weak/noisy to record
-
-### 3. Duplicate / near-duplicate noise control
-A refined minimum noise-control pass is now in place for workflow closeout auto-memory.
-
-Current suppression reasons include:
-- `duplicate_closeout_auto_memory`
-- `near_duplicate_checkpoint_closeout`
-
-Current suppression behavior:
-- suppress when the generated closeout summary is identical to recent `workflow_complete_auto` memory for the same workflow
-- parse generated closeout summaries into meaningful comparison fields where available:
-  - `completion_summary`
-  - `latest_checkpoint_summary`
-  - `next_intended_action`
-  - `verify_status`
-  - `workflow_status`
-  - `attempt_status`
-  - `failure_reason`
-- keep near-duplicate matching scoped to recent auto-memory for the same workflow and same `step_name`
-- require metadata-aware matching across:
-  - `next_intended_action`
-  - `verify_status`
-  - `workflow_status`
-  - `attempt_status`
-  - `failure_reason`
-- near-duplicate matching is limited to a recent lookback window:
-  - `6 hours`
-- near-duplicate matching now uses weighted field-aware similarity in addition to completion-summary token similarity
-  - completion summary is weighted most heavily
-  - latest checkpoint summary and next action also contribute materially
-  - status fields and failure reason participate with lighter weights
-- boilerplate workflow-closeout tokens are still heavily discounted before token scoring
-  - examples include:
-    - `workflow`
-    - `completed`
-    - `summary`
-    - `status`
-    - `verify`
-    - `latest`
-    - `checkpoint`
-    - `line`
-    - `lines`
-
-This is still intentionally a pragmatic refinement, not a final similarity model, but the current matcher refinement is now validated in both workflow-service and PostgreSQL-focused coverage.
-
-## Validation completed for Phase 2
-
-### Focused workflow-service / bridge tests
-`tests/test_workflow_service.py`
-- high-signal record path
-- low-signal skip path
-- verify-failed forced record path
-- duplicate suppression
-- near-duplicate suppression
-- old closeout outside lookback window is not treated as near-duplicate
-- differing `verify_status` is not treated as near-duplicate
-- high summary similarity suppresses near-duplicate closeout
-- boilerplate-heavy summary overlap still suppresses when the meaningful summary content is effectively the same
-- low summary similarity still records closeout
-- extracted semantic closeout fields are compared directly
-- differing `attempt_status` is not treated as near-duplicate
-- differing `failure_reason` is not treated as near-duplicate
-- weighted field-aware matching can still suppress closeouts when the meaningful completion content is effectively the same
-
-Focused result for the closeout matching refinement subset:
-```/dev/null/txt#L1-1
-10 passed, 60 deselected
-```
-
-### Focused PostgreSQL integration coverage
-`tests/test_postgres_integration.py`
-
-Covered through focused integration tests:
-- high-signal closeout records memory and embedding
-- closeout auto-memory is searchable
-- low-signal closeout skips with:
-  - `low_signal_checkpoint_closeout`
-- duplicate closeout suppresses with:
-  - `duplicate_closeout_auto_memory`
-- near-duplicate closeout suppresses with:
-  - `near_duplicate_checkpoint_closeout`
-- high summary similarity suppresses near-duplicate closeout
-- boilerplate-heavy summary overlap still suppresses when the meaningful summary content is effectively the same
-- low summary similarity still records closeout
-- old closeout outside the lookback window is not treated as near-duplicate
-- differing `verify_status` is not treated as near-duplicate
-
-Focused PostgreSQL integration coverage now also includes:
-- extracted semantic closeout fields can participate in near-duplicate suppression
-- differing `attempt_status` is not treated as near-duplicate
-- differing `failure_reason` is not treated as near-duplicate
-- weighted field-aware matching can still suppress closeouts when the meaningful completion content is effectively the same
-
-Focused result after the metadata-aware and weighted matcher refine coverage update:
-```/dev/null/txt#L1-1
-9 passed, 33 deselected
-```
-
-### Runtime debugging outcome after focused coverage
-A later runtime check proved that the embedding path itself was healthy but `workflow_complete` auto-memory was still failing in the live stack.
-
-What was confirmed:
-- `envrcctl exec` did expose `OPENAI_API_KEY` to the compose invocation
-- the rebuilt `ctxledger-server-private` container did receive:
-  - `CTXLEDGER_EMBEDDING_ENABLED=true`
-  - `CTXLEDGER_EMBEDDING_PROVIDER=openai`
-  - `CTXLEDGER_EMBEDDING_MODEL=text-embedding-3-small`
-  - `OPENAI_API_KEY`
-- direct `memory_remember_episode` persisted an OpenAI embedding successfully
-- MCP/runtime `workflow_complete` initially failed with:
-  - `auto_memory_recording_failed`
-  - PostgreSQL `CheckViolation`
-  - failing constraint:
-    - `memory_items_provenance_valid`
-
-Root cause:
-- the checked-in schema already allowed:
-  - `workflow_complete_auto`
-- but the running PostgreSQL database still had an older version of the `memory_items_provenance_valid` constraint that only allowed:
-  - `episode`
-  - `explicit`
-  - `derived`
-  - `imported`
-
-Observed failure shape:
-- auto-memory created the episode
-- memory item insert failed on `provenance='workflow_complete_auto'`
-- therefore embedding persistence never ran
-- `auto_memory_details` surfaced as `null` in the runtime completion response
-
-Recovery that worked:
-- update the live PostgreSQL constraint to allow:
-  - `workflow_complete_auto`
-
-After that live fix:
-- MCP/runtime `workflow_complete` succeeded with:
-  - `auto_memory_recorded: true`
-  - `embedding_persistence_status: stored`
-  - `embedding_provider: openai`
-  - `embedding_model: text-embedding-3-small`
-- `memory_items` gained a `workflow_complete_auto` row
-- `memory_embeddings` count increased accordingly
-
-### Full coverage QA follow-up
-After acceptance evidence was mostly in place, a full repository coverage run was executed for release QA.
-
-What initially failed:
-- `tests/test_cli.py`
-  - fixture drift from the newer required `embedding` settings block
-  - stale fallback-version expectation
-- `tests/test_mcp_modules.py`
-  - fixture drift from newer required `schema_name` and `embedding` settings fields
-- `tests/test_coverage_targets.py`
-  - stale expectations for current workflow auto-memory skip and failure detail shapes
-- `tests/test_postgres_helpers.py`
-  - stale expectations that did not account for schema-aware `SET search_path TO "public", public`
-
-What changed:
-- updated test fixtures to construct current `AppSettings` / `DatabaseSettings` shapes
-- aligned workflow auto-memory assertions with current result payloads
-  - low-signal closeout now returns a non-`None` result with:
-    - `auto_memory_recorded: false`
-    - `auto_memory_skipped_reason: low_signal_checkpoint_closeout`
-  - failed embedding persistence detail assertions now also include:
-    - `auto_memory_recorded: true`
-- aligned PostgreSQL helper expectations with current session setup behavior
-  - statement timeout
-  - schema-aware `search_path`
-
-Final QA outcome:
-- full suite coverage run passed:
-  - `723 passed, 1 skipped`
-- total coverage:
-  - `96%`
-
-## Immediate restart point
-The workflow-service and PostgreSQL-focused closeout matching refinement is now implemented and validated for extracted fields, richer metadata-aware comparison, and weighted similarity.
-
-The real runtime path for `workflow_complete` auto-memory with OpenAI embeddings is also now understood:
-- compose/env forwarding was not the blocker
-- the live PostgreSQL `memory_items_provenance_valid` constraint was stale
-- after fixing that live constraint, runtime closeout auto-memory embedding persistence worked
-
-The broader release-QA coverage pass is now also complete and green:
-- stale tests were updated to match the current runtime/config surface
-- no new product-code regressions were uncovered in the full suite
-- repository-wide coverage currently stands at `96%`
-
-The next useful step is to make sure the live-schema drift is addressed durably, then decide whether to close out release readiness with docs/commit housekeeping or push matcher quality further.
-
-## Recommended next steps
-1. address the live-schema drift durably
-   - ensure existing databases update `memory_items_provenance_valid` to allow:
-     - `workflow_complete_auto`
-   - consider whether a documented migration/recovery step is enough or whether a more formal migration mechanism is needed
-2. capture the release-QA outcome in docs and/or commit history
-   - the full coverage pass is now green
-   - test-only alignment changes should be committed descriptively if not already
-3. decide whether duplicate suppression should remain scoped only to the same workflow
-   - current behavior is workflow-local
-4. optionally extend operator-facing docs
-   - explain auto-memory skip reasons
-   - explain duplicate suppression reasons
-   - explain the lookback-window behavior
-   - explain weighted closeout similarity behavior
-   - explain semantic field extraction and boilerplate discounting
-   - explain the runtime constraint mismatch failure mode and recovery
-5. if needed later, add broader regression coverage around these reasons in handler/server-level tests
-6. if matcher quality still feels weak in practice, consider a stronger similarity model beyond the current weighted heuristic
-
-## Important files
-- `src/ctxledger/config.py`
-- `src/ctxledger/memory/service.py`
-- `src/ctxledger/workflow/memory_bridge.py`
-- `src/ctxledger/workflow/service.py`
-- `tests/test_cli.py`
-- `tests/test_coverage_targets.py`
-- `tests/test_mcp_modules.py`
-- `tests/test_postgres_helpers.py`
-- `tests/test_workflow_service.py`
-- `tests/test_postgres_integration.py`
-- `docker/docker-compose.small-auth.yml`
-
-## Known commit/history anchor
-Existing commit from the OpenAI validation pass:
-- `68fa351` `Validate OpenAI embedding integration end to end`
-
-## Operational reminders
-- ignore untracked cert files
-- ignore `.coverage` as a generated QA artifact unless intentionally preserving it
-- treat pasted API keys as exposed; prefer env injection / secret handling
-- the focused PostgreSQL refine checks validated in this session are:
-  - `python -m pytest tests/test_postgres_integration.py -q -k 'near_duplicate or old_closeout or verify_status'`
-  - `python -m pytest tests/test_postgres_integration.py -q -k 'summary_similarity or near_duplicate or old_closeout or verify_status'`
-  - `python -m pytest tests/test_postgres_integration.py -q -k 'boilerplate or summary_similarity or near_duplicate'`
-- important implementation detail for the PostgreSQL old-closeout test:
-  - persisted auto-memory episodes live in the `episodes` table, not a separate `memory_episodes` table
-- important implementation details for the current closeout matching refinement:
-  - near-duplicate suppression still uses a completion-summary token similarity threshold of `0.75`
-  - generated closeout summaries are parsed into semantic fields when possible
-  - weighted field-aware similarity currently uses a threshold of `0.7`
-  - completion summary is weighted most heavily, with lighter weights for checkpoint summary, next action, statuses, and failure reason
-  - a small ignored-token set reduces false similarity from boilerplate closeout wording
-- important runtime debugging lesson from this session:
-  - if `memory_remember_episode` stores embeddings successfully but MCP/runtime `workflow_complete` returns `auto_memory_recording_failed` with PostgreSQL `CheckViolation`, inspect the live `memory_items_provenance_valid` constraint first
-  - the checked-in schema may already be correct while the running database still carries an older constraint definition
-  - `envrcctl exec -- docker compose ... down` and `up -d --build` do not reset that kind of live schema drift because the PostgreSQL volume remains intact
-- important release-QA command from this session:
-  - `python -m pytest --cov=src/ctxledger --cov-report=term-missing -q`
-
-## Continuation note
-The closeout matcher itself is now refined and validated in both workflow-service and PostgreSQL-focused coverage:
-- semantic fields are extracted from generated summaries
-- metadata-aware comparison now includes `workflow_status`, `attempt_status`, and `failure_reason`
-- weighted similarity emphasizes completion summary content and further discounts boilerplate lines/tokens
-
-The runtime `workflow_complete` auto-memory path was also debugged end-to-end:
-- `envrcctl`/compose forwarding of `OPENAI_API_KEY` was confirmed to be working
-- direct `memory_remember_episode` proved the OpenAI embedding path itself was healthy
-- the runtime blocker was an older live PostgreSQL `memory_items_provenance_valid` constraint
-- after updating that live constraint to allow `workflow_complete_auto`, MCP/runtime closeout auto-memory successfully stored both the memory item and the OpenAI embedding
-
-The broader release-QA coverage pass is green again after one additional stale-test correction:
-- latest full suite result:
-  - `780 passed, 1 skipped`
-
-A follow-up failure surfaced in `tests/test_coverage_targets.py` around duplicate closeout suppression:
-- `test_workflow_memory_bridge_duplicate_closeout_checks_old_episode_and_non_auto_memory_paths`
-- the temporary expectation change was wrong
-- current implementation still suppresses exact-summary duplicates for prior auto-memory episodes even when the prior episode is old, because:
-  - `_recent_workflow_completion_memory()` filters to `memory_origin == "workflow_complete_auto"` before duplicate checks
-  - exact normalized-summary equality is checked before the near-duplicate time-window gate
-  - non-auto episodes are ignored for this path
-- the test was restored to expect:
-  - `AutoMemoryDuplicateCheckResult(should_record=False, skipped_reason="duplicate_closeout_auto_memory")`
-
-Latest validation completed:
-- focused rerun:
+## Final 0.3.0 status
+### Validation
+- focused duplicate-closeout rerun passed:
   - `python -m pytest tests/test_coverage_targets.py -q -k old_episode_and_non_auto_memory_paths`
   - `1 passed`
-- full suite rerun:
+- full suite rerun passed:
   - `python -m pytest -q`
   - `780 passed, 1 skipped`
-- the single skipped test is the expected real OpenAI integration case gated on `OPENAI_API_KEY`
 
-Release/readiness outcome now captured:
-- `0.3.0` was assessed as ready to ship for the implemented scope
-- internal release judgment is effectively GO
-- provider wording still needs to stay honest:
-  - `openai`, `local_stub`, and `custom_http` are the strongest validated paths
-  - `voyageai` and `cohere` configuration surfaces exist, but full provider-specific runtime support remains incomplete
-- `memory_get_context` should still be described as episode-oriented rather than as a finished hierarchical retrieval surface
+### Skipped test
+The single skipped test is expected:
+- real OpenAI integration requires `OPENAI_API_KEY`
 
-Roadmap/docs direction was then shifted:
-- hierarchical memory retrieval was moved from `0.4.0` to `0.5.0`
-- `0.4.0` is now the observability milestone:
-  - operator-facing CLI inspection/reporting for workflow and memory state
-  - optional deployable Grafana-based dashboard support
-- related docs were updated to align around that shift:
-  - `README.md`
-  - `docs/roadmap.md`
-  - `docs/mcp-api.md`
-  - `docs/deployment.md`
-  - `docs/CHANGELOG.md`
+### Release judgment
+- internal `0.3.0` release judgment: **GO**
+- provider wording should remain honest:
+  - strongest validated paths:
+    - `openai`
+    - `local_stub`
+    - `custom_http`
+  - `voyageai` and `cohere` config surfaces exist, but full provider-specific runtime support remains incomplete
+- `memory_get_context` should still be described as:
+  - episode-oriented
+  - not yet a finished hierarchical retrieval surface
 
-Operational/product insight from the live PostgreSQL inspection:
-- the canonical database already contains enough durable activity that observability is now more valuable than repository projection files for day-to-day operator visibility
-- representative live indicators observed during this session included:
-  - `40` workspaces
-  - `58` workflow instances
-  - `369` checkpoints
-  - `34` episodes
-  - `24` memory items
-  - `3` memory embeddings
-- projection exists as implemented derived behavior, but it no longer feels central to the product direction compared with direct workflow/memory observability
+## Important implementation/result notes
+### Duplicate closeout behavior
+A stale expectation in `tests/test_coverage_targets.py` was corrected.
 
-If continuing next:
-- update `last_session.md`
-- commit the current docs/README updates cleanly
-- tag the release as `v0.3.0`
-- then begin a concrete `0.4.0` observability implementation plan centered on:
-  - CLI status/stats surfaces
-  - Grafana container deployment
-  - dashboard queries over canonical PostgreSQL state
-- capture the live-schema update path in a more durable migration/recovery note
-- make a descriptive commit for the latest release-QA test-alignment pass if that is not done yet
-- then decide whether the heuristic is now good enough
-- otherwise pursue a stronger similarity model and/or broader operator-facing docs
+Current behavior:
+- exact-summary duplicate suppression still applies to prior auto-memory episodes even when the prior episode is old
+- `_recent_workflow_completion_memory()` filters to:
+  - `memory_origin == "workflow_complete_auto"`
+- exact normalized-summary equality is checked before the near-duplicate time-window gate
+- non-auto episodes are ignored for that duplicate path
+
+Correct expected result:
+- `AutoMemoryDuplicateCheckResult(should_record=False, skipped_reason="duplicate_closeout_auto_memory")`
+
+### Runtime auto-memory + embeddings
+The runtime `workflow_complete` auto-memory path was debugged end-to-end.
+
+Confirmed:
+- `OPENAI_API_KEY` forwarding was working
+- direct `memory_remember_episode` with OpenAI embeddings was healthy
+- the runtime blocker was a stale live PostgreSQL constraint:
+  - `memory_items_provenance_valid`
+- after updating the live constraint to allow:
+  - `workflow_complete_auto`
+- MCP/runtime closeout auto-memory stored:
+  - the episode
+  - the memory item
+  - the OpenAI embedding
+
+### Deployment / schema drift note
+A durable deployment note was added for the live-schema drift failure mode:
+- stale `memory_items_provenance_valid`
+- retained PostgreSQL volume means restart/rebuild alone may not fix it
+
+## Live PostgreSQL observability insight
+A live inspection of the running PostgreSQL container showed that canonical state has already accumulated enough meaningful activity that direct observability now feels more valuable than repository projection files.
+
+Representative observed counts:
+- `40` workspaces
+- `58` workflow instances
+- `58` workflow attempts
+- `369` workflow checkpoints
+- `369` verify reports
+- `34` episodes
+- `24` memory items
+- `3` memory embeddings
+
+Takeaway:
+- projection still exists as implemented derived behavior
+- but product direction now feels better served by:
+  - canonical workflow observability
+  - canonical memory observability
+  - operator-facing inspection surfaces
+
+## Roadmap shift now in effect
+### 0.4.0
+`0.4.0` is now the observability milestone.
+
+Focus:
+- workflow and memory observability
+- operator-facing CLI inspection tools
+- optional deployable **Grafana** dashboard support
+- better visibility into canonical runtime state
+
+### 0.5.0
+Hierarchical retrieval work moved here.
+
+Focus:
+- hierarchical memory retrieval
+- summary layers
+- relation-aware context assembly
+- more multi-layer `memory_get_context` behavior
+
+## Docs updated
+The roadmap/scope shift was aligned across:
+- `README.md`
+- `docs/roadmap.md`
+- `docs/mcp-api.md`
+- `docs/deployment.md`
+- `docs/CHANGELOG.md`
+
+A dedicated implementation plan was also added:
+- `docs/plans/observability_0_4_0_plan.md`
+
+## Git state recorded
+Relevant recent commit/tag state:
+- `92035f5`
+  - `Align coverage tests and document schema drift recovery`
+- `8e4f3fb`
+  - `Finalize 0.3.0 docs and observability roadmap`
+- git tag:
+  - `v0.3.0`
+
+## Important files for next session
+- `docs/plans/observability_0_4_0_plan.md`
+- `docs/roadmap.md`
+- `README.md`
+- `docs/deployment.md`
+- `docs/mcp-api.md`
+- `docs/CHANGELOG.md`
+- `src/ctxledger/workflow/memory_bridge.py`
+- `src/ctxledger/memory/service.py`
+- `tests/test_coverage_targets.py`
+
+## Next recommended action
+Start concrete `0.4.0` implementation work from the observability plan.
+
+Recommended first sequence:
+1. implement CLI summary surfaces:
+   - `ctxledger stats`
+   - `ctxledger workflows`
+   - `ctxledger memory-stats`
+   - `ctxledger failures`
+2. add shared DB-backed summary queries
+3. add CLI tests
+4. add Grafana compose overlay
+5. define initial dashboard provisioning/query set
+6. write Grafana operator runbook
