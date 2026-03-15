@@ -350,8 +350,10 @@ class UnitOfWorkWorkflowLookupRepository:
                     "workflow_updated_at": None,
                     "latest_attempt_status": None,
                     "latest_attempt_is_terminal": None,
+                    "has_latest_attempt": False,
                     "latest_attempt_verify_status": None,
                     "latest_attempt_started_at": None,
+                    "has_latest_checkpoint": False,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
                     "latest_projection_canonical_update_at": None,
@@ -413,6 +415,7 @@ class UnitOfWorkWorkflowLookupRepository:
                 "latest_attempt_is_terminal": (
                     latest_attempt.is_terminal if latest_attempt is not None else None
                 ),
+                "has_latest_attempt": latest_attempt is not None,
                 "latest_attempt_verify_status": (
                     latest_attempt.verify_status.value
                     if latest_attempt is not None
@@ -422,6 +425,7 @@ class UnitOfWorkWorkflowLookupRepository:
                 "latest_attempt_started_at": (
                     latest_attempt.started_at if latest_attempt is not None else None
                 ),
+                "has_latest_checkpoint": latest_checkpoint is not None,
                 "latest_checkpoint_created_at": (
                     latest_checkpoint.created_at
                     if latest_checkpoint is not None
@@ -593,10 +597,21 @@ class InMemoryWorkflowLookupRepository:
             "latest_attempt_is_terminal": workflow_info.get(
                 "latest_attempt_is_terminal"
             ),
+            "has_latest_attempt": workflow_info.get(
+                "has_latest_attempt",
+                workflow_info.get("latest_attempt_status") is not None
+                or workflow_info.get("latest_attempt_is_terminal") is not None
+                or workflow_info.get("latest_attempt_verify_status") is not None
+                or workflow_info.get("latest_attempt_started_at") is not None,
+            ),
             "latest_attempt_verify_status": workflow_info.get(
                 "latest_attempt_verify_status"
             ),
             "latest_attempt_started_at": workflow_info.get("latest_attempt_started_at"),
+            "has_latest_checkpoint": workflow_info.get(
+                "has_latest_checkpoint",
+                workflow_info.get("latest_checkpoint_created_at") is not None,
+            ),
             "latest_checkpoint_created_at": workflow_info.get(
                 "latest_checkpoint_created_at"
             ),
@@ -1386,6 +1401,8 @@ class MemoryService:
                 "signal_priority": [
                     "workflow_is_terminal",
                     "latest_attempt_is_terminal",
+                    "has_latest_attempt",
+                    "has_latest_checkpoint",
                     "latest_checkpoint_created_at",
                     "latest_verify_report_created_at",
                     "latest_projection_canonical_update_at",
@@ -1559,6 +1576,8 @@ class MemoryService:
             tuple[
                 bool,
                 bool,
+                bool,
+                bool,
                 datetime,
                 datetime,
                 datetime,
@@ -1584,6 +1603,10 @@ class MemoryService:
             workflow_is_terminal = bool(freshness.get("workflow_is_terminal") or False)
             latest_attempt_is_terminal = bool(
                 freshness.get("latest_attempt_is_terminal") or False
+            )
+            has_latest_attempt = bool(freshness.get("has_latest_attempt") or False)
+            has_latest_checkpoint = bool(
+                freshness.get("has_latest_checkpoint") or False
             )
             latest_checkpoint_created_at = freshness.get(
                 "latest_checkpoint_created_at"
@@ -1612,6 +1635,8 @@ class MemoryService:
                 (
                     not workflow_is_terminal,
                     not latest_attempt_is_terminal,
+                    has_latest_attempt,
+                    has_latest_checkpoint,
                     latest_checkpoint_created_at,
                     latest_verify_report_created_at,
                     latest_projection_canonical_update_at,
@@ -1665,9 +1690,19 @@ class MemoryService:
                     if freshness.get("latest_attempt_is_terminal") is not None
                     else None
                 ),
+                "has_latest_attempt": (
+                    bool(freshness.get("has_latest_attempt"))
+                    if freshness.get("has_latest_attempt") is not None
+                    else None
+                ),
                 "latest_attempt_verify_status": (
                     str(freshness.get("latest_attempt_verify_status"))
                     if freshness.get("latest_attempt_verify_status") is not None
+                    else None
+                ),
+                "has_latest_checkpoint": (
+                    bool(freshness.get("has_latest_checkpoint"))
+                    if freshness.get("has_latest_checkpoint") is not None
                     else None
                 ),
                 "latest_checkpoint_created_at": (
