@@ -1,25 +1,25 @@
 # ctxledger last session
 
-## 直近で完了していること
-- `memory_get_context` は explanation / narrowing / candidate ordering の可観測性がさらに強化された状態です。
-- token-aware query matching は維持されています。
-- workspace / ticket intersection narrowing は維持されています。
-- workflow candidate ordering は現在、terminality / resumability proxy / verify / projection freshness を含む `workflow_freshness_signals` ベースです。
-- broad targeted validation の既知結果:
+## Recently completed
+- `memory_get_context` now has further improved observability for explanation / narrowing / candidate ordering.
+- Token-aware query matching is still in place.
+- Workspace / ticket intersection narrowing is still in place.
+- Workflow candidate ordering is currently based on `workflow_freshness_signals`, including terminality / resumability proxy / verify / projection freshness.
+- Latest broad targeted validation results:
   - `tests/test_server.py`
   - `tests/test_mcp_tool_handlers.py`
   - `tests/test_coverage_targets.py`
   - `tests/test_postgres_integration.py`
-  - `427 passed`
+  - `436 passed`
 
-## このセッションまでで入っている ordering / details
+## Ordering / details included as of this session
 `src/ctxledger/memory/service.py`
-- `workflow_instance_id` 指定時:
+- When `workflow_instance_id` is specified:
   - `ordering_basis = "workflow_instance_id_priority"`
-- それ以外:
+- Otherwise:
   - `ordering_basis = "workflow_freshness_signals"`
 
-現在の `signal_priority`:
+Current `signal_priority`:
 1. `workflow_is_terminal`
 2. `latest_attempt_is_terminal`
 3. `has_latest_attempt`
@@ -33,7 +33,7 @@
 11. `workflow_updated_at`
 12. `resolver_order`
 
-`candidate_signals` で見えるもの:
+Visible in `candidate_signals`:
 - `workflow_status`
 - `workflow_is_terminal`
 - `latest_attempt_status`
@@ -50,59 +50,61 @@
 - `latest_attempt_started_at`
 - `workflow_updated_at`
 
-補足:
-- non-terminal workflow / non-terminal latest attempt を terminal より優先する実挙動が入っています。
-- `projection_open_failure_count` は現時点では details 可視化用で、ordering key には未使用です。
-- returned episodes 自体の global `created_at` 降順は維持です。
+Notes:
+- The actual behavior now prioritizes non-terminal workflows / non-terminal latest attempts over terminal ones.
+- `projection_open_failure_count` is currently used as a tie-break ordering key after projection freshness and before episode recency.
+- Returned episodes themselves still remain globally ordered by descending `created_at`.
 
-## テスト状況
+## Test status
 `tests/test_coverage_targets.py`
-- `memory_get_context` focused coverage は最新で `16 passed`
-- 追加済みの代表ケース:
+- The latest focused coverage for `memory_get_context` is `18 passed`
+- Representative added cases:
   - checkpoint freshness > episode recency
-  - checkpoint tie で verify freshness 優先
-  - checkpoint / verify tie で projection freshness 優先
+  - when checkpoints tie, prefer verify freshness
+  - when checkpoint / verify tie, prefer projection freshness
   - running workflow > terminal workflow
-  - checkpoint signal 不在時の episode recency fallback
+  - episode recency fallback when checkpoint signals are absent
   - `has_latest_attempt=True` > `False`
   - `has_latest_checkpoint=True` > `False`
+  - when projection freshness ties, prefer the workflow with lower `projection_open_failure_count`
+  - after a `projection_open_failure_count` tie, fall back to episode recency
 
-既知の focused 実行履歴:
+Known focused run history:
+- `18 passed`
 - `16 passed`
 - `14 passed`
 - `13 passed`
 - `11 passed`
 - `9 passed`
 
-## 直近の commit
+## Most recent commits
 - `Improve memory_get_context candidate ordering` (`e849d9d`)
 - `Strengthen memory_get_context freshness ordering` (`42b73db`)
 - `Expand memory_get_context freshness signals` (`7dd74db`)
 - `Prioritize non-terminal memory context candidates` (`84f48eb`)
 
-## 現在の状態
-- 直近の対象変更は commit 済みです。
-- 未追跡 cert は従来どおり無視でよいです。
-- 未追跡:
+## Current state
+- Changes including `projection_open_failure_count` ordering / details / focused assertion fixes are present in the working tree and are not yet committed.
+- Focused `memory_get_context` is `18 passed`, and broad targeted validation is `436 passed`.
+- As before, untracked cert files can be ignored.
+- Untracked:
   - `docker/traefik/certs/localhost.crt`
   - `docker/traefik/certs/localhost.key`
 
-## 次にやるなら自然な候補
-1. `projection_open_failure_count` を ordering key に使うか検討
-   - いまは details 可視化のみ
-   - terminality / resumability proxy / freshness の後段 tie-break に入れるかは要検討
-2. context assembly 側を改善
-   - workflow ごとの取り込み件数バランス
+## Natural next candidates
+1. Improve the context assembly side
+   - balance per-workflow intake counts
    - episode-level explanation
-   - `include_memory_items` / `include_summaries` 拡張
-3. 必要なら broad targeted validation をもう一度流す
-   - focused `memory_get_context` は通過済み
-   - 既知 broad targeted good は前回の `427 passed`
+   - extend `include_memory_items` / `include_summaries`
+2. Before moving on to context assembly improvements, sort out commit / close-out policy if needed
+   - the working tree contains changes in `.rules` / `last_session.md` / `src/ctxledger/memory/service.py` / `tests/test_coverage_targets.py`
+   - focused `memory_get_context` is `18 passed`
+   - broad targeted validation is `436 passed`
 
-## 次回再開時の最短メモ
-- `memory_get_context` は terminality / `has_latest_attempt` / `has_latest_checkpoint` / verify / projection freshness まで ordering 実装済み
-- 最新 focused pytest は `16 passed`
-- workflow-instance details assertion 群は新 signal に合わせて更新済み
-- `projection_open_failure_count` はまだ ordering 未使用
-- broad targeted known-good は `427 passed`
-- 未追跡 cert は無視
+## Shortest restart memo for next time
+- `memory_get_context` ordering is implemented through terminality / `has_latest_attempt` / `has_latest_checkpoint` / verify / projection freshness / `projection_open_failure_count` tie-break
+- latest focused pytest is `18 passed`
+- one older focused assertion has also been updated so `signal_priority` includes `projection_open_failure_count`
+- broad targeted known-good is `436 passed`
+- working tree changes are not committed
+- ignore untracked cert files

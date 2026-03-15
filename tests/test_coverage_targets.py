@@ -4515,6 +4515,7 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -4683,6 +4684,7 @@ def test_memory_get_context_applies_initial_query_filtering() -> None:
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -4788,6 +4790,7 @@ def test_memory_get_context_matches_query_against_metadata_keys() -> None:
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -4893,6 +4896,7 @@ def test_memory_get_context_matches_query_against_metadata_values() -> None:
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -4998,6 +5002,7 @@ def test_memory_get_context_matches_multi_token_query_against_summary() -> None:
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -5103,6 +5108,7 @@ def test_memory_get_context_matches_multi_token_query_against_metadata() -> None
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -5230,6 +5236,7 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
                 "latest_projection_successful_write_at",
+                "projection_open_failure_count",
                 "latest_episode_created_at",
                 "latest_attempt_started_at",
                 "workflow_updated_at",
@@ -5373,6 +5380,7 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
                 "latest_projection_successful_write_at",
+                "projection_open_failure_count",
                 "latest_episode_created_at",
                 "latest_attempt_started_at",
                 "workflow_updated_at",
@@ -5500,6 +5508,7 @@ def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() 
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -5654,6 +5663,7 @@ def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -5808,6 +5818,7 @@ def test_memory_get_context_prefers_projection_freshness_after_checkpoint_and_ve
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -5958,6 +5969,7 @@ def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_sig
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -6010,6 +6022,316 @@ def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_sig
                 "latest_episode_created_at": (created_at.replace(day=2).isoformat()),
                 "latest_attempt_started_at": (created_at.replace(day=1).isoformat()),
                 "workflow_updated_at": created_at.replace(day=1).isoformat(),
+            },
+        },
+    }
+
+
+def test_memory_get_context_prefers_lower_projection_open_failure_count_after_projection_freshness_tie() -> (
+    None
+):
+    lower_failure_workflow_id = uuid4()
+    higher_failure_workflow_id = uuid4()
+    created_at = datetime(2024, 8, 20, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=lower_failure_workflow_id,
+            summary="Lower projection failure count workflow",
+            metadata={"kind": "lower-failure"},
+            created_at=created_at.replace(day=2),
+            updated_at=created_at.replace(day=2),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=higher_failure_workflow_id,
+            summary="Higher projection failure count workflow",
+            metadata={"kind": "higher-failure"},
+            created_at=created_at.replace(day=5),
+            updated_at=created_at.replace(day=5),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                lower_failure_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000027",
+                    "ticket_id": "TICKET-PROJECTION-FAILURE-COUNT",
+                    "has_latest_attempt": True,
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=10),
+                    "latest_verify_report_created_at": created_at.replace(day=11),
+                    "latest_projection_canonical_update_at": created_at.replace(day=12),
+                    "latest_projection_successful_write_at": created_at.replace(day=12),
+                    "projection_open_failure_count": 0,
+                    "latest_attempt_started_at": created_at.replace(day=9),
+                    "workflow_updated_at": created_at.replace(day=9),
+                },
+                higher_failure_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000027",
+                    "ticket_id": "TICKET-PROJECTION-FAILURE-COUNT",
+                    "has_latest_attempt": True,
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=10),
+                    "latest_verify_report_created_at": created_at.replace(day=11),
+                    "latest_projection_canonical_update_at": created_at.replace(day=12),
+                    "latest_projection_successful_write_at": created_at.replace(day=12),
+                    "projection_open_failure_count": 3,
+                    "latest_attempt_started_at": created_at.replace(day=9),
+                    "workflow_updated_at": created_at.replace(day=9),
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id="00000000-0000-0000-0000-000000000027",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert response.details["workflow_candidate_ordering"] == {
+        "ordering_basis": "workflow_freshness_signals",
+        "workflow_instance_id_priority_applied": False,
+        "signal_priority": [
+            "workflow_is_terminal",
+            "latest_attempt_is_terminal",
+            "has_latest_attempt",
+            "has_latest_checkpoint",
+            "latest_checkpoint_created_at",
+            "latest_verify_report_created_at",
+            "latest_projection_canonical_update_at",
+            "latest_projection_successful_write_at",
+            "projection_open_failure_count",
+            "latest_episode_created_at",
+            "latest_attempt_started_at",
+            "workflow_updated_at",
+            "resolver_order",
+        ],
+        "workspace_candidate_ids": [
+            str(lower_failure_workflow_id),
+            str(higher_failure_workflow_id),
+        ],
+        "ticket_candidate_ids": [],
+        "resolver_candidate_ids": [
+            str(lower_failure_workflow_id),
+            str(higher_failure_workflow_id),
+        ],
+        "final_candidate_ids": [
+            str(lower_failure_workflow_id),
+            str(higher_failure_workflow_id),
+        ],
+        "candidate_signals": {
+            str(lower_failure_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "has_latest_attempt": True,
+                "latest_attempt_verify_status": None,
+                "has_latest_checkpoint": True,
+                "latest_checkpoint_created_at": created_at.replace(day=10).isoformat(),
+                "latest_verify_report_created_at": (
+                    created_at.replace(day=11).isoformat()
+                ),
+                "latest_projection_canonical_update_at": (
+                    created_at.replace(day=12).isoformat()
+                ),
+                "latest_projection_successful_write_at": (
+                    created_at.replace(day=12).isoformat()
+                ),
+                "projection_open_failure_count": 0,
+                "latest_episode_created_at": created_at.replace(day=2).isoformat(),
+                "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
+                "workflow_updated_at": created_at.replace(day=9).isoformat(),
+            },
+            str(higher_failure_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "has_latest_attempt": True,
+                "latest_attempt_verify_status": None,
+                "has_latest_checkpoint": True,
+                "latest_checkpoint_created_at": created_at.replace(day=10).isoformat(),
+                "latest_verify_report_created_at": (
+                    created_at.replace(day=11).isoformat()
+                ),
+                "latest_projection_canonical_update_at": (
+                    created_at.replace(day=12).isoformat()
+                ),
+                "latest_projection_successful_write_at": (
+                    created_at.replace(day=12).isoformat()
+                ),
+                "projection_open_failure_count": 3,
+                "latest_episode_created_at": created_at.replace(day=5).isoformat(),
+                "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
+                "workflow_updated_at": created_at.replace(day=9).isoformat(),
+            },
+        },
+    }
+
+
+def test_memory_get_context_falls_back_to_episode_recency_after_projection_failure_count_tie() -> (
+    None
+):
+    older_episode_workflow_id = uuid4()
+    newer_episode_workflow_id = uuid4()
+    created_at = datetime(2024, 8, 25, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=older_episode_workflow_id,
+            summary="Older episode after projection failure tie",
+            metadata={"kind": "older"},
+            created_at=created_at.replace(day=2),
+            updated_at=created_at.replace(day=2),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=newer_episode_workflow_id,
+            summary="Newer episode after projection failure tie",
+            metadata={"kind": "newer"},
+            created_at=created_at.replace(day=6),
+            updated_at=created_at.replace(day=6),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                older_episode_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000028",
+                    "ticket_id": "TICKET-PROJECTION-FAILURE-TIE",
+                    "has_latest_attempt": True,
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=10),
+                    "latest_verify_report_created_at": created_at.replace(day=11),
+                    "latest_projection_canonical_update_at": created_at.replace(day=12),
+                    "latest_projection_successful_write_at": created_at.replace(day=12),
+                    "projection_open_failure_count": 1,
+                    "latest_attempt_started_at": created_at.replace(day=9),
+                    "workflow_updated_at": created_at.replace(day=9),
+                },
+                newer_episode_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000028",
+                    "ticket_id": "TICKET-PROJECTION-FAILURE-TIE",
+                    "has_latest_attempt": True,
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=10),
+                    "latest_verify_report_created_at": created_at.replace(day=11),
+                    "latest_projection_canonical_update_at": created_at.replace(day=12),
+                    "latest_projection_successful_write_at": created_at.replace(day=12),
+                    "projection_open_failure_count": 1,
+                    "latest_attempt_started_at": created_at.replace(day=9),
+                    "workflow_updated_at": created_at.replace(day=9),
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id="00000000-0000-0000-0000-000000000028",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert response.details["workflow_candidate_ordering"] == {
+        "ordering_basis": "workflow_freshness_signals",
+        "workflow_instance_id_priority_applied": False,
+        "signal_priority": [
+            "workflow_is_terminal",
+            "latest_attempt_is_terminal",
+            "has_latest_attempt",
+            "has_latest_checkpoint",
+            "latest_checkpoint_created_at",
+            "latest_verify_report_created_at",
+            "latest_projection_canonical_update_at",
+            "latest_projection_successful_write_at",
+            "projection_open_failure_count",
+            "latest_episode_created_at",
+            "latest_attempt_started_at",
+            "workflow_updated_at",
+            "resolver_order",
+        ],
+        "workspace_candidate_ids": [
+            str(older_episode_workflow_id),
+            str(newer_episode_workflow_id),
+        ],
+        "ticket_candidate_ids": [],
+        "resolver_candidate_ids": [
+            str(older_episode_workflow_id),
+            str(newer_episode_workflow_id),
+        ],
+        "final_candidate_ids": [
+            str(newer_episode_workflow_id),
+            str(older_episode_workflow_id),
+        ],
+        "candidate_signals": {
+            str(newer_episode_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "has_latest_attempt": True,
+                "latest_attempt_verify_status": None,
+                "has_latest_checkpoint": True,
+                "latest_checkpoint_created_at": created_at.replace(day=10).isoformat(),
+                "latest_verify_report_created_at": (
+                    created_at.replace(day=11).isoformat()
+                ),
+                "latest_projection_canonical_update_at": (
+                    created_at.replace(day=12).isoformat()
+                ),
+                "latest_projection_successful_write_at": (
+                    created_at.replace(day=12).isoformat()
+                ),
+                "projection_open_failure_count": 1,
+                "latest_episode_created_at": created_at.replace(day=6).isoformat(),
+                "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
+                "workflow_updated_at": created_at.replace(day=9).isoformat(),
+            },
+            str(older_episode_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "has_latest_attempt": True,
+                "latest_attempt_verify_status": None,
+                "has_latest_checkpoint": True,
+                "latest_checkpoint_created_at": created_at.replace(day=10).isoformat(),
+                "latest_verify_report_created_at": (
+                    created_at.replace(day=11).isoformat()
+                ),
+                "latest_projection_canonical_update_at": (
+                    created_at.replace(day=12).isoformat()
+                ),
+                "latest_projection_successful_write_at": (
+                    created_at.replace(day=12).isoformat()
+                ),
+                "projection_open_failure_count": 1,
+                "latest_episode_created_at": created_at.replace(day=2).isoformat(),
+                "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
+                "workflow_updated_at": created_at.replace(day=9).isoformat(),
             },
         },
     }
@@ -6106,6 +6428,7 @@ def test_memory_get_context_prefers_non_terminal_workflow_over_terminal_workflow
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -6247,6 +6570,7 @@ def test_memory_get_context_prefers_workflow_with_latest_attempt_signal() -> Non
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",
@@ -6378,6 +6702,7 @@ def test_memory_get_context_prefers_workflow_with_latest_checkpoint_signal() -> 
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
             "latest_projection_successful_write_at",
+            "projection_open_failure_count",
             "latest_episode_created_at",
             "latest_attempt_started_at",
             "workflow_updated_at",

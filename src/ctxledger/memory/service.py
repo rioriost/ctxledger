@@ -1407,6 +1407,7 @@ class MemoryService:
                     "latest_verify_report_created_at",
                     "latest_projection_canonical_update_at",
                     "latest_projection_successful_write_at",
+                    "projection_open_failure_count",
                     "latest_episode_created_at",
                     "latest_attempt_started_at",
                     "workflow_updated_at",
@@ -1582,6 +1583,7 @@ class MemoryService:
                 datetime,
                 datetime,
                 datetime,
+                int,
                 datetime,
                 datetime,
                 datetime,
@@ -1620,6 +1622,9 @@ class MemoryService:
             latest_projection_successful_write_at = freshness.get(
                 "latest_projection_successful_write_at"
             ) or datetime.min.replace(tzinfo=timezone.utc)
+            projection_open_failure_count = int(
+                freshness.get("projection_open_failure_count", 0) or 0
+            )
             latest_episode_created_at = (
                 latest_episode[0].created_at
                 if latest_episode
@@ -1641,6 +1646,7 @@ class MemoryService:
                     latest_verify_report_created_at,
                     latest_projection_canonical_update_at,
                     latest_projection_successful_write_at,
+                    -projection_open_failure_count,
                     latest_episode_created_at,
                     latest_attempt_started_at,
                     workflow_updated_at,
