@@ -423,6 +423,9 @@ Acceptance-boundary note for `v0.1.0`:
 - `workflow_checkpoint`
 - `workflow_resume`
 - `workflow_complete`
+  - can auto-create workflow closeout memory when sufficient summary/checkpoint signal exists
+  - returns auto-memory outcome details through `auto_memory_details`
+  - current closeout duplicate suppression rejects exact duplicates and suppresses near-duplicates using workflow-local, metadata-aware matching plus weighted similarity over extracted summary fields
 
 Tool argument discovery is available through `tools/list`, and visible tools expose a concrete `inputSchema`.
 
@@ -479,6 +482,7 @@ Current implementation status:
   - returns lexical score, semantic score, and ranking explanation details for each result
   - falls back to lexical-only behavior when embedding generation or semantic lookup is unavailable
   - validated embedding execution paths now include `openai` in addition to `local_stub` and `custom_http`
+  - workflow completion can now auto-create closeout memory that becomes part of the searchable corpus
   - broader provider-specific integrations and richer multi-layer retrieval remain follow-up work
 
 The intended staged roadmap is still:
