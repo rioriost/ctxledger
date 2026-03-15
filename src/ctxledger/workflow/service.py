@@ -345,6 +345,47 @@ class WorkflowStats:
 
 
 @dataclass(slots=True, frozen=True)
+class MemoryStats:
+    episode_count: int
+    memory_item_count: int
+    memory_embedding_count: int
+    memory_relation_count: int
+    memory_item_provenance_counts: dict[str, int]
+    latest_episode_created_at: datetime | None = None
+    latest_memory_item_created_at: datetime | None = None
+    latest_memory_embedding_created_at: datetime | None = None
+    latest_memory_relation_created_at: datetime | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class FailureListEntry:
+    failure_scope: str
+    failure_type: str
+    failure_status: str
+    projection_type: str | None = None
+    target_path: str | None = None
+    error_code: str | None = None
+    error_message: str = ""
+    attempt_id: UUID | None = None
+    occurred_at: datetime | None = None
+    resolved_at: datetime | None = None
+    open_failure_count: int = 0
+    retry_count: int = 0
+
+
+@dataclass(slots=True, frozen=True)
+class WorkflowListEntry:
+    workflow_instance_id: UUID
+    workspace_id: UUID
+    canonical_path: str | None
+    ticket_id: str
+    workflow_status: str
+    latest_step_name: str | None = None
+    latest_verify_status: str | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(slots=True, frozen=True)
 class RegisterWorkspaceInput:
     repo_url: str
     canonical_path: str
@@ -429,6 +470,16 @@ class WorkflowInstanceRepository:
         ticket_id: str,
         *,
         limit: int,
+    ) -> tuple[WorkflowInstance, ...]:
+        raise NotImplementedError
+
+    def list_recent(
+        self,
+        *,
+        limit: int,
+        status: str | None = None,
+        workspace_id: UUID | None = None,
+        ticket_id: str | None = None,
     ) -> tuple[WorkflowInstance, ...]:
         raise NotImplementedError
 
@@ -517,6 +568,9 @@ class MemoryItemRepository:
     ) -> tuple[MemoryItemRecord, ...]:
         raise NotImplementedError
 
+    def count_by_provenance(self) -> dict[str, int]:
+        raise NotImplementedError
+
 
 class MemoryEmbeddingRepository:
     def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
@@ -550,6 +604,15 @@ class ProjectionFailureRepository:
     def get_closed_failures_by_workflow_id(
         self, workspace_id: UUID, workflow_instance_id: UUID
     ) -> list[ProjectionFailureInfo]:
+        raise NotImplementedError
+
+    def list_failures(
+        self,
+        *,
+        limit: int,
+        status: str | None = None,
+        open_only: bool = False,
+    ) -> tuple[ProjectionFailureInfo, ...]:
         raise NotImplementedError
 
     def record_resume_projection_failure(
@@ -704,6 +767,186 @@ class WorkflowService:
                 latest_episode_created_at=latest_episode_created_at,
                 latest_memory_item_created_at=latest_memory_item_created_at,
                 latest_memory_embedding_created_at=latest_memory_embedding_created_at,
+            )
+
+    def get_memory_stats(self) -> MemoryStats:
+        with self._uow_factory() as uow:
+            episode_count = self._count_rows(uow, "memory_episodes")
+            memory_item_count = self._count_rows(uow, "memory_items")
+            memory_embedding_count = self._count_rows(uow, "memory_embeddings")
+            memory_relation_count = self._count_rows(uow, "memory_relations")
+
+            latest_episode_created_at = self._max_datetime_field(
+                uow,
+                repository_name="memory_episodes",
+                field_name="created_at",
+            )
+            latest_memory_item_created_at = self._max_datetime_field(
+                uow,
+                repository_name="memory_items",
+                field_name="created_at",
+            )
+            latest_memory_embedding_created_at = self._max_datetime_field(
+                uow,
+                repository_name="memory_embeddings",
+                field_name="created_at",
+            )
+            latest_memory_relation_created_at = self._max_datetime_field(
+                uow,
+                repository_name="memory_relations",
+                field_name="created_at",
+            )
+
+            memory_item_provenance_counts = self._count_memory_item_provenance(uow)
+
+            return MemoryStats(
+                episode_count=episode_count,
+                memory_item_count=memory_item_count,
+                memory_embedding_count=memory_embedding_count,
+                memory_relation_count=memory_relation_count,
+                memory_item_provenance_counts=memory_item_provenance_counts,
+                latest_episode_created_at=latest_episode_created_at,
+                latest_memory_item_created_at=latest_memory_item_created_at,
+                latest_memory_embedding_created_at=latest_memory_embedding_created_at,
+                latest_memory_relation_created_at=latest_memory_relation_created_at,
+            )
+
+    def list_workflows(
+        self,
+        *,
+        limit: int = 20,
+        status: str | None = None,
+        workspace_id: UUID | None = None,
+        ticket_id: str | None = None,
+    ) -> tuple[WorkflowListEntry, ...]:
+        if limit <= 0:
+            raise ValidationError("limit must be greater than zero")
+
+        normalized_status = status.strip() if isinstance(status, str) else None
+        if normalized_status == "":
+            normalized_status = None
+
+        if normalized_status is not None:
+            allowed_statuses = {
+                WorkflowInstanceStatus.RUNNING.value,
+                WorkflowInstanceStatus.COMPLETED.value,
+                WorkflowInstanceStatus.FAILED.value,
+                WorkflowInstanceStatus.CANCELLED.value,
+            }
+            if normalized_status not in allowed_statuses:
+                raise ValidationError(
+                    "status must be one of running, completed, failed, or cancelled"
+                )
+
+        normalized_ticket_id = ticket_id.strip() if isinstance(ticket_id, str) else None
+        if normalized_ticket_id == "":
+            normalized_ticket_id = None
+
+        with self._uow_factory() as uow:
+            workflows = uow.workflow_instances.list_recent(
+                limit=limit,
+                status=normalized_status,
+                workspace_id=workspace_id,
+                ticket_id=normalized_ticket_id,
+            )
+
+            entries: list[WorkflowListEntry] = []
+            for workflow in workflows:
+                workspace = uow.workspaces.get_by_id(workflow.workspace_id)
+                latest_attempt = uow.workflow_attempts.get_latest_by_workflow_id(
+                    workflow.workflow_instance_id
+                )
+                latest_checkpoint = uow.workflow_checkpoints.get_latest_by_workflow_id(
+                    workflow.workflow_instance_id
+                )
+                latest_verify_report = (
+                    uow.verify_reports.get_latest_by_attempt_id(
+                        latest_attempt.attempt_id
+                    )
+                    if latest_attempt is not None
+                    else None
+                )
+
+                entries.append(
+                    WorkflowListEntry(
+                        workflow_instance_id=workflow.workflow_instance_id,
+                        workspace_id=workflow.workspace_id,
+                        canonical_path=(
+                            workspace.canonical_path if workspace is not None else None
+                        ),
+                        ticket_id=workflow.ticket_id,
+                        workflow_status=workflow.status.value,
+                        latest_step_name=(
+                            latest_checkpoint.step_name
+                            if latest_checkpoint is not None
+                            else None
+                        ),
+                        latest_verify_status=(
+                            latest_verify_report.status.value
+                            if latest_verify_report is not None
+                            else (
+                                latest_attempt.verify_status.value
+                                if (
+                                    latest_attempt is not None
+                                    and latest_attempt.verify_status is not None
+                                )
+                                else None
+                            )
+                        ),
+                        updated_at=workflow.updated_at,
+                    )
+                )
+
+            return tuple(entries)
+
+    def list_failures(
+        self,
+        *,
+        limit: int = 20,
+        status: str | None = None,
+        open_only: bool = False,
+    ) -> tuple[FailureListEntry, ...]:
+        if limit <= 0:
+            raise ValidationError("limit must be greater than zero")
+
+        normalized_status = status.strip() if isinstance(status, str) else None
+        if normalized_status == "":
+            normalized_status = None
+
+        allowed_statuses = {"open", "resolved", "ignored"}
+        if normalized_status is not None and normalized_status not in allowed_statuses:
+            raise ValidationError("status must be one of open, resolved, or ignored")
+
+        if open_only:
+            normalized_status = "open"
+
+        with self._uow_factory() as uow:
+            repository = getattr(uow, "projection_failures", None)
+            if repository is None:
+                return ()
+
+            failures = repository.list_failures(
+                limit=limit,
+                status=normalized_status,
+                open_only=open_only,
+            )
+
+            return tuple(
+                FailureListEntry(
+                    failure_scope="projection",
+                    failure_type=failure.projection_type.value,
+                    failure_status=failure.status,
+                    projection_type=failure.projection_type.value,
+                    target_path=failure.target_path,
+                    error_code=failure.error_code,
+                    error_message=failure.error_message,
+                    attempt_id=failure.attempt_id,
+                    occurred_at=failure.occurred_at,
+                    resolved_at=failure.resolved_at,
+                    open_failure_count=failure.open_failure_count,
+                    retry_count=failure.retry_count,
+                )
+                for failure in failures
             )
 
     def register_workspace(self, data: RegisterWorkspaceInput) -> Workspace:
@@ -1726,6 +1969,46 @@ class WorkflowService:
 
         raise PersistenceError(
             "stats failure aggregation is not supported for projection failures"
+        )
+
+    def _count_memory_item_provenance(self, uow: UnitOfWork) -> dict[str, int]:
+        repository = getattr(uow, "memory_items", None)
+        if repository is None:
+            return {}
+
+        records_by_id = getattr(repository, "_records_by_id", None)
+        if records_by_id is None:
+            values_by_id = getattr(repository, "_values_by_id", None)
+            if isinstance(values_by_id, dict):
+                records_by_id = values_by_id
+
+        if isinstance(records_by_id, dict):
+            counts: dict[str, int] = {}
+            for record in records_by_id.values():
+                provenance = getattr(record, "provenance", None)
+                if provenance is None:
+                    continue
+                normalized_provenance = str(provenance)
+                counts[normalized_provenance] = counts.get(normalized_provenance, 0) + 1
+            return counts
+
+        memory_items_by_id = getattr(repository, "_memory_items_by_id", None)
+        if isinstance(memory_items_by_id, dict):
+            counts: dict[str, int] = {}
+            for record in memory_items_by_id.values():
+                provenance = getattr(record, "provenance", None)
+                if provenance is None:
+                    continue
+                normalized_provenance = str(provenance)
+                counts[normalized_provenance] = counts.get(normalized_provenance, 0) + 1
+            return counts
+
+        count_method = getattr(repository, "count_by_provenance", None)
+        if callable(count_method):
+            return {str(key): int(value) for key, value in count_method().items()}
+
+        raise PersistenceError(
+            "memory stats provenance aggregation is not supported for memory items"
         )
 
     def _map_workflow_status_to_attempt_status(

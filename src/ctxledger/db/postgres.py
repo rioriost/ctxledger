@@ -558,6 +558,52 @@ class PostgresWorkflowInstanceRepository(WorkflowInstanceRepository):
             rows = cur.fetchall()
         return tuple(self._row_to_workflow(row) for row in rows)
 
+    def list_recent(
+        self,
+        *,
+        limit: int,
+        status: str | None = None,
+        workspace_id: UUID | None = None,
+        ticket_id: str | None = None,
+    ) -> tuple[WorkflowInstance, ...]:
+        where_clauses: list[str] = []
+        parameters: list[Any] = []
+
+        if status is not None:
+            where_clauses.append("status = %s")
+            parameters.append(status)
+        if workspace_id is not None:
+            where_clauses.append("workspace_id = %s")
+            parameters.append(workspace_id)
+        if ticket_id is not None:
+            where_clauses.append("ticket_id = %s")
+            parameters.append(ticket_id)
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        with self._conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    workflow_instance_id,
+                    workspace_id,
+                    ticket_id,
+                    status,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM workflow_instances
+                {where_sql}
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT %s
+                """,
+                (*parameters, limit),
+            )
+            rows = cur.fetchall()
+        return tuple(self._row_to_workflow(row) for row in rows)
+
     def create(self, workflow: WorkflowInstance) -> WorkflowInstance:
         with self._conn.cursor() as cur:
             cur.execute(
@@ -1202,6 +1248,19 @@ class PostgresMemoryItemRepository(MemoryItemRepository):
             row = cur.fetchone()
         return int(row["count"]) if row is not None else 0
 
+    def count_by_provenance(self) -> dict[str, int]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT provenance, COUNT(*) AS count
+                FROM memory_items
+                GROUP BY provenance
+                ORDER BY provenance ASC
+                """
+            )
+            rows = cur.fetchall()
+        return {str(row["provenance"]): int(row["count"]) for row in rows}
+
     def max_datetime(self, field_name: str) -> datetime | None:
         if field_name not in {"created_at", "updated_at"}:
             raise PersistenceError(
@@ -1449,6 +1508,27 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
         return tuple(_memory_embedding_row_to_record(row) for row in rows)
 
 
+class PostgresMemoryRelationRepository:
+    def __init__(self, conn: Connection) -> None:
+        self._conn = conn
+
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM memory_relations")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
+    def max_datetime(self, field_name: str) -> datetime | None:
+        if field_name != "created_at":
+            raise PersistenceError(
+                f"Unsupported datetime field '{field_name}' for memory_relations"
+            )
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT MAX(created_at) AS value FROM memory_relations")
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
+
+
 class PostgresProjectionStateRepository(ProjectionStateRepository):
     """
     Minimal read-only projection state repository.
@@ -1577,6 +1657,75 @@ class PostgresProjectionFailureRepository(ProjectionFailureRepository):
             )
             row = cur.fetchone()
         return int(row["count"]) if row is not None else 0
+
+    def list_failures(
+        self,
+        *,
+        limit: int,
+        status: str | None = None,
+        open_only: bool = False,
+    ) -> tuple[ProjectionFailureInfo, ...]:
+        where_clauses: list[str] = []
+        parameters: list[Any] = []
+
+        if open_only:
+            where_clauses.append("status = 'open'")
+        elif status is not None:
+            where_clauses.append("status = %s")
+            parameters.append(status)
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        with self._conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    projection_type,
+                    attempt_id,
+                    error_code,
+                    error_message,
+                    target_path,
+                    retry_count,
+                    occurred_at,
+                    resolved_at,
+                    status
+                FROM projection_failures
+                {where_sql}
+                ORDER BY occurred_at DESC, projection_type ASC, target_path ASC
+                LIMIT %s
+                """,
+                (*parameters, limit),
+            )
+            rows = cur.fetchall()
+
+        failures: list[ProjectionFailureInfo] = []
+        counts_by_key: dict[tuple[ProjectionArtifactType, str], int] = {}
+        for row in rows:
+            projection_type = ProjectionArtifactType(str(row["projection_type"]))
+            failure_status = str(row["status"])
+            count_key = (projection_type, failure_status)
+            count_value = counts_by_key.get(count_key, 0) + 1
+            counts_by_key[count_key] = count_value
+            failures.append(
+                ProjectionFailureInfo(
+                    projection_type=projection_type,
+                    error_code=row["error_code"],
+                    error_message=row["error_message"],
+                    target_path=row["target_path"],
+                    attempt_id=_to_uuid(row["attempt_id"])
+                    if row["attempt_id"] is not None
+                    else None,
+                    occurred_at=_optional_datetime(row["occurred_at"]),
+                    resolved_at=_optional_datetime(row["resolved_at"]),
+                    open_failure_count=count_value,
+                    retry_count=int(row["retry_count"] or 0),
+                    status=failure_status,
+                )
+            )
+
+        return tuple(failures)
 
     def get_open_failures_by_workflow_id(
         self,
@@ -1886,6 +2035,7 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
         self.memory_episodes = PostgresMemoryEpisodeRepository(self._conn)
         self.memory_items = PostgresMemoryItemRepository(self._conn)
         self.memory_embeddings = PostgresMemoryEmbeddingRepository(self._conn)
+        self.memory_relations = PostgresMemoryRelationRepository(self._conn)
         self.projection_states = PostgresProjectionStateRepository(self._conn)
         self.projection_failures = PostgresProjectionFailureRepository(self._conn)
         self._committed = False
@@ -1948,6 +2098,7 @@ __all__ = [
     "PostgresMemoryEmbeddingRepository",
     "PostgresMemoryEpisodeRepository",
     "PostgresMemoryItemRepository",
+    "PostgresMemoryRelationRepository",
     "PostgresProjectionStateRepository",
     "PostgresUnitOfWork",
     "PostgresVerifyReportRepository",

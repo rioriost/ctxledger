@@ -24,11 +24,14 @@ from ctxledger.config import (
 )
 from ctxledger.workflow.service import (
     CreateCheckpointInput,
+    FailureListEntry,
+    MemoryStats,
     ProjectionArtifactType,
     ProjectionStatus,
     RegisterWorkspaceInput,
     ResumeIssue,
     StartWorkflowInput,
+    WorkflowListEntry,
     WorkflowStats,
 )
 
@@ -579,6 +582,689 @@ def test_main_stats_reports_missing_database_url(
     assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
 
 
+def test_main_workflows_renders_text_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    workflows = (
+        WorkflowListEntry(
+            workflow_instance_id=workflow_instance_id,
+            workspace_id=workspace_id,
+            canonical_path=str(tmp_path),
+            ticket_id="CLI-WF-1",
+            workflow_status="running",
+            latest_step_name="implement_cli_workflows",
+            latest_verify_status="passed",
+            updated_at=datetime(2026, 3, 15, 12, 0, 0, tzinfo=UTC),
+        ),
+    )
+
+    class FakeWorkflowsService:
+        def __init__(self, result: tuple[WorkflowListEntry, ...]) -> None:
+            self.result = result
+            self.calls: list[dict[str, object]] = []
+
+        def list_workflows(
+            self,
+            *,
+            limit: int,
+            status: str | None = None,
+            workspace_id: object | None = None,
+            ticket_id: str | None = None,
+        ) -> tuple[WorkflowListEntry, ...]:
+            self.calls.append(
+                {
+                    "limit": limit,
+                    "status": status,
+                    "workspace_id": workspace_id,
+                    "ticket_id": ticket_id,
+                }
+            )
+            return self.result
+
+    settings = make_settings()
+    fake_service = FakeWorkflowsService(workflows)
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: fake_service,
+    )
+
+    exit_code = cli_module.main(["workflows"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "ctxledger workflows" in captured.out
+    assert f"- {workflow_instance_id} [running]" in captured.out
+    assert f"workspace={tmp_path}" in captured.out
+    assert "ticket=CLI-WF-1" in captured.out
+    assert "latest_step=implement_cli_workflows" in captured.out
+    assert "verify_status=passed" in captured.out
+    assert "updated_at=2026-03-15 12:00:00+00:00" in captured.out
+    assert captured.err == ""
+    assert fake_service.calls == [
+        {
+            "limit": 20,
+            "status": None,
+            "workspace_id": None,
+            "ticket_id": None,
+        }
+    ]
+
+
+def test_main_workflows_renders_json_output_and_filters(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    workflows = (
+        WorkflowListEntry(
+            workflow_instance_id=workflow_instance_id,
+            workspace_id=workspace_id,
+            canonical_path=str(tmp_path),
+            ticket_id="CLI-WF-JSON-1",
+            workflow_status="completed",
+            latest_step_name="ship_it",
+            latest_verify_status="passed",
+            updated_at=datetime(2026, 3, 15, 13, 30, 0, tzinfo=UTC),
+        ),
+    )
+
+    class FakeWorkflowsService:
+        def __init__(self, result: tuple[WorkflowListEntry, ...]) -> None:
+            self.result = result
+            self.calls: list[dict[str, object]] = []
+
+        def list_workflows(
+            self,
+            *,
+            limit: int,
+            status: str | None = None,
+            workspace_id: object | None = None,
+            ticket_id: str | None = None,
+        ) -> tuple[WorkflowListEntry, ...]:
+            self.calls.append(
+                {
+                    "limit": limit,
+                    "status": status,
+                    "workspace_id": workspace_id,
+                    "ticket_id": ticket_id,
+                }
+            )
+            return self.result
+
+    settings = make_settings()
+    fake_service = FakeWorkflowsService(workflows)
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: fake_service,
+    )
+
+    exit_code = cli_module.main(
+        [
+            "workflows",
+            "--limit",
+            "5",
+            "--status",
+            "completed",
+            "--workspace-id",
+            str(workspace_id),
+            "--ticket-id",
+            "CLI-WF-JSON-1",
+            "--format",
+            "json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload == [
+        {
+            "canonical_path": str(tmp_path),
+            "latest_step_name": "ship_it",
+            "latest_verify_status": "passed",
+            "ticket_id": "CLI-WF-JSON-1",
+            "updated_at": "2026-03-15T13:30:00+00:00",
+            "workflow_instance_id": str(workflow_instance_id),
+            "workflow_status": "completed",
+            "workspace_id": str(workspace_id),
+        }
+    ]
+    assert captured.err == ""
+    assert fake_service.calls == [
+        {
+            "limit": 5,
+            "status": "completed",
+            "workspace_id": workspace_id,
+            "ticket_id": "CLI-WF-JSON-1",
+        }
+    ]
+
+
+def test_main_workflows_reports_missing_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url=""),
+    )
+
+    exit_code = cli_module.main(["workflows"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+
+
+def test_main_workflows_returns_error_when_loading_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+
+    class ExplodingWorkflowService:
+        def __init__(self, uow_factory: object) -> None:
+            self.uow_factory = uow_factory
+
+        def list_workflows(
+            self,
+            *,
+            limit: int,
+            status: str | None = None,
+            workspace_id: object | None = None,
+            ticket_id: str | None = None,
+        ) -> tuple[WorkflowListEntry, ...]:
+            raise RuntimeError("workflows exploded")
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        ExplodingWorkflowService,
+    )
+
+    exit_code = cli_module.main(["workflows"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to load workflows: workflows exploded" in captured.err
+
+
+def test_main_memory_stats_renders_text_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stats = MemoryStats(
+        episode_count=34,
+        memory_item_count=24,
+        memory_embedding_count=3,
+        memory_relation_count=7,
+        memory_item_provenance_counts={
+            "derived": 2,
+            "episode": 17,
+            "explicit": 1,
+            "workflow_complete_auto": 4,
+        },
+        latest_episode_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_item_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_embedding_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_relation_created_at=datetime(2026, 3, 15, 9, 5, 0, tzinfo=UTC),
+    )
+
+    class FakeMemoryStatsWorkflowService:
+        def __init__(self, stats_result: MemoryStats) -> None:
+            self.stats_result = stats_result
+            self.get_memory_stats_calls = 0
+
+        def get_memory_stats(self) -> MemoryStats:
+            self.get_memory_stats_calls += 1
+            return self.stats_result
+
+    settings = make_settings()
+    fake_service = FakeMemoryStatsWorkflowService(stats)
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: fake_service,
+    )
+
+    exit_code = cli_module.main(["memory-stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "ctxledger memory-stats" in captured.out
+    assert "Counts:" in captured.out
+    assert "- episodes: 34" in captured.out
+    assert "- memory_items: 24" in captured.out
+    assert "- memory_embeddings: 3" in captured.out
+    assert "- memory_relations: 7" in captured.out
+    assert "Memory item provenance:" in captured.out
+    assert "- derived: 2" in captured.out
+    assert "- episode: 17" in captured.out
+    assert "- explicit: 1" in captured.out
+    assert "- workflow_complete_auto: 4" in captured.out
+    assert "Latest activity:" in captured.out
+    assert "2026-03-15 09:05:00+00:00" in captured.out
+    assert captured.err == ""
+    assert fake_service.get_memory_stats_calls == 1
+
+
+def test_main_memory_stats_renders_json_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stats = MemoryStats(
+        episode_count=3,
+        memory_item_count=4,
+        memory_embedding_count=1,
+        memory_relation_count=0,
+        memory_item_provenance_counts={
+            "episode": 2,
+            "workflow_complete_auto": 2,
+        },
+        latest_episode_created_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
+        latest_memory_item_created_at=None,
+        latest_memory_embedding_created_at=None,
+        latest_memory_relation_created_at=None,
+    )
+
+    class FakeMemoryStatsWorkflowService:
+        def __init__(self, stats_result: MemoryStats) -> None:
+            self.stats_result = stats_result
+
+        def get_memory_stats(self) -> MemoryStats:
+            return self.stats_result
+
+    settings = make_settings()
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: FakeMemoryStatsWorkflowService(stats),
+    )
+
+    exit_code = cli_module.main(["memory-stats", "--format", "json"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload == {
+        "episode_count": 3,
+        "latest_episode_created_at": "2026-03-15T09:00:00+00:00",
+        "latest_memory_embedding_created_at": None,
+        "latest_memory_item_created_at": None,
+        "latest_memory_relation_created_at": None,
+        "memory_embedding_count": 1,
+        "memory_item_count": 4,
+        "memory_item_provenance_counts": {
+            "episode": 2,
+            "workflow_complete_auto": 2,
+        },
+        "memory_relation_count": 0,
+    }
+    assert captured.err == ""
+
+
+def test_main_memory_stats_reports_missing_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url=""),
+    )
+
+    exit_code = cli_module.main(["memory-stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+
+
+def test_main_memory_stats_returns_error_when_loading_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+
+    class ExplodingWorkflowService:
+        def __init__(self, uow_factory: object) -> None:
+            self.uow_factory = uow_factory
+
+        def get_memory_stats(self) -> MemoryStats:
+            raise RuntimeError("memory stats exploded")
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        ExplodingWorkflowService,
+    )
+
+    exit_code = cli_module.main(["memory-stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to load memory stats: memory stats exploded" in captured.err
+
+
+def test_main_failures_renders_text_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    failures = (
+        FailureListEntry(
+            failure_scope="projection",
+            failure_type="resume_json",
+            failure_status="open",
+            projection_type="resume_json",
+            target_path=".agent/resume.json",
+            error_code="io_error",
+            error_message="failed to write projection",
+            attempt_id=uuid4(),
+            occurred_at=datetime(2026, 3, 15, 10, 0, 0, tzinfo=UTC),
+            resolved_at=None,
+            open_failure_count=2,
+            retry_count=1,
+        ),
+    )
+
+    class FakeFailuresWorkflowService:
+        def __init__(self, result: tuple[FailureListEntry, ...]) -> None:
+            self.result = result
+            self.calls: list[dict[str, object]] = []
+
+        def list_failures(
+            self,
+            *,
+            limit: int,
+            status: str | None = None,
+            open_only: bool = False,
+        ) -> tuple[FailureListEntry, ...]:
+            self.calls.append(
+                {
+                    "limit": limit,
+                    "status": status,
+                    "open_only": open_only,
+                }
+            )
+            return self.result
+
+    settings = make_settings()
+    fake_service = FakeFailuresWorkflowService(failures)
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: fake_service,
+    )
+
+    exit_code = cli_module.main(["failures"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "ctxledger failures" in captured.out
+    assert "- open: resume_json" in captured.out
+    assert "scope=projection" in captured.out
+    assert "path=.agent/resume.json" in captured.out
+    assert "error_code=io_error" in captured.out
+    assert "message=failed to write projection" in captured.out
+    assert "occurred_at=2026-03-15 10:00:00+00:00" in captured.out
+    assert "resolved_at=None" in captured.out
+    assert "retry_count=1" in captured.out
+    assert "open_failures=2" in captured.out
+    assert captured.err == ""
+    assert fake_service.calls == [
+        {
+            "limit": 20,
+            "status": None,
+            "open_only": False,
+        }
+    ]
+
+
+def test_main_failures_renders_json_output_and_filters(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    attempt_id = uuid4()
+    failures = (
+        FailureListEntry(
+            failure_scope="projection",
+            failure_type="resume_md",
+            failure_status="ignored",
+            projection_type="resume_md",
+            target_path=".agent/resume.md",
+            error_code="permission_error",
+            error_message="write intentionally ignored",
+            attempt_id=attempt_id,
+            occurred_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
+            resolved_at=datetime(2026, 3, 15, 9, 5, 0, tzinfo=UTC),
+            open_failure_count=1,
+            retry_count=0,
+        ),
+    )
+
+    class FakeFailuresWorkflowService:
+        def __init__(self, result: tuple[FailureListEntry, ...]) -> None:
+            self.result = result
+            self.calls: list[dict[str, object]] = []
+
+        def list_failures(
+            self,
+            *,
+            limit: int,
+            status: str | None = None,
+            open_only: bool = False,
+        ) -> tuple[FailureListEntry, ...]:
+            self.calls.append(
+                {
+                    "limit": limit,
+                    "status": status,
+                    "open_only": open_only,
+                }
+            )
+            return self.result
+
+    settings = make_settings()
+    fake_service = FakeFailuresWorkflowService(failures)
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: fake_service,
+    )
+
+    exit_code = cli_module.main(
+        [
+            "failures",
+            "--limit",
+            "5",
+            "--status",
+            "ignored",
+            "--format",
+            "json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload == [
+        {
+            "attempt_id": str(attempt_id),
+            "error_code": "permission_error",
+            "error_message": "write intentionally ignored",
+            "failure_scope": "projection",
+            "failure_status": "ignored",
+            "failure_type": "resume_md",
+            "occurred_at": "2026-03-15T09:00:00+00:00",
+            "open_failure_count": 1,
+            "projection_type": "resume_md",
+            "resolved_at": "2026-03-15T09:05:00+00:00",
+            "retry_count": 0,
+            "target_path": ".agent/resume.md",
+        }
+    ]
+    assert captured.err == ""
+    assert fake_service.calls == [
+        {
+            "limit": 5,
+            "status": "ignored",
+            "open_only": False,
+        }
+    ]
+
+
+def test_main_failures_reports_missing_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url=""),
+    )
+
+    exit_code = cli_module.main(["failures"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+
+
+def test_main_failures_returns_error_when_loading_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+
+    class ExplodingWorkflowService:
+        def __init__(self, uow_factory: object) -> None:
+            self.uow_factory = uow_factory
+
+        def list_failures(
+            self,
+            *,
+            limit: int,
+            status: str | None = None,
+            open_only: bool = False,
+        ) -> tuple[FailureListEntry, ...]:
+            raise RuntimeError("failures exploded")
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        ExplodingWorkflowService,
+    )
+
+    exit_code = cli_module.main(["failures"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to load failures: failures exploded" in captured.err
+
+
 def test_main_stats_returns_error_when_stats_loading_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1075,6 +1761,9 @@ def test_build_parser_includes_expected_subcommands() -> None:
     subcommands = set(actions[0].choices)
     assert subcommands == {
         "stats",
+        "workflows",
+        "failures",
+        "memory-stats",
         "serve",
         "print-schema-path",
         "apply-schema",
@@ -1363,6 +2052,80 @@ def test_main_returns_parser_error_for_unknown_command(
 
     with pytest.raises(RuntimeError, match="Unknown command: mystery"):
         cli_module.main(["mystery"])
+
+
+def test_main_dispatches_workflows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[tuple[int, str | None, str | None, str]] = []
+
+    def fake_workflows(args: argparse.Namespace) -> int:
+        received.append((args.limit, args.status, args.workspace_id, args.format))
+        return 8
+
+    monkeypatch.setattr(cli_module, "_workflows", fake_workflows)
+
+    result = cli_module.main(
+        [
+            "workflows",
+            "--limit",
+            "7",
+            "--status",
+            "running",
+            "--workspace-id",
+            "workspace-123",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result == 8
+    assert received == [(7, "running", "workspace-123", "json")]
+
+
+def test_main_dispatches_memory_stats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received_formats: list[str] = []
+
+    def fake_memory_stats(args: argparse.Namespace) -> int:
+        received_formats.append(args.format)
+        return 6
+
+    monkeypatch.setattr(cli_module, "_memory_stats", fake_memory_stats)
+
+    result = cli_module.main(["memory-stats", "--format", "json"])
+
+    assert result == 6
+    assert received_formats == ["json"]
+
+
+def test_main_dispatches_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[tuple[int, str | None, bool, str]] = []
+
+    def fake_failures(args: argparse.Namespace) -> int:
+        received.append((args.limit, args.status, args.open_only, args.format))
+        return 4
+
+    monkeypatch.setattr(cli_module, "_failures", fake_failures)
+
+    result = cli_module.main(
+        [
+            "failures",
+            "--limit",
+            "9",
+            "--status",
+            "open",
+            "--open-only",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result == 4
+    assert received == [(9, "open", True, "json")]
 
 
 def test_main_dispatches_resume_workflow(

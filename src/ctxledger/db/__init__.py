@@ -138,6 +138,37 @@ class InMemoryWorkflowInstanceRepository(WorkflowInstanceRepository):
         workflows.sort(key=lambda workflow: workflow.updated_at, reverse=True)
         return tuple(workflows[:limit])
 
+    def list_recent(
+        self,
+        *,
+        limit: int,
+        status: str | None = None,
+        workspace_id: object | None = None,
+        ticket_id: str | None = None,
+    ) -> tuple[WorkflowInstance, ...]:
+        workflows = list(self._workflows_by_id.values())
+
+        if status is not None:
+            workflows = [
+                workflow for workflow in workflows if workflow.status.value == status
+            ]
+        if workspace_id is not None:
+            workflows = [
+                workflow
+                for workflow in workflows
+                if workflow.workspace_id == workspace_id
+            ]
+        if ticket_id is not None:
+            workflows = [
+                workflow for workflow in workflows if workflow.ticket_id == ticket_id
+            ]
+
+        workflows.sort(
+            key=lambda workflow: (workflow.updated_at, workflow.created_at),
+            reverse=True,
+        )
+        return tuple(workflows[:limit])
+
     def create(self, workflow: WorkflowInstance) -> WorkflowInstance:
         self._workflows_by_id[workflow.workflow_instance_id] = workflow
         return workflow
@@ -305,6 +336,12 @@ class InMemoryMemoryItemRepository(MemoryItemRepository):
         memory_items.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
         return tuple(memory_items[:limit])
 
+    def count_by_provenance(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for memory_item in self._memory_items_by_id.values():
+            counts[memory_item.provenance] = counts.get(memory_item.provenance, 0) + 1
+        return counts
+
 
 class InMemoryMemoryEmbeddingRepository(MemoryEmbeddingRepository):
     def __init__(
@@ -452,6 +489,33 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
                     if failure.status in {"resolved", "ignored"}
                 )
         return list(failures)
+
+    def list_failures(
+        self,
+        *,
+        limit: int,
+        status: str | None = None,
+        open_only: bool = False,
+    ) -> tuple[ProjectionFailureInfo, ...]:
+        failures: list[ProjectionFailureInfo] = []
+        for candidate_failures in self._failures_by_key.values():
+            failures.extend(candidate_failures)
+
+        if open_only:
+            failures = [failure for failure in failures if failure.status == "open"]
+        elif status is not None:
+            failures = [failure for failure in failures if failure.status == status]
+
+        failures.sort(
+            key=lambda failure: (
+                failure.occurred_at is not None,
+                failure.occurred_at,
+                failure.projection_type.value,
+                failure.target_path,
+            ),
+            reverse=True,
+        )
+        return tuple(failures[:limit])
 
     def record_resume_projection_failure(
         self,

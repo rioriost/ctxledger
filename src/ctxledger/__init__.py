@@ -25,6 +25,74 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output format",
     )
 
+    workflows_parser = subparsers.add_parser(
+        "workflows",
+        help="List recent workflows and their operational status",
+    )
+    workflows_parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Maximum number of workflows to return",
+    )
+    workflows_parser.add_argument(
+        "--status",
+        choices=("running", "completed", "failed", "cancelled"),
+        help="Filter by workflow status",
+    )
+    workflows_parser.add_argument(
+        "--workspace-id",
+        help="Filter by workspace ID",
+    )
+    workflows_parser.add_argument(
+        "--ticket-id",
+        help="Filter by ticket ID",
+    )
+    workflows_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format",
+    )
+
+    failures_parser = subparsers.add_parser(
+        "failures",
+        help="List recent failures and their lifecycle state",
+    )
+    failures_parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Maximum number of failures to return",
+    )
+    failures_parser.add_argument(
+        "--status",
+        choices=("open", "resolved", "ignored"),
+        help="Filter by failure status",
+    )
+    failures_parser.add_argument(
+        "--open-only",
+        action="store_true",
+        help="Show only open failures",
+    )
+    failures_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format",
+    )
+
+    memory_stats_parser = subparsers.add_parser(
+        "memory-stats",
+        help="Display canonical memory observability summary",
+    )
+    memory_stats_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format",
+    )
+
     serve_parser = subparsers.add_parser(
         "serve",
         help="Start the ctxledger server",
@@ -339,6 +407,299 @@ def _stats(args: argparse.Namespace) -> int:
         return 1
 
 
+def _format_workflows_text(workflows: list[object] | tuple[object, ...]) -> str:
+    lines = ["ctxledger workflows", ""]
+
+    if not workflows:
+        lines.append("- none")
+        return "\n".join(lines)
+
+    for workflow in workflows:
+        lines.append(
+            f"- {getattr(workflow, 'workflow_instance_id', '')} "
+            f"[{getattr(workflow, 'workflow_status', 'unknown')}]"
+        )
+        lines.append(
+            f"  workspace={getattr(workflow, 'canonical_path', None) or getattr(workflow, 'workspace_id', '')}"
+        )
+        lines.append(f"  ticket={getattr(workflow, 'ticket_id', '')}")
+        lines.append(
+            f"  latest_step={getattr(workflow, 'latest_step_name', None) or 'none'}"
+        )
+        lines.append(
+            f"  verify_status={getattr(workflow, 'latest_verify_status', None) or 'none'}"
+        )
+        lines.append(f"  updated_at={getattr(workflow, 'updated_at', None)}")
+        lines.append("")
+
+    if lines[-1] == "":
+        lines.pop()
+
+    return "\n".join(lines)
+
+
+def _workflows(args: argparse.Namespace) -> int:
+    try:
+        import json
+
+        from .config import get_settings
+        from .db.postgres import PostgresConfig, build_postgres_uow_factory
+        from .workflow.service import WorkflowService
+
+        workflow_service = WorkflowService(
+            build_postgres_uow_factory(PostgresConfig.from_settings(get_settings()))
+        )
+        settings = get_settings()
+
+        if not settings.database.url:
+            print(
+                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
+                file=sys.stderr,
+            )
+            return 1
+
+        workspace_id = UUID(args.workspace_id) if args.workspace_id else None
+        workflows = workflow_service.list_workflows(
+            limit=args.limit,
+            status=args.status,
+            workspace_id=workspace_id,
+            ticket_id=args.ticket_id,
+        )
+
+        if args.format == "json":
+            print(
+                json.dumps(
+                    [
+                        {
+                            "workflow_instance_id": str(workflow.workflow_instance_id),
+                            "workspace_id": str(workflow.workspace_id),
+                            "canonical_path": workflow.canonical_path,
+                            "ticket_id": workflow.ticket_id,
+                            "workflow_status": workflow.workflow_status,
+                            "latest_step_name": workflow.latest_step_name,
+                            "latest_verify_status": workflow.latest_verify_status,
+                            "updated_at": (
+                                workflow.updated_at.isoformat()
+                                if workflow.updated_at is not None
+                                else None
+                            ),
+                        }
+                        for workflow in workflows
+                    ],
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(_format_workflows_text(workflows))
+
+        return 0
+    except Exception as exc:
+        print(f"Failed to load workflows: {exc}", file=sys.stderr)
+        return 1
+
+
+def _format_memory_stats_text(stats: object) -> str:
+    provenance_counts = getattr(stats, "memory_item_provenance_counts", {})
+
+    lines = [
+        "ctxledger memory-stats",
+        "",
+        "Counts:",
+        f"- episodes: {getattr(stats, 'episode_count', 0)}",
+        f"- memory_items: {getattr(stats, 'memory_item_count', 0)}",
+        f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
+        f"- memory_relations: {getattr(stats, 'memory_relation_count', 0)}",
+        "",
+        "Memory item provenance:",
+    ]
+
+    if provenance_counts:
+        for provenance in sorted(provenance_counts):
+            lines.append(f"- {provenance}: {provenance_counts[provenance]}")
+    else:
+        lines.append("- none")
+
+    lines.extend(
+        [
+            "",
+            "Latest activity:",
+            f"- episode_created_at: {getattr(stats, 'latest_episode_created_at', None)}",
+            f"- memory_item_created_at: {getattr(stats, 'latest_memory_item_created_at', None)}",
+            f"- memory_embedding_created_at: {getattr(stats, 'latest_memory_embedding_created_at', None)}",
+            f"- memory_relation_created_at: {getattr(stats, 'latest_memory_relation_created_at', None)}",
+        ]
+    )
+
+    return "\n".join(lines)
+
+
+def _format_failures_text(failures: list[object] | tuple[object, ...]) -> str:
+    lines = ["ctxledger failures", ""]
+
+    if not failures:
+        lines.append("- none")
+        return "\n".join(lines)
+
+    for failure in failures:
+        lines.append(
+            f"- {getattr(failure, 'failure_status', 'unknown')}: "
+            f"{getattr(failure, 'failure_type', 'unknown')}"
+        )
+        lines.append(f"  scope={getattr(failure, 'failure_scope', 'unknown')}")
+        lines.append(f"  path={getattr(failure, 'target_path', None) or 'none'}")
+        lines.append(f"  error_code={getattr(failure, 'error_code', None) or 'none'}")
+        lines.append(f"  message={getattr(failure, 'error_message', '')}")
+        lines.append(f"  occurred_at={getattr(failure, 'occurred_at', None)}")
+        lines.append(f"  resolved_at={getattr(failure, 'resolved_at', None)}")
+        lines.append(f"  retry_count={getattr(failure, 'retry_count', 0)}")
+        lines.append(f"  open_failures={getattr(failure, 'open_failure_count', 0)}")
+        lines.append("")
+
+    if lines[-1] == "":
+        lines.pop()
+
+    return "\n".join(lines)
+
+
+def _failures(args: argparse.Namespace) -> int:
+    try:
+        import json
+
+        from .config import get_settings
+        from .db.postgres import PostgresConfig, build_postgres_uow_factory
+        from .workflow.service import WorkflowService
+
+        settings = get_settings()
+
+        if not settings.database.url:
+            print(
+                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
+                file=sys.stderr,
+            )
+            return 1
+
+        workflow_service = WorkflowService(
+            build_postgres_uow_factory(PostgresConfig.from_settings(settings))
+        )
+        failures = workflow_service.list_failures(
+            limit=args.limit,
+            status=args.status,
+            open_only=args.open_only,
+        )
+
+        if args.format == "json":
+            print(
+                json.dumps(
+                    [
+                        {
+                            "failure_scope": failure.failure_scope,
+                            "failure_type": failure.failure_type,
+                            "failure_status": failure.failure_status,
+                            "projection_type": failure.projection_type,
+                            "target_path": failure.target_path,
+                            "error_code": failure.error_code,
+                            "error_message": failure.error_message,
+                            "attempt_id": (
+                                str(failure.attempt_id)
+                                if failure.attempt_id is not None
+                                else None
+                            ),
+                            "occurred_at": (
+                                failure.occurred_at.isoformat()
+                                if failure.occurred_at is not None
+                                else None
+                            ),
+                            "resolved_at": (
+                                failure.resolved_at.isoformat()
+                                if failure.resolved_at is not None
+                                else None
+                            ),
+                            "open_failure_count": failure.open_failure_count,
+                            "retry_count": failure.retry_count,
+                        }
+                        for failure in failures
+                    ],
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(_format_failures_text(failures))
+
+        return 0
+    except Exception as exc:
+        print(f"Failed to load failures: {exc}", file=sys.stderr)
+        return 1
+
+
+def _memory_stats(args: argparse.Namespace) -> int:
+    try:
+        import json
+
+        from .config import get_settings
+        from .db.postgres import PostgresConfig, build_postgres_uow_factory
+        from .workflow.service import WorkflowService
+
+        settings = get_settings()
+
+        if not settings.database.url:
+            print(
+                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
+                file=sys.stderr,
+            )
+            return 1
+
+        workflow_service = WorkflowService(
+            build_postgres_uow_factory(PostgresConfig.from_settings(settings))
+        )
+        stats = workflow_service.get_memory_stats()
+
+        if args.format == "json":
+            print(
+                json.dumps(
+                    {
+                        "episode_count": stats.episode_count,
+                        "memory_item_count": stats.memory_item_count,
+                        "memory_embedding_count": stats.memory_embedding_count,
+                        "memory_relation_count": stats.memory_relation_count,
+                        "memory_item_provenance_counts": (
+                            stats.memory_item_provenance_counts
+                        ),
+                        "latest_episode_created_at": (
+                            stats.latest_episode_created_at.isoformat()
+                            if stats.latest_episode_created_at is not None
+                            else None
+                        ),
+                        "latest_memory_item_created_at": (
+                            stats.latest_memory_item_created_at.isoformat()
+                            if stats.latest_memory_item_created_at is not None
+                            else None
+                        ),
+                        "latest_memory_embedding_created_at": (
+                            stats.latest_memory_embedding_created_at.isoformat()
+                            if stats.latest_memory_embedding_created_at is not None
+                            else None
+                        ),
+                        "latest_memory_relation_created_at": (
+                            stats.latest_memory_relation_created_at.isoformat()
+                            if stats.latest_memory_relation_created_at is not None
+                            else None
+                        ),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(_format_memory_stats_text(stats))
+
+        return 0
+    except Exception as exc:
+        print(f"Failed to load memory stats: {exc}", file=sys.stderr)
+        return 1
+
+
 def _resume_workflow(args: argparse.Namespace) -> int:
     try:
         import json
@@ -488,6 +849,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "stats":
         return _stats(args)
+    if command == "workflows":
+        return _workflows(args)
+    if command == "failures":
+        return _failures(args)
+    if command == "memory-stats":
+        return _memory_stats(args)
     if command == "serve":
         return _serve(args)
     if command == "print-schema-path":
