@@ -45,6 +45,18 @@ Near-term roadmap emphasis is also important to read correctly:
   - optional deployable Grafana-based dashboard support
 - broader hierarchical memory retrieval is planned later in `0.5.0`
 
+Current observability surfaces now include:
+
+- CLI:
+  - `ctxledger stats`
+  - `ctxledger workflows`
+  - `ctxledger memory-stats`
+  - `ctxledger failures`
+- optional Grafana dashboard deployment:
+  - runtime overview
+  - memory overview
+  - failure overview
+
 In `v0.1.0`, the primary focus is the durable workflow control layer.
 
 ---
@@ -251,6 +263,148 @@ Because Zed does not expand environment variables in its MCP configuration file,
 ```/dev/null/sh#L1-1
 envrcctl secret get CTXLEDGER_SMALL_AUTH_TOKEN
 ```
+
+### Optional Grafana observability startup
+
+The repository now also includes an optional Grafana overlay for read-only dashboard observability over canonical PostgreSQL state.
+
+Important design expectations:
+
+- Grafana is optional
+- Grafana is read-only
+- Grafana reads PostgreSQL directly
+- Grafana should use a dedicated read-only PostgreSQL role
+- Grafana should query `observability` schema views rather than broad raw-table access
+- Grafana does **not** depend on shelling out to the CLI observability commands
+
+#### 1. Apply observability SQL views
+
+Before starting Grafana, apply the observability SQL bootstrap:
+
+```/dev/null/sh#L1-1
+docker exec -i ctxledger-postgres psql -U ctxledger -d ctxledger < docs/sql/observability_views.sql
+```
+
+This creates:
+
+- `observability` schema
+- workflow overview views
+- memory overview views
+- projection failure views
+- activity timeline view
+
+#### 2. Create a read-only PostgreSQL role for Grafana
+
+Create a dedicated role such as `ctxledger_grafana` and grant it:
+
+- `CONNECT` on database `ctxledger`
+- `USAGE` on schema `observability`
+- `SELECT` on observability views
+
+A concrete example is documented in:
+
+- `docs/deployment.md`
+- `docs/grafana_operator_runbook.md`
+- `docs/sql/observability_views.sql` (commented example)
+
+#### 3. Set Grafana-related environment variables
+
+When using `envrcctl`, a practical local setup is:
+
+```/dev/null/sh#L1-4
+echo -n "admin" | envrcctl secret set CTXLEDGER_GRAFANA_ADMIN_USER --account 'ctxledger' --stdin
+echo -n "replace-with-a-strong-admin-password" | envrcctl secret set CTXLEDGER_GRAFANA_ADMIN_PASSWORD --account 'ctxledger' --stdin
+echo -n "ctxledger_grafana" | envrcctl secret set CTXLEDGER_GRAFANA_POSTGRES_USER --account 'ctxledger' --stdin
+echo -n "replace-with-a-strong-secret" | envrcctl secret set CTXLEDGER_GRAFANA_POSTGRES_PASSWORD --account 'ctxledger' --stdin
+```
+
+You may also want to set optional values such as:
+
+- `CTXLEDGER_GRAFANA_ROOT_URL`
+- `CTXLEDGER_GRAFANA_DOMAIN`
+- `CTXLEDGER_GRAFANA_POSTGRES_HOST`
+- `CTXLEDGER_GRAFANA_POSTGRES_DB`
+- `CTXLEDGER_GRAFANA_POSTGRES_SSLMODE`
+
+For the local Docker path, defaults are normally sufficient for:
+
+- host: `postgres:5432`
+- db: `ctxledger`
+- sslmode: `disable`
+
+#### 4. Start the stack with the Grafana overlay
+
+If you are already using the authenticated local HTTPS stack, start Grafana by adding the observability overlay:
+
+```/dev/null/sh#L1-1
+envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml -f docker/docker-compose.observability.yml up -d --build
+```
+
+If you are using the HTTPS no-auth stack instead, the same pattern applies:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml -f docker/docker-compose.observability.yml up -d --build
+```
+
+For a forced recreate of the auth-enabled path:
+
+```/dev/null/sh#L1-1
+envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml -f docker/docker-compose.observability.yml up -d --build --force-recreate
+```
+
+#### 5. Access Grafana
+
+Grafana is exposed locally at:
+
+```/dev/null/txt#L1-1
+http://localhost:3000
+```
+
+Use the admin credentials provided through the Grafana environment variables above.
+
+#### 6. What should appear
+
+Provisioning should create:
+
+- datasource:
+  - `ctxledger-postgres`
+- dashboard folder:
+  - `ctxledger`
+
+Initial dashboards currently included:
+
+- `ctxledger Runtime Overview`
+- `ctxledger Memory Overview`
+- `ctxledger Failure Overview`
+
+#### 7. Verify dashboard data
+
+Useful cross-checks:
+
+```/dev/null/sh#L1-3
+ctxledger stats
+ctxledger memory-stats
+ctxledger failures --limit 10
+```
+
+Representative expected behavior:
+
+- Runtime dashboard reflects canonical workflow counts and recent activity
+- Memory dashboard reflects:
+  - episode count
+  - memory item count
+  - memory embedding count
+  - memory relation count
+  - provenance breakdown
+- Failure dashboard reflects:
+  - open / resolved / ignored projection failures
+  - recent failure rows
+  - failure timeline
+
+For deeper operational guidance, troubleshooting, and security notes, see:
+
+- `docs/grafana_operator_runbook.md`
+- `docs/deployment.md`
 
 ### Agent workflow usage guidance
 

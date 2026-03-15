@@ -1,0 +1,24 @@
+apiVersion: 1
+
+datasources:
+  - name: ctxledger-postgres
+    uid: ctxledger-postgres
+    type: postgres
+    access: proxy
+    isDefault: true
+    editable: false
+    url: ${CTXLEDGER_GRAFANA_POSTGRES_HOST}
+    user: ${CTXLEDGER_GRAFANA_POSTGRES_USER}
+    secureJsonData:
+      password: ${CTXLEDGER_GRAFANA_POSTGRES_PASSWORD}
+    jsonData:
+      database: ${CTXLEDGER_GRAFANA_POSTGRES_DB}
+      sslmode: ${CTXLEDGER_GRAFANA_POSTGRES_SSLMODE}
+      postgresVersion: 1600
+      timescaledb: false
+      connMaxLifetime: 14400
+      maxIdleConns: 10
+      maxOpenConns: 25
+      sslRootCertFile: ""
+      tlsAuth: false
+      tlsAuthWithCACert: false

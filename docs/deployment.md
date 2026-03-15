@@ -151,6 +151,208 @@ Filesystem access is needed for derived projections such as:
 
 Projection writing is best-effort and must not be treated as canonical persistence.
 
+## 5.4 Observability SQL Views and Grafana Read-only Access
+
+For `0.4.0` observability work, Grafana should be treated as a **read-only PostgreSQL client** over canonical state.
+
+Recommended deployment posture:
+
+- do **not** make Grafana depend on CLI command execution for metrics collection
+- do **not** point Grafana at broad write-capable database credentials
+- prefer a dedicated observability schema containing stable read-only SQL views
+- grant Grafana only:
+  - database connect
+  - schema usage
+  - `SELECT` on observability views
+
+This keeps the CLI and dashboard paths aligned in meaning while avoiding a design where dashboard access can mutate canonical runtime state.
+
+### 5.4.1 Recommended access model
+
+Preferred structure:
+
+- application schema:
+  - `public`
+- observability schema:
+  - `observability`
+- Grafana database role:
+  - `ctxledger_grafana`
+
+Recommended properties of the Grafana role:
+
+- login-capable
+- read-only
+- no table ownership
+- no schema creation
+- no write privileges on canonical tables
+- no dependency on broad function execution grants unless explicitly needed
+
+### 5.4.2 Example observability schema bootstrap
+
+The following example creates an observability schema and a minimal set of stable views for Grafana-oriented inspection.
+
+```/dev/null/sql#L1-92
+CREATE SCHEMA IF NOT EXISTS observability;
+
+CREATE OR REPLACE VIEW observability.workflow_status_counts AS
+SELECT
+  status,
+  COUNT(*)::bigint AS workflow_count
+FROM workflow_instances
+GROUP BY status;
+
+CREATE OR REPLACE VIEW observability.workflow_recent AS
+SELECT
+  wi.workflow_instance_id,
+  wi.workspace_id,
+  w.canonical_path,
+  wi.ticket_id,
+  wi.status AS workflow_status,
+  wi.updated_at,
+  wc.step_name AS latest_step_name,
+  wa.verify_status AS latest_verify_status
+FROM workflow_instances AS wi
+LEFT JOIN workspaces AS w
+  ON w.workspace_id = wi.workspace_id
+LEFT JOIN LATERAL (
+  SELECT
+    checkpoint_id,
+    step_name,
+    created_at
+  FROM workflow_checkpoints
+  WHERE workflow_instance_id = wi.workflow_instance_id
+  ORDER BY created_at DESC
+  LIMIT 1
+) AS wc ON TRUE
+LEFT JOIN LATERAL (
+  SELECT
+    attempt_id,
+    verify_status,
+    updated_at
+  FROM workflow_attempts
+  WHERE workflow_instance_id = wi.workflow_instance_id
+  ORDER BY attempt_number DESC, started_at DESC
+  LIMIT 1
+) AS wa ON TRUE;
+
+CREATE OR REPLACE VIEW observability.memory_overview AS
+SELECT
+  (SELECT COUNT(*)::bigint FROM episodes) AS episode_count,
+  (SELECT COUNT(*)::bigint FROM memory_items) AS memory_item_count,
+  (SELECT COUNT(*)::bigint FROM memory_embeddings) AS memory_embedding_count,
+  (SELECT COUNT(*)::bigint FROM memory_relations) AS memory_relation_count,
+  (SELECT MAX(created_at) FROM episodes) AS latest_episode_created_at,
+  (SELECT MAX(created_at) FROM memory_items) AS latest_memory_item_created_at,
+  (SELECT MAX(created_at) FROM memory_embeddings) AS latest_memory_embedding_created_at,
+  (SELECT MAX(created_at) FROM memory_relations) AS latest_memory_relation_created_at;
+
+CREATE OR REPLACE VIEW observability.memory_item_provenance_counts AS
+SELECT
+  provenance,
+  COUNT(*)::bigint AS memory_item_count
+FROM memory_items
+GROUP BY provenance;
+
+CREATE OR REPLACE VIEW observability.projection_failures_recent AS
+SELECT
+  projection_failure_id,
+  workspace_id,
+  workflow_instance_id,
+  attempt_id,
+  projection_type,
+  target_path,
+  error_code,
+  error_message,
+  status,
+  retry_count,
+  occurred_at,
+  resolved_at
+FROM projection_failures;
+
+CREATE OR REPLACE VIEW observability.projection_failure_status_counts AS
+SELECT
+  status,
+  COUNT(*)::bigint AS failure_count
+FROM projection_failures
+GROUP BY status;
+```
+
+These views are intentionally simple:
+
+- aggregate counts
+- recent workflow inspection
+- memory overview
+- provenance breakdown
+- projection failure inspection
+
+They are suitable for:
+
+- Grafana panels
+- ad hoc operator inspection
+- future compatibility hardening through view-level evolution
+
+### 5.4.3 Example Grafana read-only role
+
+The following example shows the intended database privilege shape for a Grafana-specific role.
+
+```/dev/null/sql#L1-23
+CREATE ROLE ctxledger_grafana
+LOGIN
+PASSWORD 'replace-with-a-strong-secret';
+
+GRANT CONNECT ON DATABASE ctxledger TO ctxledger_grafana;
+
+GRANT USAGE ON SCHEMA observability TO ctxledger_grafana;
+
+GRANT SELECT ON ALL TABLES IN SCHEMA observability TO ctxledger_grafana;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA observability
+GRANT SELECT ON TABLES TO ctxledger_grafana;
+
+REVOKE ALL ON SCHEMA public FROM ctxledger_grafana;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ctxledger_grafana;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ctxledger_grafana;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM ctxledger_grafana;
+```
+
+Operational notes:
+
+- use a real secret, never the placeholder password
+- prefer secret injection through deployment configuration rather than hardcoding credentials in dashboard JSON
+- if the deployment uses a schema name other than `public` for canonical application tables, adjust the revocation/grant pattern accordingly
+- if Grafana only needs selected views, you may grant `SELECT` on those specific views instead of all tables in the `observability` schema
+
+### 5.4.4 SQL injection risk posture
+
+Grafana should not be treated as “safe by default” merely because it is read-oriented.
+
+Important risk controls:
+
+1. **read-only database role**
+   - the primary control
+   - ensures dashboard-issued SQL cannot mutate canonical state
+
+2. **view-based exposure**
+   - reduce direct access to raw tables
+   - expose stable, intentionally chosen columns only
+
+3. **restricted dashboard editing**
+   - limit who can create or modify SQL-backed panels
+   - avoid broad editor/admin access without operational need
+
+4. **careful variable usage**
+   - prefer bounded choice variables over free-text interpolation
+   - avoid surprising query expansion patterns
+
+5. **statement timeout / connection limits**
+   - helps reduce operational blast radius from accidental expensive queries
+
+This means the intended Grafana model is:
+
+- **separate from the CLI implementation path**
+- **directly querying PostgreSQL**
+- **constrained by a read-only observability role and stable views**
+
 ---
 
 ## 6. Configuration
@@ -247,6 +449,12 @@ Current evidenced local verification surfaces include:
 Current evidenced smoke validation script:
 
 - `scripts/mcp_http_smoke.py`
+
+Future observability deployments that add Grafana should continue to preserve this core separation:
+
+- MCP and debug routes remain application-facing operational surfaces
+- Grafana remains an optional dashboard surface
+- Grafana should consume PostgreSQL through read-only observability views rather than by shelling out to CLI commands
 
 That smoke script now supports:
 
@@ -796,6 +1004,7 @@ That `0.4.0` work is expected to expand beyond logs alone into:
 
 - CLI inspection/reporting surfaces
 - optional deployable Grafana-based dashboard support for lightweight dashboard-style visibility
+- read-only observability SQL views and constrained dashboard database access when Grafana is enabled
 
 Important logged events should include:
 

@@ -152,23 +152,109 @@ Continue concrete `0.4.0` implementation work from the observability plan.
 
 Current progress:
 - `ctxledger stats` has now been implemented as the first observability CLI surface
+- `ctxledger workflows` is now implemented as the second observability CLI surface
+- `ctxledger memory-stats` is now implemented as the third observability CLI surface
+- `ctxledger failures` is now implemented as the fourth observability CLI surface
 - the CLI supports:
   - text output
   - `--format json`
-- canonical aggregation support was added across the workflow service and PostgreSQL repositories
+- `ctxledger workflows` currently supports:
+  - `--limit`
+  - `--status`
+  - `--workspace-id`
+  - `--ticket-id`
+  - `--format json`
+- `ctxledger memory-stats` currently reports:
+  - episode count
+  - memory item count
+  - memory embedding count
+  - memory relation count
+  - memory item provenance breakdown
+  - latest memory activity timestamps
+- `ctxledger failures` currently supports:
+  - `--limit`
+  - `--status`
+  - `--open-only`
+  - `--format json`
+- `ctxledger failures` currently reports:
+  - failure scope/type
+  - lifecycle state (`open`, `resolved`, `ignored`)
+  - target path
+  - error code
+  - error message
+  - occurred/resolved timestamps
+  - retry count
+  - open failure count
+  - attempt id when present
+- canonical aggregation/query support was added across the workflow service and both PostgreSQL and in-memory repositories
 - focused CLI validation passed:
   - `python -m pytest tests/test_cli.py -q`
-  - `31 passed`
-- live manual verification against the running Docker PostgreSQL also succeeded using:
-  - `CTXLEDGER_DATABASE_URL=postgresql://ctxledger:ctxledger@localhost:5432/ctxledger ctxledger stats`
+  - `46 passed`
+- manual operator verification confirmed the CLI observability commands work:
+  - `ctxledger workflows`
+  - `ctxledger memory-stats`
+  - `ctxledger failures`
+- Grafana groundwork has now been validated live:
+  - observability SQL bootstrap file added and applied:
+    - `docs/sql/observability_views.sql`
+  - Grafana compose overlay added and verified with the current local stack shape:
+    - `docker/docker-compose.observability.yml`
+    - startup used together with:
+      - `docker/docker-compose.yml`
+      - `docker/docker-compose.small-auth.yml`
+  - datasource provisioning added and confirmed working:
+    - `docker/grafana/provisioning/datasources/postgres.yml`
+  - dashboard provider provisioning added and confirmed working:
+    - `docker/grafana/provisioning/dashboards/dashboards.yml`
+  - initial dashboards added and confirmed rendering real data:
+    - `docker/grafana/dashboards/runtime_overview.json`
+    - `docker/grafana/dashboards/memory_overview.json`
+    - `docker/grafana/dashboards/failure_overview.json`
+  - operator runbook added:
+    - `docs/grafana_operator_runbook.md`
+- important live Grafana bring-up note:
+  - dashboard datasource UID references originally needed correction
+  - dashboards should use the provisioned fixed UID:
+    - `ctxledger-postgres`
+  - this was necessary for live dashboard data rendering
+- deployment guidance was expanded to describe:
+  - read-only Grafana PostgreSQL access
+  - `observability` schema / view approach
+  - SQL-injection risk posture and mitigations
+- `ctxledger workflows` text output includes:
+  - workflow instance id
+  - workspace path fallbacking to workspace id when needed
+  - ticket id
+  - latest checkpoint step
+  - latest verify status
+  - updated timestamp
+- `ctxledger memory-stats` text output includes:
+  - counts section
+  - provenance breakdown section
+  - latest activity section
+- `ctxledger failures` text output includes:
+  - lifecycle-first summary line
+  - scope
+  - path
+  - error code
+  - error message
+  - occurred/resolved timestamps
+  - retry count
+  - open failure count
+- current dashboard/operator UX gaps:
+  - stat panels still show series label `value` in places
+  - pie chart/table presentation can be made more operator-friendly with better aliases and panel options
+  - README does not yet document the Grafana compose overlay flow
 
 Recommended next sequence:
-1. implement:
-   - `ctxledger workflows`
-   - `ctxledger memory-stats`
-   - `ctxledger failures`
-2. continue expanding shared DB-backed summary/query helpers as needed
-3. add/extend CLI tests for the new observability commands
-4. add Grafana compose overlay
-5. define initial dashboard provisioning/query set
-6. write Grafana operator runbook
+1. check that all live Grafana bring-up fixes are reflected in the repository
+   - especially datasource UID usage in dashboard JSON
+   - and any other changes required for the current local stack shape
+2. add README guidance for bringing up Grafana with Docker Compose
+   - including the current auth-overlay-compatible startup shape
+   - and the required PostgreSQL observability/bootstrap steps
+3. make Grafana dashboards more operator-friendly
+   - improve panel aliases/labels
+   - remove generic `value` presentation where possible
+   - improve pie/table readability
+   - consider a workflow-activity dashboard if still useful
