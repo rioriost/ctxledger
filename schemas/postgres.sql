@@ -504,6 +504,10 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_embeddings_memory_model
   ON memory_embeddings (memory_id, embedding_model);
 
+CREATE INDEX IF NOT EXISTS idx_memory_embeddings_embedding_hnsw
+  ON memory_embeddings
+  USING hnsw (embedding vector_l2_ops);
+
 CREATE TABLE IF NOT EXISTS memory_relations (
   memory_relation_id UUID PRIMARY KEY,
   source_memory_id UUID NOT NULL REFERENCES memory_items(memory_id) ON DELETE CASCADE,

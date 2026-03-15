@@ -482,7 +482,9 @@ Current implementation status:
   - returns lexical score, semantic score, and ranking explanation details for each result
   - falls back to lexical-only behavior when embedding generation or semantic lookup is unavailable
   - validated embedding execution paths now include `openai` in addition to `local_stub` and `custom_http`
+  - PostgreSQL-backed vector retrieval now defaults to an HNSW index over stored embeddings
   - workflow completion can now auto-create closeout memory that becomes part of the searchable corpus
+  - because HNSW indexes are updated incrementally as new embeddings are inserted, normal writes do not require a separate indexing job, but long-running deployments may still benefit from occasional reindex/rebuild maintenance after substantial growth or distribution drift
   - broader provider-specific integrations and richer multi-layer retrieval remain follow-up work
 
 The intended staged roadmap is still:
