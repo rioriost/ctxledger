@@ -68,8 +68,8 @@ def minimum_valid_env() -> dict[str, str]:
         "CTXLEDGER_LOG_STRUCTURED": "true",
         "CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS": "5",
         "CTXLEDGER_EMBEDDING_ENABLED": "false",
-        "CTXLEDGER_EMBEDDING_PROVIDER": "disabled",
-        "CTXLEDGER_EMBEDDING_MODEL": "local-stub-v1",
+        "CTXLEDGER_EMBEDDING_PROVIDER": "openai",
+        "CTXLEDGER_EMBEDDING_MODEL": "text-embedding-3-small",
     }
 
 
@@ -101,8 +101,8 @@ def test_load_settings_with_minimum_valid_env(clean_ctxledger_env: None) -> None
     assert settings.projection.enabled is True
     assert settings.projection.directory_name == ".agent"
     assert settings.embedding.enabled is False
-    assert settings.embedding.provider is EmbeddingProvider.DISABLED
-    assert settings.embedding.model == "local-stub-v1"
+    assert settings.embedding.provider is EmbeddingProvider.OPENAI
+    assert settings.embedding.model == "text-embedding-3-small"
     assert settings.embedding.api_key is None
     assert settings.embedding.base_url is None
     assert settings.embedding.dimensions is None
@@ -114,7 +114,7 @@ def test_get_settings_returns_validated_settings(clean_ctxledger_env: None) -> N
 
     assert isinstance(settings, AppSettings)
     assert settings.app_name == "ctxledger"
-    assert settings.app_version == "0.1.0"
+    assert settings.app_version == "0.3.0"
 
 
 def test_missing_database_url_raises_config_error(clean_ctxledger_env: None) -> None:
@@ -549,7 +549,7 @@ def test_app_settings_validate_requires_api_key_for_external_embedding_provider(
 
     with pytest.raises(
         ConfigError,
-        match="CTXLEDGER_EMBEDDING_API_KEY is required for the selected embedding provider",
+        match="OPENAI_API_KEY is required for the selected embedding provider",
     ):
         settings.validate()
 
@@ -637,7 +637,7 @@ def test_load_settings_uses_defaults_for_optional_values(
         settings = load_settings()
 
     assert settings.app_name == "ctxledger"
-    assert settings.app_version == "0.1.0"
+    assert settings.app_version == "0.3.0"
     assert settings.environment == "development"
     assert settings.http.host == "0.0.0.0"
     assert settings.http.port == 8080
@@ -652,8 +652,8 @@ def test_load_settings_uses_defaults_for_optional_values(
     assert settings.database.connect_timeout_seconds == 5
     assert settings.database.statement_timeout_ms is None
     assert settings.embedding.enabled is False
-    assert settings.embedding.provider is EmbeddingProvider.DISABLED
-    assert settings.embedding.model == "local-stub-v1"
+    assert settings.embedding.provider is EmbeddingProvider.OPENAI
+    assert settings.embedding.model == "text-embedding-3-small"
     assert settings.embedding.api_key is None
     assert settings.embedding.base_url is None
     assert settings.embedding.dimensions is None

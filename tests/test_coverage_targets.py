@@ -3455,9 +3455,7 @@ def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest()
     )
 
 
-def test_memory_service_skips_embedding_persistence_when_external_provider_is_unimplemented() -> (
-    None
-):
+def test_memory_service_persists_openai_embedding_after_memory_item_ingest() -> None:
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()
     memory_item_repository = InMemoryMemoryItemRepository()
@@ -3470,17 +3468,26 @@ def test_memory_service_skips_embedding_persistence_when_external_provider_is_un
             }
         }
     )
-    embedding_generator = ExternalAPIEmbeddingGenerator(
-        provider=EmbeddingProvider.CUSTOM_HTTP,
-        model="custom-model",
-        api_key="secret",
-        base_url="https://embeddings.example.com/v1",
-    )
+
+    class FixedOpenAIEmbeddingGenerator:
+        def generate(self, request: EmbeddingRequest) -> EmbeddingResult:
+            assert request.text == "External embedding provider remains optional"
+            assert request.metadata == {"kind": "checkpoint", "component": "memory"}
+            return EmbeddingResult(
+                provider="openai",
+                model="text-embedding-3-small",
+                vector=(0.25, -0.5, 1.0),
+                content_hash=compute_content_hash(
+                    "External embedding provider remains optional",
+                    {"kind": "checkpoint", "component": "memory"},
+                ),
+            )
+
     service = MemoryService(
         episode_repository=episode_repository,
         memory_item_repository=memory_item_repository,
         memory_embedding_repository=memory_embedding_repository,
-        embedding_generator=embedding_generator,
+        embedding_generator=FixedOpenAIEmbeddingGenerator(),
         workflow_lookup=workflow_lookup,
         workspace_lookup=workflow_lookup,
     )
@@ -3495,7 +3502,21 @@ def test_memory_service_skips_embedding_persistence_when_external_provider_is_un
 
     assert response.feature == MemoryFeature.REMEMBER_EPISODE
     assert len(memory_item_repository.memory_items) == 1
-    assert memory_embedding_repository.embeddings == ()
+    assert len(memory_embedding_repository.embeddings) == 1
+    assert (
+        memory_embedding_repository.embeddings[0].memory_id
+        == memory_item_repository.memory_items[0].memory_id
+    )
+    assert memory_embedding_repository.embeddings[0].embedding_model == (
+        "text-embedding-3-small"
+    )
+    assert memory_embedding_repository.embeddings[0].embedding == (0.25, -0.5, 1.0)
+    assert memory_embedding_repository.embeddings[
+        0
+    ].content_hash == compute_content_hash(
+        "External embedding provider remains optional",
+        {"kind": "checkpoint", "component": "memory"},
+    )
 
 
 def test_build_embedding_generator_returns_local_stub_generator() -> None:
@@ -3559,19 +3580,22 @@ def test_local_stub_embedding_generator_rejects_empty_text() -> None:
     assert exc_info.value.details == {"field": "text"}
 
 
-def test_build_embedding_generator_returns_external_provider_descriptor() -> None:
+def test_build_embedding_generator_returns_openai_generator_by_default_shape() -> None:
     generator = build_embedding_generator(
         EmbeddingSettings(
             provider=EmbeddingProvider.OPENAI,
             model="text-embedding-3-small",
             api_key="secret",
-            base_url="https://api.openai.com/v1",
+            base_url=None,
             dimensions=1536,
             enabled=True,
         )
     )
 
     assert isinstance(generator, ExternalAPIEmbeddingGenerator)
+    assert generator.provider is EmbeddingProvider.OPENAI
+    assert generator.model == "text-embedding-3-small"
+    assert generator.base_url == "https://api.openai.com/v1/embeddings"
 
 
 def test_external_embedding_generator_requires_api_key_at_runtime() -> None:
@@ -3589,24 +3613,71 @@ def test_external_embedding_generator_requires_api_key_at_runtime() -> None:
     assert exc_info.value.details == {"field": "api_key"}
 
 
-def test_external_embedding_generator_reports_not_implemented_provider_details() -> (
-    None
-):
+def test_openai_embedding_generator_posts_expected_request_and_parses_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     generator = ExternalAPIEmbeddingGenerator(
         provider=EmbeddingProvider.OPENAI,
         model="text-embedding-3-small",
         api_key="secret",
-        base_url="https://api.openai.com/v1",
+        base_url="https://api.openai.com/v1/embeddings",
+    )
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "data": [
+                        {
+                            "embedding": [0.125, -0.25, 0.5],
+                        }
+                    ],
+                    "model": "text-embedding-3-small",
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request: object) -> FakeResponse:
+        captured["full_url"] = request.full_url
+        captured["method"] = request.get_method()
+        captured["authorization"] = request.get_header("Authorization")
+        captured["content_type"] = request.get_header("Content-type")
+        captured["accept"] = request.get_header("Accept")
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    result = generator.generate(
+        EmbeddingRequest(
+            text="hello world",
+            metadata={"kind": "episode"},
+        )
     )
 
-    with pytest.raises(EmbeddingGenerationError) as exc_info:
-        generator.generate(EmbeddingRequest(text="hello world"))
-
-    assert exc_info.value.provider == "openai"
-    assert exc_info.value.details == {
-        "provider": "openai",
-        "model": "text-embedding-3-small",
-        "base_url": "https://api.openai.com/v1",
+    assert result.provider == "openai"
+    assert result.model == "text-embedding-3-small"
+    assert result.vector == (0.125, -0.25, 0.5)
+    assert result.content_hash == compute_content_hash(
+        "hello world",
+        {"kind": "episode"},
+    )
+    assert captured == {
+        "full_url": "https://api.openai.com/v1/embeddings",
+        "method": "POST",
+        "authorization": "Bearer secret",
+        "content_type": "application/json",
+        "accept": "application/json",
+        "body": {
+            "input": "hello world",
+            "model": "text-embedding-3-small",
+        },
     }
 
 
@@ -4009,6 +4080,8 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert remember_response.details == {
         "workflow_instance_id": str(workflow_id),
         "attempt_id": str(attempt_id),
+        "embedding_persistence_status": "skipped",
+        "embedding_generation_skipped_reason": ("embedding_persistence_not_configured"),
     }
     assert len(episode_repository.episodes) == 1
     assert len(memory_item_repository.memory_items) == 1

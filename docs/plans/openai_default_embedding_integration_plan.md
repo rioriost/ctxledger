@@ -41,7 +41,7 @@ After this plan is implemented, the desired behavior is:
 1. `ctxledger` defaults to an OpenAI embedding integration
 2. operators can enable real embedding generation by setting only:
    - `CTXLEDGER_EMBEDDING_ENABLED=true`
-   - `CTXLEDGER_EMBEDDING_API_KEY=...`
+   - `OPENAI_API_KEY=...`
 3. OpenAI requests are sent to the correct embeddings endpoint with the correct request shape
 4. OpenAI responses are parsed into the internal `EmbeddingResult`
 5. semantic retrieval can be validated end-to-end against a real external embedding API
@@ -107,7 +107,7 @@ Recommended default behavior:
 
 - `CTXLEDGER_EMBEDDING_ENABLED` should remain an explicit boolean switch
 - when enabled and no provider is specified, OpenAI is assumed
-- when enabled and only `CTXLEDGER_EMBEDDING_API_KEY` is supplied, the default OpenAI path works
+- when enabled and only `OPENAI_API_KEY` is supplied, the default OpenAI path works
 
 This preserves safe startup behavior while still making OpenAI the default provider.
 
@@ -273,7 +273,7 @@ Support Azure-like configuration through:
 
 - `CTXLEDGER_EMBEDDING_PROVIDER=openai`
 - `CTXLEDGER_EMBEDDING_BASE_URL=<full Azure embeddings endpoint>`
-- `CTXLEDGER_EMBEDDING_API_KEY=<Azure API key>`
+- `OPENAI_API_KEY=<Azure API key>`
 
 This may require:
 - custom header support in a later phase if Azure requires `api-key` instead of bearer auth
@@ -325,11 +325,11 @@ At least one opt-in integration path should use a real external embedding API so
 
 At minimum:
 
-- `CTXLEDGER_OPENAI_TEST_API_KEY`
+- `OPENAI_API_KEY`
 
 Optionally:
-- `CTXLEDGER_OPENAI_TEST_MODEL`
-- `CTXLEDGER_OPENAI_TEST_BASE_URL`
+- `OPENAI_MODEL`
+- `OPENAI_BASE_URL`
 
 ### Test behavior
 
@@ -409,7 +409,7 @@ Show the minimal config:
 
 ```/dev/null/sh#L1-3
 export CTXLEDGER_EMBEDDING_ENABLED=true
-export CTXLEDGER_EMBEDDING_API_KEY=your_openai_api_key
+export OPENAI_API_KEY=your_openai_api_key
 export CTXLEDGER_EMBEDDING_PROVIDER=openai
 ```
 
@@ -417,7 +417,7 @@ Optional override example:
 
 ```/dev/null/sh#L1-2
 export CTXLEDGER_EMBEDDING_BASE_URL=https://your-compatible-endpoint.example.com/embeddings
-export CTXLEDGER_EMBEDDING_API_KEY=your_provider_key
+export OPENAI_API_KEY=your_provider_key
 ```
 
 ---
@@ -513,7 +513,7 @@ This plan should be considered complete when all of the following are true:
 - Keep embedding execution **explicitly enabled**
 - Make the common real path require only:
   - `CTXLEDGER_EMBEDDING_ENABLED=true`
-  - `CTXLEDGER_EMBEDDING_API_KEY=...`
+  - `OPENAI_API_KEY=...`
 - Implement provider-specific OpenAI request/response handling
 - Preserve endpoint override for compatible alternatives
 - Verify the external path with opt-in integration coverage

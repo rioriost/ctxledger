@@ -67,7 +67,7 @@ def build_embedding_generator(settings: EmbeddingSettings) -> EmbeddingGenerator
             provider=settings.provider,
             model=settings.model,
             api_key=settings.api_key,
-            base_url=settings.base_url or "https://api.openai.com/v1",
+            base_url=settings.base_url or "https://api.openai.com/v1/embeddings",
         )
 
     if settings.provider is EmbeddingProvider.VOYAGEAI:
@@ -166,6 +166,13 @@ class ExternalAPIEmbeddingGenerator:
         target_model = request.model or self.model
         content_hash = compute_content_hash(normalized_text, request.metadata)
 
+        if self.provider is EmbeddingProvider.OPENAI:
+            return self._generate_openai(
+                text=normalized_text,
+                model=target_model,
+                content_hash=content_hash,
+            )
+
         if self.provider is EmbeddingProvider.CUSTOM_HTTP:
             return self._generate_custom_http(
                 text=normalized_text,
@@ -186,6 +193,37 @@ class ExternalAPIEmbeddingGenerator:
                 "model": target_model,
                 "base_url": self.base_url,
             },
+        )
+
+    def _generate_openai(
+        self,
+        *,
+        text: str,
+        model: str,
+        content_hash: str,
+    ) -> EmbeddingResult:
+        raw_response = self._post_json(
+            url=self.base_url,
+            payload={
+                "input": text,
+                "model": model,
+            },
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+        embedding = _extract_embedding_vector(
+            raw_response,
+            provider=self.provider.value,
+        )
+
+        return EmbeddingResult(
+            provider=self.provider.value,
+            model=_extract_response_model(raw_response, default=model),
+            vector=embedding,
+            content_hash=content_hash,
         )
 
     def _generate_custom_http(
@@ -211,7 +249,10 @@ class ExternalAPIEmbeddingGenerator:
                 "Accept": "application/json",
             },
         )
-        embedding = _extract_embedding_vector(raw_response)
+        embedding = _extract_embedding_vector(
+            raw_response,
+            provider=self.provider.value,
+        )
 
         return EmbeddingResult(
             provider=self.provider.value,
@@ -274,11 +315,15 @@ class ExternalAPIEmbeddingGenerator:
             ) from exc
 
 
-def _extract_embedding_vector(payload: Any) -> tuple[float, ...]:
+def _extract_embedding_vector(
+    payload: Any,
+    *,
+    provider: str = EmbeddingProvider.CUSTOM_HTTP.value,
+) -> tuple[float, ...]:
     if not isinstance(payload, dict):
         raise EmbeddingGenerationError(
             "Embedding provider returned an invalid response payload.",
-            provider=EmbeddingProvider.CUSTOM_HTTP.value,
+            provider=provider,
             details={"field": "response"},
         )
 
@@ -305,7 +350,7 @@ def _extract_embedding_vector(payload: Any) -> tuple[float, ...]:
 
     raise EmbeddingGenerationError(
         "Embedding provider response did not contain a usable embedding vector.",
-        provider=EmbeddingProvider.CUSTOM_HTTP.value,
+        provider=provider,
         details={"field": "embedding"},
     )
 

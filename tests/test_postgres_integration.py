@@ -20,6 +20,7 @@ from ctxledger.db.postgres import PostgresConfig, build_postgres_uow_factory
 from ctxledger.memory.embeddings import (
     EmbeddingRequest,
     EmbeddingResult,
+    ExternalAPIEmbeddingGenerator,
     build_embedding_generator,
     compute_content_hash,
 )
@@ -275,6 +276,27 @@ def postgres_test_schema(
 @pytest.fixture
 def postgres_database_url(postgres_integration_environment: None) -> str:
     return os.getenv("CTXLEDGER_TEST_DATABASE_URL", DEFAULT_DATABASE_URL)
+
+
+@pytest.fixture
+def openai_test_api_key() -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        pytest.skip("OPENAI_API_KEY is required for real OpenAI integration tests")
+    return api_key
+
+
+@pytest.fixture
+def openai_test_model() -> str:
+    return os.getenv("OPENAI_MODEL", "text-embedding-3-small")
+
+
+@pytest.fixture
+def openai_test_base_url() -> str:
+    return os.getenv(
+        "OPENAI_BASE_URL",
+        "https://api.openai.com/v1/embeddings",
+    )
 
 
 @pytest.fixture
@@ -689,6 +711,154 @@ def test_postgres_memory_remember_episode_persists_custom_http_embedding(
     assert memory_embeddings[0].embedding_model == "custom-http-test-model"
     assert memory_embeddings[0].embedding == (0.125,) * 1536
     assert memory_embeddings[0].content_hash == "custom-http-content-hash"
+
+
+def test_postgres_memory_remember_episode_and_search_with_real_openai_embeddings(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+    openai_test_api_key: str,
+    openai_test_model: str,
+    openai_test_base_url: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(uow_factory)
+    embedding_generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.OPENAI,
+        model=openai_test_model,
+        api_key=openai_test_api_key,
+        base_url=openai_test_base_url,
+    )
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+        embedding_generator=embedding_generator,
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-search-openai.git",
+            canonical_path="/tmp/integration-repo-memory-search-openai",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMSEARCH-OPENAI-001",
+        )
+    )
+
+    relevant_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Investigated projection drift root cause in deployment workflow",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={
+                "kind": "root-cause",
+                "component": "projection",
+                "scope": "deployment",
+            },
+        )
+    )
+    distractor_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Documented release checklist and handoff steps",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={
+                "kind": "docs",
+                "component": "release",
+                "scope": "handoff",
+            },
+        )
+    )
+
+    assert relevant_episode.episode is not None
+    assert distractor_episode.episode is not None
+
+    if relevant_episode.details.get("embedding_generation_skipped_reason") is not None:
+        pytest.fail(
+            "Real OpenAI integration test did not persist the relevant embedding: "
+            f"{relevant_episode.details['embedding_generation_skipped_reason']}"
+        )
+    if (
+        distractor_episode.details.get("embedding_generation_skipped_reason")
+        is not None
+    ):
+        pytest.fail(
+            "Real OpenAI integration test did not persist the distractor embedding: "
+            f"{distractor_episode.details['embedding_generation_skipped_reason']}"
+        )
+
+    with uow_factory() as uow:
+        assert uow.memory_items is not None
+        assert uow.memory_embeddings is not None
+
+        workspace_items = uow.memory_items.list_by_workspace_id(
+            workspace.workspace_id,
+            limit=10,
+        )
+        assert len(workspace_items) == 2
+
+        embeddings_by_memory_id = {
+            item.memory_id: uow.memory_embeddings.list_by_memory_id(
+                item.memory_id,
+                limit=10,
+            )
+            for item in workspace_items
+        }
+
+    assert all(len(embeddings) == 1 for embeddings in embeddings_by_memory_id.values())
+    assert all(
+        embeddings[0].embedding_model == openai_test_model
+        for embeddings in embeddings_by_memory_id.values()
+    )
+    assert all(
+        len(embeddings[0].embedding) > 0
+        for embeddings in embeddings_by_memory_id.values()
+    )
+    assert all(
+        embeddings[0].content_hash for embeddings in embeddings_by_memory_id.values()
+    )
+
+    search = memory_service.search(
+        SearchMemoryRequest(
+            query="projection drift root cause",
+            workspace_id=str(workspace.workspace_id),
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert search.feature == MemoryFeature.SEARCH
+    assert search.implemented is True
+    assert search.details["search_mode"] == "hybrid_memory_item_search"
+    assert search.details["semantic_candidates_considered"] >= 1
+    assert search.details["semantic_query_generated"] is True
+    assert search.details["memory_items_considered"] == 2
+    assert search.details["results_returned"] >= 1
+    assert len(search.results) >= 1
+
+    top_result = search.results[0]
+    assert top_result.summary == (
+        "Investigated projection drift root cause in deployment workflow"
+    )
+    assert top_result.semantic_score > 0.0
+    assert (
+        "embedding_similarity" in top_result.matched_fields
+        or "content" in top_result.matched_fields
+    )
+    assert top_result.score > 0.0
+    assert top_result.ranking_details["semantic_component"] > 0.0
 
 
 def test_postgres_memory_search_hybrid_results_include_ranking_details(

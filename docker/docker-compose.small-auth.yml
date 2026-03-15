@@ -88,6 +88,7 @@ services:
       CTXLEDGER_LOG_LEVEL: info
       CTXLEDGER_LOG_STRUCTURED: "true"
       CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS: 5
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       PYTHONPATH: /app/src
     working_dir: /app
     command:

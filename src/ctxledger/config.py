@@ -243,7 +243,7 @@ class AppSettings:
 
             if self.embedding.requires_external_api and not self.embedding.api_key:
                 raise ConfigError(
-                    "CTXLEDGER_EMBEDDING_API_KEY is required for the selected embedding provider"
+                    "OPENAI_API_KEY is required for the selected embedding provider"
                 )
 
             if (
@@ -301,11 +301,11 @@ def load_settings() -> AppSettings:
         embedding=EmbeddingSettings(
             provider=_parse_embedding_provider(
                 "CTXLEDGER_EMBEDDING_PROVIDER",
-                EmbeddingProvider.DISABLED,
+                EmbeddingProvider.OPENAI,
             ),
-            model=_get_env("CTXLEDGER_EMBEDDING_MODEL", "local-stub-v1")
-            or "local-stub-v1",
-            api_key=_get_env("CTXLEDGER_EMBEDDING_API_KEY"),
+            model=_get_env("CTXLEDGER_EMBEDDING_MODEL", "text-embedding-3-small")
+            or "text-embedding-3-small",
+            api_key=_get_env("OPENAI_API_KEY"),
             base_url=_get_env("CTXLEDGER_EMBEDDING_BASE_URL"),
             dimensions=_parse_optional_int("CTXLEDGER_EMBEDDING_DIMENSIONS"),
             enabled=_parse_bool("CTXLEDGER_EMBEDDING_ENABLED", False),

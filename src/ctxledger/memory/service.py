@@ -998,7 +998,7 @@ class MemoryService:
                 updated_at=episode.updated_at,
             )
         )
-        self._maybe_store_embedding(memory_item)
+        embedding_outcome = self._maybe_store_embedding(memory_item)
 
         return RememberEpisodeResponse(
             feature=MemoryFeature.REMEMBER_EPISODE,
@@ -1012,6 +1012,7 @@ class MemoryService:
                 "attempt_id": (
                     str(episode.attempt_id) if episode.attempt_id is not None else None
                 ),
+                **embedding_outcome,
             },
         )
 
@@ -1973,12 +1974,17 @@ class MemoryService:
                 details={"field": field_name},
             ) from None
 
-    def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> None:
+    def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
         if (
             self._embedding_generator is None
             or self._memory_embedding_repository is None
         ):
-            return
+            return {
+                "embedding_persistence_status": "skipped",
+                "embedding_generation_skipped_reason": (
+                    "embedding_persistence_not_configured"
+                ),
+            }
 
         try:
             result = self._embedding_generator.generate(
@@ -1987,8 +1993,18 @@ class MemoryService:
                     metadata=memory_item.metadata,
                 )
             )
-        except EmbeddingGenerationError:
-            return
+        except EmbeddingGenerationError as exc:
+            failure_reason = f"embedding_generation_failed:{exc.provider}"
+            details: dict[str, Any] = {
+                "embedding_persistence_status": "failed",
+                "embedding_generation_skipped_reason": failure_reason,
+                "embedding_generation_failure": {
+                    "provider": exc.provider,
+                    "message": str(exc),
+                    "details": dict(exc.details),
+                },
+            }
+            return details
 
         self._memory_embedding_repository.create(
             MemoryEmbeddingRecord(
@@ -2000,6 +2016,14 @@ class MemoryService:
                 created_at=memory_item.updated_at,
             )
         )
+        return {
+            "embedding_persistence_status": "stored",
+            "embedding_generation_skipped_reason": None,
+            "embedding_provider": result.provider,
+            "embedding_model": result.model,
+            "embedding_vector_dimensions": len(result.vector),
+            "embedding_content_hash": result.content_hash,
+        }
 
     def _resolve_workspace_id(self, workflow_instance_id: UUID) -> UUID | None:
         if self._workspace_lookup is None:
