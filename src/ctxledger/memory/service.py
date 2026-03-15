@@ -1148,6 +1148,7 @@ class MemoryService:
         query_tokens = _query_tokens(normalized_query)
         workspace_workflow_ids: tuple[UUID, ...] = ()
         ticket_workflow_ids: tuple[UUID, ...] = ()
+        resolver_ordered_workflow_ids: tuple[UUID, ...] = ()
 
         if self._has_text(request.workflow_instance_id):
             lookup_scope = "workflow_instance"
@@ -1186,17 +1187,28 @@ class MemoryService:
             if workspace_workflow_ids and ticket_workflow_ids:
                 lookup_scope = "workspace_and_ticket"
                 ticket_workflow_id_set = set(ticket_workflow_ids)
-                resolved_workflow_ids = tuple(
+                resolver_ordered_workflow_ids = tuple(
                     workflow_id
                     for workflow_id in workspace_workflow_ids
                     if workflow_id in ticket_workflow_id_set
                 )[: request.limit]
             elif workspace_workflow_ids:
                 lookup_scope = "workspace"
-                resolved_workflow_ids = workspace_workflow_ids
+                resolver_ordered_workflow_ids = workspace_workflow_ids
             elif ticket_workflow_ids:
                 lookup_scope = "ticket"
-                resolved_workflow_ids = ticket_workflow_ids
+                resolver_ordered_workflow_ids = ticket_workflow_ids
+
+        recency_ordered_workflow_ids = (
+            self._order_workflow_ids_by_episode_recency(
+                workflow_ids=resolver_ordered_workflow_ids,
+                limit=request.limit,
+            )
+            if resolved_workflow_instance_id is None
+            else resolved_workflow_ids
+        )
+        if resolved_workflow_instance_id is None:
+            resolved_workflow_ids = recency_ordered_workflow_ids
 
         details = {
             "query": request.query,
@@ -1211,7 +1223,11 @@ class MemoryService:
             "include_memory_items": request.include_memory_items,
             "include_summaries": request.include_summaries,
             "workflow_candidate_ordering": {
-                "ordering_basis": "resolver_order",
+                "ordering_basis": (
+                    "workflow_instance_id_priority"
+                    if resolved_workflow_instance_id is not None
+                    else "latest_episode_recency"
+                ),
                 "workflow_instance_id_priority_applied": (
                     resolved_workflow_instance_id is not None
                 ),
@@ -1220,6 +1236,9 @@ class MemoryService:
                 ],
                 "ticket_candidate_ids": [
                     str(workflow_id) for workflow_id in ticket_workflow_ids
+                ],
+                "resolver_candidate_ids": [
+                    str(workflow_id) for workflow_id in resolver_ordered_workflow_ids
                 ],
                 "final_candidate_ids": [
                     str(workflow_id) for workflow_id in resolved_workflow_ids
@@ -1361,6 +1380,32 @@ class MemoryService:
 
         episodes.sort(key=lambda episode: episode.created_at, reverse=True)
         return tuple(episodes[:limit])
+
+    def _order_workflow_ids_by_episode_recency(
+        self,
+        *,
+        workflow_ids: tuple[UUID, ...],
+        limit: int,
+    ) -> tuple[UUID, ...]:
+        if not workflow_ids:
+            return ()
+
+        workflow_recencies: list[tuple[datetime, int, UUID]] = []
+
+        for index, workflow_id in enumerate(workflow_ids):
+            latest_episode = self._episode_repository.list_by_workflow_id(
+                workflow_id,
+                limit=1,
+            )
+            latest_created_at = (
+                latest_episode[0].created_at
+                if latest_episode
+                else datetime.min.replace(tzinfo=timezone.utc)
+            )
+            workflow_recencies.append((latest_created_at, -index, workflow_id))
+
+        workflow_recencies.sort(reverse=True)
+        return tuple(workflow_id for _, _, workflow_id in workflow_recencies[:limit])
 
     def _score_memory_item_for_query(
         self,
