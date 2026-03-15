@@ -244,17 +244,26 @@ Current progress:
 - current dashboard/operator UX gaps:
   - stat panels still show series label `value` in places
   - pie chart/table presentation can be made more operator-friendly with better aliases and panel options
-  - README does not yet document the Grafana compose overlay flow
+- README quick start has now been rewritten to be more user-first and self-contained:
+  - key local startup steps were moved higher
+  - Grafana compose overlay usage is now documented in README
+  - Grafana setup no longer depends on jumping out to other docs for the minimum working path
+  - MCP client configuration examples were aligned to `localhost`
+  - Grafana login guidance using:
+    - `CTXLEDGER_GRAFANA_ADMIN_USER`
+    - `CTXLEDGER_GRAFANA_ADMIN_PASSWORD`
+    is now included directly in the quick start flow
+  - standard shell `export` examples were added for Grafana env setup
+  - `envrcctl` is now clearly presented as optional rather than the default path
 
 Recommended next sequence:
-1. check that all live Grafana bring-up fixes are reflected in the repository
-   - especially datasource UID usage in dashboard JSON
-   - and any other changes required for the current local stack shape
-2. add README guidance for bringing up Grafana with Docker Compose
-   - including the current auth-overlay-compatible startup shape
-   - and the required PostgreSQL observability/bootstrap steps
-3. make Grafana dashboards more operator-friendly
+1. check that all README quick-start and live Grafana bring-up fixes are reflected consistently across repository docs
+   - especially any remaining `127.0.0.1` vs `localhost` user-facing examples
+   - and any places where quick-start-critical steps still only exist in linked docs
+2. make Grafana dashboards more operator-friendly
    - improve panel aliases/labels
    - remove generic `value` presentation where possible
    - improve pie/table readability
-   - consider a workflow-activity dashboard if still useful
+   - make latest-activity tables easier to scan
+3. decide whether to add a dedicated workflow-activity dashboard
+   - only if it adds real operator value beyond the current runtime overview
