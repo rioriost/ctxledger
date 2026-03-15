@@ -4580,7 +4580,13 @@ def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources(
         failure_reason=None,
     )
 
-    assert result is None
+    assert result is not None
+    assert result.episode is None
+    assert result.memory_item is None
+    assert result.details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "low_signal_checkpoint_closeout",
+    }
 
 
 def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation_fails() -> (
@@ -4641,6 +4647,7 @@ def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation
 
     assert result is not None
     assert result.details == {
+        "auto_memory_recorded": True,
         "embedding_persistence_status": "failed",
         "embedding_generation_skipped_reason": "embedding_generation_failed:openai",
         "embedding_generation_failure": {

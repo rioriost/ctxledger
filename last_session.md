@@ -7,6 +7,8 @@ The closeout matcher now extracts semantic fields from generated summaries, comp
 
 A runtime failure in `workflow_complete` auto-memory turned out not to be an environment-variable forwarding problem after all. The actual blocker was an older live PostgreSQL `memory_items_provenance_valid` constraint that still rejected `workflow_complete_auto`, so auto-memory could create the episode but failed while inserting the corresponding memory item. After updating the live constraint, the MCP/runtime path successfully recorded closeout auto-memory and persisted an OpenAI embedding.
 
+A follow-up release-QA pass then ran the full test suite with coverage for `0.3.0`. That run was green after aligning several stale test expectations with the current runtime/config surface. The main issues were outdated test fixtures that did not include the newer `embedding` and `schema_name` settings fields, older assertions for workflow auto-memory skip/detail payloads, and PostgreSQL helper expectations that did not account for schema-aware `search_path` session setup. After updating those tests, the repository-wide coverage run passed at `723 passed, 1 skipped` with total coverage at `96%`.
+
 ## What is already done
 
 ### OpenAI-default embedding path
@@ -34,10 +36,18 @@ A runtime failure in `workflow_complete` auto-memory turned out not to be an env
 - direct runtime embedding verification now also passed:
   - manual `memory_remember_episode` persisted an OpenAI embedding to `memory_embeddings`
   - MCP/runtime `workflow_complete` auto-memory also persisted an OpenAI embedding after the live PostgreSQL constraint fix
+- full repository QA/coverage validation is now green:
+  - `723 passed, 1 skipped`
+  - total coverage: `96%`
 
 Useful command if re-running real OpenAI validation:
 ```/dev/null/sh#L1-1
 envrcctl exec -- python -m pytest tests/test_postgres_integration.py -q -k openai
+```
+
+Useful command for the full release-QA coverage pass:
+```/dev/null/sh#L1-1
+python -m pytest --cov=src/ctxledger --cov-report=term-missing -q
 ```
 
 ### Memory observability
@@ -232,6 +242,38 @@ After that live fix:
 - `memory_items` gained a `workflow_complete_auto` row
 - `memory_embeddings` count increased accordingly
 
+### Full coverage QA follow-up
+After acceptance evidence was mostly in place, a full repository coverage run was executed for release QA.
+
+What initially failed:
+- `tests/test_cli.py`
+  - fixture drift from the newer required `embedding` settings block
+  - stale fallback-version expectation
+- `tests/test_mcp_modules.py`
+  - fixture drift from newer required `schema_name` and `embedding` settings fields
+- `tests/test_coverage_targets.py`
+  - stale expectations for current workflow auto-memory skip and failure detail shapes
+- `tests/test_postgres_helpers.py`
+  - stale expectations that did not account for schema-aware `SET search_path TO "public", public`
+
+What changed:
+- updated test fixtures to construct current `AppSettings` / `DatabaseSettings` shapes
+- aligned workflow auto-memory assertions with current result payloads
+  - low-signal closeout now returns a non-`None` result with:
+    - `auto_memory_recorded: false`
+    - `auto_memory_skipped_reason: low_signal_checkpoint_closeout`
+  - failed embedding persistence detail assertions now also include:
+    - `auto_memory_recorded: true`
+- aligned PostgreSQL helper expectations with current session setup behavior
+  - statement timeout
+  - schema-aware `search_path`
+
+Final QA outcome:
+- full suite coverage run passed:
+  - `723 passed, 1 skipped`
+- total coverage:
+  - `96%`
+
 ## Immediate restart point
 The workflow-service and PostgreSQL-focused closeout matching refinement is now implemented and validated for extracted fields, richer metadata-aware comparison, and weighted similarity.
 
@@ -240,30 +282,42 @@ The real runtime path for `workflow_complete` auto-memory with OpenAI embeddings
 - the live PostgreSQL `memory_items_provenance_valid` constraint was stale
 - after fixing that live constraint, runtime closeout auto-memory embedding persistence worked
 
-The next useful step is to make sure this live-schema drift is addressed durably, then decide whether the current weighted field-aware heuristic is sufficient or whether matcher quality should be pushed further.
+The broader release-QA coverage pass is now also complete and green:
+- stale tests were updated to match the current runtime/config surface
+- no new product-code regressions were uncovered in the full suite
+- repository-wide coverage currently stands at `96%`
+
+The next useful step is to make sure the live-schema drift is addressed durably, then decide whether to close out release readiness with docs/commit housekeeping or push matcher quality further.
 
 ## Recommended next steps
 1. address the live-schema drift durably
    - ensure existing databases update `memory_items_provenance_valid` to allow:
      - `workflow_complete_auto`
    - consider whether a documented migration/recovery step is enough or whether a more formal migration mechanism is needed
-2. decide whether duplicate suppression should remain scoped only to the same workflow
+2. capture the release-QA outcome in docs and/or commit history
+   - the full coverage pass is now green
+   - test-only alignment changes should be committed descriptively if not already
+3. decide whether duplicate suppression should remain scoped only to the same workflow
    - current behavior is workflow-local
-3. optionally extend operator-facing docs
+4. optionally extend operator-facing docs
    - explain auto-memory skip reasons
    - explain duplicate suppression reasons
    - explain the lookback-window behavior
    - explain weighted closeout similarity behavior
    - explain semantic field extraction and boilerplate discounting
    - explain the runtime constraint mismatch failure mode and recovery
-4. if needed later, add broader regression coverage around these reasons in handler/server-level tests
-5. if matcher quality still feels weak in practice, consider a stronger similarity model beyond the current weighted heuristic
+5. if needed later, add broader regression coverage around these reasons in handler/server-level tests
+6. if matcher quality still feels weak in practice, consider a stronger similarity model beyond the current weighted heuristic
 
 ## Important files
 - `src/ctxledger/config.py`
 - `src/ctxledger/memory/service.py`
 - `src/ctxledger/workflow/memory_bridge.py`
 - `src/ctxledger/workflow/service.py`
+- `tests/test_cli.py`
+- `tests/test_coverage_targets.py`
+- `tests/test_mcp_modules.py`
+- `tests/test_postgres_helpers.py`
 - `tests/test_workflow_service.py`
 - `tests/test_postgres_integration.py`
 - `docker/docker-compose.small-auth.yml`
@@ -274,6 +328,7 @@ Existing commit from the OpenAI validation pass:
 
 ## Operational reminders
 - ignore untracked cert files
+- ignore `.coverage` as a generated QA artifact unless intentionally preserving it
 - treat pasted API keys as exposed; prefer env injection / secret handling
 - the focused PostgreSQL refine checks validated in this session are:
   - `python -m pytest tests/test_postgres_integration.py -q -k 'near_duplicate or old_closeout or verify_status'`
@@ -291,6 +346,8 @@ Existing commit from the OpenAI validation pass:
   - if `memory_remember_episode` stores embeddings successfully but MCP/runtime `workflow_complete` returns `auto_memory_recording_failed` with PostgreSQL `CheckViolation`, inspect the live `memory_items_provenance_valid` constraint first
   - the checked-in schema may already be correct while the running database still carries an older constraint definition
   - `envrcctl exec -- docker compose ... down` and `up -d --build` do not reset that kind of live schema drift because the PostgreSQL volume remains intact
+- important release-QA command from this session:
+  - `python -m pytest --cov=src/ctxledger --cov-report=term-missing -q`
 
 ## Continuation note
 The closeout matcher itself is now refined and validated in both workflow-service and PostgreSQL-focused coverage:
@@ -304,20 +361,25 @@ The runtime `workflow_complete` auto-memory path was also debugged end-to-end:
 - the runtime blocker was an older live PostgreSQL `memory_items_provenance_valid` constraint
 - after updating that live constraint to allow `workflow_complete_auto`, MCP/runtime closeout auto-memory successfully stored both the memory item and the OpenAI embedding
 
-Focused workflow-service validation is green:
-- `python -m pytest tests/test_workflow_service.py -q -k 'near_duplicate or summary_similarity or boilerplate or metadata_aware or attempt_status or failure_reason or semantic_fields'`
+The broader release-QA coverage pass is now green:
+- full suite result:
+  - `723 passed, 1 skipped`
+- total coverage:
+  - `96%`
 
-Focused PostgreSQL integration validation is green:
-- `python -m pytest tests/test_postgres_integration.py -q -k 'near_duplicate or summary_similarity or boilerplate or metadata_aware or attempt_status or failure_reason'`
-
-Important live-runtime recovery command used during debugging:
-```/dev/null/sql#L1-3
-ALTER TABLE memory_items DROP CONSTRAINT IF EXISTS memory_items_provenance_valid;
-ALTER TABLE memory_items ADD CONSTRAINT memory_items_provenance_valid
-  CHECK (provenance IN ('episode', 'explicit', 'derived', 'imported', 'workflow_complete_auto'));
-```
+During that QA pass, the failures were stale test expectations rather than runtime regressions:
+- `tests/test_cli.py`
+  - needed current `embedding` settings in fixtures
+  - version fallback expectation was outdated
+- `tests/test_mcp_modules.py`
+  - needed current `schema_name` and `embedding` settings in fixtures
+- `tests/test_coverage_targets.py`
+  - needed current auto-memory skip/detail expectations
+- `tests/test_postgres_helpers.py`
+  - needed to account for schema-aware `search_path` session setup
 
 If continuing next:
-- capture this live-schema update path in a more durable migration/recovery note
+- capture the live-schema update path in a more durable migration/recovery note
+- make a descriptive commit for the release-QA test-alignment pass if that is not done yet
 - then decide whether the heuristic is now good enough
 - otherwise pursue a stronger similarity model and/or broader operator-facing docs

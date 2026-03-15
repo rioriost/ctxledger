@@ -14,6 +14,8 @@ from ctxledger.config import (
     AppSettings,
     DatabaseSettings,
     DebugSettings,
+    EmbeddingProvider,
+    EmbeddingSettings,
     HttpSettings,
     LoggingSettings,
     LogLevel,
@@ -57,6 +59,14 @@ def make_settings(
         logging=LoggingSettings(
             level=LogLevel.INFO,
             structured=False,
+        ),
+        embedding=EmbeddingSettings(
+            provider=EmbeddingProvider.DISABLED,
+            model="text-embedding-3-small",
+            api_key=None,
+            base_url=None,
+            dimensions=None,
+            enabled=False,
         ),
     )
 
@@ -856,7 +866,7 @@ def test_print_version_falls_back_when_metadata_lookup_fails(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.1.0"
+    assert captured.out.strip() == "0.2.0"
     assert captured.err == ""
 
 

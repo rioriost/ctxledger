@@ -246,6 +246,7 @@ def test_health_checker_ping_executes_select_and_session_settings(
 
     assert executed == [
         ("SET statement_timeout = 1234", None),
+        ('SET search_path TO "public", public', None),
         ("SELECT 1", None),
     ]
 
@@ -277,7 +278,8 @@ def test_health_checker_schema_ready_returns_true_when_all_tables_exist(
 
     assert checker.schema_ready() is True
     assert executed[0] == ("SET statement_timeout = 0", None)
-    assert "information_schema.tables" in executed[1][0]
+    assert executed[1] == ('SET search_path TO "public", public', None)
+    assert "information_schema.tables" in executed[2][0]
 
 
 def test_health_checker_schema_ready_returns_false_when_tables_are_missing(
