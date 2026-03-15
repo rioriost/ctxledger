@@ -361,25 +361,30 @@ The runtime `workflow_complete` auto-memory path was also debugged end-to-end:
 - the runtime blocker was an older live PostgreSQL `memory_items_provenance_valid` constraint
 - after updating that live constraint to allow `workflow_complete_auto`, MCP/runtime closeout auto-memory successfully stored both the memory item and the OpenAI embedding
 
-The broader release-QA coverage pass is now green:
-- full suite result:
-  - `723 passed, 1 skipped`
-- total coverage:
-  - `96%`
+The broader release-QA coverage pass is green again after one additional stale-test correction:
+- latest full suite result:
+  - `780 passed, 1 skipped`
 
-During that QA pass, the failures were stale test expectations rather than runtime regressions:
-- `tests/test_cli.py`
-  - needed current `embedding` settings in fixtures
-  - version fallback expectation was outdated
-- `tests/test_mcp_modules.py`
-  - needed current `schema_name` and `embedding` settings in fixtures
-- `tests/test_coverage_targets.py`
-  - needed current auto-memory skip/detail expectations
-- `tests/test_postgres_helpers.py`
-  - needed to account for schema-aware `search_path` session setup
+A follow-up failure surfaced in `tests/test_coverage_targets.py` around duplicate closeout suppression:
+- `test_workflow_memory_bridge_duplicate_closeout_checks_old_episode_and_non_auto_memory_paths`
+- the temporary expectation change was wrong
+- current implementation still suppresses exact-summary duplicates for prior auto-memory episodes even when the prior episode is old, because:
+  - `_recent_workflow_completion_memory()` filters to `memory_origin == "workflow_complete_auto"` before duplicate checks
+  - exact normalized-summary equality is checked before the near-duplicate time-window gate
+  - non-auto episodes are ignored for this path
+- the test was restored to expect:
+  - `AutoMemoryDuplicateCheckResult(should_record=False, skipped_reason="duplicate_closeout_auto_memory")`
+
+Latest validation completed:
+- focused rerun:
+  - `python -m pytest tests/test_coverage_targets.py -q -k old_episode_and_non_auto_memory_paths`
+  - `1 passed`
+- full suite rerun:
+  - `python -m pytest -q`
+  - `780 passed, 1 skipped`
 
 If continuing next:
 - capture the live-schema update path in a more durable migration/recovery note
-- make a descriptive commit for the release-QA test-alignment pass if that is not done yet
+- make a descriptive commit for the latest release-QA test-alignment pass if that is not done yet
 - then decide whether the heuristic is now good enough
 - otherwise pursue a stronger similarity model and/or broader operator-facing docs

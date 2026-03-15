@@ -576,6 +576,38 @@ Recommended operator order:
 
 Migration or bootstrap execution should be treated as an operator/deployment concern, not as normal request-serving behavior.
 
+## 7.4 Recovery for Stale Live Constraints After Schema Drift
+
+In environments that persist PostgreSQL data across restarts, an older live constraint definition may remain in place even when the checked-in bootstrap schema has already been updated.
+
+One concrete failure mode is a stale `memory_items_provenance_valid` constraint that does not yet allow:
+
+- `workflow_complete_auto`
+
+This can surface as:
+
+- direct `memory_remember_episode` working normally
+- `workflow_complete` creating the auto-memory episode but failing while inserting the corresponding memory item
+- PostgreSQL `CheckViolation` errors referencing `memory_items_provenance_valid`
+- auto-memory completion details indicating recording failure instead of successful embedding persistence
+
+This is a schema-drift recovery problem, not an application-env forwarding problem.
+
+Recommended recovery approach:
+
+1. inspect the live constraint definition in the running database
+2. confirm whether `workflow_complete_auto` is missing from the allowed provenance values
+3. update or recreate the live constraint so it matches the current schema in `schemas/postgres.sql`
+4. rerun a representative `workflow_complete` path and confirm:
+   - the memory item is stored
+   - auto-memory reports successful recording
+   - embedding persistence succeeds when embedding is enabled
+
+Operational reminder:
+
+- rebuilding containers or restarting services does not by itself correct this class of drift when the PostgreSQL volume is retained
+- treat the checked-in schema as the desired definition, but verify the live database separately before assuming migration state is current
+
 ---
 
 ## 8. Health and Readiness
