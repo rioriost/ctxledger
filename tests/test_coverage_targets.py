@@ -4583,6 +4583,74 @@ def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources(
     assert result is None
 
 
+def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation_fails() -> (
+    None
+):
+    from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
+
+    class FailingEmbeddingGenerator:
+        def generate(self, request: EmbeddingRequest) -> EmbeddingResult:
+            raise EmbeddingGenerationError(
+                "embedding generation failed",
+                provider="openai",
+                details={"status_code": 500},
+            )
+
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    attempt_id = uuid4()
+
+    bridge = WorkflowMemoryBridge(
+        episode_repository=InMemoryEpisodeRepository(),
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        embedding_generator=FailingEmbeddingGenerator(),
+    )
+
+    result = bridge.record_workflow_completion_memory(
+        workflow=WorkflowInstance(
+            workflow_instance_id=workflow_id,
+            workspace_id=workspace_id,
+            ticket_id="TICKET-AUTO-MEM-3",
+            status=WorkflowInstanceStatus.COMPLETED,
+        ),
+        attempt=WorkflowAttempt(
+            attempt_id=attempt_id,
+            workflow_instance_id=workflow_id,
+            attempt_number=1,
+            status=WorkflowAttemptStatus.SUCCEEDED,
+            verify_status=VerifyStatus.PASSED,
+        ),
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            attempt_id=attempt_id,
+            step_name="validate_openai",
+            summary="Broader targeted regression is green",
+            checkpoint_json={"next_intended_action": "Review diff and commit"},
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"]},
+        ),
+        summary="Validated OpenAI embedding integration end to end",
+        failure_reason=None,
+    )
+
+    assert result is not None
+    assert result.details == {
+        "embedding_persistence_status": "failed",
+        "embedding_generation_skipped_reason": "embedding_generation_failed:openai",
+        "embedding_generation_failure": {
+            "provider": "openai",
+            "message": "embedding generation failed",
+            "details": {"status_code": 500},
+        },
+    }
+
+
 def test_memory_service_raises_validation_errors_for_invalid_requests() -> None:
     workflow_id = uuid4()
     service = MemoryService(

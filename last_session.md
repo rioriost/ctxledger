@@ -1,7 +1,7 @@
 # ctxledger last session
 
 ## Session summary
-This work loop finished the OpenAI-default embedding integration validation and cleanup pass for `ctxledger`, and a follow-up doc-alignment pass corrected stale repository docs that still understated current memory and embedding support. It also recovered an interrupted uncommitted workstream for automatic workflow-completion memory capture.
+This work loop finished the OpenAI-default embedding integration validation and cleanup pass for `ctxledger`, and a follow-up doc-alignment pass corrected stale repository docs that still understated current memory and embedding support. It also recovered and extended an interrupted uncommitted workstream for automatic workflow-completion memory capture.
 
 Main outcomes:
 - OpenAI remains the default embedding provider in config.
@@ -10,7 +10,7 @@ Main outcomes:
 - OpenAI-related environment variable naming was standardized toward common OpenAI conventions where appropriate.
 - The broader targeted regression suite is green.
 - `README.md`, `docs/CHANGELOG.md`, `docs/deployment.md`, and `docs/roadmap.md` now reflect the current implemented state for `memory_search`, semantic retrieval, and validated OpenAI embedding support.
-- An interrupted, uncommitted `workflow_complete` auto-memory workstream was identified from the working tree and recovered to a targeted-pass state.
+- An interrupted, uncommitted `workflow_complete` auto-memory workstream was identified from the working tree, recovered to a targeted-pass state, and extended with explicit auto-memory failure surfacing plus retrieval proof through `memory_search`.
 
 ---
 
@@ -366,17 +366,24 @@ At session close:
   - `docs/CHANGELOG.md`
   - `docs/deployment.md`
   - `docs/roadmap.md`
-- interrupted uncommitted auto-memory recovery work is present in the working tree:
+- interrupted auto-memory work has now been recovered and extended in the current implementation:
   - `src/ctxledger/workflow/memory_bridge.py`
   - `src/ctxledger/workflow/service.py`
   - `src/ctxledger/runtime/server_factory.py`
+  - `src/ctxledger/mcp/tool_handlers.py`
   - `tests/test_coverage_targets.py`
+  - `tests/test_server.py`
+  - `tests/test_mcp_tool_handlers.py`
   - `tests/test_postgres_integration.py`
   - `schemas/postgres.sql`
-- that interrupted work is now at a targeted validated state after recovery:
-  - fixed test wiring away from env-dependent service construction for the targeted integration path
+- current recovered state:
+  - fixed targeted test wiring away from env-dependent service construction for the targeted integration path
   - aligned schema provenance constraint with `workflow_complete_auto`
   - aligned the targeted PostgreSQL integration test with the actual local-stub bridge wiring used there
+  - added structured `workflow_complete` auto-memory surfacing through:
+    - `warnings`
+    - `auto_memory_details`
+  - added targeted PostgreSQL proof that `workflow_complete_auto` memory is retrievable through `memory_search`
 - workflow is complete in canonical tracking
 - untracked cert files are still ignorable:
   - `docker/traefik/certs/localhost.crt`
@@ -399,14 +406,14 @@ Still worth remembering:
 ---
 
 ## Natural next candidates
-1. Decide whether the interrupted `workflow_complete` auto-memory work should keep the current local-stub-focused targeted integration test shape or be rewritten to validate the default OpenAI runtime path explicitly.
-2. Review the runtime/behavior design for auto-memory failures after `workflow_complete`, especially whether best-effort failure should be surfaced more explicitly.
-3. If desired, add a tiny operator-facing helper script or docs snippet for:
+1. Decide whether the `workflow_complete` auto-memory integration path should keep the current local-stub-focused targeted test shape or be rewritten to validate the default OpenAI runtime path explicitly.
+2. If desired, add a tiny operator-facing helper script or docs snippet for:
    - running the real OpenAI integration test
    - manually inspecting `memory_embeddings`
-4. Review any remaining docs outside `README.md`, `docs/CHANGELOG.md`, `docs/deployment.md`, `docs/roadmap.md`, and the updated plan file for outdated embedding-support wording or env names.
-5. If another embedding provider is next, extend the same provider-specific pattern used for OpenAI.
-6. If Azure/OpenAI-compatible support matters soon, clarify header/auth compatibility explicitly.
+3. Review any remaining docs outside `README.md`, `docs/CHANGELOG.md`, `docs/deployment.md`, `docs/roadmap.md`, and the updated plan file for outdated embedding-support wording or env names.
+4. If another embedding provider is next, extend the same provider-specific pattern used for OpenAI.
+5. If Azure/OpenAI-compatible support matters soon, clarify header/auth compatibility explicitly.
+6. For Phase 2 of `automatic_multilayer_memory_plan.md`, design checkpoint auto-memory heuristics and noise controls before implementation.
 
 ---
 
@@ -427,18 +434,26 @@ Still worth remembering:
   - `docs/CHANGELOG.md`
   - `docs/deployment.md`
   - `docs/roadmap.md`
-- interrupted uncommitted `workflow_complete` auto-memory work was identified from the working tree and partially recovered:
+- `workflow_complete` auto-memory work is now recovered and extended:
   - target files:
     - `src/ctxledger/workflow/memory_bridge.py`
     - `src/ctxledger/workflow/service.py`
     - `src/ctxledger/runtime/server_factory.py`
+    - `src/ctxledger/mcp/tool_handlers.py`
     - `tests/test_coverage_targets.py`
+    - `tests/test_server.py`
+    - `tests/test_mcp_tool_handlers.py`
     - `tests/test_postgres_integration.py`
     - `schemas/postgres.sql`
-  - targeted recovery points confirmed:
+  - targeted recovery and extension points confirmed:
     - schema allows `workflow_complete_auto` provenance
     - targeted PostgreSQL integration test for `workflow_complete_auto` passes
     - targeted workflow bridge / factory coverage passes
+    - `workflow_complete` success payload now surfaces:
+      - `warnings`
+      - `auto_memory_details`
+    - targeted handler tests for workflow completion surfacing pass
+    - targeted PostgreSQL proof that `workflow_complete_auto` memory is retrievable through `memory_search` passes
 - commit created:
   - `68fa351 Validate OpenAI embedding integration end to end`
 - if testing real persistence again, use:

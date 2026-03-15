@@ -318,6 +318,8 @@ class WorkflowCompleteResult:
     workflow_instance: WorkflowInstance
     attempt: WorkflowAttempt
     verify_report: VerifyReport | None = None
+    warnings: tuple[ResumeIssue, ...] = ()
+    auto_memory_details: dict[str, Any] | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -1071,20 +1073,71 @@ class WorkflowService:
 
             uow.commit()
 
+            completion_warnings: list[ResumeIssue] = []
+            auto_memory_details: dict[str, Any] | None = None
+
             if self._workflow_memory_bridge is not None:
-                self._workflow_memory_bridge.record_workflow_completion_memory(
-                    workflow=updated_workflow,
-                    attempt=updated_attempt,
-                    latest_checkpoint=latest_checkpoint,
-                    verify_report=verify_report,
-                    summary=data.summary,
-                    failure_reason=data.failure_reason,
-                )
+                try:
+                    auto_memory_result = (
+                        self._workflow_memory_bridge.record_workflow_completion_memory(
+                            workflow=updated_workflow,
+                            attempt=updated_attempt,
+                            latest_checkpoint=latest_checkpoint,
+                            verify_report=verify_report,
+                            summary=data.summary,
+                            failure_reason=data.failure_reason,
+                        )
+                    )
+                except Exception as exc:
+                    completion_warnings.append(
+                        ResumeIssue(
+                            code="auto_memory_recording_failed",
+                            message=(
+                                "workflow completion succeeded but automatic memory "
+                                "recording failed"
+                            ),
+                            details={
+                                "error_type": type(exc).__name__,
+                                "error_message": str(exc),
+                            },
+                        )
+                    )
+                else:
+                    if auto_memory_result is None:
+                        auto_memory_details = {
+                            "auto_memory_recorded": False,
+                            "auto_memory_skipped_reason": (
+                                "no_completion_summary_source"
+                            ),
+                        }
+                    else:
+                        auto_memory_details = {
+                            "auto_memory_recorded": True,
+                            **auto_memory_result.details,
+                        }
+                        if (
+                            auto_memory_result.details.get(
+                                "embedding_persistence_status"
+                            )
+                            == "failed"
+                        ):
+                            completion_warnings.append(
+                                ResumeIssue(
+                                    code="auto_memory_embedding_failed",
+                                    message=(
+                                        "workflow completion memory was recorded but "
+                                        "embedding persistence failed"
+                                    ),
+                                    details=dict(auto_memory_result.details),
+                                )
+                            )
 
             return WorkflowCompleteResult(
                 workflow_instance=updated_workflow,
                 attempt=updated_attempt,
                 verify_report=verify_report,
+                warnings=tuple(completion_warnings),
+                auto_memory_details=auto_memory_details,
             )
 
     def _require_workspace(self, uow: UnitOfWork, workspace_id: UUID) -> Workspace:

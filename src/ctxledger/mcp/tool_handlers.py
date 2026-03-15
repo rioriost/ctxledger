@@ -598,6 +598,15 @@ def build_workflow_complete_tool_handler(
                         else None
                     )
                 ),
+                "warnings": [
+                    {
+                        "code": warning.code,
+                        "message": warning.message,
+                        "details": warning.details,
+                    }
+                    for warning in result.warnings
+                ],
+                "auto_memory_details": result.auto_memory_details,
             }
         )
 

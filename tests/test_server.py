@@ -2776,6 +2776,8 @@ def test_build_workflow_complete_tool_handler_returns_success_payload() -> None:
                 "workflow_instance": completed_workflow,
                 "attempt": finished_attempt,
                 "verify_report": resume.latest_verify_report,
+                "warnings": (),
+                "auto_memory_details": None,
             },
         )(),
     )
@@ -2810,6 +2812,8 @@ def test_build_workflow_complete_tool_handler_returns_success_payload() -> None:
             "attempt_status": finished_attempt.status.value,
             "finished_at": finished_attempt.finished_at.isoformat(),
             "latest_verify_status": resume.latest_verify_report.status.value,
+            "warnings": [],
+            "auto_memory_details": None,
         },
     }
     assert fake_workflow_service.complete_workflow_calls == [
@@ -2823,6 +2827,99 @@ def test_build_workflow_complete_tool_handler_returns_success_payload() -> None:
             failure_reason=None,
         )
     ]
+
+
+def test_build_workflow_complete_tool_handler_returns_auto_memory_warning_payload() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    finished_attempt = replace(
+        resume.attempt,
+        status=WorkflowAttemptStatus.SUCCEEDED,
+        finished_at=datetime(2024, 1, 8, tzinfo=UTC),
+    )
+    completed_workflow = replace(
+        resume.workflow_instance,
+        status=WorkflowInstanceStatus.COMPLETED,
+        updated_at=datetime(2024, 1, 8, tzinfo=UTC),
+    )
+    auto_memory_warning = ResumeIssue(
+        code="auto_memory_embedding_failed",
+        message="workflow completion memory was recorded but embedding persistence failed",
+        details={
+            "auto_memory_recorded": True,
+            "embedding_persistence_status": "failed",
+            "embedding_generation_skipped_reason": "embedding_generation_failed:openai",
+        },
+    )
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        complete_workflow_result=type(
+            "WorkflowCompleteResultStub",
+            (),
+            {
+                "workflow_instance": completed_workflow,
+                "attempt": finished_attempt,
+                "verify_report": resume.latest_verify_report,
+                "warnings": (auto_memory_warning,),
+                "auto_memory_details": {
+                    "auto_memory_recorded": True,
+                    "embedding_persistence_status": "failed",
+                    "embedding_generation_skipped_reason": "embedding_generation_failed:openai",
+                },
+            },
+        )(),
+    )
+    server = CtxLedgerServer(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=FakeRuntime(),
+        workflow_service_factory=lambda: fake_workflow_service,
+    )
+    handler = build_workflow_complete_tool_handler(server)
+
+    server.startup()
+
+    response = handler(
+        {
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "attempt_id": str(resume.attempt.attempt_id),
+            "workflow_status": WorkflowInstanceStatus.COMPLETED.value,
+            "summary": "Completed successfully",
+            "verify_status": VerifyStatus.PASSED.value,
+            "verify_report": {"checks": ["pytest"], "status": "passed"},
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workflow_instance_id": str(completed_workflow.workflow_instance_id),
+            "attempt_id": str(finished_attempt.attempt_id),
+            "workflow_status": completed_workflow.status.value,
+            "attempt_status": finished_attempt.status.value,
+            "finished_at": finished_attempt.finished_at.isoformat(),
+            "latest_verify_status": resume.latest_verify_report.status.value,
+            "warnings": [
+                {
+                    "code": "auto_memory_embedding_failed",
+                    "message": "workflow completion memory was recorded but embedding persistence failed",
+                    "details": {
+                        "auto_memory_recorded": True,
+                        "embedding_persistence_status": "failed",
+                        "embedding_generation_skipped_reason": "embedding_generation_failed:openai",
+                    },
+                }
+            ],
+            "auto_memory_details": {
+                "auto_memory_recorded": True,
+                "embedding_persistence_status": "failed",
+                "embedding_generation_skipped_reason": "embedding_generation_failed:openai",
+            },
+        },
+    }
 
 
 def test_build_workflow_complete_tool_handler_returns_invalid_request_for_bad_status() -> (

@@ -1002,6 +1002,145 @@ def test_postgres_workflow_complete_auto_records_memory_and_embedding(
     assert memory_embeddings[0].content_hash is not None
 
 
+def test_postgres_workflow_complete_auto_memory_is_searchable(
+    postgres_database_url: str,
+    clean_postgres_database: str,
+) -> None:
+    config = PostgresConfig(
+        database_url=postgres_database_url,
+        connect_timeout_seconds=5,
+        statement_timeout_ms=5000,
+        schema_name=clean_postgres_database,
+    )
+    uow_factory = build_postgres_uow_factory(config)
+    workflow_service = WorkflowService(
+        uow_factory,
+        workflow_memory_bridge=WorkflowMemoryBridge(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
+            embedding_generator=build_embedding_generator(
+                EmbeddingSettings(
+                    provider=EmbeddingProvider.LOCAL_STUB,
+                    model="local-stub-v1",
+                    api_key=None,
+                    base_url=None,
+                    dimensions=1536,
+                    enabled=True,
+                )
+            ),
+        ),
+    )
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+        embedding_generator=build_embedding_generator(
+            EmbeddingSettings(
+                provider=EmbeddingProvider.LOCAL_STUB,
+                model="local-stub-v1",
+                api_key=None,
+                base_url=None,
+                dimensions=1536,
+                enabled=True,
+            )
+        ),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-search.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-search",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-SEARCH-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="investigate_projection_drift",
+            summary="Investigated projection drift root cause in deployment workflow",
+            checkpoint_json={
+                "next_intended_action": "Write fix and validate semantic retrieval"
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Validated projection drift fix and semantic retrieval",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    search = memory_service.search(
+        SearchMemoryRequest(
+            query="projection drift root cause",
+            workspace_id=str(workspace.workspace_id),
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert completed.workflow_instance.status == WorkflowInstanceStatus.COMPLETED
+    assert completed.attempt.status == WorkflowAttemptStatus.SUCCEEDED
+    assert completed.auto_memory_details is not None
+    assert completed.auto_memory_details["auto_memory_recorded"] is True
+    assert completed.auto_memory_details["embedding_persistence_status"] == "stored"
+    assert completed.warnings == ()
+
+    assert search.feature == MemoryFeature.SEARCH
+    assert search.implemented is True
+    assert search.details["search_mode"] == "hybrid_memory_item_search"
+    assert search.details["semantic_candidates_considered"] >= 1
+    assert search.details["semantic_query_generated"] is True
+    assert search.details["memory_items_considered"] >= 1
+    assert search.details["results_returned"] >= 1
+    assert len(search.results) >= 1
+
+    top_result = search.results[0]
+    assert (
+        top_result.summary == "Workflow completed with status `completed`.\n"
+        "Completion summary: Validated projection drift fix and semantic retrieval\n"
+        "Latest checkpoint summary: Investigated projection drift root cause in deployment workflow\n"
+        "Last planned next action: Write fix and validate semantic retrieval\n"
+        "Verify status: passed"
+    )
+    assert top_result.semantic_score > 0.0
+    assert top_result.score > 0.0
+    assert top_result.ranking_details["semantic_component"] > 0.0
+    assert top_result.metadata == {
+        "auto_generated": True,
+        "memory_origin": "workflow_complete_auto",
+        "workflow_status": "completed",
+        "attempt_status": "succeeded",
+        "attempt_number": 1,
+        "verify_status": "passed",
+        "step_name": "investigate_projection_drift",
+        "next_intended_action": "Write fix and validate semantic retrieval",
+    }
+    assert (
+        "embedding_similarity" in top_result.matched_fields
+        or "content" in top_result.matched_fields
+    )
+
+
 def test_postgres_memory_search_hybrid_results_include_ranking_details(
     postgres_database_url: str,
     clean_postgres_database: str,

@@ -1033,6 +1033,8 @@ def test_build_workflow_complete_tool_handler_returns_verify_report_status_when_
             verify_status=VerifyStatus.FAILED,
         ),
         verify_report=SimpleNamespace(status=VerifyStatus.PASSED),
+        warnings=(),
+        auto_memory_details=None,
     )
     service = FakeWorkflowService(complete_result=result)
     handler = build_workflow_complete_tool_handler(
@@ -1060,6 +1062,8 @@ def test_build_workflow_complete_tool_handler_returns_verify_report_status_when_
             "attempt_status": "completed",
             "finished_at": finished_at.isoformat(),
             "latest_verify_status": "passed",
+            "warnings": [],
+            "auto_memory_details": None,
         },
     }
     assert service.complete_calls is not None
@@ -1085,6 +1089,8 @@ def test_build_workflow_complete_tool_handler_falls_back_to_attempt_verify_statu
             verify_status=VerifyStatus.FAILED,
         ),
         verify_report=None,
+        warnings=(),
+        auto_memory_details=None,
     )
     service = FakeWorkflowService(complete_result=result)
     handler = build_workflow_complete_tool_handler(
@@ -1101,6 +1107,8 @@ def test_build_workflow_complete_tool_handler_falls_back_to_attempt_verify_statu
 
     assert response.payload["result"]["finished_at"] is None
     assert response.payload["result"]["latest_verify_status"] == "failed"
+    assert response.payload["result"]["warnings"] == []
+    assert response.payload["result"]["auto_memory_details"] is None
 
 
 @pytest.mark.parametrize(
