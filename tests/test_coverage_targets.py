@@ -4502,6 +4502,8 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
             "signal_priority": [
+                "workflow_is_terminal",
+                "latest_attempt_is_terminal",
                 "latest_checkpoint_created_at",
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
@@ -4517,6 +4519,11 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
             "final_candidate_ids": [str(workflow_id)],
             "candidate_signals": {
                 str(workflow_id): {
+                    "workflow_status": None,
+                    "workflow_is_terminal": None,
+                    "latest_attempt_status": None,
+                    "latest_attempt_is_terminal": None,
+                    "latest_attempt_verify_status": None,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
                     "latest_projection_canonical_update_at": None,
@@ -4661,6 +4668,8 @@ def test_memory_get_context_applies_initial_query_filtering() -> None:
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
             "signal_priority": [
+                "workflow_is_terminal",
+                "latest_attempt_is_terminal",
                 "latest_checkpoint_created_at",
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
@@ -4676,6 +4685,11 @@ def test_memory_get_context_applies_initial_query_filtering() -> None:
             "final_candidate_ids": [str(workflow_id)],
             "candidate_signals": {
                 str(workflow_id): {
+                    "workflow_status": None,
+                    "workflow_is_terminal": None,
+                    "latest_attempt_status": None,
+                    "latest_attempt_is_terminal": None,
+                    "latest_attempt_verify_status": None,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
                     "latest_projection_canonical_update_at": None,
@@ -4757,6 +4771,8 @@ def test_memory_get_context_matches_query_against_metadata_keys() -> None:
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
             "signal_priority": [
+                "workflow_is_terminal",
+                "latest_attempt_is_terminal",
                 "latest_checkpoint_created_at",
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
@@ -4772,6 +4788,11 @@ def test_memory_get_context_matches_query_against_metadata_keys() -> None:
             "final_candidate_ids": [str(workflow_id)],
             "candidate_signals": {
                 str(workflow_id): {
+                    "workflow_status": None,
+                    "workflow_is_terminal": None,
+                    "latest_attempt_status": None,
+                    "latest_attempt_is_terminal": None,
+                    "latest_attempt_verify_status": None,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
                     "latest_projection_canonical_update_at": None,
@@ -4853,6 +4874,8 @@ def test_memory_get_context_matches_query_against_metadata_values() -> None:
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
             "signal_priority": [
+                "workflow_is_terminal",
+                "latest_attempt_is_terminal",
                 "latest_checkpoint_created_at",
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
@@ -4868,6 +4891,11 @@ def test_memory_get_context_matches_query_against_metadata_values() -> None:
             "final_candidate_ids": [str(workflow_id)],
             "candidate_signals": {
                 str(workflow_id): {
+                    "workflow_status": None,
+                    "workflow_is_terminal": None,
+                    "latest_attempt_status": None,
+                    "latest_attempt_is_terminal": None,
+                    "latest_attempt_verify_status": None,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
                     "latest_projection_canonical_update_at": None,
@@ -4949,6 +4977,8 @@ def test_memory_get_context_matches_multi_token_query_against_summary() -> None:
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
             "signal_priority": [
+                "workflow_is_terminal",
+                "latest_attempt_is_terminal",
                 "latest_checkpoint_created_at",
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
@@ -4964,6 +4994,11 @@ def test_memory_get_context_matches_multi_token_query_against_summary() -> None:
             "final_candidate_ids": [str(workflow_id)],
             "candidate_signals": {
                 str(workflow_id): {
+                    "workflow_status": None,
+                    "workflow_is_terminal": None,
+                    "latest_attempt_status": None,
+                    "latest_attempt_is_terminal": None,
+                    "latest_attempt_verify_status": None,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
                     "latest_projection_canonical_update_at": None,
@@ -5045,6 +5080,8 @@ def test_memory_get_context_matches_multi_token_query_against_metadata() -> None
             "ordering_basis": "workflow_instance_id_priority",
             "workflow_instance_id_priority_applied": True,
             "signal_priority": [
+                "workflow_is_terminal",
+                "latest_attempt_is_terminal",
                 "latest_checkpoint_created_at",
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
@@ -5060,6 +5097,11 @@ def test_memory_get_context_matches_multi_token_query_against_metadata() -> None
             "final_candidate_ids": [str(workflow_id)],
             "candidate_signals": {
                 str(workflow_id): {
+                    "workflow_status": None,
+                    "workflow_is_terminal": None,
+                    "latest_attempt_status": None,
+                    "latest_attempt_is_terminal": None,
+                    "latest_attempt_verify_status": None,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
                     "latest_projection_canonical_update_at": None,
@@ -5168,6 +5210,8 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
             "ordering_basis": "workflow_freshness_signals",
             "workflow_instance_id_priority_applied": False,
             "signal_priority": [
+                "workflow_is_terminal",
+                "latest_attempt_is_terminal",
                 "latest_checkpoint_created_at",
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
@@ -5189,6 +5233,11 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
             "final_candidate_ids": [str(matching_workflow_id)],
             "candidate_signals": {
                 str(matching_workflow_id): {
+                    "workflow_status": None,
+                    "workflow_is_terminal": None,
+                    "latest_attempt_status": None,
+                    "latest_attempt_is_terminal": None,
+                    "latest_attempt_verify_status": None,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
                     "latest_projection_canonical_update_at": None,
@@ -5300,6 +5349,8 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
             "ordering_basis": "workflow_freshness_signals",
             "workflow_instance_id_priority_applied": False,
             "signal_priority": [
+                "workflow_is_terminal",
+                "latest_attempt_is_terminal",
                 "latest_checkpoint_created_at",
                 "latest_verify_report_created_at",
                 "latest_projection_canonical_update_at",
@@ -5321,6 +5372,11 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
             "final_candidate_ids": [str(matching_workflow_id)],
             "candidate_signals": {
                 str(matching_workflow_id): {
+                    "workflow_status": None,
+                    "workflow_is_terminal": None,
+                    "latest_attempt_status": None,
+                    "latest_attempt_is_terminal": None,
+                    "latest_attempt_verify_status": None,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
                     "latest_projection_canonical_update_at": None,
@@ -5416,6 +5472,8 @@ def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() 
         "ordering_basis": "workflow_freshness_signals",
         "workflow_instance_id_priority_applied": False,
         "signal_priority": [
+            "workflow_is_terminal",
+            "latest_attempt_is_terminal",
             "latest_checkpoint_created_at",
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
@@ -5440,6 +5498,11 @@ def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() 
         ],
         "candidate_signals": {
             str(checkpoint_fresh_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "latest_attempt_verify_status": None,
                 "latest_checkpoint_created_at": (
                     created_at.replace(day=21).isoformat()
                 ),
@@ -5458,6 +5521,11 @@ def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() 
                 "workflow_updated_at": created_at.replace(day=18).isoformat(),
             },
             str(episode_fresh_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "latest_attempt_verify_status": None,
                 "latest_checkpoint_created_at": (
                     created_at.replace(day=11).isoformat()
                 ),
@@ -5552,6 +5620,8 @@ def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie
         "ordering_basis": "workflow_freshness_signals",
         "workflow_instance_id_priority_applied": False,
         "signal_priority": [
+            "workflow_is_terminal",
+            "latest_attempt_is_terminal",
             "latest_checkpoint_created_at",
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
@@ -5576,6 +5646,11 @@ def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie
         ],
         "candidate_signals": {
             str(verify_fresh_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "latest_attempt_verify_status": None,
                 "latest_checkpoint_created_at": (
                     created_at.replace(day=10).isoformat()
                 ),
@@ -5594,6 +5669,11 @@ def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie
                 "workflow_updated_at": created_at.replace(day=9).isoformat(),
             },
             str(verify_stale_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "latest_attempt_verify_status": None,
                 "latest_checkpoint_created_at": (
                     created_at.replace(day=10).isoformat()
                 ),
@@ -5688,6 +5768,8 @@ def test_memory_get_context_prefers_projection_freshness_after_checkpoint_and_ve
         "ordering_basis": "workflow_freshness_signals",
         "workflow_instance_id_priority_applied": False,
         "signal_priority": [
+            "workflow_is_terminal",
+            "latest_attempt_is_terminal",
             "latest_checkpoint_created_at",
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
@@ -5712,6 +5794,11 @@ def test_memory_get_context_prefers_projection_freshness_after_checkpoint_and_ve
         ],
         "candidate_signals": {
             str(projection_fresh_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "latest_attempt_verify_status": None,
                 "latest_checkpoint_created_at": (
                     created_at.replace(day=10).isoformat()
                 ),
@@ -5730,6 +5817,11 @@ def test_memory_get_context_prefers_projection_freshness_after_checkpoint_and_ve
                 "workflow_updated_at": created_at.replace(day=9).isoformat(),
             },
             str(projection_stale_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "latest_attempt_verify_status": None,
                 "latest_checkpoint_created_at": (
                     created_at.replace(day=10).isoformat()
                 ),
@@ -5820,6 +5912,8 @@ def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_sig
         "ordering_basis": "workflow_freshness_signals",
         "workflow_instance_id_priority_applied": False,
         "signal_priority": [
+            "workflow_is_terminal",
+            "latest_attempt_is_terminal",
             "latest_checkpoint_created_at",
             "latest_verify_report_created_at",
             "latest_projection_canonical_update_at",
@@ -5844,6 +5938,11 @@ def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_sig
         ],
         "candidate_signals": {
             str(newer_episode_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "latest_attempt_verify_status": None,
                 "latest_checkpoint_created_at": None,
                 "latest_verify_report_created_at": None,
                 "latest_projection_canonical_update_at": None,
@@ -5854,6 +5953,11 @@ def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_sig
                 "workflow_updated_at": created_at.replace(day=1).isoformat(),
             },
             str(older_episode_workflow_id): {
+                "workflow_status": None,
+                "workflow_is_terminal": None,
+                "latest_attempt_status": None,
+                "latest_attempt_is_terminal": None,
+                "latest_attempt_verify_status": None,
                 "latest_checkpoint_created_at": None,
                 "latest_verify_report_created_at": None,
                 "latest_projection_canonical_update_at": None,
@@ -5862,6 +5966,160 @@ def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_sig
                 "latest_episode_created_at": (created_at.replace(day=2).isoformat()),
                 "latest_attempt_started_at": (created_at.replace(day=1).isoformat()),
                 "workflow_updated_at": created_at.replace(day=1).isoformat(),
+            },
+        },
+    }
+
+
+def test_memory_get_context_prefers_non_terminal_workflow_over_terminal_workflow() -> (
+    None
+):
+    running_workflow_id = uuid4()
+    terminal_workflow_id = uuid4()
+    created_at = datetime(2024, 7, 1, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=running_workflow_id,
+            summary="Running workflow context",
+            metadata={"kind": "running"},
+            created_at=created_at.replace(day=2),
+            updated_at=created_at.replace(day=2),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=terminal_workflow_id,
+            summary="Terminal workflow context",
+            metadata={"kind": "terminal"},
+            created_at=created_at.replace(day=10),
+            updated_at=created_at.replace(day=10),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                running_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000024",
+                    "ticket_id": "TICKET-TERMINALITY",
+                    "workflow_status": "running",
+                    "workflow_is_terminal": False,
+                    "latest_attempt_status": "running",
+                    "latest_attempt_is_terminal": False,
+                    "latest_attempt_verify_status": "pending",
+                    "latest_checkpoint_created_at": created_at.replace(day=5),
+                    "latest_verify_report_created_at": created_at.replace(day=4),
+                    "latest_projection_canonical_update_at": created_at.replace(day=4),
+                    "latest_projection_successful_write_at": created_at.replace(day=4),
+                    "projection_open_failure_count": 0,
+                    "latest_attempt_started_at": created_at.replace(day=5),
+                    "workflow_updated_at": created_at.replace(day=5),
+                },
+                terminal_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000024",
+                    "ticket_id": "TICKET-TERMINALITY",
+                    "workflow_status": "completed",
+                    "workflow_is_terminal": True,
+                    "latest_attempt_status": "succeeded",
+                    "latest_attempt_is_terminal": True,
+                    "latest_attempt_verify_status": "passed",
+                    "latest_checkpoint_created_at": created_at.replace(day=6),
+                    "latest_verify_report_created_at": created_at.replace(day=6),
+                    "latest_projection_canonical_update_at": created_at.replace(day=6),
+                    "latest_projection_successful_write_at": created_at.replace(day=6),
+                    "projection_open_failure_count": 0,
+                    "latest_attempt_started_at": created_at.replace(day=6),
+                    "workflow_updated_at": created_at.replace(day=6),
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id="00000000-0000-0000-0000-000000000024",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert response.details["workflow_candidate_ordering"] == {
+        "ordering_basis": "workflow_freshness_signals",
+        "workflow_instance_id_priority_applied": False,
+        "signal_priority": [
+            "workflow_is_terminal",
+            "latest_attempt_is_terminal",
+            "latest_checkpoint_created_at",
+            "latest_verify_report_created_at",
+            "latest_projection_canonical_update_at",
+            "latest_projection_successful_write_at",
+            "latest_episode_created_at",
+            "latest_attempt_started_at",
+            "workflow_updated_at",
+            "resolver_order",
+        ],
+        "workspace_candidate_ids": [
+            str(running_workflow_id),
+            str(terminal_workflow_id),
+        ],
+        "ticket_candidate_ids": [],
+        "resolver_candidate_ids": [
+            str(running_workflow_id),
+            str(terminal_workflow_id),
+        ],
+        "final_candidate_ids": [
+            str(running_workflow_id),
+            str(terminal_workflow_id),
+        ],
+        "candidate_signals": {
+            str(running_workflow_id): {
+                "workflow_status": "running",
+                "workflow_is_terminal": False,
+                "latest_attempt_status": "running",
+                "latest_attempt_is_terminal": False,
+                "latest_attempt_verify_status": "pending",
+                "latest_checkpoint_created_at": (created_at.replace(day=5).isoformat()),
+                "latest_verify_report_created_at": (
+                    created_at.replace(day=4).isoformat()
+                ),
+                "latest_projection_canonical_update_at": (
+                    created_at.replace(day=4).isoformat()
+                ),
+                "latest_projection_successful_write_at": (
+                    created_at.replace(day=4).isoformat()
+                ),
+                "projection_open_failure_count": 0,
+                "latest_episode_created_at": created_at.replace(day=2).isoformat(),
+                "latest_attempt_started_at": created_at.replace(day=5).isoformat(),
+                "workflow_updated_at": created_at.replace(day=5).isoformat(),
+            },
+            str(terminal_workflow_id): {
+                "workflow_status": "completed",
+                "workflow_is_terminal": True,
+                "latest_attempt_status": "succeeded",
+                "latest_attempt_is_terminal": True,
+                "latest_attempt_verify_status": "passed",
+                "latest_checkpoint_created_at": (created_at.replace(day=6).isoformat()),
+                "latest_verify_report_created_at": (
+                    created_at.replace(day=6).isoformat()
+                ),
+                "latest_projection_canonical_update_at": (
+                    created_at.replace(day=6).isoformat()
+                ),
+                "latest_projection_successful_write_at": (
+                    created_at.replace(day=6).isoformat()
+                ),
+                "projection_open_failure_count": 0,
+                "latest_episode_created_at": created_at.replace(day=10).isoformat(),
+                "latest_attempt_started_at": created_at.replace(day=6).isoformat(),
+                "workflow_updated_at": created_at.replace(day=6).isoformat(),
             },
         },
     }

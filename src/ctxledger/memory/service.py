@@ -235,7 +235,7 @@ class WorkflowLookupRepository(Protocol):
     def workflow_freshness_by_id(
         self,
         workflow_instance_id: UUID,
-    ) -> dict[str, datetime | int | None]: ...
+    ) -> dict[str, datetime | int | str | bool | None]: ...
 
 
 class EpisodeRepository(Protocol):
@@ -340,12 +340,17 @@ class UnitOfWorkWorkflowLookupRepository:
     def workflow_freshness_by_id(
         self,
         workflow_instance_id: UUID,
-    ) -> dict[str, datetime | int | None]:
+    ) -> dict[str, datetime | int | str | bool | None]:
         with self._uow_factory() as uow:
             workflow = uow.workflow_instances.get_by_id(workflow_instance_id)
             if workflow is None:
                 return {
+                    "workflow_status": None,
+                    "workflow_is_terminal": None,
                     "workflow_updated_at": None,
+                    "latest_attempt_status": None,
+                    "latest_attempt_is_terminal": None,
+                    "latest_attempt_verify_status": None,
                     "latest_attempt_started_at": None,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
@@ -399,7 +404,21 @@ class UnitOfWorkWorkflowLookupRepository:
                 )
 
             return {
+                "workflow_status": workflow.status.value,
+                "workflow_is_terminal": workflow.is_terminal,
                 "workflow_updated_at": workflow.updated_at,
+                "latest_attempt_status": (
+                    latest_attempt.status.value if latest_attempt is not None else None
+                ),
+                "latest_attempt_is_terminal": (
+                    latest_attempt.is_terminal if latest_attempt is not None else None
+                ),
+                "latest_attempt_verify_status": (
+                    latest_attempt.verify_status.value
+                    if latest_attempt is not None
+                    and latest_attempt.verify_status is not None
+                    else None
+                ),
                 "latest_attempt_started_at": (
                     latest_attempt.started_at if latest_attempt is not None else None
                 ),
@@ -564,10 +583,19 @@ class InMemoryWorkflowLookupRepository:
     def workflow_freshness_by_id(
         self,
         workflow_instance_id: UUID,
-    ) -> dict[str, datetime | int | None]:
+    ) -> dict[str, datetime | int | str | bool | None]:
         workflow_info = self._workflows_by_id.get(workflow_instance_id, {})
         return {
+            "workflow_status": workflow_info.get("workflow_status"),
+            "workflow_is_terminal": workflow_info.get("workflow_is_terminal"),
             "workflow_updated_at": workflow_info.get("workflow_updated_at"),
+            "latest_attempt_status": workflow_info.get("latest_attempt_status"),
+            "latest_attempt_is_terminal": workflow_info.get(
+                "latest_attempt_is_terminal"
+            ),
+            "latest_attempt_verify_status": workflow_info.get(
+                "latest_attempt_verify_status"
+            ),
             "latest_attempt_started_at": workflow_info.get("latest_attempt_started_at"),
             "latest_checkpoint_created_at": workflow_info.get(
                 "latest_checkpoint_created_at"
@@ -1356,6 +1384,8 @@ class MemoryService:
                     resolved_workflow_instance_id is not None
                 ),
                 "signal_priority": [
+                    "workflow_is_terminal",
+                    "latest_attempt_is_terminal",
                     "latest_checkpoint_created_at",
                     "latest_verify_report_created_at",
                     "latest_projection_canonical_update_at",
@@ -1526,7 +1556,19 @@ class MemoryService:
             return ()
 
         workflow_recencies: list[
-            tuple[datetime, datetime, datetime, datetime, datetime, datetime, int, UUID]
+            tuple[
+                bool,
+                bool,
+                datetime,
+                datetime,
+                datetime,
+                datetime,
+                datetime,
+                datetime,
+                datetime,
+                int,
+                UUID,
+            ]
         ] = []
 
         for index, workflow_id in enumerate(workflow_ids):
@@ -1538,6 +1580,10 @@ class MemoryService:
             latest_episode = self._episode_repository.list_by_workflow_id(
                 workflow_id,
                 limit=1,
+            )
+            workflow_is_terminal = bool(freshness.get("workflow_is_terminal") or False)
+            latest_attempt_is_terminal = bool(
+                freshness.get("latest_attempt_is_terminal") or False
             )
             latest_checkpoint_created_at = freshness.get(
                 "latest_checkpoint_created_at"
@@ -1564,6 +1610,8 @@ class MemoryService:
             ) or datetime.min.replace(tzinfo=timezone.utc)
             workflow_recencies.append(
                 (
+                    not workflow_is_terminal,
+                    not latest_attempt_is_terminal,
                     latest_checkpoint_created_at,
                     latest_verify_report_created_at,
                     latest_projection_canonical_update_at,
@@ -1597,6 +1645,31 @@ class MemoryService:
                 limit=1,
             )
             signals[str(workflow_id)] = {
+                "workflow_status": (
+                    str(freshness.get("workflow_status"))
+                    if freshness.get("workflow_status") is not None
+                    else None
+                ),
+                "workflow_is_terminal": (
+                    bool(freshness.get("workflow_is_terminal"))
+                    if freshness.get("workflow_is_terminal") is not None
+                    else None
+                ),
+                "latest_attempt_status": (
+                    str(freshness.get("latest_attempt_status"))
+                    if freshness.get("latest_attempt_status") is not None
+                    else None
+                ),
+                "latest_attempt_is_terminal": (
+                    bool(freshness.get("latest_attempt_is_terminal"))
+                    if freshness.get("latest_attempt_is_terminal") is not None
+                    else None
+                ),
+                "latest_attempt_verify_status": (
+                    str(freshness.get("latest_attempt_verify_status"))
+                    if freshness.get("latest_attempt_verify_status") is not None
+                    else None
+                ),
                 "latest_checkpoint_created_at": (
                     freshness.get("latest_checkpoint_created_at").isoformat()
                     if freshness.get("latest_checkpoint_created_at") is not None
