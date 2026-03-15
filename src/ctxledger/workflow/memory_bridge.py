@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Protocol
@@ -123,6 +124,8 @@ _FIELD_LABEL_TO_KEY = {
     "failure reason": "failure_reason",
 }
 
+logger = logging.getLogger(__name__)
+
 
 class EpisodeRepository(Protocol):
     def create(self, episode: EpisodeRecord) -> EpisodeRecord: ...
@@ -167,10 +170,33 @@ class WorkflowMemoryBridge:
         summary: str | None,
         failure_reason: str | None,
     ) -> WorkflowCompletionMemoryRecordResult | None:
+        logger.info(
+            "workflow completion auto-memory evaluation started",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "workflow_status": str(
+                    getattr(workflow.status, "value", workflow.status)
+                ),
+                "attempt_status": str(getattr(attempt.status, "value", attempt.status)),
+                "has_latest_checkpoint": latest_checkpoint is not None,
+                "has_completion_summary": self._normalize_text(summary) is not None,
+                "has_failure_reason": self._normalize_text(failure_reason) is not None,
+            },
+        )
         should_record, skipped_reason = self._auto_memory_gating_decision(
             workflow=workflow,
             latest_checkpoint=latest_checkpoint,
             verify_report=verify_report,
+        )
+        logger.info(
+            "workflow completion auto-memory gating decided",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "should_record": should_record,
+                "skipped_reason": skipped_reason,
+            },
         )
         if not should_record:
             return WorkflowCompletionMemoryRecordResult(
@@ -187,6 +213,17 @@ class WorkflowMemoryBridge:
             summary=summary,
             failure_reason=failure_reason,
         )
+        logger.info(
+            "workflow completion auto-memory summary built",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "has_memory_summary": memory_summary is not None,
+                "memory_summary_preview": (
+                    memory_summary[:240] if memory_summary is not None else None
+                ),
+            },
+        )
         if memory_summary is None:
             return None
 
@@ -197,12 +234,29 @@ class WorkflowMemoryBridge:
             verify_report=verify_report,
             failure_reason=failure_reason,
         )
+        logger.info(
+            "workflow completion auto-memory metadata built",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "episode_metadata": episode_metadata,
+            },
+        )
 
         duplicate_check = self._duplicate_closeout_memory_decision(
             workflow=workflow,
             latest_checkpoint=latest_checkpoint,
             memory_summary=memory_summary,
             episode_metadata=episode_metadata,
+        )
+        logger.info(
+            "workflow completion auto-memory duplicate check decided",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "should_record": duplicate_check.should_record,
+                "skipped_reason": duplicate_check.skipped_reason,
+            },
         )
         if not duplicate_check.should_record:
             return WorkflowCompletionMemoryRecordResult(
@@ -213,6 +267,13 @@ class WorkflowMemoryBridge:
             )
 
         now = datetime.now(timezone.utc)
+        logger.info(
+            "workflow completion auto-memory creating episode",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+            },
+        )
         episode = self.episode_repository.create(
             EpisodeRecord(
                 episode_id=uuid4(),
@@ -223,6 +284,22 @@ class WorkflowMemoryBridge:
                 created_at=now,
                 updated_at=now,
             )
+        )
+        logger.info(
+            "workflow completion auto-memory episode created",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "episode_id": str(episode.episode_id),
+            },
+        )
+        logger.info(
+            "workflow completion auto-memory creating memory item",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "episode_id": str(episode.episode_id),
+            },
         )
         memory_item = self.memory_item_repository.create(
             MemoryItemRecord(
@@ -237,7 +314,26 @@ class WorkflowMemoryBridge:
                 updated_at=episode.updated_at,
             )
         )
+        logger.info(
+            "workflow completion auto-memory memory item created",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "episode_id": str(episode.episode_id),
+                "memory_id": str(memory_item.memory_id),
+            },
+        )
         details = self._maybe_store_embedding(memory_item)
+        logger.info(
+            "workflow completion auto-memory embedding persistence finished",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "episode_id": str(episode.episode_id),
+                "memory_id": str(memory_item.memory_id),
+                "embedding_details": details,
+            },
+        )
         return WorkflowCompletionMemoryRecordResult(
             episode=episode,
             memory_item=memory_item,

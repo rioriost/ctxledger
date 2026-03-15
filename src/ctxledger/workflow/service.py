@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -7,6 +8,8 @@ from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 from .memory_bridge import WorkflowCompletionMemoryRecordResult, WorkflowMemoryBridge
+
+logger = logging.getLogger(__name__)
 
 
 def utc_now() -> datetime:
@@ -1013,6 +1016,24 @@ class WorkflowService:
         return tuple(reconciled)
 
     def complete_workflow(self, data: CompleteWorkflowInput) -> WorkflowCompleteResult:
+        logger.info(
+            "workflow completion service entry",
+            extra={
+                "workflow_instance_id": str(data.workflow_instance_id),
+                "attempt_id": str(data.attempt_id),
+                "workflow_status": data.workflow_status.value,
+                "has_summary": data.summary is not None,
+                "has_verify_status": data.verify_status is not None,
+                "has_verify_report": data.verify_report is not None,
+                "has_failure_reason": data.failure_reason is not None,
+                "has_workflow_memory_bridge": self._workflow_memory_bridge is not None,
+                "workflow_memory_bridge_type": (
+                    type(self._workflow_memory_bridge).__name__
+                    if self._workflow_memory_bridge is not None
+                    else None
+                ),
+            },
+        )
         with self._uow_factory() as uow:
             workflow = self._require_workflow(uow, data.workflow_instance_id)
             attempt = self._require_attempt(uow, data.attempt_id)
@@ -1071,15 +1092,27 @@ class WorkflowService:
                 workflow.workflow_instance_id
             )
 
-            uow.commit()
-
             completion_warnings: list[ResumeIssue] = []
             auto_memory_details: dict[str, Any] | None = None
 
-            if self._workflow_memory_bridge is not None:
+            workflow_memory_bridge = self._workflow_memory_bridge
+            if (
+                workflow_memory_bridge is not None
+                and type(uow).__name__ == "PostgresUnitOfWork"
+                and uow.memory_episodes is not None
+                and uow.memory_items is not None
+            ):
+                workflow_memory_bridge = WorkflowMemoryBridge(
+                    episode_repository=uow.memory_episodes,
+                    memory_item_repository=uow.memory_items,
+                    memory_embedding_repository=uow.memory_embeddings,
+                    embedding_generator=workflow_memory_bridge.embedding_generator,
+                )
+
+            if workflow_memory_bridge is not None:
                 try:
                     auto_memory_result = (
-                        self._workflow_memory_bridge.record_workflow_completion_memory(
+                        workflow_memory_bridge.record_workflow_completion_memory(
                             workflow=updated_workflow,
                             attempt=updated_attempt,
                             latest_checkpoint=latest_checkpoint,
@@ -1111,10 +1144,7 @@ class WorkflowService:
                             ),
                         }
                     else:
-                        auto_memory_details = {
-                            "auto_memory_recorded": True,
-                            **auto_memory_result.details,
-                        }
+                        auto_memory_details = dict(auto_memory_result.details)
                         if (
                             auto_memory_result.details.get(
                                 "embedding_persistence_status"
@@ -1125,12 +1155,25 @@ class WorkflowService:
                                 ResumeIssue(
                                     code="auto_memory_embedding_failed",
                                     message=(
-                                        "workflow completion memory was recorded but "
-                                        "embedding persistence failed"
+                                        "workflow completion succeeded but automatic "
+                                        "memory embedding generation failed"
                                     ),
-                                    details=dict(auto_memory_result.details),
+                                    details={
+                                        "embedding_generation_skipped_reason": (
+                                            auto_memory_result.details.get(
+                                                "embedding_generation_skipped_reason"
+                                            )
+                                        ),
+                                        "embedding_generation_failure": (
+                                            auto_memory_result.details.get(
+                                                "embedding_generation_failure"
+                                            )
+                                        ),
+                                    },
                                 )
                             )
+
+            uow.commit()
 
             return WorkflowCompleteResult(
                 workflow_instance=updated_workflow,

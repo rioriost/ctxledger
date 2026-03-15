@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -30,6 +31,9 @@ if TYPE_CHECKING:
     from ..runtime.types import McpToolResponse
     from ..server import CtxLedgerServer
     from ..workflow.service import UnitOfWork
+
+
+logger = logging.getLogger(__name__)
 
 
 def _mcp_tool_response_cls() -> type["McpToolResponse"]:
@@ -551,6 +555,40 @@ def build_workflow_complete_tool_handler(
         if isinstance(failure_reason, _mcp_tool_response_cls()):
             return failure_reason
 
+        logger.info(
+            "workflow_complete MCP handler invoked",
+            extra={
+                "workflow_instance_id": str(workflow_instance_id),
+                "attempt_id": str(attempt_id),
+                "workflow_status": workflow_status.value,
+                "has_summary": summary is not None,
+                "has_verify_status": verify_status is not None,
+                "has_verify_report": verify_report is not None,
+                "has_failure_reason": failure_reason is not None,
+                "workflow_service_initialized": server.workflow_service is not None,
+                "workflow_service_type": (
+                    type(server.workflow_service).__name__
+                    if server.workflow_service is not None
+                    else None
+                ),
+                "has_workflow_memory_bridge": bool(
+                    getattr(server.workflow_service, "_workflow_memory_bridge", None)
+                )
+                if server.workflow_service is not None
+                else False,
+                "workflow_memory_bridge_type": (
+                    type(
+                        getattr(server.workflow_service, "_workflow_memory_bridge")
+                    ).__name__
+                    if getattr(server.workflow_service, "_workflow_memory_bridge", None)
+                    is not None
+                    else None
+                )
+                if server.workflow_service is not None
+                else None,
+            },
+        )
+
         if server.workflow_service is None:
             return build_mcp_error_response(
                 code="server_not_ready",
@@ -571,10 +609,33 @@ def build_workflow_complete_tool_handler(
                 )
             )
         except Exception as exc:
+            logger.info(
+                "workflow_complete MCP handler failed",
+                extra={
+                    "workflow_instance_id": str(workflow_instance_id),
+                    "attempt_id": str(attempt_id),
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                },
+            )
             return _map_workflow_error_to_mcp_response(
                 exc,
                 default_message="failed to complete workflow",
             )
+
+        logger.info(
+            "workflow_complete MCP handler succeeded",
+            extra={
+                "workflow_instance_id": str(
+                    result.workflow_instance.workflow_instance_id
+                ),
+                "attempt_id": str(result.attempt.attempt_id),
+                "workflow_status": result.workflow_instance.status.value,
+                "attempt_status": result.attempt.status.value,
+                "auto_memory_details": result.auto_memory_details,
+                "warning_count": len(result.warnings),
+            },
+        )
 
         return build_mcp_success_response(
             {

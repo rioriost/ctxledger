@@ -88,6 +88,9 @@ services:
       CTXLEDGER_LOG_LEVEL: info
       CTXLEDGER_LOG_STRUCTURED: "true"
       CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS: 5
+      CTXLEDGER_EMBEDDING_ENABLED: "true"
+      CTXLEDGER_EMBEDDING_PROVIDER: openai
+      CTXLEDGER_EMBEDDING_MODEL: ${OPENAI_MODEL:-text-embedding-3-small}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       PYTHONPATH: /app/src
     working_dir: /app

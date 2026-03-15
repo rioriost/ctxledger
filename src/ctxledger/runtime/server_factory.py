@@ -21,7 +21,18 @@ def build_workflow_service_factory(
     postgres_config = PostgresConfig.from_settings(settings)
     uow_factory = build_postgres_uow_factory(postgres_config)
 
-    def _factory() -> WorkflowService:
+    def _factory(uow=None) -> WorkflowService:
+        if uow is not None:
+            workflow_memory_bridge = WorkflowMemoryBridge(
+                episode_repository=uow.memory_episodes,
+                memory_item_repository=uow.memory_items,
+                memory_embedding_repository=uow.memory_embeddings,
+            )
+            return WorkflowService(
+                uow_factory,
+                workflow_memory_bridge=workflow_memory_bridge,
+            )
+
         workflow_memory_bridge = WorkflowMemoryBridge(
             episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
             memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
