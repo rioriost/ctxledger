@@ -561,6 +561,36 @@ Recommended initial safeguards:
 Potential later enhancements:
 
 - summary similarity deduplication
+  - current closeout implementation now uses weighted field-aware similarity plus completion-summary token similarity
+  - current extracted comparison fields include:
+    - `completion_summary`
+    - `latest_checkpoint_summary`
+    - `next_intended_action`
+    - `verify_status`
+    - `workflow_status`
+    - `attempt_status`
+    - `failure_reason`
+  - current near-duplicate closeout suppression still remains workflow-local and same-`step_name`
+  - current metadata-aware matching requires:
+    - `next_intended_action`
+    - `verify_status`
+    - `workflow_status`
+    - `attempt_status`
+    - `failure_reason`
+  - current thresholds / controls:
+    - completion-summary token similarity threshold: `0.75`
+    - weighted field-aware similarity threshold: `0.7`
+    - lookback window: `6 hours`
+  - current token scoring discounts boilerplate workflow-closeout tokens such as:
+    - `workflow`
+    - `completed`
+    - `summary`
+    - `status`
+    - `verify`
+    - `latest`
+    - `checkpoint`
+    - `line`
+    - `lines`
 - content hash suppression across adjacent checkpoints
 - per-workflow cap on auto-generated checkpoint memories
 - configurable auto-memory mode:
@@ -588,6 +618,12 @@ In future, retrieval can weight or filter by provenance:
 - `workflow_checkpoint_auto` may be useful but noisier
 - manual episode memories may deserve stronger ranking weight
 
+For workflow-complete auto-memory specifically, the current implementation already treats closeout quality as a matching problem rather than a pure text-equality problem:
+
+- duplicate suppression rejects exact repeated closeout summaries
+- near-duplicate suppression uses extracted closeout fields, metadata-aware matching, and weighted similarity
+- this should make retrieval corpora less noisy without requiring provenance-aware retrieval changes yet
+
 This is optional for the initial phase.
 
 ---
@@ -602,6 +638,15 @@ Add focused tests for:
 - checkpoint auto-memory summary generation
 - checkpoint eligibility logic
 - provenance / metadata values
+- closeout duplicate suppression
+- closeout near-duplicate suppression
+- extracted semantic field comparison for generated closeout summaries
+- metadata-aware non-matches when:
+  - `verify_status` differs
+  - `attempt_status` differs
+  - `failure_reason` differs
+- weighted closeout similarity behavior
+- low-similarity closeouts still recording
 
 ## 17.2 Integration tests
 
@@ -611,6 +656,10 @@ Add PostgreSQL-backed integration tests to prove:
 - corresponding memory item is stored
 - embedding row is stored when enabled
 - `memory_search` can retrieve content created through workflow-only paths
+- closeout duplicate suppression works against persisted PostgreSQL episodes
+- closeout near-duplicate suppression works against persisted PostgreSQL episodes
+- extracted semantic closeout fields participate in suppression decisions
+- differing `attempt_status` and `failure_reason` do not get suppressed as near-duplicates
 
 ## 17.3 Regression expectations
 
