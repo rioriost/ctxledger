@@ -76,18 +76,20 @@ def dispatch_rpc_method(
     method: Any,
     params: Any,
 ) -> dict[str, Any]:
+    dispatch_table = {
+        "tools/list": lambda: _build_tools_list_result(runtime),
+        "tools/call": lambda: _build_tools_call_result(runtime, params),
+        "resources/list": lambda: _build_resources_list_result(runtime),
+        "resources/read": lambda: _build_resources_read_result(runtime, params),
+    }
+
     if method == "exit":
         raise SystemExit(0)
-    if method == "tools/list":
-        return _build_tools_list_result(runtime)
-    if method == "tools/call":
-        return _build_tools_call_result(runtime, params)
-    if method == "resources/list":
-        return _build_resources_list_result(runtime)
-    if method == "resources/read":
-        return _build_resources_read_result(runtime, params)
 
-    raise ValueError(f"Unknown method: {method}")
+    handler = dispatch_table.get(method)
+    if handler is None:
+        raise ValueError(f"Unknown method: {method}")
+    return handler()
 
 
 def _dispatch_lifecycle_request(
@@ -123,23 +125,28 @@ def _build_tools_call_result(
     runtime: McpRpcRuntime,
     params: Any,
 ) -> dict[str, Any]:
-    if not isinstance(params, dict):
-        raise ValueError("tools/call requires 'params' (object)")
+    validated_params = _require_object_params(
+        params,
+        method_name="tools/call",
+    )
+    name = _require_non_empty_string_field(
+        validated_params,
+        field_name="name",
+        method_name="tools/call",
+    )
+    arguments = _require_object_field(
+        validated_params,
+        field_name="arguments",
+        method_name="tools/call",
+        default={},
+    )
 
-    name = params.get("name")
-    arguments = params.get("arguments") or {}
-
-    if not isinstance(name, str) or not name.strip():
-        raise ValueError("tools/call requires 'name' (string)")
-    if not isinstance(arguments, dict):
-        raise ValueError("tools/call requires 'arguments' (object)")
-
-    response = runtime.dispatch_tool(name.strip(), arguments)
+    response = runtime.dispatch_tool(name, arguments)
     return {
         "content": [
             {
                 "type": "text",
-                "text": json.dumps(response.payload, ensure_ascii=False),
+                "text": _json_text_payload(response.payload),
             }
         ]
     }
@@ -162,24 +169,67 @@ def _build_resources_read_result(
     runtime: McpRpcRuntime,
     params: Any,
 ) -> dict[str, Any]:
-    if not isinstance(params, dict):
-        raise ValueError("resources/read requires 'params' (object)")
+    validated_params = _require_object_params(
+        params,
+        method_name="resources/read",
+    )
+    normalized_uri = _require_non_empty_string_field(
+        validated_params,
+        field_name="uri",
+        method_name="resources/read",
+    )
 
-    uri = params.get("uri")
-    if not isinstance(uri, str) or not uri.strip():
-        raise ValueError("resources/read requires 'uri' (string)")
-
-    normalized_uri = uri.strip()
     response = runtime.dispatch_resource(normalized_uri)
     return {
         "contents": [
             {
                 "uri": normalized_uri,
                 "mimeType": "application/json",
-                "text": json.dumps(response.payload, ensure_ascii=False),
+                "text": _json_text_payload(response.payload),
             }
         ]
     }
+
+
+def _require_object_params(
+    params: Any,
+    *,
+    method_name: str,
+) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        raise ValueError(f"{method_name} requires 'params' (object)")
+    return params
+
+
+def _require_non_empty_string_field(
+    params: dict[str, Any],
+    *,
+    field_name: str,
+    method_name: str,
+) -> str:
+    value = params.get(field_name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{method_name} requires '{field_name}' (string)")
+    return value.strip()
+
+
+def _require_object_field(
+    params: dict[str, Any],
+    *,
+    field_name: str,
+    method_name: str,
+    default: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    value = params.get(field_name)
+    if value is None:
+        value = default if default is not None else {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{method_name} requires '{field_name}' (object)")
+    return value
+
+
+def _json_text_payload(payload: Any) -> str:
+    return json.dumps(payload, ensure_ascii=False)
 
 
 __all__ = [
