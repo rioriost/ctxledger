@@ -6,6 +6,8 @@ from enum import StrEnum
 from typing import Final
 from urllib.parse import urlparse
 
+from .version import get_app_name, get_app_version
+
 
 class ConfigError(ValueError):
     """Raised when runtime configuration is invalid."""
@@ -284,9 +286,13 @@ class AppSettings:
 
 
 def load_settings() -> AppSettings:
+    default_app_name = get_app_name()
+    default_app_version = get_app_version()
+
     settings = AppSettings(
-        app_name=_get_env("CTXLEDGER_APP_NAME", "ctxledger") or "ctxledger",
-        app_version=_get_env("CTXLEDGER_APP_VERSION", "0.4.0") or "0.4.0",
+        app_name=_get_env("CTXLEDGER_APP_NAME", default_app_name) or default_app_name,
+        app_version=_get_env("CTXLEDGER_APP_VERSION", default_app_version)
+        or default_app_version,
         environment=_get_env("CTXLEDGER_ENV", "development") or "development",
         database=DatabaseSettings(
             url=_get_env("CTXLEDGER_DATABASE_URL", "") or "",

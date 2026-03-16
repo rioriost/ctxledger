@@ -316,10 +316,10 @@ def clean_postgres_database(
 
 
 @pytest.fixture
-def postgres_workflow_service(
+def postgres_pooled_uow_factory(
     postgres_database_url: str,
     clean_postgres_database: str,
-) -> WorkflowService:
+) -> Iterator:
     config = PostgresConfig(
         database_url=postgres_database_url,
         connect_timeout_seconds=5,
@@ -328,9 +328,16 @@ def postgres_workflow_service(
     )
     connection_pool = build_connection_pool(config)
     try:
-        yield WorkflowService(build_postgres_uow_factory(config, connection_pool))
+        yield build_postgres_uow_factory(config, connection_pool)
     finally:
         connection_pool.close()
+
+
+@pytest.fixture
+def postgres_workflow_service(
+    postgres_pooled_uow_factory,
+) -> WorkflowService:
+    return WorkflowService(postgres_pooled_uow_factory)
 
 
 def test_postgres_workflow_service_round_trip_happy_path(
@@ -416,16 +423,9 @@ def test_postgres_workflow_service_round_trip_happy_path(
 
 
 def test_postgres_memory_search_returns_memory_item_based_results(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(uow_factory)
     memory_service = MemoryService(
         episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
@@ -533,16 +533,9 @@ def test_postgres_memory_search_returns_memory_item_based_results(
 
 
 def test_postgres_memory_remember_episode_persists_local_stub_embedding(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(uow_factory)
     memory_service = MemoryService(
         episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
@@ -633,36 +626,21 @@ class FakeCustomHTTPEmbeddingGenerator(EmbeddingGenerator):
 
 
 def test_postgres_memory_remember_episode_persists_custom_http_embedding(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
+    uow_factory = postgres_pooled_uow_factory
+    workflow_service = WorkflowService(uow_factory)
+    embedding_generator = FakeCustomHTTPEmbeddingGenerator()
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+        embedding_generator=embedding_generator,
     )
-    connection_pool = build_connection_pool(config)
-    try:
-        uow_factory = build_postgres_uow_factory(config, connection_pool)
-        connection_pool = build_connection_pool(config)
-        try:
-            uow_factory = build_postgres_uow_factory(config, connection_pool)
-            connection_pool = build_connection_pool(config)
-            try:
-                uow_factory = build_postgres_uow_factory(config, connection_pool)
-                workflow_service = WorkflowService(uow_factory)
-                embedding_generator = FakeCustomHTTPEmbeddingGenerator()
-                memory_service = MemoryService(
-                    episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
-                    memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
-                    memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
-                    workflow_lookup_repository=UnitOfWorkWorkflowLookupRepository(uow_factory),
-                    workspace_lookup_repository=UnitOfWorkWorkspaceLookupRepository(uow_factory),
-                    embedding_generator=embedding_generator,
-                )
 
-                workspace = workflow_service.register_workspace(
+    workspace = workflow_service.register_workspace(
         RegisterWorkspaceInput(
             repo_url="https://example.com/org/repo-memory-embeddings-custom-http.git",
             canonical_path="/tmp/integration-repo-memory-embeddings-custom-http",
@@ -735,37 +713,29 @@ def test_postgres_memory_remember_episode_persists_custom_http_embedding(
 
 
 def test_postgres_memory_remember_episode_and_search_with_real_openai_embeddings(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
     openai_test_api_key: str,
     openai_test_model: str,
     openai_test_base_url: str,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
+    uow_factory = postgres_pooled_uow_factory
+    workflow_service = WorkflowService(uow_factory)
+    embedding_generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.OPENAI,
+        model=openai_test_model,
+        api_key=openai_test_api_key,
+        base_url=openai_test_base_url,
     )
-    connection_pool = build_connection_pool(config)
-    try:
-        uow_factory = build_postgres_uow_factory(config, connection_pool)
-        workflow_service = WorkflowService(uow_factory)
-        embedding_generator = ExternalAPIEmbeddingGenerator(
-            provider=EmbeddingProvider.OPENAI,
-            model=openai_test_model,
-            api_key=openai_api_key,
-        )
-        memory_service = MemoryService(
-            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
-            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
-            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
-            workflow_lookup_repository=UnitOfWorkWorkflowLookupRepository(uow_factory),
-            workspace_lookup_repository=UnitOfWorkWorkspaceLookupRepository(uow_factory),
-            embedding_generator=embedding_generator,
-        )
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+        embedding_generator=embedding_generator,
+    )
 
-        workspace = workflow_service.register_workspace(
+    workspace = workflow_service.register_workspace(
         RegisterWorkspaceInput(
             repo_url="https://example.com/org/repo-memory-search-openai.git",
             canonical_path="/tmp/integration-repo-memory-search-openai",
@@ -884,16 +854,9 @@ def test_postgres_memory_remember_episode_and_search_with_real_openai_embeddings
 
 
 def test_postgres_workflow_complete_auto_records_memory_and_embedding(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -1024,16 +987,9 @@ def test_postgres_workflow_complete_auto_records_memory_and_embedding(
 
 
 def test_postgres_workflow_complete_auto_memory_is_searchable(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -1163,16 +1119,9 @@ def test_postgres_workflow_complete_auto_memory_is_searchable(
 
 
 def test_postgres_workflow_complete_auto_memory_skips_low_signal_closeout(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -1260,16 +1209,9 @@ def test_postgres_workflow_complete_auto_memory_skips_low_signal_closeout(
 
 
 def test_postgres_workflow_complete_auto_memory_suppresses_duplicate_closeout(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -1393,16 +1335,9 @@ def test_postgres_workflow_complete_auto_memory_suppresses_duplicate_closeout(
 
 
 def test_postgres_workflow_complete_auto_memory_suppresses_near_duplicate_closeout(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -1465,7 +1400,7 @@ def test_postgres_workflow_complete_auto_memory_suppresses_near_duplicate_closeo
     near_duplicate_result = (
         workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
             workflow=first_completed.workflow_instance,
-            attempt=WorkflowAttemptStatus.SUCCEEDED and first_completed.attempt,
+            attempt=first_completed.attempt,
             latest_checkpoint=WorkflowCheckpoint(
                 checkpoint_id=uuid4(),
                 workflow_instance_id=started.workflow_instance.workflow_instance_id,
@@ -1510,16 +1445,9 @@ def test_postgres_workflow_complete_auto_memory_suppresses_near_duplicate_closeo
 
 
 def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_with_high_summary_similarity(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -1625,16 +1553,9 @@ def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_with_high_s
 
 
 def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_when_similarity_is_only_boilerplate_driven(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -1742,16 +1663,9 @@ def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_when_simila
 
 
 def test_postgres_workflow_complete_auto_memory_does_not_treat_old_closeout_as_near_duplicate(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -1906,16 +1820,9 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_old_closeout_as_n
 
 
 def test_postgres_workflow_complete_auto_memory_records_when_summary_similarity_is_below_threshold(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -2026,16 +1933,9 @@ def test_postgres_workflow_complete_auto_memory_records_when_summary_similarity_
 
 
 def test_postgres_workflow_complete_auto_memory_uses_extracted_and_metadata_fields_for_near_duplicate_matching(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -2141,16 +2041,9 @@ def test_postgres_workflow_complete_auto_memory_uses_extracted_and_metadata_fiel
 
 
 def test_postgres_workflow_complete_auto_memory_does_not_treat_different_attempt_status_as_near_duplicate(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -2276,16 +2169,9 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_attempt
 
 
 def test_postgres_workflow_complete_auto_memory_does_not_treat_different_failure_reason_as_near_duplicate(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -2414,16 +2300,9 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_failure
 
 
 def test_postgres_workflow_complete_auto_memory_does_not_treat_different_verify_status_as_near_duplicate(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(
         uow_factory,
         workflow_memory_bridge=WorkflowMemoryBridge(
@@ -2551,16 +2430,9 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_verify_
 
 
 def test_postgres_memory_search_hybrid_results_include_ranking_details(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(uow_factory)
 
     class FixedHybridEmbeddingGenerator(EmbeddingGenerator):
@@ -2709,16 +2581,9 @@ def test_postgres_memory_search_hybrid_results_include_ranking_details(
 
 
 def test_postgres_memory_search_result_mode_counts_cover_hybrid_lexical_and_semantic_only(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(uow_factory)
 
     class FixedThreeModeEmbeddingGenerator(EmbeddingGenerator):
@@ -2879,16 +2744,9 @@ def test_postgres_memory_search_result_mode_counts_cover_hybrid_lexical_and_sema
 
 
 def test_postgres_memory_embedding_repository_find_similar_returns_nearest_matches(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(uow_factory)
 
     workspace = workflow_service.register_workspace(
@@ -3039,40 +2897,13 @@ def test_postgres_memory_embedding_repository_find_similar_returns_nearest_match
 
 
 def test_postgres_memory_get_context_returns_multiple_workflow_episodes(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    workflow_service = WorkflowService(
-        build_postgres_uow_factory(
-            PostgresConfig(
-                database_url=postgres_database_url,
-                connect_timeout_seconds=5,
-                statement_timeout_ms=5000,
-                schema_name=clean_postgres_database,
-            )
-        )
-    )
+    uow_factory = postgres_pooled_uow_factory
+    workflow_service = WorkflowService(uow_factory)
     memory_service = MemoryService(
-        episode_repository=UnitOfWorkEpisodeRepository(
-            build_postgres_uow_factory(
-                PostgresConfig(
-                    database_url=postgres_database_url,
-                    connect_timeout_seconds=5,
-                    statement_timeout_ms=5000,
-                    schema_name=clean_postgres_database,
-                )
-            )
-        ),
-        workflow_lookup=UnitOfWorkWorkflowLookupRepository(
-            build_postgres_uow_factory(
-                PostgresConfig(
-                    database_url=postgres_database_url,
-                    connect_timeout_seconds=5,
-                    statement_timeout_ms=5000,
-                    schema_name=clean_postgres_database,
-                )
-            )
-        ),
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
     )
 
     workspace = workflow_service.register_workspace(
@@ -3142,40 +2973,13 @@ def test_postgres_memory_get_context_returns_multiple_workflow_episodes(
 
 
 def test_postgres_memory_get_context_returns_workspace_episodes(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    workflow_service = WorkflowService(
-        build_postgres_uow_factory(
-            PostgresConfig(
-                database_url=postgres_database_url,
-                connect_timeout_seconds=5,
-                statement_timeout_ms=5000,
-                schema_name=clean_postgres_database,
-            )
-        )
-    )
+    uow_factory = postgres_pooled_uow_factory
+    workflow_service = WorkflowService(uow_factory)
     memory_service = MemoryService(
-        episode_repository=UnitOfWorkEpisodeRepository(
-            build_postgres_uow_factory(
-                PostgresConfig(
-                    database_url=postgres_database_url,
-                    connect_timeout_seconds=5,
-                    statement_timeout_ms=5000,
-                    schema_name=clean_postgres_database,
-                )
-            )
-        ),
-        workflow_lookup=UnitOfWorkWorkflowLookupRepository(
-            build_postgres_uow_factory(
-                PostgresConfig(
-                    database_url=postgres_database_url,
-                    connect_timeout_seconds=5,
-                    statement_timeout_ms=5000,
-                    schema_name=clean_postgres_database,
-                )
-            )
-        ),
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
     )
 
     workspace = workflow_service.register_workspace(
@@ -3264,40 +3068,13 @@ def test_postgres_memory_get_context_returns_workspace_episodes(
 
 
 def test_postgres_memory_get_context_returns_ticket_episodes(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    workflow_service = WorkflowService(
-        build_postgres_uow_factory(
-            PostgresConfig(
-                database_url=postgres_database_url,
-                connect_timeout_seconds=5,
-                statement_timeout_ms=5000,
-                schema_name=clean_postgres_database,
-            )
-        )
-    )
+    uow_factory = postgres_pooled_uow_factory
+    workflow_service = WorkflowService(uow_factory)
     memory_service = MemoryService(
-        episode_repository=UnitOfWorkEpisodeRepository(
-            build_postgres_uow_factory(
-                PostgresConfig(
-                    database_url=postgres_database_url,
-                    connect_timeout_seconds=5,
-                    statement_timeout_ms=5000,
-                    schema_name=clean_postgres_database,
-                )
-            )
-        ),
-        workflow_lookup=UnitOfWorkWorkflowLookupRepository(
-            build_postgres_uow_factory(
-                PostgresConfig(
-                    database_url=postgres_database_url,
-                    connect_timeout_seconds=5,
-                    statement_timeout_ms=5000,
-                    schema_name=clean_postgres_database,
-                )
-            )
-        ),
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
     )
 
     first_workspace = workflow_service.register_workspace(
@@ -3387,40 +3164,13 @@ def test_postgres_memory_get_context_returns_ticket_episodes(
 
 
 def test_postgres_memory_get_context_applies_initial_query_filtering(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    workflow_service = WorkflowService(
-        build_postgres_uow_factory(
-            PostgresConfig(
-                database_url=postgres_database_url,
-                connect_timeout_seconds=5,
-                statement_timeout_ms=5000,
-                schema_name=clean_postgres_database,
-            )
-        )
-    )
+    uow_factory = postgres_pooled_uow_factory
+    workflow_service = WorkflowService(uow_factory)
     memory_service = MemoryService(
-        episode_repository=UnitOfWorkEpisodeRepository(
-            build_postgres_uow_factory(
-                PostgresConfig(
-                    database_url=postgres_database_url,
-                    connect_timeout_seconds=5,
-                    statement_timeout_ms=5000,
-                    schema_name=clean_postgres_database,
-                )
-            )
-        ),
-        workflow_lookup=UnitOfWorkWorkflowLookupRepository(
-            build_postgres_uow_factory(
-                PostgresConfig(
-                    database_url=postgres_database_url,
-                    connect_timeout_seconds=5,
-                    statement_timeout_ms=5000,
-                    schema_name=clean_postgres_database,
-                )
-            )
-        ),
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
     )
 
     workspace = workflow_service.register_workspace(
@@ -3526,16 +3276,9 @@ def test_postgres_memory_get_context_applies_initial_query_filtering(
 
 
 def test_postgres_memory_item_and_embedding_repositories_round_trip(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
 ) -> None:
-    config = PostgresConfig(
-        database_url=postgres_database_url,
-        connect_timeout_seconds=5,
-        statement_timeout_ms=5000,
-        schema_name=clean_postgres_database,
-    )
-    uow_factory = build_postgres_uow_factory(config)
+    uow_factory = postgres_pooled_uow_factory
     workflow_service = WorkflowService(uow_factory)
 
     workspace = workflow_service.register_workspace(
@@ -4706,20 +4449,11 @@ def test_postgres_workflow_service_ignore_clears_open_projection_failure_warning
 
 
 def test_postgres_writer_and_reconcile_end_to_end_json_only(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
     tmp_path: Path,
 ) -> None:
-    service = WorkflowService(
-        build_postgres_uow_factory(
-            PostgresConfig(
-                database_url=postgres_database_url,
-                connect_timeout_seconds=5,
-                statement_timeout_ms=5000,
-                schema_name=clean_postgres_database,
-            )
-        )
-    )
+    uow_factory = postgres_pooled_uow_factory
+    service = WorkflowService(uow_factory)
 
     workspace = service.register_workspace(
         RegisterWorkspaceInput(
@@ -4779,21 +4513,12 @@ def test_postgres_writer_and_reconcile_end_to_end_json_only(
 
 
 def test_postgres_writer_and_reconcile_end_to_end_markdown_failure(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    service = WorkflowService(
-        build_postgres_uow_factory(
-            PostgresConfig(
-                database_url=postgres_database_url,
-                connect_timeout_seconds=5,
-                statement_timeout_ms=5000,
-                schema_name=clean_postgres_database,
-            )
-        )
-    )
+    uow_factory = postgres_pooled_uow_factory
+    service = WorkflowService(uow_factory)
 
     workspace = service.register_workspace(
         RegisterWorkspaceInput(
@@ -4901,21 +4626,12 @@ def test_postgres_writer_and_reconcile_end_to_end_markdown_failure(
 
 
 def test_postgres_writer_and_reconcile_end_to_end_json_failure(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_pooled_uow_factory,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    service = WorkflowService(
-        build_postgres_uow_factory(
-            PostgresConfig(
-                database_url=postgres_database_url,
-                connect_timeout_seconds=5,
-                statement_timeout_ms=5000,
-                schema_name=clean_postgres_database,
-            )
-        )
-    )
+    uow_factory = postgres_pooled_uow_factory
+    service = WorkflowService(uow_factory)
 
     workspace = service.register_workspace(
         RegisterWorkspaceInput(
@@ -5025,6 +4741,7 @@ def test_postgres_writer_and_reconcile_end_to_end_json_failure(
 
 
 def test_postgres_settings_can_build_uow_factory_from_loaded_settings(
+    postgres_pooled_uow_factory,
     postgres_database_url: str,
     clean_postgres_database: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -5057,49 +4774,43 @@ def test_postgres_settings_can_build_uow_factory_from_loaded_settings(
         statement_timeout_ms=config.statement_timeout_ms,
         schema_name=clean_postgres_database,
     )
-    service = WorkflowService(build_postgres_uow_factory(config))
+    connection_pool = build_connection_pool(config)
+    try:
+        service = WorkflowService(build_postgres_uow_factory(config, connection_pool))
 
-    workspace = service.register_workspace(
-        RegisterWorkspaceInput(
-            repo_url="https://example.com/org/repo-3.git",
-            canonical_path="/tmp/integration-repo-3",
-            default_branch="main",
+        workspace = service.register_workspace(
+            RegisterWorkspaceInput(
+                repo_url="https://example.com/org/repo-3.git",
+                canonical_path="/tmp/integration-repo-3",
+                default_branch="main",
+            )
         )
-    )
 
-    started = service.start_workflow(
-        StartWorkflowInput(
-            workspace_id=workspace.workspace_id,
-            ticket_id="INTEG-789",
+        started = service.start_workflow(
+            StartWorkflowInput(
+                workspace_id=workspace.workspace_id,
+                ticket_id="INTEG-789",
+            )
         )
-    )
 
-    resume = service.resume_workflow(
-        ResumeWorkflowInput(
-            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        resume = service.resume_workflow(
+            ResumeWorkflowInput(
+                workflow_instance_id=started.workflow_instance.workflow_instance_id
+            )
         )
-    )
 
-    assert config.database_url == postgres_database_url
-    assert config.connect_timeout_seconds == 5
-    assert config.statement_timeout_ms == 5000
-    assert resume.resumable_status == ResumableStatus.BLOCKED
+        assert config.database_url == postgres_database_url
+        assert config.connect_timeout_seconds == 5
+        assert config.statement_timeout_ms == 5000
+        assert resume.resumable_status == ResumableStatus.BLOCKED
+    finally:
+        connection_pool.close()
 
 
 def test_postgres_projection_state_can_be_observed_after_projection_write(
-    postgres_database_url: str,
-    clean_postgres_database: str,
+    postgres_workflow_service: WorkflowService,
 ) -> None:
-    service = WorkflowService(
-        build_postgres_uow_factory(
-            PostgresConfig(
-                database_url=postgres_database_url,
-                connect_timeout_seconds=5,
-                statement_timeout_ms=5000,
-                schema_name=clean_postgres_database,
-            )
-        )
-    )
+    service = postgres_workflow_service
 
     workspace = service.register_workspace(
         RegisterWorkspaceInput(

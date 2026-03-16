@@ -176,7 +176,9 @@ def _print_version() -> int:
 
         print(version("ctxledger"))
     except Exception:
-        print("0.4.0")
+        from .version import get_app_version
+
+        print(get_app_version())
     return 0
 
 
