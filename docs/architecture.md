@@ -124,14 +124,22 @@ Broader protocol-scope claims should be treated separately from this currently e
 
 ### 4.3 Process Model
 
-A running `ctxledger` process owns:
+Current process model for the `0.5.1` connection-pooling hardening work:
 
 - validated runtime configuration
-- PostgreSQL connection pool
+- process-scoped PostgreSQL connection pool ownership
 - transport adapter initialization
 - startup/shutdown lifecycle management
+- transaction-scoped unit-of-work execution over pooled connections
 
-Each request or tool invocation uses the shared core and obtains a transaction-scoped database session.
+The current implementation direction is that a running `ctxledger` process should own a shared PostgreSQL connection pool, and each request or tool invocation should obtain a transaction-scoped database session from that pool.
+
+Current implementation notes:
+
+- PostgreSQL-backed unit-of-work construction is now expected to receive an explicit shared pool
+- CLI and server/bootstrap paths are being aligned around explicit pool ownership instead of ad hoc pool creation
+- HTTP/runtime bootstrap must initialize a real workflow service before serving resume-oriented routes
+- recent resume-path hardening added targeted timing instrumentation for stage-by-stage workflow resume lookup diagnosis
 
 ---
 

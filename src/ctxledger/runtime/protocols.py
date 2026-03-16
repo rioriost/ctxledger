@@ -22,7 +22,11 @@ class ServerRuntime(Protocol):
 
 
 class WorkflowServiceFactory(Protocol):
-    def __call__(self, uow: Any | None = None) -> WorkflowService: ...
+    def __call__(
+        self,
+        uow: Any | None = None,
+        connection_pool: Any | None = None,
+    ) -> WorkflowService: ...
 
 
 class McpRuntimeProtocol(Protocol):

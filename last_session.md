@@ -3,9 +3,18 @@
 ## Summary
 `0.5.0` is closed out as a **refactoring milestone** and tagged as `v0.5.0`.
 
-The repository is now ready to begin `0.6.0`.
+A short `0.5.1` follow-up is now planned before `0.6.0`.
 
-`0.6.0` is the active milestone, and its scope is:
+`0.5.1` is intended as a **targeted connection-pooling refactoring and runtime hardening step** focused on adopting `psycopg-pool` for PostgreSQL-backed execution paths.
+
+This work loop made substantial progress on that hardening step:
+- PostgreSQL unit-of-work construction now requires an explicit shared pool instead of silently creating ad hoc pools
+- CLI PostgreSQL bootstrap paths were refactored to own and close shared pools explicitly
+- server/runtime bootstrap paths were corrected so HTTP/runtime wiring can initialize a real workflow service again
+- helper, CLI, coverage-target, and server tests were updated to reflect the new pool ownership rules
+- resume-related PostgreSQL indexes were added to the canonical schema for verify report and projection-failure lookup paths
+
+`0.6.0` remains the next feature milestone after that, and its scope is:
 
 - hierarchical memory retrieval
 - summary layers
@@ -51,6 +60,49 @@ Net effect:
 - preserved behavior
 - strong test-backed confidence for future work
 
+## 0.5.1 immediate direction
+
+### Core implementation direction
+Before beginning `0.6.0` feature development, the next work loop should implement PostgreSQL connection pooling with `psycopg-pool`.
+
+Current intent:
+- keep PostgreSQL canonical
+- preserve the existing unit-of-work and repository boundaries
+- replace per-unit-of-work fresh connection creation with pooled acquisition
+- improve runtime efficiency and connection lifecycle discipline
+- align implementation with the architecture documentation that already describes a PostgreSQL connection pool
+
+### Why 0.5.1 is being added
+This follow-up milestone was triggered by investigation into a `workflow_resume` timeout seen at the start of the current session.
+
+Current judgment after the latest investigation:
+- the `workflow_resume` application logic itself still does not look inherently complex enough to be the primary bottleneck
+- the previous HTTP/runtime failure mode was at least partly explained by server bootstrap wiring leaving `workflow_service` uninitialized on the HTTP path
+- that wiring issue has now been corrected, and both CLI and HTTP/runtime dispatch paths can successfully return resume data for the currently inspected workflow
+- added debug-level stage timing in `WorkflowService.resume_workflow()` currently suggests the local lookup stages complete quickly under the present dataset
+- the current PostgreSQL path no longer silently creates ad hoc pools through the unit-of-work factory
+- connection pooling remains a worthwhile refactoring and hardening step even though the original timeout is **not currently reproduced** in the latest local checks
+
+### 0.5.1 plan document
+The new implementation plan for this work is:
+
+- `docs/plans/connection_pooling_0_5_1_plan.md`
+
+### Recommended immediate next steps for 0.5.1
+1. update `docs/roadmap.md` to introduce `0.5.1`
+2. align `docs/architecture.md` with the planned/actual pool lifecycle wording
+3. keep refining pool ownership boundaries for:
+   - server bootstrap
+   - CLI bootstrap
+   - PostgreSQL unit-of-work creation
+4. confirm schema/index application on the target database(s), especially the newly added resume-related indexes
+5. investigate whether any remaining `workflow_resume` timeout depends on:
+   - a different workflow instance
+   - a different database state
+   - a different transport/context-server timeout budget
+   - a cold-start/bootstrap path rather than the steady-state resume query path
+6. run focused workflow and PostgreSQL integration validation again after any further runtime or schema changes
+
 ## 0.6.0 starting direction
 
 ### Core implementation direction
@@ -88,7 +140,9 @@ Useful Mnemis note for later:
 - that makes it relevant to `0.7.0` design evaluation
 - but it should not distort the execution scope of `0.6.0`
 
-## Recommended immediate next steps for 0.6.0
+## Recommended later next steps for 0.6.0
+After `0.5.1` pooling work is complete:
+
 1. define the minimal hierarchical memory data model needed for `0.6.0`
 2. identify where Apache AGE must be introduced:
    - schema
@@ -102,17 +156,31 @@ Useful Mnemis note for later:
 
 ## Important files for next session
 - `docs/roadmap.md`
-- `docs/plans/refactoring_0_5_0_plan.md`
+- `docs/architecture.md`
+- `docs/plans/connection_pooling_0_5_1_plan.md`
+- `docs/plans/hierarchical_memory_0_6_0_plan.md`
 - `last_session.md`
-- `src/ctxledger/memory/service.py`
+- `src/ctxledger/server.py`
+- `src/ctxledger/runtime/server_factory.py`
+- `src/ctxledger/runtime/protocols.py`
+- `src/ctxledger/http_app.py`
 - `src/ctxledger/workflow/service.py`
-- `src/ctxledger/workflow/memory_bridge.py`
 - `src/ctxledger/db/postgres.py`
 - `src/ctxledger/db/__init__.py`
+- `src/ctxledger/config.py`
+- `schemas/postgres.sql`
 - `README.md`
 
 ## Notes on local workspace state
 Tracked refactoring work has been committed.
+
+Current investigation notes:
+- local CLI `resume-workflow` against workflow `86b84bab-05cc-4405-b4dc-536e6f0b7e7e` succeeded once `CTXLEDGER_DATABASE_URL` was provided
+- local HTTP/runtime dispatch for the same workflow also succeeded after restoring default workflow-service-factory wiring in `create_server()`
+- the previously observed HTTP `503 server_not_ready` state was caused by bootstrap wiring leaving `workflow_service_factory` unset on the server path
+- debug-level timing added to `WorkflowService.resume_workflow()` is now available for future reproduction attempts
+- temporary local probe scripts used during this investigation were removed after use
+- no reliable local reproduction of the original `workflow_resume` timeout remains at this point
 
 Known remaining local/generated artifacts may still exist, such as:
 - coverage output

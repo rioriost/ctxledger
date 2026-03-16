@@ -194,9 +194,13 @@ def _print_missing_database_url(*, include_override_hint: bool = False) -> int:
     return 1
 
 
-def _build_postgres_workflow_service() -> tuple[object, object]:
+def _build_postgres_workflow_service() -> tuple[object, object, object]:
     from .config import get_settings
-    from .db.postgres import PostgresConfig, build_postgres_uow_factory
+    from .db.postgres import (
+        PostgresConfig,
+        build_connection_pool,
+        build_postgres_uow_factory,
+    )
     from .workflow.service import WorkflowService
 
     settings = get_settings()
@@ -204,10 +208,12 @@ def _build_postgres_workflow_service() -> tuple[object, object]:
     if not settings.database.url:
         raise RuntimeError("missing_database_url")
 
-    workflow_service = WorkflowService(
-        build_postgres_uow_factory(PostgresConfig.from_settings(settings))
-    )
-    return settings, workflow_service
+    postgres_config = PostgresConfig.from_settings(settings)
+    connection_pool = build_connection_pool(postgres_config)
+    uow_factory = build_postgres_uow_factory(postgres_config, connection_pool)
+
+    workflow_service = WorkflowService(uow_factory)
+    return settings, workflow_service, connection_pool
 
 
 def _print_json_payload(payload: object) -> None:
@@ -262,16 +268,21 @@ def _write_resume_projection(args: argparse.Namespace) -> int:
         workflow_instance_id = UUID(args.workflow_instance_id)
 
         try:
-            settings, workflow_service = _build_postgres_workflow_service()
+            settings, workflow_service, connection_pool = (
+                _build_postgres_workflow_service()
+            )
         except RuntimeError as exc:
             if str(exc) == "missing_database_url":
                 return _print_missing_database_url()
             raise
 
-        resume = workflow_service.resume_workflow(
-            ResumeWorkflowInput(workflow_instance_id=workflow_instance_id)
-        )
-        workspace = resume.workspace
+        try:
+            resume = workflow_service.resume_workflow(
+                ResumeWorkflowInput(workflow_instance_id=workflow_instance_id)
+            )
+            workspace = resume.workspace
+        finally:
+            connection_pool.close()
 
         writer = ResumeProjectionWriter(
             workflow_service=workflow_service,
@@ -351,13 +362,16 @@ def _format_stats_text(stats: object) -> str:
 def _stats(args: argparse.Namespace) -> int:
     try:
         try:
-            _, workflow_service = _build_postgres_workflow_service()
+            _, workflow_service, connection_pool = _build_postgres_workflow_service()
         except RuntimeError as exc:
             if str(exc) == "missing_database_url":
                 return _print_missing_database_url()
             raise
 
-        stats = workflow_service.get_stats()
+        try:
+            stats = workflow_service.get_stats()
+        finally:
+            connection_pool.close()
 
         if args.format == "json":
             _print_json_payload(
@@ -436,19 +450,23 @@ def _format_workflows_text(workflows: list[object] | tuple[object, ...]) -> str:
 def _workflows(args: argparse.Namespace) -> int:
     try:
         try:
-            _, workflow_service = _build_postgres_workflow_service()
+            _, workflow_service, connection_pool = _build_postgres_workflow_service()
         except RuntimeError as exc:
             if str(exc) == "missing_database_url":
                 return _print_missing_database_url()
             raise
 
         workspace_id = UUID(args.workspace_id) if args.workspace_id else None
-        workflows = workflow_service.list_workflows(
-            limit=args.limit,
-            status=args.status,
-            workspace_id=workspace_id,
-            ticket_id=args.ticket_id,
-        )
+
+        try:
+            workflows = workflow_service.list_workflows(
+                limit=max(args.limit, 1),
+                status=args.status,
+                workspace_id=workspace_id,
+                ticket_id=args.ticket_id,
+            )
+        finally:
+            connection_pool.close()
 
         if args.format == "json":
             _print_json_payload(
@@ -541,17 +559,20 @@ def _format_failures_text(failures: list[object] | tuple[object, ...]) -> str:
 def _failures(args: argparse.Namespace) -> int:
     try:
         try:
-            _, workflow_service = _build_postgres_workflow_service()
+            _, workflow_service, connection_pool = _build_postgres_workflow_service()
         except RuntimeError as exc:
             if str(exc) == "missing_database_url":
                 return _print_missing_database_url()
             raise
 
-        failures = workflow_service.list_failures(
-            limit=args.limit,
-            status=args.status,
-            open_only=args.open_only,
-        )
+        try:
+            failures = workflow_service.list_failures(
+                limit=args.limit,
+                status=args.status,
+                open_only=args.open_only,
+            )
+        finally:
+            connection_pool.close()
 
         if args.format == "json":
             _print_json_payload(
@@ -589,13 +610,16 @@ def _failures(args: argparse.Namespace) -> int:
 def _memory_stats(args: argparse.Namespace) -> int:
     try:
         try:
-            _, workflow_service = _build_postgres_workflow_service()
+            _, workflow_service, connection_pool = _build_postgres_workflow_service()
         except RuntimeError as exc:
             if str(exc) == "missing_database_url":
                 return _print_missing_database_url()
             raise
 
-        stats = workflow_service.get_memory_stats()
+        try:
+            stats = workflow_service.get_memory_stats()
+        finally:
+            connection_pool.close()
 
         if args.format == "json":
             _print_json_payload(
@@ -638,15 +662,18 @@ def _resume_workflow(args: argparse.Namespace) -> int:
         workflow_instance_id = UUID(args.workflow_instance_id)
 
         try:
-            _, workflow_service = _build_postgres_workflow_service()
+            _, workflow_service, connection_pool = _build_postgres_workflow_service()
         except RuntimeError as exc:
             if str(exc) == "missing_database_url":
                 return _print_missing_database_url()
             raise
 
-        resume = workflow_service.resume_workflow(
-            ResumeWorkflowInput(workflow_instance_id=workflow_instance_id)
-        )
+        try:
+            resume = workflow_service.resume_workflow(
+                ResumeWorkflowInput(workflow_instance_id=workflow_instance_id)
+            )
+        finally:
+            connection_pool.close()
 
         if args.format == "json":
             payload = serialize_workflow_resume(resume)

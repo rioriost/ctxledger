@@ -45,9 +45,11 @@ try:
     import psycopg
     from psycopg import Connection
     from psycopg.rows import dict_row
+    from psycopg_pool import ConnectionPool
 except ImportError:  # pragma: no cover
     psycopg = None
     Connection = Any  # type: ignore[assignment]
+    ConnectionPool = Any  # type: ignore[assignment]
     dict_row = None  # type: ignore[assignment]
 
 
@@ -56,6 +58,14 @@ def _require_psycopg() -> None:
         raise RuntimeError(
             "psycopg is required for PostgreSQL support. "
             "Install it with: pip install psycopg[binary]"
+        )
+
+
+def _require_connection_pool() -> None:
+    if psycopg is None or dict_row is None or ConnectionPool is Any:
+        raise RuntimeError(
+            "psycopg-pool is required for PostgreSQL connection pooling. "
+            "Install it with: pip install psycopg-pool"
         )
 
 
@@ -177,12 +187,28 @@ def _connect(database_url: str) -> Connection:
     return psycopg.connect(database_url, row_factory=dict_row)  # type: ignore[misc]
 
 
+def build_connection_pool(config: PostgresConfig) -> ConnectionPool:
+    _require_connection_pool()
+    kwargs: dict[str, Any] = {
+        "conninfo": config.database_url,
+        "min_size": config.pool_min_size,
+        "max_size": config.pool_max_size,
+        "timeout": config.pool_timeout_seconds,
+        "kwargs": {"row_factory": dict_row},
+        "open": True,
+    }
+    return ConnectionPool(**kwargs)  # type: ignore[misc]
+
+
 @dataclass(slots=True, frozen=True)
 class PostgresConfig:
     database_url: str
     connect_timeout_seconds: int = 5
     statement_timeout_ms: int | None = None
     schema_name: str = "public"
+    pool_min_size: int = 1
+    pool_max_size: int = 10
+    pool_timeout_seconds: int = 5
 
     @classmethod
     def from_settings(cls, settings: Any) -> PostgresConfig:
@@ -195,6 +221,9 @@ class PostgresConfig:
             connect_timeout_seconds=settings.database.connect_timeout_seconds,
             statement_timeout_ms=settings.database.statement_timeout_ms,
             schema_name=normalized_schema_name,
+            pool_min_size=getattr(settings.database, "pool_min_size", 1),
+            pool_max_size=getattr(settings.database, "pool_max_size", 10),
+            pool_timeout_seconds=getattr(settings.database, "pool_timeout_seconds", 5),
         )
 
 
@@ -2027,13 +2056,16 @@ class PostgresProjectionFailureRepository(ProjectionFailureRepository):
 
 
 class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"]):
-    def __init__(self, config: PostgresConfig) -> None:
+    def __init__(self, config: PostgresConfig, pool: ConnectionPool) -> None:
         self._config = config
+        self._pool = pool
         self._conn: Connection | None = None
+        self._pool_conn_context: Any = None
         self._committed = False
 
     def __enter__(self) -> PostgresUnitOfWork:
-        self._conn = _connect(self._config.database_url)
+        self._pool_conn_context = self._pool.connection()
+        self._conn = self._pool_conn_context.__enter__()
         self._apply_session_settings()
         self.workspaces = PostgresWorkspaceRepository(self._conn)
         self.workflow_instances = PostgresWorkflowInstanceRepository(self._conn)
@@ -2050,17 +2082,22 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
-        if self._conn is None:
+        pool_conn_context = self._pool_conn_context
+        conn = self._conn
+
+        self._pool_conn_context = None
+        self._conn = None
+
+        if conn is None or pool_conn_context is None:
             return
 
         try:
             if exc_type is not None and not self._committed:
-                self._conn.rollback()
+                conn.rollback()
             elif not self._committed:
-                self._conn.rollback()
+                conn.rollback()
         finally:
-            self._conn.close()
-            self._conn = None
+            pool_conn_context.__exit__(exc_type, exc, tb)
 
     def commit(self) -> None:
         if self._conn is None:
@@ -2089,9 +2126,17 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
             )
 
 
-def build_postgres_uow_factory(config: PostgresConfig) -> Any:
+def build_postgres_uow_factory(
+    config: PostgresConfig,
+    pool: ConnectionPool | None = None,
+) -> Any:
+    if pool is None:
+        raise ValueError(
+            "A shared PostgreSQL connection pool is required to build a unit-of-work factory"
+        )
+
     def _factory() -> PostgresUnitOfWork:
-        return PostgresUnitOfWork(config)
+        return PostgresUnitOfWork(config, pool)
 
     return _factory
 
@@ -2114,6 +2159,7 @@ __all__ = [
     "PostgresWorkflowCheckpointRepository",
     "PostgresWorkflowInstanceRepository",
     "PostgresWorkspaceRepository",
+    "build_connection_pool",
     "build_postgres_uow_factory",
     "load_postgres_schema_sql",
 ]

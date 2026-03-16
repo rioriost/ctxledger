@@ -345,6 +345,9 @@ def make_settings(
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         ),
         http=HttpSettings(
             host=host,
@@ -386,6 +389,7 @@ def make_server(
         "settings": settings or make_settings(),
         "db_health_checker": db_health_checker or FakeDatabaseHealthChecker(),
         "runtime": runtime or FakeRuntime(),
+        "connection_pool": object(),
     }
     if workflow_service_factory is not None:
         kwargs["workflow_service_factory"] = workflow_service_factory

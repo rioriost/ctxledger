@@ -144,6 +144,9 @@ def make_settings(
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         ),
         http=HttpSettings(
             host=host,
@@ -265,6 +268,7 @@ def make_server(
         db_health_checker=FakeDbChecker(),
         runtime=runtime,
         workflow_service_factory=workflow_service_factory,
+        connection_pool=object(),
     )
 
 
@@ -1170,8 +1174,13 @@ def test_build_workflow_service_factory_builds_workflow_service(
             captured["settings"] = settings
             return "postgres-config"
 
-    def fake_build_postgres_uow_factory(config: object):
+    def fake_build_postgres_uow_factory(
+        config: object,
+        *,
+        pool: object | None = None,
+    ):
         captured["config"] = config
+        captured["pool"] = pool
 
         def _uow_factory():
             return "uow"
@@ -1197,13 +1206,14 @@ def test_build_workflow_service_factory_builds_workflow_service(
     )
 
     settings = make_settings()
-    factory = build_workflow_service_factory(settings)
+    factory = build_workflow_service_factory(settings, connection_pool="POOL")
 
     assert factory is not None
     service = factory()
 
     assert captured["settings"] is settings
     assert captured["config"] == "postgres-config"
+    assert captured["pool"] == "POOL"
     assert isinstance(service, FakeWorkflowService)
     assert callable(service.uow_factory)
     assert service.uow_factory() == "uow"

@@ -16,7 +16,11 @@ from ctxledger.config import (
     ProjectionSettings,
     load_settings,
 )
-from ctxledger.db.postgres import PostgresConfig, build_postgres_uow_factory
+from ctxledger.db.postgres import (
+    PostgresConfig,
+    build_connection_pool,
+    build_postgres_uow_factory,
+)
 from ctxledger.memory.embeddings import (
     EmbeddingRequest,
     EmbeddingResult,
@@ -322,7 +326,11 @@ def postgres_workflow_service(
         statement_timeout_ms=5000,
         schema_name=clean_postgres_database,
     )
-    return WorkflowService(build_postgres_uow_factory(config))
+    connection_pool = build_connection_pool(config)
+    try:
+        yield WorkflowService(build_postgres_uow_factory(config, connection_pool))
+    finally:
+        connection_pool.close()
 
 
 def test_postgres_workflow_service_round_trip_happy_path(
@@ -634,19 +642,27 @@ def test_postgres_memory_remember_episode_persists_custom_http_embedding(
         statement_timeout_ms=5000,
         schema_name=clean_postgres_database,
     )
-    uow_factory = build_postgres_uow_factory(config)
-    workflow_service = WorkflowService(uow_factory)
-    embedding_generator = FakeCustomHTTPEmbeddingGenerator()
-    memory_service = MemoryService(
-        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
-        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
-        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
-        embedding_generator=embedding_generator,
-        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
-        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
-    )
+    connection_pool = build_connection_pool(config)
+    try:
+        uow_factory = build_postgres_uow_factory(config, connection_pool)
+        connection_pool = build_connection_pool(config)
+        try:
+            uow_factory = build_postgres_uow_factory(config, connection_pool)
+            connection_pool = build_connection_pool(config)
+            try:
+                uow_factory = build_postgres_uow_factory(config, connection_pool)
+                workflow_service = WorkflowService(uow_factory)
+                embedding_generator = FakeCustomHTTPEmbeddingGenerator()
+                memory_service = MemoryService(
+                    episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+                    memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+                    memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+                    workflow_lookup_repository=UnitOfWorkWorkflowLookupRepository(uow_factory),
+                    workspace_lookup_repository=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+                    embedding_generator=embedding_generator,
+                )
 
-    workspace = workflow_service.register_workspace(
+                workspace = workflow_service.register_workspace(
         RegisterWorkspaceInput(
             repo_url="https://example.com/org/repo-memory-embeddings-custom-http.git",
             canonical_path="/tmp/integration-repo-memory-embeddings-custom-http",
@@ -731,24 +747,25 @@ def test_postgres_memory_remember_episode_and_search_with_real_openai_embeddings
         statement_timeout_ms=5000,
         schema_name=clean_postgres_database,
     )
-    uow_factory = build_postgres_uow_factory(config)
-    workflow_service = WorkflowService(uow_factory)
-    embedding_generator = ExternalAPIEmbeddingGenerator(
-        provider=EmbeddingProvider.OPENAI,
-        model=openai_test_model,
-        api_key=openai_test_api_key,
-        base_url=openai_test_base_url,
-    )
-    memory_service = MemoryService(
-        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
-        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
-        memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
-        embedding_generator=embedding_generator,
-        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
-        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
-    )
+    connection_pool = build_connection_pool(config)
+    try:
+        uow_factory = build_postgres_uow_factory(config, connection_pool)
+        workflow_service = WorkflowService(uow_factory)
+        embedding_generator = ExternalAPIEmbeddingGenerator(
+            provider=EmbeddingProvider.OPENAI,
+            model=openai_test_model,
+            api_key=openai_api_key,
+        )
+        memory_service = MemoryService(
+            episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+            memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+            workflow_lookup_repository=UnitOfWorkWorkflowLookupRepository(uow_factory),
+            workspace_lookup_repository=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+            embedding_generator=embedding_generator,
+        )
 
-    workspace = workflow_service.register_workspace(
+        workspace = workflow_service.register_workspace(
         RegisterWorkspaceInput(
             repo_url="https://example.com/org/repo-memory-search-openai.git",
             canonical_path="/tmp/integration-repo-memory-search-openai",

@@ -63,6 +63,9 @@ def make_settings(
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         ),
         http=HttpSettings(
             host=host,

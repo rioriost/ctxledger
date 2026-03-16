@@ -127,6 +127,9 @@ class DatabaseSettings:
     connect_timeout_seconds: int
     statement_timeout_ms: int | None
     schema_name: str
+    pool_min_size: int
+    pool_max_size: int
+    pool_timeout_seconds: int
 
     @property
     def is_configured(self) -> bool:
@@ -234,6 +237,24 @@ class AppSettings:
         if not self.database.schema_name:
             raise ConfigError("CTXLEDGER_DB_SCHEMA_NAME must not be empty")
 
+        if self.database.pool_min_size < 0:
+            raise ConfigError(
+                "CTXLEDGER_DB_POOL_MIN_SIZE must be greater than or equal to 0"
+            )
+
+        if self.database.pool_max_size <= 0:
+            raise ConfigError("CTXLEDGER_DB_POOL_MAX_SIZE must be greater than 0")
+
+        if self.database.pool_max_size < self.database.pool_min_size:
+            raise ConfigError(
+                "CTXLEDGER_DB_POOL_MAX_SIZE must be greater than or equal to CTXLEDGER_DB_POOL_MIN_SIZE"
+            )
+
+        if self.database.pool_timeout_seconds <= 0:
+            raise ConfigError(
+                "CTXLEDGER_DB_POOL_TIMEOUT_SECONDS must be greater than 0"
+            )
+
         if self.embedding.enabled:
             if not self.embedding.model:
                 raise ConfigError("CTXLEDGER_EMBEDDING_MODEL must not be empty")
@@ -276,6 +297,9 @@ def load_settings() -> AppSettings:
                 "CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"
             ),
             schema_name=_get_env("CTXLEDGER_DB_SCHEMA_NAME", "public") or "public",
+            pool_min_size=_parse_int("CTXLEDGER_DB_POOL_MIN_SIZE", 1),
+            pool_max_size=_parse_int("CTXLEDGER_DB_POOL_MAX_SIZE", 10),
+            pool_timeout_seconds=_parse_int("CTXLEDGER_DB_POOL_TIMEOUT_SECONDS", 5),
         ),
         http=HttpSettings(
             host=_get_env("CTXLEDGER_HOST", "0.0.0.0") or "0.0.0.0",

@@ -212,9 +212,13 @@ def create_fastapi_app(server: CtxLedgerServer) -> FastAPI:
     return app
 
 
-def create_fastapi_app_from_settings(settings: AppSettings) -> FastAPI:
-    server = create_server(settings)
-    return create_fastapi_app(server)
+def create_fastapi_app_from_settings(
+    settings: AppSettings,
+    *,
+    server: CtxLedgerServer | None = None,
+) -> FastAPI:
+    resolved_server = server if server is not None else create_server(settings)
+    return create_fastapi_app(resolved_server)
 
 
 def create_default_fastapi_app() -> FastAPI:
@@ -224,7 +228,11 @@ def create_default_fastapi_app() -> FastAPI:
     return create_fastapi_app_from_settings(settings)
 
 
-app = create_default_fastapi_app()
+def _create_module_app() -> FastAPI:
+    return create_default_fastapi_app()
+
+
+app = _create_module_app()
 
 
 __all__ = [

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 from uuid import UUID
 
 from .config import AppSettings
+from .db.postgres import (
+    PostgresConfig,
+    build_connection_pool,
+)
 from .runtime.database_health import (
     build_database_health_checker,
 )
@@ -86,6 +91,7 @@ class CtxLedgerServer:
         db_health_checker: DatabaseHealthChecker | None = None,
         runtime: ServerRuntime | None = None,
         workflow_service_factory: WorkflowServiceFactory | None = None,
+        connection_pool: Any | None = None,
     ) -> None:
         self.settings = settings
         self.db_health_checker = db_health_checker or build_database_health_checker(
@@ -94,6 +100,12 @@ class CtxLedgerServer:
         self.runtime = runtime
         self.workflow_service_factory = workflow_service_factory
         self.workflow_service: WorkflowService | None = None
+        self.connection_pool = connection_pool
+        self._owns_connection_pool = (
+            connection_pool is None
+            and workflow_service_factory is None
+            and bool(settings.database.url)
+        )
         self._started = False
 
     def get_workflow_resume(self, workflow_instance_id: UUID) -> WorkflowResume:
@@ -210,8 +222,22 @@ class CtxLedgerServer:
         if not self.db_health_checker.schema_ready():
             raise ServerBootstrapError("database schema is not ready")
 
+        if self.connection_pool is None and self._owns_connection_pool:
+            postgres_config = PostgresConfig.from_settings(self.settings)
+            self.connection_pool = build_connection_pool(postgres_config)
+
         if self.workflow_service_factory is not None:
-            self.workflow_service = self.workflow_service_factory()
+            if self.connection_pool is not None:
+                try:
+                    self.workflow_service = self.workflow_service_factory(
+                        connection_pool=self.connection_pool
+                    )
+                except TypeError as exc:
+                    if "connection_pool" not in str(exc):
+                        raise
+                    self.workflow_service = self.workflow_service_factory()
+            else:
+                self.workflow_service = self.workflow_service_factory()
 
         if self.runtime is not None:
             self.runtime.start()
@@ -236,6 +262,11 @@ class CtxLedgerServer:
             self.runtime.stop()
 
         self.workflow_service = None
+
+        if self.connection_pool is not None and self._owns_connection_pool:
+            self.connection_pool.close()
+            self.connection_pool = None
+
         self._started = False
         logger.info("ctxledger shutdown complete")
 
@@ -256,6 +287,7 @@ def create_server(
     db_health_checker: DatabaseHealthChecker | None = None,
     runtime: ServerRuntime | None = None,
     workflow_service_factory: WorkflowServiceFactory | None = None,
+    connection_pool: Any | None = None,
 ) -> CtxLedgerServer:
     server = CtxLedgerServer(
         settings=settings,
@@ -266,6 +298,7 @@ def create_server(
             if workflow_service_factory is not None
             else build_workflow_service_factory(settings)
         ),
+        connection_pool=connection_pool,
     )
     server.runtime = (
         runtime if runtime is not None else build_http_runtime_adapter(server)

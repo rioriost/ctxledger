@@ -1137,36 +1137,142 @@ class WorkflowService:
             )
 
     def resume_workflow(self, data: ResumeWorkflowInput) -> WorkflowResume:
+        debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
+        started_at = utc_now()
+        if debug_logging_enabled:
+            logger.debug(
+                "resume_workflow started",
+                extra={"workflow_instance_id": str(data.workflow_instance_id)},
+            )
         with self._uow_factory() as uow:
+            workflow_lookup_started_at = utc_now()
             workflow = self._require_workflow(uow, data.workflow_instance_id)
-            workspace = self._require_workspace(uow, workflow.workspace_id)
+            if debug_logging_enabled:
+                logger.debug(
+                    "resume_workflow workflow lookup complete",
+                    extra={
+                        "workflow_instance_id": str(data.workflow_instance_id),
+                        "duration_ms": int(
+                            (utc_now() - workflow_lookup_started_at).total_seconds()
+                            * 1000
+                        ),
+                    },
+                )
 
+            workspace_lookup_started_at = utc_now()
+            workspace = self._require_workspace(uow, workflow.workspace_id)
+            if debug_logging_enabled:
+                logger.debug(
+                    "resume_workflow workspace lookup complete",
+                    extra={
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "workspace_id": str(workspace.workspace_id),
+                        "duration_ms": int(
+                            (utc_now() - workspace_lookup_started_at).total_seconds()
+                            * 1000
+                        ),
+                    },
+                )
+
+            attempt_lookup_started_at = utc_now()
             attempt = uow.workflow_attempts.get_running_by_workflow_id(
                 workflow.workflow_instance_id
             )
+            attempt_lookup_strategy = "running"
             if attempt is None:
                 attempt = uow.workflow_attempts.get_latest_by_workflow_id(
                     workflow.workflow_instance_id
                 )
+                attempt_lookup_strategy = "latest"
+            if debug_logging_enabled:
+                logger.debug(
+                    "resume_workflow attempt lookup complete",
+                    extra={
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "attempt_lookup_strategy": attempt_lookup_strategy,
+                        "attempt_id": (
+                            str(attempt.attempt_id) if attempt is not None else None
+                        ),
+                        "duration_ms": int(
+                            (utc_now() - attempt_lookup_started_at).total_seconds()
+                            * 1000
+                        ),
+                    },
+                )
 
+            checkpoint_lookup_started_at = utc_now()
             latest_checkpoint = uow.workflow_checkpoints.get_latest_by_workflow_id(
                 workflow.workflow_instance_id
             )
+            if debug_logging_enabled:
+                logger.debug(
+                    "resume_workflow checkpoint lookup complete",
+                    extra={
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "checkpoint_id": (
+                            str(latest_checkpoint.checkpoint_id)
+                            if latest_checkpoint is not None
+                            else None
+                        ),
+                        "duration_ms": int(
+                            (utc_now() - checkpoint_lookup_started_at).total_seconds()
+                            * 1000
+                        ),
+                    },
+                )
+
+            verify_report_lookup_started_at = utc_now()
             latest_verify_report = (
                 uow.verify_reports.get_latest_by_attempt_id(attempt.attempt_id)
                 if attempt is not None
                 else None
             )
+            if debug_logging_enabled:
+                logger.debug(
+                    "resume_workflow verify report lookup complete",
+                    extra={
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "attempt_id": (
+                            str(attempt.attempt_id) if attempt is not None else None
+                        ),
+                        "verify_id": (
+                            str(latest_verify_report.verify_id)
+                            if latest_verify_report is not None
+                            else None
+                        ),
+                        "duration_ms": int(
+                            (
+                                utc_now() - verify_report_lookup_started_at
+                            ).total_seconds()
+                            * 1000
+                        ),
+                    },
+                )
 
             projections: tuple[ProjectionInfo, ...] = ()
+            projection_lookup_started_at = utc_now()
             if getattr(uow, "projection_states", None) is not None:
                 projections = uow.projection_states.get_resume_projections(
                     workspace.workspace_id,
                     workflow.workflow_instance_id,
                 )
+            if debug_logging_enabled:
+                logger.debug(
+                    "resume_workflow projection lookup complete",
+                    extra={
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "workspace_id": str(workspace.workspace_id),
+                        "projection_count": len(projections),
+                        "duration_ms": int(
+                            (utc_now() - projection_lookup_started_at).total_seconds()
+                            * 1000
+                        ),
+                    },
+                )
 
             open_projection_failures: list[ProjectionFailureInfo] = []
             closed_projection_failures: list[ProjectionFailureInfo] = []
+            projection_failure_lookup_started_at = utc_now()
             if getattr(uow, "projection_failures", None) is not None:
                 open_projection_failures = (
                     uow.projection_failures.get_open_failures_by_workflow_id(
@@ -1179,6 +1285,24 @@ class WorkflowService:
                         workspace.workspace_id,
                         workflow.workflow_instance_id,
                     )
+                )
+            if debug_logging_enabled:
+                logger.debug(
+                    "resume_workflow projection failure lookup complete",
+                    extra={
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "workspace_id": str(workspace.workspace_id),
+                        "open_projection_failure_count": len(open_projection_failures),
+                        "closed_projection_failure_count": len(
+                            closed_projection_failures
+                        ),
+                        "duration_ms": int(
+                            (
+                                utc_now() - projection_failure_lookup_started_at
+                            ).total_seconds()
+                            * 1000
+                        ),
+                    },
                 )
 
             warnings = list(
@@ -1198,6 +1322,29 @@ class WorkflowService:
             next_hint = self._derive_next_hint(
                 workflow, attempt, latest_checkpoint, resumable_status
             )
+
+            if debug_logging_enabled:
+                logger.debug(
+                    "resume_workflow complete",
+                    extra={
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "workspace_id": str(workspace.workspace_id),
+                        "attempt_id": (
+                            str(attempt.attempt_id) if attempt is not None else None
+                        ),
+                        "checkpoint_id": (
+                            str(latest_checkpoint.checkpoint_id)
+                            if latest_checkpoint is not None
+                            else None
+                        ),
+                        "projection_count": len(projections),
+                        "warning_count": len(warnings),
+                        "resumable_status": resumable_status.value,
+                        "duration_ms": int(
+                            (utc_now() - started_at).total_seconds() * 1000
+                        ),
+                    },
+                )
 
             return WorkflowResume(
                 workspace=workspace,

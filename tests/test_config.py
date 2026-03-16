@@ -362,12 +362,18 @@ def test_database_settings_is_configured_reflects_url_presence() -> None:
         connect_timeout_seconds=5,
         statement_timeout_ms=None,
         schema_name="public",
+        pool_min_size=1,
+        pool_max_size=10,
+        pool_timeout_seconds=5,
     )
     missing = DatabaseSettings(
         url="",
         connect_timeout_seconds=5,
         statement_timeout_ms=None,
         schema_name="public",
+        pool_min_size=1,
+        pool_max_size=10,
+        pool_timeout_seconds=5,
     )
 
     assert configured.is_configured is True
@@ -391,6 +397,9 @@ def test_app_settings_validate_rejects_empty_host() -> None:
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         ),
         http=HttpSettings(host="", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -425,6 +434,9 @@ def test_app_settings_validate_rejects_empty_http_path() -> None:
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path=""),
         debug=DebugSettings(enabled=True),
@@ -459,6 +471,9 @@ def test_app_settings_validate_requires_embedding_model_when_enabled() -> None:
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -497,6 +512,9 @@ def test_app_settings_validate_requires_api_key_for_external_embedding_provider(
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -536,6 +554,9 @@ def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provi
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -573,6 +594,9 @@ def test_app_settings_validate_rejects_non_positive_embedding_dimensions() -> No
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -618,6 +642,9 @@ def test_load_settings_uses_defaults_for_optional_values(
     assert settings.projection.write_markdown is True
     assert settings.projection.write_json is True
     assert settings.logging.level is LogLevel.INFO
+    assert settings.database.pool_min_size == 1
+    assert settings.database.pool_max_size == 10
+    assert settings.database.pool_timeout_seconds == 5
     assert settings.logging.structured is True
     assert settings.database.connect_timeout_seconds == 5
     assert settings.database.statement_timeout_ms is None

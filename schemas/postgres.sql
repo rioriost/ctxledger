@@ -182,6 +182,9 @@ CREATE TABLE IF NOT EXISTS verify_reports (
 CREATE INDEX IF NOT EXISTS idx_verify_reports_attempt_created_desc
   ON verify_reports (attempt_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_verify_reports_attempt_verify_created_desc
+  ON verify_reports (attempt_id, verify_id, created_at DESC);
+
 -- ---------------------------------------------------------------------------
 -- Projection failures
 -- Canonical operational metadata for derived projection write failures.
@@ -220,6 +223,22 @@ CREATE INDEX IF NOT EXISTS idx_projection_failures_workspace_occurred_desc
 
 CREATE INDEX IF NOT EXISTS idx_projection_failures_workflow_occurred_desc
   ON projection_failures (workflow_instance_id, occurred_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_projection_failures_workflow_status_projection_occurred
+  ON projection_failures (
+    workflow_instance_id,
+    status,
+    projection_type,
+    occurred_at ASC
+  );
+
+CREATE INDEX IF NOT EXISTS idx_projection_failures_workspace_workflow_status_projection
+  ON projection_failures (
+    workspace_id,
+    workflow_instance_id,
+    status,
+    projection_type
+  );
 
 CREATE INDEX IF NOT EXISTS idx_projection_failures_attempt_occurred_desc
   ON projection_failures (attempt_id, occurred_at DESC);

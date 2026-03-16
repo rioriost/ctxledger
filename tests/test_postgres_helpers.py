@@ -29,6 +29,7 @@ from ctxledger.db.postgres import (
     _schema_path,
     _to_datetime,
     _to_uuid,
+    build_connection_pool,
     build_postgres_uow_factory,
     load_postgres_schema_sql,
 )
@@ -99,6 +100,36 @@ class FakeConnection:
 
     def close(self) -> None:
         self.close_calls += 1
+
+
+class FakePoolConnectionContext:
+    def __init__(self, connection: FakeConnection) -> None:
+        self._connection = connection
+        self.enter_calls = 0
+        self.exit_calls = 0
+        self.exit_args: list[tuple[object, object, object]] = []
+
+    def __enter__(self) -> FakeConnection:
+        self.enter_calls += 1
+        return self._connection
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.exit_calls += 1
+        self.exit_args.append((exc_type, exc, tb))
+        self._connection.close()
+
+
+class FakeConnectionPool:
+    def __init__(self, connection: FakeConnection) -> None:
+        self._connection = connection
+        self.connection_calls = 0
+        self.contexts: list[FakePoolConnectionContext] = []
+
+    def connection(self) -> FakePoolConnectionContext:
+        self.connection_calls += 1
+        context = FakePoolConnectionContext(self._connection)
+        self.contexts.append(context)
+        return context
 
 
 def test_require_psycopg_raises_when_driver_is_unavailable(
@@ -215,6 +246,9 @@ def test_postgres_config_from_settings_reads_database_values() -> None:
             url="postgresql://ctxledger/db",
             connect_timeout_seconds=9,
             statement_timeout_ms=3210,
+            pool_min_size=2,
+            pool_max_size=11,
+            pool_timeout_seconds=7,
         )
     )
 
@@ -224,6 +258,9 @@ def test_postgres_config_from_settings_reads_database_values() -> None:
         database_url="postgresql://ctxledger/db",
         connect_timeout_seconds=9,
         statement_timeout_ms=3210,
+        pool_min_size=2,
+        pool_max_size=11,
+        pool_timeout_seconds=7,
     )
 
 
@@ -240,6 +277,9 @@ def test_health_checker_ping_executes_select_and_session_settings(
         PostgresConfig(
             database_url="postgresql://ctxledger/db",
             statement_timeout_ms=1234,
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
         )
     )
     checker.ping()
@@ -296,7 +336,12 @@ def test_health_checker_schema_ready_returns_false_when_tables_are_missing(
     monkeypatch.setattr(postgres_module, "_connect", lambda database_url: connection)
 
     checker = PostgresDatabaseHealthChecker(
-        PostgresConfig(database_url="postgresql://ctxledger/db")
+        PostgresConfig(
+            database_url="postgresql://ctxledger/db",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
+        )
     )
 
     assert checker.schema_ready() is False
@@ -304,12 +349,14 @@ def test_health_checker_schema_ready_returns_false_when_tables_are_missing(
 
 def test_build_postgres_uow_factory_returns_factory_bound_to_config() -> None:
     config = PostgresConfig(database_url="postgresql://ctxledger/db")
-    factory = build_postgres_uow_factory(config)
+    pool = FakeConnectionPool(FakeConnection(FakeCursor()))
+    factory = build_postgres_uow_factory(config, pool)
 
     assert callable(factory)
     uow = factory()
 
     assert uow._config == config
+    assert uow._pool is pool
 
 
 def test_postgres_workspace_repository_getters_create_update_and_row_mapping() -> None:
@@ -898,7 +945,8 @@ def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle(
         database_url="postgresql://ctxledger/db",
         statement_timeout_ms=456,
     )
-    uow = PostgresUnitOfWork(config)
+    pool = FakeConnectionPool(connection)
+    uow = PostgresUnitOfWork(config, pool)
 
     with uow as active_uow:
         assert active_uow is uow
@@ -918,7 +966,7 @@ def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle(
     assert connection.close_calls == 1
     assert cursor._executed[0] == ("SET statement_timeout = 456", None)
 
-    inactive_uow = PostgresUnitOfWork(config)
+    inactive_uow = PostgresUnitOfWork(config, FakeConnectionPool(connection))
     with pytest.raises(PersistenceError, match="Unit of work is not active"):
         inactive_uow.commit()
     with pytest.raises(PersistenceError, match="Unit of work is not active"):
@@ -927,41 +975,70 @@ def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle(
         inactive_uow._apply_session_settings()
 
 
-def test_postgres_unit_of_work_rolls_back_on_explicit_rollback_and_exit(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_postgres_unit_of_work_rolls_back_on_explicit_rollback_and_exit() -> None:
     cursor = FakeCursor()
     connection = FakeConnection(cursor)
+    pool = FakeConnectionPool(connection)
 
-    monkeypatch.setattr(postgres_module, "_connect", lambda database_url: connection)
-
-    uow = PostgresUnitOfWork(PostgresConfig(database_url="postgresql://ctxledger/db"))
+    uow = PostgresUnitOfWork(
+        PostgresConfig(
+            database_url="postgresql://ctxledger/db",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
+        ),
+        pool,
+    )
 
     with uow:
         uow.rollback()
 
+    assert pool.connection_calls == 1
+    assert len(pool.contexts) == 1
+    assert pool.contexts[0].enter_calls == 1
+    assert pool.contexts[0].exit_calls == 1
     assert connection.rollback_calls == 2
     assert connection.commit_calls == 0
     assert connection.close_calls == 1
 
 
-def test_postgres_unit_of_work_rolls_back_on_exception(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_postgres_unit_of_work_rolls_back_on_exception() -> None:
     cursor = FakeCursor()
     connection = FakeConnection(cursor)
+    pool = FakeConnectionPool(connection)
 
-    monkeypatch.setattr(postgres_module, "_connect", lambda database_url: connection)
-
-    uow = PostgresUnitOfWork(PostgresConfig(database_url="postgresql://ctxledger/db"))
+    uow = PostgresUnitOfWork(
+        PostgresConfig(
+            database_url="postgresql://ctxledger/db",
+            pool_min_size=1,
+            pool_max_size=10,
+            pool_timeout_seconds=5,
+        ),
+        pool,
+    )
 
     with pytest.raises(RuntimeError, match="boom"):
         with uow:
             raise RuntimeError("boom")
 
+    assert pool.connection_calls == 1
+    assert len(pool.contexts) == 1
+    assert pool.contexts[0].enter_calls == 1
+    assert pool.contexts[0].exit_calls == 1
+    assert pool.contexts[0].exit_args[0][0] is RuntimeError
     assert connection.rollback_calls == 1
     assert connection.commit_calls == 0
     assert connection.close_calls == 1
+
+
+def test_build_postgres_uow_factory_requires_shared_pool() -> None:
+    config = PostgresConfig(database_url="postgresql://ctxledger/db")
+
+    with pytest.raises(
+        ValueError,
+        match="A shared PostgreSQL connection pool is required",
+    ):
+        build_postgres_uow_factory(config)
 
 
 def test_load_postgres_schema_sql_returns_schema_contents() -> None:

@@ -185,6 +185,55 @@ Expected themes:
 - avoid release claims that depend on new product features rather than structural cleanup
 - prepare the codebase and persistence layer for graph-assisted hierarchical retrieval in `0.6.0`
 
+## 0.5.1
+
+Planned focus:
+
+- PostgreSQL connection pooling with `psycopg-pool`
+- runtime hardening for PostgreSQL-backed workflow and memory operations
+- reduction of per-request connection churn without changing canonical behavior
+- alignment of implementation with the documented process model
+- a safer database access foundation before beginning broader `0.6.0` work
+
+Current progress already landed toward `0.5.1`:
+
+- PostgreSQL unit-of-work construction now requires an explicit shared connection pool instead of silently creating ad hoc pools
+- `PostgresUnitOfWork` is pool-backed and borrows connections from a shared pool for transaction-scoped use
+- server bootstrap, CLI bootstrap, and runtime factory paths have been refactored toward explicit shared-pool ownership
+- CLI PostgreSQL command paths now create and close shared pools explicitly
+- server/runtime bootstrap wiring was corrected so the HTTP/runtime path initializes a real workflow service again instead of remaining `server_not_ready`
+- debug-level stage timing was added to `WorkflowService.resume_workflow()` for workflow, workspace, attempt, checkpoint, verify-report, projection, and projection-failure lookup stages
+- targeted PostgreSQL indexes were added for resume-related verify-report and projection-failure lookup patterns
+- helper, CLI, server, and coverage-target tests were updated to reflect the new pool ownership rules
+
+Current `0.5.1` positioning:
+
+- the current local CLI and HTTP/runtime resume paths both succeed for the latest inspected workflow
+- the original `workflow_resume` timeout that motivated this milestone is not currently reproduced in the latest local checks
+- the latest investigation suggests at least one earlier failure mode was bootstrap/runtime wiring related rather than purely query complexity
+- connection pooling and runtime hardening still remain valid `0.5.1` work because they improve ownership clarity, reduce hidden pool churn, and provide a better base for future timeout diagnosis
+
+Remaining work to close out `0.5.1` more confidently:
+
+- ensure the latest schema/index changes are applied on the actual target databases, not just captured in `schemas/postgres.sql`
+- continue validating pool lifecycle discipline across server, CLI, and any remaining runtime/bootstrap paths
+- decide whether any remaining factory-created pools need more explicit ownership or shutdown coordination
+- investigate whether the original timeout depends on:
+  - a different workflow instance
+  - a different database state
+  - a different transport or context-server timeout budget
+  - a cold-start/bootstrap path rather than steady-state resume lookup behavior
+- keep focused workflow and PostgreSQL integration validation green after any further runtime or schema adjustments
+
+Expected themes:
+
+- shared PostgreSQL pool ownership for long-lived runtime processes
+- pooled connection acquisition through the existing unit-of-work boundary
+- explicit pool-related configuration and validation
+- preservation of current workflow and memory semantics
+- focused validation for transaction behavior, cleanup, and regression safety
+- runtime/bootstrap correctness for both CLI and HTTP-driven resume behavior
+
 ## 0.6
 
 Planned focus:
@@ -216,14 +265,12 @@ Expected themes:
 
 ## Immediate next steps
 
-- begin `0.6.0` planning and implementation for hierarchical memory retrieval
-- define the minimal hierarchical memory data model needed for `0.6.0`
-- identify where Apache AGE must be introduced:
-  - schema
-  - local and development setup
-  - repository and service boundaries
-  - tests
-- define the first `memory_get_context` hierarchical retrieval slice
+- finish `0.5.1` closeout work for PostgreSQL connection pooling and runtime hardening
+- confirm that the latest resume-related schema/index additions are applied in the intended runtime databases
+- keep refining pool ownership boundaries for server and CLI bootstrap paths where lifecycle ambiguity remains
+- continue validating behavior preservation across workflow and memory paths, especially HTTP/runtime resume behavior
+- investigate any remaining `workflow_resume` timeout only if it can be reproduced under a specific workflow, database state, or transport budget
+- resume `0.6.0` hierarchical memory implementation after the pooling hardening step is considered sufficiently closed
 - keep Mnemis-alignment work out of `0.6.0`
 
 ## 0.7
