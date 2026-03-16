@@ -523,7 +523,6 @@ def _failures(args: argparse.Namespace) -> int:
                         "failure_scope": failure.failure_scope,
                         "failure_type": failure.failure_type,
                         "failure_status": failure.failure_status,
-                        "projection_type": failure.projection_type,
                         "target_path": failure.target_path,
                         "error_code": failure.error_code,
                         "error_message": failure.error_message,

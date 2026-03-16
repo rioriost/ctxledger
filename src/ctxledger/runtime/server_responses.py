@@ -322,71 +322,6 @@ def build_workflow_detail_resource_response(
     )
 
 
-def _build_projection_failure_action_response(
-    server: CtxLedgerServer,
-    *,
-    workspace_id: UUID,
-    workflow_instance_id: UUID,
-    projection_type: ProjectionArtifactType | None,
-    action: str,
-    operation,
-    default_error_message: str,
-) -> ProjectionFailureActionResponse:
-    from .types import ProjectionFailureActionResponse
-
-    if server.workflow_service is None:
-        return ProjectionFailureActionResponse(
-            status_code=503,
-            payload={
-                "error": {
-                    "code": "server_not_ready",
-                    "message": "workflow service is not initialized",
-                }
-            },
-            headers={"content-type": "application/json"},
-        )
-
-    try:
-        updated_failure_count = operation(server.workflow_service)
-    except Exception as exc:
-        message = str(exc) or default_error_message
-        status_code, code = _projection_failure_error_status(message)
-        return ProjectionFailureActionResponse(
-            status_code=status_code,
-            payload={
-                "error": {
-                    "code": code,
-                    "message": message,
-                }
-            },
-            headers={"content-type": "application/json"},
-        )
-
-    return ProjectionFailureActionResponse(
-        status_code=200,
-        payload={
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-            "projection_type": (
-                projection_type.value if projection_type is not None else None
-            ),
-            "updated_failure_count": updated_failure_count,
-            "status": action,
-        },
-        headers={"content-type": "application/json"},
-    )
-
-
-def _projection_failure_error_status(exc: Exception) -> tuple[int, str]:
-    message = str(exc)
-    lowered = message.lower()
-    if "not found" in lowered:
-        return 404, "not_found"
-    if "does not belong to workspace" in lowered or "mismatch" in lowered:
-        return 400, "invalid_request"
-    return 500, "server_error"
-
-
 def _workflow_resume_error_payload(
     exc: WorkflowError,
     *,
@@ -410,9 +345,6 @@ def _workflow_resume_error_payload(
 
 
 __all__ = [
-    "build_closed_projection_failures_response",
-    "build_projection_failures_ignore_response",
-    "build_projection_failures_resolve_response",
     "build_runtime_introspection_response",
     "build_runtime_routes_response",
     "build_runtime_tools_response",

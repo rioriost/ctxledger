@@ -84,7 +84,6 @@ class PostgresDatabaseHealthChecker:
             "workflow_attempts",
             "workflow_checkpoints",
             "verify_reports",
-            "projection_states",
         )
 
         query = """

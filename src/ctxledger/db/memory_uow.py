@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from ctxledger.db import (
-    InMemoryProjectionFailureRepository,
-    InMemoryProjectionStateRepository,
     InMemoryStore,
     InMemoryUnitOfWork,
     InMemoryVerifyReportRepository,
@@ -16,8 +14,6 @@ from ctxledger.db import (
 make_in_memory_uow_factory = build_in_memory_uow_factory
 
 __all__ = [
-    "InMemoryProjectionFailureRepository",
-    "InMemoryProjectionStateRepository",
     "InMemoryStore",
     "InMemoryUnitOfWork",
     "InMemoryVerifyReportRepository",

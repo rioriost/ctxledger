@@ -74,9 +74,6 @@ from ctxledger.server import (
 from ctxledger.workflow.service import (
     CompleteWorkflowInput,
     CreateCheckpointInput,
-    ProjectionArtifactType,
-    ProjectionInfo,
-    ProjectionStatus,
     RegisterWorkspaceInput,
     ResumableStatus,
     ResumeIssue,
@@ -137,10 +134,6 @@ class FakeWorkflowService:
     create_checkpoint_calls: list[object] | None = None
     complete_workflow_result: object | None = None
     complete_workflow_calls: list[object] | None = None
-    ignore_result: int = 0
-    resolve_result: int = 0
-    ignore_calls: list[object] | None = None
-    resolve_calls: list[object] | None = None
 
     def __post_init__(self) -> None:
         if self.resume_calls is None:
@@ -153,10 +146,6 @@ class FakeWorkflowService:
             self.create_checkpoint_calls = []
         if self.complete_workflow_calls is None:
             self.complete_workflow_calls = []
-        if self.ignore_calls is None:
-            self.ignore_calls = []
-        if self.resolve_calls is None:
-            self.resolve_calls = []
 
     def resume_workflow(self, data: object) -> WorkflowResume:
         assert self.resume_calls is not None
@@ -187,45 +176,8 @@ class FakeWorkflowService:
         self.complete_workflow_calls.append(data)
         return self.complete_workflow_result
 
-    def ignore_resume_projection_failures(
-        self,
-        *,
-        workspace_id: object,
-        workflow_instance_id: object,
-        projection_type: object = None,
-    ) -> int:
-        assert self.ignore_calls is not None
-        self.ignore_calls.append(
-            {
-                "workspace_id": workspace_id,
-                "workflow_instance_id": workflow_instance_id,
-                "projection_type": projection_type,
-            }
-        )
-        return self.ignore_result
 
-    def resolve_resume_projection_failures(
-        self,
-        *,
-        workspace_id: object,
-        workflow_instance_id: object,
-        projection_type: object = None,
-    ) -> int:
-        assert self.resolve_calls is not None
-        self.resolve_calls.append(
-            {
-                "workspace_id": workspace_id,
-                "workflow_instance_id": workflow_instance_id,
-                "projection_type": projection_type,
-            }
-        )
-        return self.resolve_result
-
-
-def make_resume_fixture(
-    *,
-    closed_projection_failures: tuple[object, ...] = (),
-) -> WorkflowResume:
+def make_resume_fixture() -> WorkflowResume:
     workspace_id = uuid4()
     workflow_instance_id = uuid4()
     attempt_id = uuid4()
@@ -278,24 +230,6 @@ def make_resume_fixture(
         report_json={"checks": ["pytest"], "status": "passed"},
         created_at=datetime(2024, 1, 7, tzinfo=UTC),
     )
-    projections = (
-        ProjectionInfo(
-            projection_type=ProjectionArtifactType.RESUME_JSON,
-            status=ProjectionStatus.FRESH,
-            target_path=".agent/resume.json",
-            last_successful_write_at=datetime(2024, 1, 8, tzinfo=UTC),
-            last_canonical_update_at=datetime(2024, 1, 8, tzinfo=UTC),
-            open_failure_count=0,
-        ),
-        ProjectionInfo(
-            projection_type=ProjectionArtifactType.RESUME_MD,
-            status=ProjectionStatus.STALE,
-            target_path=".agent/resume.md",
-            last_successful_write_at=datetime(2024, 1, 8, tzinfo=UTC),
-            last_canonical_update_at=datetime(2024, 1, 7, tzinfo=UTC),
-            open_failure_count=1,
-        ),
-    )
     warnings = (
         ResumeIssue(
             code="stale_projection",
@@ -314,9 +248,7 @@ def make_resume_fixture(
         latest_checkpoint=latest_checkpoint,
         latest_verify_report=latest_verify_report,
         resumable_status=ResumableStatus.RESUMABLE,
-        projections=projections,
         warnings=warnings,
-        closed_projection_failures=closed_projection_failures,
         next_hint="Serialize resume output",
     )
 
@@ -844,10 +776,6 @@ def test_get_workflow_resume_returns_resume_from_initialized_workflow_service() 
         fake_workflow_service.resume_calls[0].workflow_instance_id
         == resume.workflow_instance.workflow_instance_id
     )
-    assert (
-        fake_workflow_service.resume_calls[0].include_closed_projection_failures
-        is False
-    )
 
 
 def test_get_workflow_resume_raises_when_workflow_service_is_not_initialized() -> None:
@@ -878,26 +806,6 @@ def test_serialize_workflow_resume_returns_api_ready_payload() -> None:
     assert payload["attempt"]["status"] == resume.attempt.status.value
     assert payload["latest_checkpoint"]["step_name"] == "implement_server_api"
     assert payload["latest_verify_report"]["status"] == VerifyStatus.PASSED.value
-    assert payload["projections"] == [
-        {
-            "projection_type": "resume_json",
-            "status": "fresh",
-            "target_path": ".agent/resume.json",
-            "last_successful_write_at": "2024-01-08T00:00:00+00:00",
-            "last_canonical_update_at": "2024-01-08T00:00:00+00:00",
-            "open_failure_count": 0,
-        },
-        {
-            "projection_type": "resume_md",
-            "status": "stale",
-            "target_path": ".agent/resume.md",
-            "last_successful_write_at": "2024-01-08T00:00:00+00:00",
-            "last_canonical_update_at": "2024-01-07T00:00:00+00:00",
-            "open_failure_count": 1,
-        },
-    ]
-    assert payload["resumable_status"] == "resumable"
-    assert payload["next_hint"] == "Serialize resume output"
     assert payload["warnings"] == [
         {
             "code": "stale_projection",
@@ -906,49 +814,6 @@ def test_serialize_workflow_resume_returns_api_ready_payload() -> None:
                 "projection_type": "resume_md",
                 "target_path": ".agent/resume.md",
             },
-        }
-    ]
-    assert payload["closed_projection_failures"] == []
-
-
-def test_serialize_workflow_resume_includes_closed_projection_failures() -> None:
-    attempt_id = uuid4()
-    closed_projection_failures = (
-        type(
-            "ClosedProjectionFailure",
-            (),
-            {
-                "projection_type": ProjectionArtifactType.RESUME_JSON,
-                "target_path": ".agent/resume.json",
-                "attempt_id": attempt_id,
-                "error_code": "EACCES",
-                "error_message": "permission denied",
-                "occurred_at": datetime(2024, 1, 9, tzinfo=UTC),
-                "resolved_at": datetime(2024, 1, 10, tzinfo=UTC),
-                "open_failure_count": 0,
-                "retry_count": 2,
-                "status": "ignored",
-            },
-        )(),
-    )
-    resume = make_resume_fixture(
-        closed_projection_failures=closed_projection_failures,
-    )
-
-    payload = serialize_workflow_resume(resume)
-
-    assert payload["closed_projection_failures"] == [
-        {
-            "projection_type": "resume_json",
-            "target_path": ".agent/resume.json",
-            "attempt_id": str(attempt_id),
-            "error_code": "EACCES",
-            "error_message": "permission denied",
-            "occurred_at": "2024-01-09T00:00:00+00:00",
-            "resolved_at": "2024-01-10T00:00:00+00:00",
-            "open_failure_count": 0,
-            "retry_count": 2,
-            "status": "ignored",
         }
     ]
 

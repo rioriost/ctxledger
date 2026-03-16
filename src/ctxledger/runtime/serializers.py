@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
 
 from ctxledger.memory.service import (
     GetContextResponse,
@@ -16,8 +15,6 @@ from .introspection import RuntimeIntrospection
 
 def serialize_workflow_resume(
     resume: WorkflowResume,
-    *,
-    include_closed_projection_failures: bool = True,
 ) -> dict[str, Any]:
     payload = {
         "workspace": {
@@ -82,25 +79,6 @@ def serialize_workflow_resume(
             if resume.latest_verify_report is not None
             else None
         ),
-        "projections": [
-            {
-                "projection_type": projection.projection_type.value,
-                "status": projection.status.value,
-                "target_path": projection.target_path,
-                "last_successful_write_at": (
-                    projection.last_successful_write_at.isoformat()
-                    if projection.last_successful_write_at is not None
-                    else None
-                ),
-                "last_canonical_update_at": (
-                    projection.last_canonical_update_at.isoformat()
-                    if projection.last_canonical_update_at is not None
-                    else None
-                ),
-                "open_failure_count": projection.open_failure_count,
-            }
-            for projection in resume.projections
-        ],
         "resumable_status": resume.resumable_status.value,
         "next_hint": resume.next_hint,
         "warnings": [
@@ -112,67 +90,7 @@ def serialize_workflow_resume(
             for warning in resume.warnings
         ],
     }
-    if include_closed_projection_failures:
-        payload["closed_projection_failures"] = [
-            {
-                "projection_type": failure.projection_type.value,
-                "target_path": failure.target_path,
-                "attempt_id": (
-                    str(failure.attempt_id) if failure.attempt_id is not None else None
-                ),
-                "error_code": failure.error_code,
-                "error_message": failure.error_message,
-                "occurred_at": (
-                    failure.occurred_at.isoformat()
-                    if failure.occurred_at is not None
-                    else None
-                ),
-                "resolved_at": (
-                    failure.resolved_at.isoformat()
-                    if failure.resolved_at is not None
-                    else None
-                ),
-                "open_failure_count": failure.open_failure_count,
-                "retry_count": failure.retry_count,
-                "status": failure.status,
-            }
-            for failure in getattr(resume, "closed_projection_failures", ())
-        ]
     return payload
-
-
-def serialize_closed_projection_failures_history(
-    workflow_instance_id: UUID,
-    closed_projection_failures: tuple[Any, ...] | list[Any],
-) -> dict[str, Any]:
-    return {
-        "workflow_instance_id": str(workflow_instance_id),
-        "closed_projection_failures": [
-            {
-                "projection_type": failure.projection_type.value,
-                "target_path": failure.target_path,
-                "attempt_id": (
-                    str(failure.attempt_id) if failure.attempt_id is not None else None
-                ),
-                "error_code": failure.error_code,
-                "error_message": failure.error_message,
-                "occurred_at": (
-                    failure.occurred_at.isoformat()
-                    if failure.occurred_at is not None
-                    else None
-                ),
-                "resolved_at": (
-                    failure.resolved_at.isoformat()
-                    if failure.resolved_at is not None
-                    else None
-                ),
-                "open_failure_count": failure.open_failure_count,
-                "retry_count": failure.retry_count,
-                "status": failure.status,
-            }
-            for failure in closed_projection_failures
-        ],
-    }
 
 
 def serialize_stub_response(response: StubResponse) -> dict[str, Any]:
@@ -317,7 +235,6 @@ def serialize_runtime_introspection_collection(
 
 
 __all__ = [
-    "serialize_closed_projection_failures_history",
     "serialize_get_context_response",
     "serialize_remember_episode_response",
     "serialize_runtime_introspection",

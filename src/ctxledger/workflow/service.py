@@ -46,18 +46,6 @@ class ResumableStatus(StrEnum):
     INCONSISTENT = "inconsistent"
 
 
-class ProjectionStatus(StrEnum):
-    FRESH = "fresh"
-    STALE = "stale"
-    MISSING = "missing"
-    FAILED = "failed"
-
-
-class ProjectionArtifactType(StrEnum):
-    RESUME_JSON = "resume_json"
-    RESUME_MD = "resume_md"
-
-
 class WorkflowError(Exception):
     code = "workflow_error"
 
@@ -187,68 +175,6 @@ class VerifyReport:
 
 
 @dataclass(slots=True, frozen=True)
-class ProjectionInfo:
-    projection_type: ProjectionArtifactType
-    status: ProjectionStatus
-    target_path: str | None = None
-    last_successful_write_at: datetime | None = None
-    last_canonical_update_at: datetime | None = None
-    open_failure_count: int = 0
-
-
-@dataclass(slots=True, frozen=True)
-class ProjectionFailureInfo:
-    projection_type: ProjectionArtifactType
-    error_code: str | None
-    error_message: str
-    target_path: str
-    attempt_id: UUID | None = None
-    occurred_at: datetime | None = None
-    resolved_at: datetime | None = None
-    open_failure_count: int = 1
-    retry_count: int = 0
-    status: str = "open"
-
-
-@dataclass(slots=True, frozen=True)
-class RecordProjectionStateInput:
-    workspace_id: UUID
-    workflow_instance_id: UUID
-    projection_type: ProjectionArtifactType
-    status: ProjectionStatus
-    target_path: str
-    last_successful_write_at: datetime | None = None
-    last_canonical_update_at: datetime | None = None
-
-    def normalized(self) -> RecordProjectionStateInput:
-        if self.status != ProjectionStatus.FRESH:
-            return self
-
-        write_at = self.last_successful_write_at or utc_now()
-        canonical_update_at = self.last_canonical_update_at or write_at
-        return RecordProjectionStateInput(
-            workspace_id=self.workspace_id,
-            workflow_instance_id=self.workflow_instance_id,
-            projection_type=self.projection_type,
-            status=self.status,
-            target_path=self.target_path,
-            last_successful_write_at=write_at,
-            last_canonical_update_at=canonical_update_at,
-        )
-
-
-@dataclass(slots=True, frozen=True)
-class RecordProjectionFailureInput:
-    workspace_id: UUID
-    workflow_instance_id: UUID
-    projection_type: ProjectionArtifactType
-    target_path: str
-    error_message: str
-    attempt_id: UUID | None = None
-    error_code: str | None = None
-
-
-@dataclass(slots=True, frozen=True)
 class EpisodeRecord:
     episode_id: UUID
     workflow_instance_id: UUID
@@ -298,9 +224,7 @@ class WorkflowResume:
     latest_checkpoint: WorkflowCheckpoint | None
     latest_verify_report: VerifyReport | None
     resumable_status: ResumableStatus
-    projections: tuple[ProjectionInfo, ...] = ()
     warnings: tuple[ResumeIssue, ...] = ()
-    closed_projection_failures: tuple[ProjectionFailureInfo, ...] = ()
     next_hint: str | None = None
 
 
@@ -337,7 +261,6 @@ class WorkflowStats:
     episode_count: int
     memory_item_count: int
     memory_embedding_count: int
-    open_projection_failure_count: int
     latest_workflow_updated_at: datetime | None = None
     latest_checkpoint_created_at: datetime | None = None
     latest_verify_report_created_at: datetime | None = None
@@ -364,7 +287,6 @@ class FailureListEntry:
     failure_scope: str
     failure_type: str
     failure_status: str
-    projection_type: str | None = None
     target_path: str | None = None
     error_code: str | None = None
     error_message: str = ""
@@ -417,7 +339,6 @@ class CreateCheckpointInput:
 @dataclass(slots=True, frozen=True)
 class ResumeWorkflowInput:
     workflow_instance_id: UUID
-    include_closed_projection_failures: bool = False
 
 
 @dataclass(slots=True, frozen=True)
@@ -588,58 +509,6 @@ class MemoryEmbeddingRepository:
         raise NotImplementedError
 
 
-class ProjectionStateRepository:
-    def get_resume_projections(
-        self, workspace_id: UUID, workflow_instance_id: UUID
-    ) -> tuple[ProjectionInfo, ...]:
-        raise NotImplementedError
-
-    def record_resume_projection(self, projection: RecordProjectionStateInput) -> None:
-        raise NotImplementedError
-
-
-class ProjectionFailureRepository:
-    def get_open_failures_by_workflow_id(
-        self, workspace_id: UUID, workflow_instance_id: UUID
-    ) -> list[ProjectionFailureInfo]:
-        raise NotImplementedError
-
-    def get_closed_failures_by_workflow_id(
-        self, workspace_id: UUID, workflow_instance_id: UUID
-    ) -> list[ProjectionFailureInfo]:
-        raise NotImplementedError
-
-    def list_failures(
-        self,
-        *,
-        limit: int,
-        status: str | None = None,
-        open_only: bool = False,
-    ) -> tuple[ProjectionFailureInfo, ...]:
-        raise NotImplementedError
-
-    def record_resume_projection_failure(
-        self, failure: RecordProjectionFailureInput
-    ) -> ProjectionFailureInfo:
-        raise NotImplementedError
-
-    def resolve_resume_projection_failures(
-        self,
-        workspace_id: UUID,
-        workflow_instance_id: UUID,
-        projection_type: ProjectionArtifactType | None = None,
-    ) -> int:
-        raise NotImplementedError
-
-    def ignore_resume_projection_failures(
-        self,
-        workspace_id: UUID,
-        workflow_instance_id: UUID,
-        projection_type: ProjectionArtifactType | None = None,
-    ) -> int:
-        raise NotImplementedError
-
-
 class UnitOfWork:
     workspaces: WorkspaceRepository
     workflow_instances: WorkflowInstanceRepository
@@ -649,8 +518,6 @@ class UnitOfWork:
     memory_episodes: MemoryEpisodeRepository | None
     memory_items: MemoryItemRepository | None
     memory_embeddings: MemoryEmbeddingRepository | None
-    projection_states: ProjectionStateRepository | None
-    projection_failures: ProjectionFailureRepository | None
 
     def __enter__(self) -> UnitOfWork:
         return self
@@ -752,8 +619,6 @@ class WorkflowService:
                 field_name="created_at",
             )
 
-            open_projection_failure_count = self._count_open_projection_failures(uow)
-
             return WorkflowStats(
                 workspace_count=workspace_count,
                 workflow_status_counts=workflow_status_counts,
@@ -763,7 +628,6 @@ class WorkflowService:
                 episode_count=episode_count,
                 memory_item_count=memory_item_count,
                 memory_embedding_count=memory_embedding_count,
-                open_projection_failure_count=open_projection_failure_count,
                 latest_workflow_updated_at=latest_workflow_updated_at,
                 latest_checkpoint_created_at=latest_checkpoint_created_at,
                 latest_verify_report_created_at=latest_verify_report_created_at,
@@ -909,48 +773,7 @@ class WorkflowService:
         status: str | None = None,
         open_only: bool = False,
     ) -> tuple[FailureListEntry, ...]:
-        if limit <= 0:
-            raise ValidationError("limit must be greater than zero")
-
-        normalized_status = status.strip() if isinstance(status, str) else None
-        if normalized_status == "":
-            normalized_status = None
-
-        allowed_statuses = {"open", "resolved", "ignored"}
-        if normalized_status is not None and normalized_status not in allowed_statuses:
-            raise ValidationError("status must be one of open, resolved, or ignored")
-
-        if open_only:
-            normalized_status = "open"
-
-        with self._uow_factory() as uow:
-            repository = getattr(uow, "projection_failures", None)
-            if repository is None:
-                return ()
-
-            failures = repository.list_failures(
-                limit=limit,
-                status=normalized_status,
-                open_only=open_only,
-            )
-
-            return tuple(
-                FailureListEntry(
-                    failure_scope="projection",
-                    failure_type=failure.projection_type.value,
-                    failure_status=failure.status,
-                    projection_type=failure.projection_type.value,
-                    target_path=failure.target_path,
-                    error_code=failure.error_code,
-                    error_message=failure.error_message,
-                    attempt_id=failure.attempt_id,
-                    occurred_at=failure.occurred_at,
-                    resolved_at=failure.resolved_at,
-                    open_failure_count=failure.open_failure_count,
-                    retry_count=failure.retry_count,
-                )
-                for failure in failures
-            )
+        return ()
 
     def register_workspace(self, data: RegisterWorkspaceInput) -> Workspace:
         self._validate_workspace_input(data)
@@ -1276,66 +1099,6 @@ class WorkflowService:
                     },
                 )
 
-            projections: tuple[ProjectionInfo, ...] = ()
-            projection_lookup_started_at = utc_now()
-            if getattr(uow, "projection_states", None) is not None:
-                projections = uow.projection_states.get_resume_projections(
-                    workspace.workspace_id,
-                    workflow.workflow_instance_id,
-                )
-            projection_lookup_duration_ms = int(
-                (utc_now() - projection_lookup_started_at).total_seconds() * 1000
-            )
-            if debug_logging_enabled:
-                logger.debug(
-                    "resume_workflow projection lookup complete",
-                    extra={
-                        "workflow_instance_id": str(workflow.workflow_instance_id),
-                        "workspace_id": str(workspace.workspace_id),
-                        "projection_count": len(projections),
-                        "duration_ms": projection_lookup_duration_ms,
-                    },
-                )
-
-            open_projection_failures: list[ProjectionFailureInfo] = []
-            closed_projection_failures: list[ProjectionFailureInfo] = []
-            projection_failure_lookup_started_at = utc_now()
-            include_closed_projection_failures = data.include_closed_projection_failures
-            if getattr(uow, "projection_failures", None) is not None:
-                open_projection_failures = (
-                    uow.projection_failures.get_open_failures_by_workflow_id(
-                        workspace.workspace_id,
-                        workflow.workflow_instance_id,
-                    )
-                )
-                if include_closed_projection_failures:
-                    closed_projection_failures = (
-                        uow.projection_failures.get_closed_failures_by_workflow_id(
-                            workspace.workspace_id,
-                            workflow.workflow_instance_id,
-                        )
-                    )
-            projection_failure_lookup_duration_ms = int(
-                (utc_now() - projection_failure_lookup_started_at).total_seconds()
-                * 1000
-            )
-            if debug_logging_enabled:
-                logger.debug(
-                    "resume_workflow projection failure lookup complete",
-                    extra={
-                        "workflow_instance_id": str(workflow.workflow_instance_id),
-                        "workspace_id": str(workspace.workspace_id),
-                        "open_projection_failure_count": len(open_projection_failures),
-                        "closed_projection_failure_count": len(
-                            closed_projection_failures
-                        ),
-                        "include_closed_projection_failures": (
-                            include_closed_projection_failures
-                        ),
-                        "duration_ms": projection_failure_lookup_duration_ms,
-                    },
-                )
-
             response_assembly_started_at = utc_now()
             warnings = list(
                 self._build_resume_warnings(
@@ -1343,9 +1106,6 @@ class WorkflowService:
                     attempt,
                     latest_checkpoint,
                     latest_verify_report,
-                    projections,
-                    open_projection_failures,
-                    closed_projection_failures,
                 )
             )
             resumable_status = self._classify_resumable_status(
@@ -1371,7 +1131,6 @@ class WorkflowService:
                             if latest_checkpoint is not None
                             else None
                         ),
-                        "projection_count": len(projections),
                         "warning_count": len(warnings),
                         "resumable_status": resumable_status.value,
                         "duration_ms": response_assembly_duration_ms,
@@ -1394,11 +1153,6 @@ class WorkflowService:
                             if latest_checkpoint is not None
                             else None
                         ),
-                        "projection_count": len(projections),
-                        "open_projection_failure_count": len(open_projection_failures),
-                        "closed_projection_failure_count": len(
-                            closed_projection_failures
-                        ),
                         "warning_count": len(warnings),
                         "resumable_status": resumable_status.value,
                         "uow_enter_duration_ms": uow_enter_duration_ms,
@@ -1413,10 +1167,6 @@ class WorkflowService:
                         "checkpoint_lookup_duration_ms": checkpoint_lookup_duration_ms,
                         "verify_report_lookup_duration_ms": (
                             verify_report_lookup_duration_ms
-                        ),
-                        "projection_lookup_duration_ms": projection_lookup_duration_ms,
-                        "projection_failure_lookup_duration_ms": (
-                            projection_failure_lookup_duration_ms
                         ),
                         "response_assembly_duration_ms": (
                             response_assembly_duration_ms
@@ -1439,11 +1189,6 @@ class WorkflowService:
                             if latest_checkpoint is not None
                             else None
                         ),
-                        "projection_count": len(projections),
-                        "open_projection_failure_count": len(open_projection_failures),
-                        "closed_projection_failure_count": len(
-                            closed_projection_failures
-                        ),
                         "warning_count": len(warnings),
                         "resumable_status": resumable_status.value,
                         "uow_enter_duration_ms": uow_enter_duration_ms,
@@ -1458,10 +1203,6 @@ class WorkflowService:
                         "checkpoint_lookup_duration_ms": checkpoint_lookup_duration_ms,
                         "verify_report_lookup_duration_ms": (
                             verify_report_lookup_duration_ms
-                        ),
-                        "projection_lookup_duration_ms": projection_lookup_duration_ms,
-                        "projection_failure_lookup_duration_ms": (
-                            projection_failure_lookup_duration_ms
                         ),
                         "response_assembly_duration_ms": (
                             response_assembly_duration_ms
@@ -1478,173 +1219,9 @@ class WorkflowService:
                 latest_checkpoint=latest_checkpoint,
                 latest_verify_report=latest_verify_report,
                 resumable_status=resumable_status,
-                projections=projections,
                 warnings=tuple(warnings),
-                closed_projection_failures=tuple(closed_projection_failures),
                 next_hint=next_hint,
             )
-
-    def record_resume_projection(
-        self, data: RecordProjectionStateInput
-    ) -> ProjectionInfo:
-        if not data.target_path.strip():
-            raise ValidationError("target_path must not be empty")
-
-        normalized = data.normalized()
-
-        with self._uow_factory() as uow:
-            workspace = self._require_workspace(uow, normalized.workspace_id)
-            workflow = self._require_workflow(uow, normalized.workflow_instance_id)
-
-            if workflow.workspace_id != workspace.workspace_id:
-                raise WorkflowAttemptMismatchError(
-                    "workflow does not belong to workspace",
-                    details={
-                        "workspace_id": str(workspace.workspace_id),
-                        "workflow_instance_id": str(workflow.workflow_instance_id),
-                        "workflow.workspace_id": str(workflow.workspace_id),
-                    },
-                )
-
-            if getattr(uow, "projection_states", None) is None:
-                raise PersistenceError("projection state repository is not available")
-
-            uow.projection_states.record_resume_projection(normalized)
-            uow.commit()
-
-            return ProjectionInfo(
-                projection_type=normalized.projection_type,
-                status=normalized.status,
-                target_path=normalized.target_path,
-                last_successful_write_at=normalized.last_successful_write_at,
-                last_canonical_update_at=normalized.last_canonical_update_at,
-                open_failure_count=0,
-            )
-
-    def record_resume_projection_failure(
-        self, data: RecordProjectionFailureInput
-    ) -> ProjectionFailureInfo:
-        if not data.target_path.strip():
-            raise ValidationError("target_path must not be empty")
-        if not data.error_message.strip():
-            raise ValidationError("error_message must not be empty")
-
-        with self._uow_factory() as uow:
-            workspace = self._require_workspace(uow, data.workspace_id)
-            workflow = self._require_workflow(uow, data.workflow_instance_id)
-
-            if workflow.workspace_id != workspace.workspace_id:
-                raise WorkflowAttemptMismatchError(
-                    "workflow does not belong to workspace",
-                    details={
-                        "workspace_id": str(workspace.workspace_id),
-                        "workflow_instance_id": str(workflow.workflow_instance_id),
-                        "workflow.workspace_id": str(workflow.workspace_id),
-                    },
-                )
-
-            if getattr(uow, "projection_failures", None) is None:
-                raise PersistenceError("projection failure repository is not available")
-
-            failure_info = uow.projection_failures.record_resume_projection_failure(
-                data
-            )
-            uow.commit()
-            return failure_info
-
-    def resolve_resume_projection_failures(
-        self,
-        *,
-        workspace_id: UUID,
-        workflow_instance_id: UUID,
-        projection_type: ProjectionArtifactType | None = None,
-    ) -> int:
-        with self._uow_factory() as uow:
-            workspace = self._require_workspace(uow, workspace_id)
-            workflow = self._require_workflow(uow, workflow_instance_id)
-
-            if workflow.workspace_id != workspace.workspace_id:
-                raise WorkflowAttemptMismatchError(
-                    "workflow does not belong to workspace",
-                    details={
-                        "workspace_id": str(workspace.workspace_id),
-                        "workflow_instance_id": str(workflow_instance_id),
-                        "workflow.workspace_id": str(workflow.workspace_id),
-                    },
-                )
-
-            if getattr(uow, "projection_failures", None) is None:
-                raise PersistenceError("projection failure repository is not available")
-
-            resolved_count = uow.projection_failures.resolve_resume_projection_failures(
-                workspace.workspace_id,
-                workflow.workflow_instance_id,
-                projection_type,
-            )
-            uow.commit()
-            return resolved_count
-
-    def ignore_resume_projection_failures(
-        self,
-        *,
-        workspace_id: UUID,
-        workflow_instance_id: UUID,
-        projection_type: ProjectionArtifactType | None = None,
-    ) -> int:
-        with self._uow_factory() as uow:
-            workspace = self._require_workspace(uow, workspace_id)
-            workflow = self._require_workflow(uow, workflow_instance_id)
-
-            if workflow.workspace_id != workspace.workspace_id:
-                raise WorkflowAttemptMismatchError(
-                    "workflow does not belong to workspace",
-                    details={
-                        "workspace_id": str(workspace.workspace_id),
-                        "workflow_instance_id": str(workflow_instance_id),
-                        "workflow.workspace_id": str(workflow.workspace_id),
-                    },
-                )
-
-            if getattr(uow, "projection_failures", None) is None:
-                raise PersistenceError("projection failure repository is not available")
-
-            ignored_count = uow.projection_failures.ignore_resume_projection_failures(
-                workspace.workspace_id,
-                workflow.workflow_instance_id,
-                projection_type,
-            )
-            uow.commit()
-            return ignored_count
-
-    def reconcile_resume_projection(
-        self,
-        *,
-        success_updates: tuple[RecordProjectionStateInput, ...] = (),
-        failure_updates: tuple[RecordProjectionFailureInput, ...] = (),
-    ) -> tuple[ProjectionInfo, ...]:
-        reconciled: list[ProjectionInfo] = []
-
-        resolved_projections: set[tuple[UUID, UUID, ProjectionArtifactType]] = set()
-
-        for state in success_updates:
-            key = (
-                state.workspace_id,
-                state.workflow_instance_id,
-                state.projection_type,
-            )
-            if key not in resolved_projections:
-                self.resolve_resume_projection_failures(
-                    workspace_id=state.workspace_id,
-                    workflow_instance_id=state.workflow_instance_id,
-                    projection_type=state.projection_type,
-                )
-                resolved_projections.add(key)
-            reconciled.append(self.record_resume_projection(state))
-
-        for failure in failure_updates:
-            self.record_resume_projection_failure(failure)
-
-        return tuple(reconciled)
 
     def complete_workflow(self, data: CompleteWorkflowInput) -> WorkflowCompleteResult:
         logger.info(
@@ -1893,12 +1470,6 @@ class WorkflowService:
         if latest_checkpoint is None:
             return ResumableStatus.BLOCKED
 
-        if (
-            "stale_projection" in warning_codes
-            or "open_projection_failure" in warning_codes
-        ):
-            return ResumableStatus.RESUMABLE
-
         return ResumableStatus.RESUMABLE
 
     def _build_resume_warnings(
@@ -1907,9 +1478,6 @@ class WorkflowService:
         attempt: WorkflowAttempt | None,
         latest_checkpoint: WorkflowCheckpoint | None,
         latest_verify_report: VerifyReport | None,
-        projections: tuple[ProjectionInfo, ...],
-        open_projection_failures: list[ProjectionFailureInfo] | None = None,
-        closed_projection_failures: list[ProjectionFailureInfo] | None = None,
     ) -> tuple[ResumeIssue, ...]:
         warnings: list[ResumeIssue] = []
 
@@ -1946,148 +1514,6 @@ class WorkflowService:
                     details={"attempt_id": str(attempt.attempt_id)},
                 )
             )
-
-        failures_by_projection_type: dict[
-            ProjectionArtifactType, list[ProjectionFailureInfo]
-        ] = {}
-        if open_projection_failures:
-            for failure in open_projection_failures:
-                failures_by_projection_type.setdefault(
-                    failure.projection_type, []
-                ).append(failure)
-
-        closed_failures_by_projection_type: dict[
-            ProjectionArtifactType, list[ProjectionFailureInfo]
-        ] = {}
-        if closed_projection_failures:
-            for failure in closed_projection_failures:
-                closed_failures_by_projection_type.setdefault(
-                    failure.projection_type, []
-                ).append(failure)
-
-        for projection in projections:
-            if projection.status == ProjectionStatus.STALE:
-                warnings.append(
-                    ResumeIssue(
-                        code="stale_projection",
-                        message="resume projection is stale relative to canonical workflow state",
-                        details={
-                            "projection_type": projection.projection_type.value,
-                            "target_path": projection.target_path or "",
-                        },
-                    )
-                )
-            elif projection.status == ProjectionStatus.FAILED:
-                projection_failures = failures_by_projection_type.get(
-                    projection.projection_type, []
-                )
-                closed_failures = closed_failures_by_projection_type.get(
-                    projection.projection_type, []
-                )
-                if projection.open_failure_count > 0:
-                    failure_details: dict[str, Any] = {
-                        "projection_type": projection.projection_type.value,
-                        "target_path": projection.target_path or "",
-                        "open_failure_count": projection.open_failure_count,
-                    }
-                    if projection_failures:
-                        failure_details["failures"] = [
-                            {
-                                "projection_type": failure.projection_type.value,
-                                "target_path": failure.target_path,
-                                "attempt_id": (
-                                    str(failure.attempt_id)
-                                    if failure.attempt_id is not None
-                                    else None
-                                ),
-                                "error_code": failure.error_code,
-                                "error_message": failure.error_message,
-                                "occurred_at": (
-                                    failure.occurred_at.isoformat()
-                                    if failure.occurred_at is not None
-                                    else None
-                                ),
-                                "resolved_at": (
-                                    failure.resolved_at.isoformat()
-                                    if failure.resolved_at is not None
-                                    else None
-                                ),
-                                "open_failure_count": failure.open_failure_count,
-                                "retry_count": failure.retry_count,
-                                "status": failure.status,
-                            }
-                            for failure in projection_failures
-                        ]
-
-                    warnings.append(
-                        ResumeIssue(
-                            code="open_projection_failure",
-                            message="resume projection has unresolved write failures",
-                            details=failure_details,
-                        )
-                    )
-                elif closed_failures:
-                    warning_code = (
-                        "ignored_projection_failure"
-                        if any(
-                            failure.status == "ignored" for failure in closed_failures
-                        )
-                        else "resolved_projection_failure"
-                    )
-                    warning_message = (
-                        "resume projection has ignored write failures"
-                        if warning_code == "ignored_projection_failure"
-                        else "resume projection has previously resolved write failures"
-                    )
-                    warnings.append(
-                        ResumeIssue(
-                            code=warning_code,
-                            message=warning_message,
-                            details={
-                                "projection_type": projection.projection_type.value,
-                                "target_path": projection.target_path or "",
-                                "open_failure_count": projection.open_failure_count,
-                                "failures": [
-                                    {
-                                        "projection_type": failure.projection_type.value,
-                                        "target_path": failure.target_path,
-                                        "attempt_id": (
-                                            str(failure.attempt_id)
-                                            if failure.attempt_id is not None
-                                            else None
-                                        ),
-                                        "error_code": failure.error_code,
-                                        "error_message": failure.error_message,
-                                        "occurred_at": (
-                                            failure.occurred_at.isoformat()
-                                            if failure.occurred_at is not None
-                                            else None
-                                        ),
-                                        "resolved_at": (
-                                            failure.resolved_at.isoformat()
-                                            if failure.resolved_at is not None
-                                            else None
-                                        ),
-                                        "open_failure_count": failure.open_failure_count,
-                                        "retry_count": failure.retry_count,
-                                        "status": failure.status,
-                                    }
-                                    for failure in closed_failures
-                                ],
-                            },
-                        )
-                    )
-            elif projection.status == ProjectionStatus.MISSING:
-                warnings.append(
-                    ResumeIssue(
-                        code="missing_projection",
-                        message="resume projection has not been generated yet",
-                        details={
-                            "projection_type": projection.projection_type.value,
-                            "target_path": projection.target_path or "",
-                        },
-                    )
-                )
 
         return tuple(warnings)
 
@@ -2136,18 +1562,6 @@ class WorkflowService:
         values_by_id = getattr(repository, "_values_by_id", None)
         if isinstance(values_by_id, dict):
             return len(values_by_id)
-
-        if repository_name == "projection_failures":
-            failures_by_key = getattr(repository, "_failures_by_key", None)
-            if isinstance(failures_by_key, dict):
-                return sum(len(failures) for failures in failures_by_key.values())
-
-        if repository_name == "projection_states":
-            projection_states_by_key = getattr(
-                repository, "_projection_states_by_key", None
-            )
-            if isinstance(projection_states_by_key, dict):
-                return len(projection_states_by_key)
 
         count_method = getattr(repository, "count_all", None)
         if callable(count_method):
@@ -2230,28 +1644,6 @@ class WorkflowService:
 
         raise PersistenceError(
             f"stats datetime aggregation is not supported for repository '{repository_name}'"
-        )
-
-    def _count_open_projection_failures(self, uow: UnitOfWork) -> int:
-        repository = getattr(uow, "projection_failures", None)
-        if repository is None:
-            return 0
-
-        failures_by_key = getattr(repository, "_failures_by_key", None)
-        if isinstance(failures_by_key, dict):
-            return sum(
-                1
-                for failures in failures_by_key.values()
-                for failure in failures
-                if getattr(failure, "status", None) == "open"
-            )
-
-        count_method = getattr(repository, "count_open_failures", None)
-        if callable(count_method):
-            return int(count_method())
-
-        raise PersistenceError(
-            "stats failure aggregation is not supported for projection failures"
         )
 
     def _count_memory_item_provenance(self, uow: UnitOfWork) -> dict[str, int]:

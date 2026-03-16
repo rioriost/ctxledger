@@ -356,9 +356,6 @@ class UnitOfWorkWorkflowLookupRepository:
                     "has_latest_checkpoint": False,
                     "latest_checkpoint_created_at": None,
                     "latest_verify_report_created_at": None,
-                    "latest_projection_canonical_update_at": None,
-                    "latest_projection_successful_write_at": None,
-                    "projection_open_failure_count": 0,
                 }
 
             latest_attempt = uow.workflow_attempts.get_latest_by_workflow_id(
@@ -372,38 +369,6 @@ class UnitOfWorkWorkflowLookupRepository:
                 if latest_attempt is not None
                 else None
             )
-
-            projections = ()
-            if getattr(uow, "projection_states", None) is not None:
-                projections = uow.projection_states.get_resume_projections(
-                    workflow.workspace_id,
-                    workflow.workflow_instance_id,
-                )
-
-            latest_projection_canonical_update_at = None
-            latest_projection_successful_write_at = None
-            projection_open_failure_count = 0
-
-            if projections:
-                canonical_updates = tuple(
-                    projection.last_canonical_update_at
-                    for projection in projections
-                    if projection.last_canonical_update_at is not None
-                )
-                successful_writes = tuple(
-                    projection.last_successful_write_at
-                    for projection in projections
-                    if projection.last_successful_write_at is not None
-                )
-                latest_projection_canonical_update_at = (
-                    max(canonical_updates) if canonical_updates else None
-                )
-                latest_projection_successful_write_at = (
-                    max(successful_writes) if successful_writes else None
-                )
-                projection_open_failure_count = sum(
-                    projection.open_failure_count for projection in projections
-                )
 
             return {
                 "workflow_status": workflow.status.value,
@@ -436,13 +401,6 @@ class UnitOfWorkWorkflowLookupRepository:
                     if latest_verify_report is not None
                     else None
                 ),
-                "latest_projection_canonical_update_at": (
-                    latest_projection_canonical_update_at
-                ),
-                "latest_projection_successful_write_at": (
-                    latest_projection_successful_write_at
-                ),
-                "projection_open_failure_count": projection_open_failure_count,
             }
 
 
@@ -617,16 +575,6 @@ class InMemoryWorkflowLookupRepository:
             ),
             "latest_verify_report_created_at": workflow_info.get(
                 "latest_verify_report_created_at"
-            ),
-            "latest_projection_canonical_update_at": workflow_info.get(
-                "latest_projection_canonical_update_at"
-            ),
-            "latest_projection_successful_write_at": workflow_info.get(
-                "latest_projection_successful_write_at"
-            ),
-            "projection_open_failure_count": workflow_info.get(
-                "projection_open_failure_count",
-                0,
             ),
         }
 
@@ -1406,9 +1354,6 @@ class MemoryService:
                     "has_latest_checkpoint",
                     "latest_checkpoint_created_at",
                     "latest_verify_report_created_at",
-                    "latest_projection_canonical_update_at",
-                    "latest_projection_successful_write_at",
-                    "projection_open_failure_count",
                     "latest_episode_created_at",
                     "latest_attempt_started_at",
                     "workflow_updated_at",
@@ -1641,10 +1586,6 @@ class MemoryService:
                 datetime,
                 datetime,
                 int,
-                datetime,
-                datetime,
-                datetime,
-                int,
                 UUID,
             ]
         ] = []
@@ -1673,15 +1614,6 @@ class MemoryService:
             latest_verify_report_created_at = freshness.get(
                 "latest_verify_report_created_at"
             ) or datetime.min.replace(tzinfo=timezone.utc)
-            latest_projection_canonical_update_at = freshness.get(
-                "latest_projection_canonical_update_at"
-            ) or datetime.min.replace(tzinfo=timezone.utc)
-            latest_projection_successful_write_at = freshness.get(
-                "latest_projection_successful_write_at"
-            ) or datetime.min.replace(tzinfo=timezone.utc)
-            projection_open_failure_count = int(
-                freshness.get("projection_open_failure_count", 0) or 0
-            )
             latest_episode_created_at = (
                 latest_episode[0].created_at
                 if latest_episode
@@ -1701,12 +1633,8 @@ class MemoryService:
                     has_latest_checkpoint,
                     latest_checkpoint_created_at,
                     latest_verify_report_created_at,
-                    latest_projection_canonical_update_at,
-                    latest_projection_successful_write_at,
-                    -projection_open_failure_count,
                     latest_episode_created_at,
                     latest_attempt_started_at,
-                    workflow_updated_at,
                     -index,
                     workflow_id,
                 )
@@ -1777,21 +1705,6 @@ class MemoryService:
                     freshness.get("latest_verify_report_created_at").isoformat()
                     if freshness.get("latest_verify_report_created_at") is not None
                     else None
-                ),
-                "latest_projection_canonical_update_at": (
-                    freshness.get("latest_projection_canonical_update_at").isoformat()
-                    if freshness.get("latest_projection_canonical_update_at")
-                    is not None
-                    else None
-                ),
-                "latest_projection_successful_write_at": (
-                    freshness.get("latest_projection_successful_write_at").isoformat()
-                    if freshness.get("latest_projection_successful_write_at")
-                    is not None
-                    else None
-                ),
-                "projection_open_failure_count": int(
-                    freshness.get("projection_open_failure_count", 0) or 0
                 ),
                 "latest_episode_created_at": (
                     latest_episode[0].created_at.isoformat() if latest_episode else None

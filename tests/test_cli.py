@@ -22,14 +22,8 @@ from ctxledger.config import (
     LogLevel,
 )
 from ctxledger.workflow.service import (
-    CreateCheckpointInput,
     FailureListEntry,
     MemoryStats,
-    ProjectionArtifactType,
-    ProjectionStatus,
-    RegisterWorkspaceInput,
-    ResumeIssue,
-    StartWorkflowInput,
     WorkflowListEntry,
     WorkflowStats,
 )
@@ -57,12 +51,6 @@ def make_settings(
             path="/mcp",
         ),
         debug=DebugSettings(enabled=True),
-        projection=SimpleNamespace(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        ),
         logging=LoggingSettings(
             level=LogLevel.INFO,
             structured=False,
@@ -155,39 +143,6 @@ def patch_cli_connection_pool(
     return pool
 
 
-class FakeWriter:
-    instances: list["FakeWriter"] = []
-
-    def __init__(
-        self, *, workflow_service: object, projection_settings: object
-    ) -> None:
-        self.workflow_service = workflow_service
-        self.projection_settings = projection_settings
-        self.calls: list[dict[str, object]] = []
-        type(self).instances.append(self)
-
-    def write_and_reconcile_resume_projection(
-        self,
-        *,
-        workspace_root: str | Path,
-        workflow_instance_id: object,
-        workspace_id: object,
-    ) -> object:
-        self.calls.append(
-            {
-                "workspace_root": workspace_root,
-                "workflow_instance_id": workflow_instance_id,
-                "workspace_id": workspace_id,
-            }
-        )
-        return SimpleNamespace(
-            json_path=Path(workspace_root) / ".agent" / "resume.json",
-            markdown_path=Path(workspace_root) / ".agent" / "resume.md",
-            state_updates=(),
-            failure_updates=(),
-        )
-
-
 def test_main_stats_renders_text_output(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -216,7 +171,6 @@ def test_main_stats_renders_text_output(
         episode_count=34,
         memory_item_count=24,
         memory_embedding_count=3,
-        open_projection_failure_count=11,
         latest_workflow_updated_at=datetime(2026, 3, 15, 9, 45, 52, tzinfo=UTC),
         latest_checkpoint_created_at=datetime(2026, 3, 15, 10, 55, 8, tzinfo=UTC),
         latest_verify_report_created_at=datetime(2026, 3, 15, 10, 55, 8, tzinfo=UTC),
@@ -264,7 +218,6 @@ def test_main_stats_renders_text_output(
     assert "- memory_embeddings: 3" in captured.out
     assert "Other:" in captured.out
     assert "- checkpoints: 369" in captured.out
-    assert "- open_projection_failures: 11" in captured.out
     assert "Latest activity:" in captured.out
     assert "2026-03-15 09:45:52+00:00" in captured.out
     assert captured.err == ""
@@ -275,7 +228,7 @@ def test_main_stats_renders_json_output(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    stats = WorkflowStats(
+    stats = SimpleNamespace(
         workspace_count=2,
         workflow_status_counts={
             "running": 1,
@@ -299,7 +252,6 @@ def test_main_stats_renders_json_output(
         episode_count=3,
         memory_item_count=4,
         memory_embedding_count=1,
-        open_projection_failure_count=0,
         latest_workflow_updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_checkpoint_created_at=None,
         latest_verify_report_created_at=None,
@@ -309,10 +261,10 @@ def test_main_stats_renders_json_output(
     )
 
     class FakeStatsWorkflowService:
-        def __init__(self, stats_result: WorkflowStats) -> None:
+        def __init__(self, stats_result: object) -> None:
             self.stats_result = stats_result
 
-        def get_stats(self) -> WorkflowStats:
+        def get_stats(self) -> object:
             return self.stats_result
 
     settings = make_settings()
@@ -349,7 +301,6 @@ def test_main_stats_renders_json_output(
         "latest_workflow_updated_at": "2026-03-15T09:00:00+00:00",
         "memory_embedding_count": 1,
         "memory_item_count": 4,
-        "open_projection_failure_count": 0,
         "verify_status_counts": {
             "failed": 0,
             "passed": 2,
@@ -795,188 +746,6 @@ def test_main_memory_stats_returns_error_when_loading_fails(
     assert "Failed to load memory stats: memory stats exploded" in captured.err
 
 
-def test_main_failures_renders_text_output(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    failures = (
-        FailureListEntry(
-            failure_scope="projection",
-            failure_type="resume_json",
-            failure_status="open",
-            projection_type="resume_json",
-            target_path=".agent/resume.json",
-            error_code="io_error",
-            error_message="failed to write projection",
-            attempt_id=uuid4(),
-            occurred_at=datetime(2026, 3, 15, 10, 0, 0, tzinfo=UTC),
-            resolved_at=None,
-            open_failure_count=2,
-            retry_count=1,
-        ),
-    )
-
-    class FakeFailuresWorkflowService:
-        def __init__(self, result: tuple[FailureListEntry, ...]) -> None:
-            self.result = result
-            self.calls: list[dict[str, object]] = []
-
-        def list_failures(
-            self,
-            *,
-            limit: int,
-            status: str | None = None,
-            open_only: bool = False,
-        ) -> tuple[FailureListEntry, ...]:
-            self.calls.append(
-                {
-                    "limit": limit,
-                    "status": status,
-                    "open_only": open_only,
-                }
-            )
-            return self.result
-
-    settings = make_settings()
-    fake_service = FakeFailuresWorkflowService(failures)
-
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
-    patch_cli_postgres_config(monkeypatch)
-    patch_cli_connection_pool(monkeypatch)
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
-        lambda config, pool=None: "fake-uow-factory",
-    )
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
-        lambda uow_factory: fake_service,
-    )
-
-    exit_code = cli_module.main(["failures"])
-
-    captured = capsys.readouterr()
-
-    assert exit_code == 0
-    assert "ctxledger failures" in captured.out
-    assert "- open: resume_json" in captured.out
-    assert "scope=projection" in captured.out
-    assert "path=.agent/resume.json" in captured.out
-    assert "error_code=io_error" in captured.out
-    assert "message=failed to write projection" in captured.out
-    assert "occurred_at=2026-03-15 10:00:00+00:00" in captured.out
-    assert "resolved_at=None" in captured.out
-    assert "retry_count=1" in captured.out
-    assert "open_failures=2" in captured.out
-    assert captured.err == ""
-    assert fake_service.calls == [
-        {
-            "limit": 20,
-            "status": None,
-            "open_only": False,
-        }
-    ]
-
-
-def test_main_failures_renders_json_output_and_filters(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    attempt_id = uuid4()
-    failures = (
-        FailureListEntry(
-            failure_scope="projection",
-            failure_type="resume_md",
-            failure_status="ignored",
-            projection_type="resume_md",
-            target_path=".agent/resume.md",
-            error_code="permission_error",
-            error_message="write intentionally ignored",
-            attempt_id=attempt_id,
-            occurred_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
-            resolved_at=datetime(2026, 3, 15, 9, 5, 0, tzinfo=UTC),
-            open_failure_count=1,
-            retry_count=0,
-        ),
-    )
-
-    class FakeFailuresWorkflowService:
-        def __init__(self, result: tuple[FailureListEntry, ...]) -> None:
-            self.result = result
-            self.calls: list[dict[str, object]] = []
-
-        def list_failures(
-            self,
-            *,
-            limit: int,
-            status: str | None = None,
-            open_only: bool = False,
-        ) -> tuple[FailureListEntry, ...]:
-            self.calls.append(
-                {
-                    "limit": limit,
-                    "status": status,
-                    "open_only": open_only,
-                }
-            )
-            return self.result
-
-    settings = make_settings()
-    fake_service = FakeFailuresWorkflowService(failures)
-
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
-    patch_cli_postgres_config(monkeypatch)
-    patch_cli_connection_pool(monkeypatch)
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
-        lambda config, pool=None: "fake-uow-factory",
-    )
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
-        lambda uow_factory: fake_service,
-    )
-
-    exit_code = cli_module.main(
-        [
-            "failures",
-            "--limit",
-            "5",
-            "--status",
-            "ignored",
-            "--format",
-            "json",
-        ]
-    )
-
-    captured = capsys.readouterr()
-    payload = json.loads(captured.out)
-
-    assert exit_code == 0
-    assert payload == [
-        {
-            "attempt_id": str(attempt_id),
-            "error_code": "permission_error",
-            "error_message": "write intentionally ignored",
-            "failure_scope": "projection",
-            "failure_status": "ignored",
-            "failure_type": "resume_md",
-            "occurred_at": "2026-03-15T09:00:00+00:00",
-            "open_failure_count": 1,
-            "projection_type": "resume_md",
-            "resolved_at": "2026-03-15T09:05:00+00:00",
-            "retry_count": 0,
-            "target_path": ".agent/resume.md",
-        }
-    ]
-    assert captured.err == ""
-    assert fake_service.calls == [
-        {
-            "limit": 5,
-            "status": "ignored",
-            "open_only": False,
-        }
-    ]
-
-
 def test_main_failures_reports_missing_database_url(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1111,50 +880,8 @@ def test_main_resume_workflow_renders_text_output(
             created_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:01:00+00:00"),
         ),
         latest_verify_report=None,
-        projections=(
-            SimpleNamespace(
-                projection_type=ProjectionArtifactType.RESUME_JSON,
-                status=ProjectionStatus.FRESH,
-                target_path=".agent/resume.json",
-                last_successful_write_at=None,
-                last_canonical_update_at=None,
-                open_failure_count=0,
-            ),
-            SimpleNamespace(
-                projection_type=ProjectionArtifactType.RESUME_MD,
-                status=ProjectionStatus.STALE,
-                target_path=".agent/resume.md",
-                last_successful_write_at=None,
-                last_canonical_update_at=None,
-                open_failure_count=1,
-            ),
-        ),
         resumable_status=SimpleNamespace(value="resumable"),
-        warnings=(
-            ResumeIssue(
-                code="stale_projection",
-                message="resume projection is stale relative to canonical workflow state",
-                details={"projection_type": "resume_md"},
-            ),
-        ),
-        closed_projection_failures=(
-            SimpleNamespace(
-                status="resolved",
-                projection_type=ProjectionArtifactType.RESUME_JSON,
-                target_path=".agent/resume.json",
-                attempt_id=uuid4(),
-                error_code="io_error",
-                error_message="previous projection write was resolved",
-                occurred_at=SimpleNamespace(
-                    isoformat=lambda: "2024-01-01T00:00:30+00:00"
-                ),
-                resolved_at=SimpleNamespace(
-                    isoformat=lambda: "2024-01-01T00:00:45+00:00"
-                ),
-                open_failure_count=0,
-                retry_count=1,
-            ),
-        ),
+        warnings=(),
         next_hint="Run CLI resume command",
     )
 
@@ -1188,127 +915,7 @@ def test_main_resume_workflow_renders_text_output(
     assert "Resumable status: resumable" in captured.out
     assert f"Workspace: {tmp_path}" in captured.out
     assert "Latest checkpoint step: implement_cli" in captured.out
-    assert "Warnings:" in captured.out
-    assert (
-        "- stale_projection: resume projection is stale relative to canonical workflow state"
-        in captured.out
-    )
     assert "Next hint: Run CLI resume command" in captured.out
-    assert captured.err == ""
-
-
-def test_main_resume_workflow_renders_ignored_projection_warning_details(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    tmp_path: Path,
-) -> None:
-    workflow_instance_id = uuid4()
-
-    fake_resume = SimpleNamespace(
-        workspace=SimpleNamespace(
-            workspace_id=uuid4(),
-            repo_url="https://example.com/org/repo.git",
-            canonical_path=str(tmp_path),
-            default_branch="main",
-            metadata={},
-        ),
-        workflow_instance=SimpleNamespace(
-            workflow_instance_id=workflow_instance_id,
-            workspace_id=uuid4(),
-            ticket_id="CLI-RESUME-IGNORED-1",
-            status=SimpleNamespace(value="running"),
-            metadata={},
-        ),
-        attempt=SimpleNamespace(
-            attempt_id=uuid4(),
-            workflow_instance_id=workflow_instance_id,
-            attempt_number=1,
-            status=SimpleNamespace(value="failed"),
-            failure_reason="projection write failed previously",
-            verify_status=None,
-            started_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:00:00+00:00"),
-            finished_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:05:00+00:00"),
-        ),
-        latest_checkpoint=SimpleNamespace(
-            checkpoint_id=uuid4(),
-            workflow_instance_id=workflow_instance_id,
-            attempt_id=uuid4(),
-            step_name="inspect_projection_failure",
-            summary="Investigate ignored projection failures",
-            checkpoint_json={"next_intended_action": "Review warning output"},
-            created_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:04:00+00:00"),
-        ),
-        latest_verify_report=None,
-        projections=(
-            SimpleNamespace(
-                projection_type=ProjectionArtifactType.RESUME_JSON,
-                status=ProjectionStatus.FAILED,
-                target_path=".agent/resume.json",
-                last_successful_write_at=None,
-                last_canonical_update_at=None,
-                open_failure_count=0,
-            ),
-        ),
-        resumable_status=SimpleNamespace(value="resumable"),
-        warnings=(
-            ResumeIssue(
-                code="ignored_projection_failure",
-                message="resume projection has ignored or previously resolved write failures",
-                details={
-                    "projection_type": "resume_json",
-                    "target_path": ".agent/resume.json",
-                    "open_failure_count": 0,
-                    "failures": [
-                        {
-                            "projection_type": "resume_json",
-                            "target_path": ".agent/resume.json",
-                            "attempt_id": "11111111-1111-1111-1111-111111111111",
-                            "error_code": "permission_error",
-                            "error_message": "previous projection write was ignored",
-                            "occurred_at": "2024-01-01T00:03:00+00:00",
-                            "resolved_at": "2024-01-01T00:04:00+00:00",
-                            "open_failure_count": 1,
-                            "retry_count": 0,
-                            "status": "ignored",
-                        }
-                    ],
-                },
-            ),
-        ),
-        next_hint="Review warning output",
-    )
-
-    monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
-    patch_cli_postgres_config(monkeypatch)
-    patch_cli_connection_pool(monkeypatch)
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
-        lambda config, pool=None: "fake-uow-factory",
-    )
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
-        lambda uow_factory: FakeWorkflowService(fake_resume),
-    )
-
-    exit_code = cli_module.main(
-        [
-            "resume-workflow",
-            "--workflow-instance-id",
-            str(workflow_instance_id),
-        ]
-    )
-
-    captured = capsys.readouterr()
-
-    assert exit_code == 0, captured.err
-    assert "Warnings:" in captured.out
-    assert (
-        "- ignored_projection_failure: "
-        "resume projection has ignored or previously resolved write failures"
-        in captured.out
-    )
-    assert "Next hint: Review warning output" in captured.out
     assert captured.err == ""
 
 
@@ -1357,46 +964,8 @@ def test_main_resume_workflow_renders_json_output(
             created_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:01:00+00:00"),
         ),
         latest_verify_report=None,
-        projections=(
-            SimpleNamespace(
-                projection_type=ProjectionArtifactType.RESUME_JSON,
-                status=ProjectionStatus.FRESH,
-                target_path=".agent/resume.json",
-                last_successful_write_at=SimpleNamespace(
-                    isoformat=lambda: "2024-01-01T00:02:00+00:00"
-                ),
-                last_canonical_update_at=SimpleNamespace(
-                    isoformat=lambda: "2024-01-01T00:02:00+00:00"
-                ),
-                open_failure_count=0,
-            ),
-        ),
         resumable_status=SimpleNamespace(value="resumable"),
-        warnings=(
-            ResumeIssue(
-                code="ignored_projection_failure",
-                message="resume projection has ignored or previously resolved write failures",
-                details={
-                    "projection_type": "resume_json",
-                    "target_path": ".agent/resume.json",
-                    "open_failure_count": 0,
-                    "failures": [
-                        {
-                            "projection_type": "resume_json",
-                            "target_path": ".agent/resume.json",
-                            "attempt_id": str(attempt_id),
-                            "error_code": "io_error",
-                            "error_message": "previous projection write was resolved",
-                            "occurred_at": "2024-01-01T00:01:30+00:00",
-                            "resolved_at": "2024-01-01T00:02:00+00:00",
-                            "open_failure_count": 1,
-                            "retry_count": 0,
-                            "status": "resolved",
-                        }
-                    ],
-                },
-            ),
-        ),
+        warnings=(),
         next_hint="Inspect JSON",
     )
 
@@ -1411,6 +980,26 @@ def test_main_resume_workflow_renders_json_output(
     monkeypatch.setattr(
         "ctxledger.workflow.service.WorkflowService",
         lambda uow_factory: FakeWorkflowService(fake_resume),
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.serializers.serialize_workflow_resume",
+        lambda resume: {
+            "workspace": {
+                "workspace_id": str(workspace_id),
+            },
+            "workflow": {
+                "workflow_instance_id": str(workflow_instance_id),
+            },
+            "attempt": {
+                "attempt_id": str(attempt_id),
+            },
+            "latest_checkpoint": {
+                "step_name": "implement_cli",
+            },
+            "resumable_status": "resumable",
+            "next_hint": "Inspect JSON",
+            "warnings": [],
+        },
     )
 
     exit_code = cli_module.main(
@@ -1431,43 +1020,9 @@ def test_main_resume_workflow_renders_json_output(
     assert payload["workflow"]["workflow_instance_id"] == str(workflow_instance_id)
     assert payload["attempt"]["attempt_id"] == str(attempt_id)
     assert payload["latest_checkpoint"]["step_name"] == "implement_cli"
-    assert payload["projections"] == [
-        {
-            "last_canonical_update_at": "2024-01-01T00:02:00+00:00",
-            "last_successful_write_at": "2024-01-01T00:02:00+00:00",
-            "open_failure_count": 0,
-            "projection_type": "resume_json",
-            "status": "fresh",
-            "target_path": ".agent/resume.json",
-        }
-    ]
     assert payload["resumable_status"] == "resumable"
     assert payload["next_hint"] == "Inspect JSON"
-    assert payload["warnings"] == [
-        {
-            "code": "ignored_projection_failure",
-            "message": "resume projection has ignored or previously resolved write failures",
-            "details": {
-                "projection_type": "resume_json",
-                "target_path": ".agent/resume.json",
-                "open_failure_count": 0,
-                "failures": [
-                    {
-                        "projection_type": "resume_json",
-                        "target_path": ".agent/resume.json",
-                        "attempt_id": str(attempt_id),
-                        "error_code": "io_error",
-                        "error_message": "previous projection write was resolved",
-                        "occurred_at": "2024-01-01T00:01:30+00:00",
-                        "resolved_at": "2024-01-01T00:02:00+00:00",
-                        "open_failure_count": 1,
-                        "retry_count": 0,
-                        "status": "resolved",
-                    }
-                ],
-            },
-        }
-    ]
+    assert payload["warnings"] == []
     assert captured.err == ""
 
 

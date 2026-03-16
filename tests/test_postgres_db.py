@@ -17,13 +17,6 @@ from ctxledger.workflow.service import (
     MemoryItemRecord,
     MemoryItemRepository,
     PersistenceError,
-    ProjectionArtifactType,
-    ProjectionFailureInfo,
-    ProjectionInfo,
-    ProjectionStateRepository,
-    ProjectionStatus,
-    RecordProjectionFailureInput,
-    RecordProjectionStateInput,
     UnitOfWork,
     VerifyReport,
     VerifyReportRepository,
@@ -208,17 +201,6 @@ def sample_verify_report(attempt_id: UUID) -> VerifyReport:
     )
 
 
-def sample_projection_info() -> ProjectionInfo:
-    return ProjectionInfo(
-        projection_type=ProjectionArtifactType.RESUME_JSON,
-        status=ProjectionStatus.FRESH,
-        target_path=".agent/resume.json",
-        last_successful_write_at=datetime(2024, 1, 8, tzinfo=UTC),
-        last_canonical_update_at=datetime(2024, 1, 8, tzinfo=UTC),
-        open_failure_count=0,
-    )
-
-
 def test_schema_file_exists() -> None:
     schema_path = Path(__file__).resolve().parents[1] / "schemas" / "postgres.sql"
 
@@ -239,7 +221,6 @@ def test_schema_contains_core_workflow_tables() -> None:
     assert "CREATE TABLE IF NOT EXISTS workflow_attempts" in schema
     assert "CREATE TABLE IF NOT EXISTS workflow_checkpoints" in schema
     assert "CREATE TABLE IF NOT EXISTS verify_reports" in schema
-    assert "CREATE TABLE IF NOT EXISTS projection_states" in schema
 
 
 def test_unit_of_work_contract_shape_can_be_satisfied_by_postgres_impl() -> None:
@@ -252,7 +233,6 @@ def test_unit_of_work_contract_shape_can_be_satisfied_by_postgres_impl() -> None
             self.verify_reports = _VerifyReportRepoStub()
             self.memory_items = _MemoryItemRepoStub()
             self.memory_embeddings = _MemoryEmbeddingRepoStub()
-            self.projection_states = _ProjectionStateRepoStub()
             self.committed = False
             self.rolled_back = False
 
@@ -271,7 +251,6 @@ def test_unit_of_work_contract_shape_can_be_satisfied_by_postgres_impl() -> None
     assert isinstance(uow.verify_reports, VerifyReportRepository)
     assert isinstance(uow.memory_items, MemoryItemRepository)
     assert isinstance(uow.memory_embeddings, MemoryEmbeddingRepository)
-    assert isinstance(uow.projection_states, ProjectionStateRepository)
 
     uow.commit()
     uow.rollback()
@@ -371,13 +350,6 @@ def test_resume_workflow_debug_logging_includes_uow_timing_metadata(
             )
             self.verify_reports = SimpleNamespace(
                 get_latest_by_attempt_id=lambda attempt_id: verify_report
-            )
-            self.projection_states = SimpleNamespace(
-                get_resume_projections=lambda workspace_id, workflow_instance_id: ()
-            )
-            self.projection_failures = SimpleNamespace(
-                get_open_failures_by_workflow_id=lambda workspace_id, workflow_instance_id: [],
-                get_closed_failures_by_workflow_id=lambda workspace_id, workflow_instance_id: [],
             )
 
         def __enter__(self) -> "ResumeLoggingUow":
@@ -617,25 +589,6 @@ def test_memory_embedding_repository_contract_tracks_embeddings_by_memory_item()
         newer_embedding,
         older_embedding,
     )
-
-
-def test_projection_state_repository_contract_returns_resume_projection() -> None:
-    repo = _ProjectionStateRepoStub()
-    workspace = sample_workspace()
-    workflow = sample_workflow(workspace.workspace_id)
-    projection = sample_projection_info()
-
-    repo.items[
-        (
-            workspace.workspace_id,
-            workflow.workflow_instance_id,
-            projection.projection_type,
-        )
-    ] = projection
-
-    assert repo.get_resume_projections(
-        workspace.workspace_id, workflow.workflow_instance_id
-    ) == (projection,)
 
 
 @pytest.mark.parametrize(
@@ -905,54 +858,6 @@ class _MemoryEmbeddingRepoStub(MemoryEmbeddingRepository):
         return ()
 
 
-class _ProjectionStateRepoStub(ProjectionStateRepository):
-    def __init__(self) -> None:
-        self.items: dict[tuple[UUID, UUID, ProjectionArtifactType], ProjectionInfo] = {}
-
-    def get_resume_projections(
-        self,
-        workspace_id: UUID,
-        workflow_instance_id: UUID,
-    ) -> tuple[ProjectionInfo, ...]:
-        candidates = [
-            projection
-            for (
-                candidate_workspace_id,
-                candidate_workflow_instance_id,
-                _,
-            ), projection in self.items.items()
-            if candidate_workspace_id == workspace_id
-            and candidate_workflow_instance_id == workflow_instance_id
-        ]
-        candidates.sort(
-            key=lambda projection: (
-                projection.last_canonical_update_at is not None,
-                projection.last_canonical_update_at,
-                projection.last_successful_write_at is not None,
-                projection.last_successful_write_at,
-                projection.projection_type.value,
-            ),
-            reverse=True,
-        )
-        return tuple(candidates)
-
-    def record_resume_projection(self, projection: RecordProjectionStateInput) -> None:
-        self.items[
-            (
-                projection.workspace_id,
-                projection.workflow_instance_id,
-                projection.projection_type,
-            )
-        ] = ProjectionInfo(
-            projection_type=projection.projection_type,
-            status=projection.status,
-            target_path=projection.target_path,
-            last_successful_write_at=projection.last_successful_write_at,
-            last_canonical_update_at=projection.last_canonical_update_at,
-            open_failure_count=0,
-        )
-
-
 def test_postgres_low_level_helpers_and_pool_builder() -> None:
     postgres = importlib.import_module("ctxledger.db.postgres")
 
@@ -1064,7 +969,6 @@ def test_postgres_database_health_checker_ping_and_schema_ready() -> None:
             {"table_name": "workflow_attempts"},
             {"table_name": "workflow_checkpoints"},
             {"table_name": "verify_reports"},
-            {"table_name": "projection_states"},
         ]
     )
 
@@ -1733,172 +1637,6 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
         embedding_repo.create(embedding)
 
 
-def test_postgres_projection_state_and_failure_repositories_cover_main_paths() -> None:
-    from ctxledger.db.postgres import (
-        PostgresProjectionFailureRepository,
-        PostgresProjectionStateRepository,
-    )
-
-    connection = FakeConnection()
-    state_repo = PostgresProjectionStateRepository(connection)
-    failure_repo = PostgresProjectionFailureRepository(connection)
-
-    workspace_id = uuid4()
-    workflow_instance_id = uuid4()
-    attempt_id = uuid4()
-
-    state_projection = RecordProjectionStateInput(
-        workspace_id=workspace_id,
-        workflow_instance_id=workflow_instance_id,
-        projection_type=ProjectionArtifactType.RESUME_JSON,
-        status=ProjectionStatus.FRESH,
-        target_path=".agent/resume.json",
-        last_successful_write_at=datetime(2024, 1, 1, tzinfo=UTC),
-        last_canonical_update_at=datetime(2024, 1, 2, tzinfo=UTC),
-    )
-    state_repo.record_resume_projection(state_projection)
-    assert "INSERT INTO projection_states" in connection.executed[0][0]
-
-    connection.fetchall_results.append(
-        [
-            {
-                "projection_type": "resume_json",
-                "status": "fresh",
-                "target_path": ".agent/resume.json",
-                "last_successful_write_at": datetime(2024, 1, 1, tzinfo=UTC),
-                "last_canonical_update_at": datetime(2024, 1, 2, tzinfo=UTC),
-                "open_failure_count": 2,
-            }
-        ]
-    )
-    projections = state_repo.get_resume_projections(workspace_id, workflow_instance_id)
-    assert projections == (
-        ProjectionInfo(
-            projection_type=ProjectionArtifactType.RESUME_JSON,
-            status=ProjectionStatus.FRESH,
-            target_path=".agent/resume.json",
-            last_successful_write_at=datetime(2024, 1, 1, tzinfo=UTC),
-            last_canonical_update_at=datetime(2024, 1, 2, tzinfo=UTC),
-            open_failure_count=2,
-        ),
-    )
-
-    connection.fetchall_results.append(
-        [
-            {
-                "projection_type": "resume_json",
-                "attempt_id": attempt_id,
-                "error_code": "io_error",
-                "error_message": "write failed",
-                "target_path": ".agent/resume.json",
-                "retry_count": 1,
-                "occurred_at": datetime(2024, 1, 3, tzinfo=UTC),
-                "resolved_at": None,
-                "status": "open",
-            }
-        ]
-    )
-    listed = failure_repo.list_failures(limit=5, status=None)
-    assert len(listed) == 1
-    assert listed[0].status == "open"
-    assert listed[0].open_failure_count == 1
-
-    connection.fetchall_results.append(
-        [
-            {
-                "projection_type": "resume_json",
-                "attempt_id": attempt_id,
-                "error_code": "io_error",
-                "error_message": "write failed",
-                "target_path": ".agent/resume.json",
-                "retry_count": 1,
-                "occurred_at": datetime(2024, 1, 3, tzinfo=UTC),
-                "resolved_at": None,
-                "status": "open",
-            }
-        ]
-    )
-    open_failures = failure_repo.get_open_failures_by_workflow_id(
-        workspace_id,
-        workflow_instance_id,
-    )
-    assert len(open_failures) == 1
-    assert open_failures[0].status == "open"
-
-    connection.fetchall_results.append(
-        [
-            {
-                "projection_type": "resume_md",
-                "attempt_id": None,
-                "error_code": None,
-                "error_message": "ignored once",
-                "target_path": ".agent/resume.md",
-                "retry_count": 2,
-                "occurred_at": datetime(2024, 1, 4, tzinfo=UTC),
-                "resolved_at": datetime(2024, 1, 5, tzinfo=UTC),
-                "status": "ignored",
-            }
-        ]
-    )
-    closed_failures = failure_repo.get_closed_failures_by_workflow_id(
-        workspace_id,
-        workflow_instance_id,
-    )
-    assert len(closed_failures) == 1
-    assert closed_failures[0].status == "ignored"
-
-    connection.fetchone_results.append({"failure_count": 0})
-    connection.fetchone_results.append({"failure_count": 1})
-    recorded = failure_repo.record_resume_projection_failure(
-        RecordProjectionFailureInput(
-            workspace_id=workspace_id,
-            workflow_instance_id=workflow_instance_id,
-            projection_type=ProjectionArtifactType.RESUME_JSON,
-            target_path=".agent/resume.json",
-            error_message="write failed",
-            attempt_id=attempt_id,
-            error_code="io_error",
-        )
-    )
-    assert recorded.status == "open"
-    assert recorded.open_failure_count == 1
-    assert recorded.retry_count == 0
-
-    class RowCountCursor(FakeCursor):
-        def __init__(self, connection: FakeConnection, rowcount: int) -> None:
-            super().__init__(connection)
-            self.rowcount = rowcount
-
-    class RowCountConnection(FakeConnection):
-        def __init__(self, rowcount: int) -> None:
-            super().__init__()
-            self._rowcount = rowcount
-
-        def cursor(self) -> FakeCursor:
-            return RowCountCursor(self, self._rowcount)
-
-    resolved_connection = RowCountConnection(2)
-    resolved_repo = PostgresProjectionFailureRepository(resolved_connection)
-    assert (
-        resolved_repo.resolve_resume_projection_failures(
-            workspace_id,
-            workflow_instance_id,
-        )
-        == 2
-    )
-
-    ignored_connection = RowCountConnection(3)
-    ignored_repo = PostgresProjectionFailureRepository(ignored_connection)
-    assert (
-        ignored_repo.ignore_resume_projection_failures(
-            workspace_id,
-            workflow_instance_id,
-            ProjectionArtifactType.RESUME_MD,
-        )
-        == 3
-    )
-
-
 def test_postgres_unit_of_work_and_factory_cover_pool_lifecycle() -> None:
     from ctxledger.db.postgres import (
         PostgresConfig,
@@ -1942,8 +1680,6 @@ def test_postgres_unit_of_work_and_factory_cover_pool_lifecycle() -> None:
         assert current.verify_reports is not None
         assert current.memory_items is not None
         assert current.memory_embeddings is not None
-        assert current.projection_states is not None
-        assert current.projection_failures is not None
         current.commit()
 
     assert connection.commit_calls == 1
@@ -2085,42 +1821,3 @@ def test_postgres_connect_requires_driver_and_passes_row_factory() -> None:
 
     assert connection == "CONNECTION"
     assert fake_psycopg.calls == [("postgresql://example/db", "DICT_ROW")]
-
-
-def test_postgres_relation_and_projection_count_helpers_cover_edge_cases() -> None:
-    from ctxledger.db.postgres import (
-        PostgresMemoryRelationRepository,
-        PostgresProjectionFailureRepository,
-    )
-
-    relation_connection = FakeConnection()
-    relation_repo = PostgresMemoryRelationRepository(relation_connection)
-
-    relation_connection.fetchone_results.append({"count": 0})
-    assert relation_repo.count_all() == 0
-
-    relation_connection.fetchone_results.append(
-        {"value": datetime(2024, 1, 1, tzinfo=UTC)}
-    )
-    assert relation_repo.max_datetime("created_at") == datetime(2024, 1, 1, tzinfo=UTC)
-
-    with pytest.raises(
-        PersistenceError,
-        match="Unsupported datetime field 'updated_at' for memory_relations",
-    ):
-        relation_repo.max_datetime("updated_at")
-
-    failure_connection = FakeConnection()
-    failure_repo = PostgresProjectionFailureRepository(failure_connection)
-
-    failure_connection.fetchone_results.append({"count": 0})
-    assert failure_repo.count_open_failures() == 0
-
-    failure_connection.fetchall_results.append([])
-    assert failure_repo.list_failures(limit=3, status="resolved") == ()
-
-    failure_connection.fetchall_results.append([])
-    assert failure_repo.get_open_failures_by_workflow_id(uuid4(), uuid4()) == []
-
-    failure_connection.fetchall_results.append([])
-    assert failure_repo.get_closed_failures_by_workflow_id(uuid4(), uuid4()) == []

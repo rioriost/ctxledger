@@ -166,14 +166,6 @@ class LoggingSettings:
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectionSettings:
-    enabled: bool
-    directory_name: str
-    write_markdown: bool
-    write_json: bool
-
-
-@dataclass(frozen=True, slots=True)
 class EmbeddingSettings:
     provider: EmbeddingProvider
     model: str
@@ -200,14 +192,6 @@ class AppSettings:
     database: DatabaseSettings
     http: HttpSettings
     debug: DebugSettings
-    projection: ProjectionSettings = field(
-        default_factory=lambda: ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        )
-    )
     logging: LoggingSettings = field(
         default_factory=lambda: LoggingSettings(
             level=LogLevel.INFO,
@@ -327,13 +311,6 @@ def load_settings() -> AppSettings:
         ),
         debug=DebugSettings(
             enabled=_parse_bool("CTXLEDGER_ENABLE_DEBUG_ENDPOINTS", True),
-        ),
-        projection=ProjectionSettings(
-            enabled=_parse_bool("CTXLEDGER_PROJECTION_ENABLED", True),
-            directory_name=_get_env("CTXLEDGER_PROJECTION_DIRECTORY_NAME", ".agent")
-            or ".agent",
-            write_markdown=_parse_bool("CTXLEDGER_PROJECTION_WRITE_MARKDOWN", True),
-            write_json=_parse_bool("CTXLEDGER_PROJECTION_WRITE_JSON", True),
         ),
         logging=LoggingSettings(
             level=_parse_log_level("CTXLEDGER_LOG_LEVEL", LogLevel.INFO),

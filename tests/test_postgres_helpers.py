@@ -12,8 +12,6 @@ from ctxledger.db import postgres as postgres_module
 from ctxledger.db.postgres import (
     PostgresConfig,
     PostgresDatabaseHealthChecker,
-    PostgresProjectionFailureRepository,
-    PostgresProjectionStateRepository,
     PostgresUnitOfWork,
     PostgresVerifyReportRepository,
     PostgresWorkflowAttemptRepository,
@@ -35,11 +33,6 @@ from ctxledger.db.postgres import (
 )
 from ctxledger.workflow.service import (
     PersistenceError,
-    ProjectionArtifactType,
-    ProjectionFailureInfo,
-    ProjectionStatus,
-    RecordProjectionFailureInput,
-    RecordProjectionStateInput,
     VerifyStatus,
     WorkflowAttemptStatus,
     WorkflowInstanceStatus,
@@ -204,10 +197,6 @@ def test_optional_datetime_returns_none_or_datetime() -> None:
 def test_optional_str_enum_returns_none_or_enum_value() -> None:
     assert _optional_str_enum(VerifyStatus, None) is None
     assert _optional_str_enum(VerifyStatus, "passed") is VerifyStatus.PASSED
-    assert (
-        _optional_str_enum(ProjectionArtifactType, ProjectionArtifactType.RESUME_JSON)
-        is ProjectionArtifactType.RESUME_JSON
-    )
 
 
 def test_schema_path_points_to_bundled_schema_file() -> None:
@@ -289,37 +278,6 @@ def test_health_checker_ping_executes_select_and_session_settings(
         ('SET search_path TO "public", public', None),
         ("SELECT 1", None),
     ]
-
-
-def test_health_checker_schema_ready_returns_true_when_all_tables_exist(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    executed: list[tuple[str, object | None]] = []
-    rows = [
-        {"table_name": "workspaces"},
-        {"table_name": "workflow_instances"},
-        {"table_name": "workflow_attempts"},
-        {"table_name": "workflow_checkpoints"},
-        {"table_name": "verify_reports"},
-        {"table_name": "projection_states"},
-        {"table_name": "extra_table"},
-    ]
-    cursor = FakeCursor(fetchall_result=rows, executed=executed)
-    connection = FakeConnection(cursor)
-
-    monkeypatch.setattr(postgres_module, "_connect", lambda database_url: connection)
-
-    checker = PostgresDatabaseHealthChecker(
-        PostgresConfig(
-            database_url="postgresql://ctxledger/db",
-            statement_timeout_ms=None,
-        )
-    )
-
-    assert checker.schema_ready() is True
-    assert executed[0] == ("SET statement_timeout = 0", None)
-    assert executed[1] == ('SET search_path TO "public", public', None)
-    assert "information_schema.tables" in executed[2][0]
 
 
 def test_health_checker_schema_ready_returns_false_when_tables_are_missing(
@@ -651,288 +609,6 @@ def test_postgres_verify_report_repository_create_raises_when_missing_row() -> N
         repo.create(report)
 
 
-def test_postgres_projection_state_repository_covers_read_and_record() -> None:
-    workspace_id = uuid4()
-    workflow_instance_id = uuid4()
-    last_successful_write_at = datetime(2024, 1, 8, tzinfo=UTC)
-    last_canonical_update_at = datetime(2024, 1, 8, tzinfo=UTC)
-    row = {
-        "projection_type": "resume_json",
-        "status": "fresh",
-        "target_path": ".agent/resume.json",
-        "last_successful_write_at": last_successful_write_at,
-        "last_canonical_update_at": last_canonical_update_at,
-        "open_failure_count": 2,
-    }
-
-    connection = FakeConnection(FakeCursor(fetchall_result=[row]))
-    repo = PostgresProjectionStateRepository(connection)
-
-    projections = repo.get_resume_projections(workspace_id, workflow_instance_id)
-    assert len(projections) == 1
-    assert projections[0].projection_type is ProjectionArtifactType.RESUME_JSON
-    assert projections[0].status is ProjectionStatus.FRESH
-    assert projections[0].target_path == ".agent/resume.json"
-    assert projections[0].last_successful_write_at == last_successful_write_at
-    assert projections[0].last_canonical_update_at == last_canonical_update_at
-    assert projections[0].open_failure_count == 2
-
-    repo.record_resume_projection(
-        RecordProjectionStateInput(
-            workspace_id=workspace_id,
-            workflow_instance_id=workflow_instance_id,
-            projection_type=ProjectionArtifactType.RESUME_MD,
-            target_path=".agent/resume.md",
-            status=ProjectionStatus.STALE,
-            last_successful_write_at=None,
-            last_canonical_update_at=last_canonical_update_at,
-        )
-    )
-
-    assert "INSERT INTO projection_states" in connection._cursor._executed[-1][0]
-
-
-def test_postgres_projection_failure_repository_covers_open_closed_record_and_actions() -> (
-    None
-):
-    workspace_id = uuid4()
-    workflow_instance_id = uuid4()
-    attempt_id = uuid4()
-    occurred_at = datetime(2024, 1, 9, tzinfo=UTC)
-    resolved_at = datetime(2024, 1, 10, tzinfo=UTC)
-
-    open_rows = [
-        {
-            "projection_type": "resume_json",
-            "attempt_id": str(attempt_id),
-            "error_code": "io_error",
-            "error_message": "disk full",
-            "target_path": ".agent/resume.json",
-            "retry_count": 0,
-            "occurred_at": occurred_at,
-            "resolved_at": None,
-            "status": "open",
-        },
-        {
-            "projection_type": "resume_json",
-            "attempt_id": None,
-            "error_code": "permission_error",
-            "error_message": "permission denied",
-            "target_path": ".agent/resume.json",
-            "retry_count": 1,
-            "occurred_at": occurred_at,
-            "resolved_at": None,
-            "status": "open",
-        },
-    ]
-    closed_rows = [
-        {
-            "projection_type": "resume_md",
-            "attempt_id": str(attempt_id),
-            "error_code": "io_error",
-            "error_message": "resolved",
-            "target_path": ".agent/resume.md",
-            "retry_count": 2,
-            "occurred_at": occurred_at,
-            "resolved_at": resolved_at,
-            "status": "resolved",
-        },
-        {
-            "projection_type": "resume_md",
-            "attempt_id": None,
-            "error_code": "ignore_error",
-            "error_message": "ignored",
-            "target_path": ".agent/resume.md",
-            "retry_count": 3,
-            "occurred_at": occurred_at,
-            "resolved_at": resolved_at,
-            "status": "ignored",
-        },
-    ]
-
-    executed: list[tuple[str, object | None]] = []
-    cursor = FakeCursor(fetchall_result=open_rows, executed=executed)
-    connection = FakeConnection(cursor)
-    repo = PostgresProjectionFailureRepository(connection)
-
-    original_count = repo._count_open_failures
-    counts = iter([4, 5])
-
-    def fake_count(
-        workspace_id_arg,
-        workflow_instance_id_arg,
-        projection_type_arg=None,
-    ) -> int:
-        if projection_type_arg is None:
-            return original_count(
-                workspace_id_arg,
-                workflow_instance_id_arg,
-                projection_type_arg,
-            )
-        return next(counts)
-
-    repo._count_open_failures = fake_count  # type: ignore[method-assign]
-
-    open_failures = repo.get_open_failures_by_workflow_id(
-        workspace_id,
-        workflow_instance_id,
-    )
-    assert open_failures == [
-        ProjectionFailureInfo(
-            projection_type=ProjectionArtifactType.RESUME_JSON,
-            error_code="io_error",
-            error_message="disk full",
-            target_path=".agent/resume.json",
-            attempt_id=attempt_id,
-            occurred_at=occurred_at,
-            resolved_at=None,
-            open_failure_count=1,
-            retry_count=0,
-            status="open",
-        ),
-        ProjectionFailureInfo(
-            projection_type=ProjectionArtifactType.RESUME_JSON,
-            error_code="permission_error",
-            error_message="permission denied",
-            target_path=".agent/resume.json",
-            attempt_id=None,
-            occurred_at=occurred_at,
-            resolved_at=None,
-            open_failure_count=2,
-            retry_count=1,
-            status="open",
-        ),
-    ]
-
-    connection._cursor._fetchall_result = closed_rows
-    closed_failures = repo.get_closed_failures_by_workflow_id(
-        workspace_id,
-        workflow_instance_id,
-    )
-    assert closed_failures == [
-        ProjectionFailureInfo(
-            projection_type=ProjectionArtifactType.RESUME_MD,
-            error_code="io_error",
-            error_message="resolved",
-            target_path=".agent/resume.md",
-            attempt_id=attempt_id,
-            occurred_at=occurred_at,
-            resolved_at=resolved_at,
-            open_failure_count=1,
-            retry_count=2,
-            status="resolved",
-        ),
-        ProjectionFailureInfo(
-            projection_type=ProjectionArtifactType.RESUME_MD,
-            error_code="ignore_error",
-            error_message="ignored",
-            target_path=".agent/resume.md",
-            attempt_id=None,
-            occurred_at=occurred_at,
-            resolved_at=resolved_at,
-            open_failure_count=2,
-            retry_count=3,
-            status="ignored",
-        ),
-    ]
-
-    recorded = repo.record_resume_projection_failure(
-        RecordProjectionFailureInput(
-            workspace_id=workspace_id,
-            workflow_instance_id=workflow_instance_id,
-            attempt_id=attempt_id,
-            projection_type=ProjectionArtifactType.RESUME_JSON,
-            target_path=".agent/resume.json",
-            error_code="io_error",
-            error_message="disk full",
-        )
-    )
-    assert recorded.projection_type is ProjectionArtifactType.RESUME_JSON
-    assert recorded.error_code == "io_error"
-    assert recorded.target_path == ".agent/resume.json"
-    assert recorded.attempt_id == attempt_id
-    assert recorded.open_failure_count == 5
-    assert recorded.retry_count == 4
-    assert recorded.status == "open"
-    assert recorded.occurred_at is not None
-
-    connection._cursor.rowcount = 7
-    assert (
-        repo.resolve_resume_projection_failures(workspace_id, workflow_instance_id) == 7
-    )
-    assert "status = 'resolved'" in executed[-1][0]
-
-    connection._cursor.rowcount = 3
-    assert (
-        repo.resolve_resume_projection_failures(
-            workspace_id,
-            workflow_instance_id,
-            ProjectionArtifactType.RESUME_MD,
-        )
-        == 3
-    )
-    assert executed[-1][1] == (
-        workspace_id,
-        workflow_instance_id,
-        "resume_md",
-    )
-
-    connection._cursor.rowcount = 6
-    assert (
-        repo.ignore_resume_projection_failures(workspace_id, workflow_instance_id) == 6
-    )
-    assert "status = 'ignored'" in executed[-1][0]
-
-    connection._cursor.rowcount = 2
-    assert (
-        repo.ignore_resume_projection_failures(
-            workspace_id,
-            workflow_instance_id,
-            ProjectionArtifactType.RESUME_JSON,
-        )
-        == 2
-    )
-    assert executed[-1][1] == (
-        workspace_id,
-        workflow_instance_id,
-        "resume_json",
-    )
-
-
-def test_postgres_projection_failure_repository_count_open_failures_variants() -> None:
-    workspace_id = uuid4()
-    workflow_instance_id = uuid4()
-    executed: list[tuple[str, object | None]] = []
-    cursor = FakeCursor(
-        fetchone_result={"failure_count": 4},
-        executed=executed,
-    )
-    connection = FakeConnection(cursor)
-    repo = PostgresProjectionFailureRepository(connection)
-
-    assert repo._count_open_failures(workspace_id, workflow_instance_id) == 4
-    assert "SELECT COUNT(*) AS failure_count" in executed[-1][0]
-    assert executed[-1][1] == (workspace_id, workflow_instance_id)
-
-    connection._cursor._fetchone_result = {"failure_count": 2}
-    assert (
-        repo._count_open_failures(
-            workspace_id,
-            workflow_instance_id,
-            ProjectionArtifactType.RESUME_MD,
-        )
-        == 2
-    )
-    assert executed[-1][1] == (
-        workspace_id,
-        workflow_instance_id,
-        "resume_md",
-    )
-
-    connection._cursor._fetchone_result = None
-    assert repo._count_open_failures(workspace_id, workflow_instance_id) == 0
-
-
 def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -945,21 +621,24 @@ def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle(
         database_url="postgresql://ctxledger/db",
         statement_timeout_ms=456,
     )
-    pool = FakeConnectionPool(connection)
-    uow = PostgresUnitOfWork(config, pool)
 
-    with uow as active_uow:
-        assert active_uow is uow
-        assert isinstance(uow.workspaces, PostgresWorkspaceRepository)
-        assert isinstance(uow.workflow_instances, PostgresWorkflowInstanceRepository)
-        assert isinstance(uow.workflow_attempts, PostgresWorkflowAttemptRepository)
-        assert isinstance(
-            uow.workflow_checkpoints, PostgresWorkflowCheckpointRepository
-        )
-        assert isinstance(uow.verify_reports, PostgresVerifyReportRepository)
-        assert isinstance(uow.projection_states, PostgresProjectionStateRepository)
-        assert isinstance(uow.projection_failures, PostgresProjectionFailureRepository)
-        uow.commit()
+    def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle() -> None:
+        connection = FakeConnection(FakeCursor(executed=[]))
+        pool = FakeConnectionPool(connection)
+        uow = PostgresUnitOfWork(pool)
+
+        with uow as active_uow:
+            assert active_uow is uow
+            assert isinstance(uow.workspaces, PostgresWorkspaceRepository)
+            assert isinstance(
+                uow.workflow_instances, PostgresWorkflowInstanceRepository
+            )
+            assert isinstance(uow.workflow_attempts, PostgresWorkflowAttemptRepository)
+            assert isinstance(
+                uow.workflow_checkpoints, PostgresWorkflowCheckpointRepository
+            )
+            assert isinstance(uow.verify_reports, PostgresVerifyReportRepository)
+            uow.commit()
 
     assert connection.commit_calls == 1
     assert connection.rollback_calls == 0
