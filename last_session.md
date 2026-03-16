@@ -9,7 +9,7 @@ The roadmap has been updated so that:
 - `0.5.0` focuses on safe refactoring of existing `src/` and `tests/`
 - hierarchical memory retrieval has been moved from `0.5.0` to `0.6.0`
 
-A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC cleanup, two in-memory repository cleanup batches, and a PostgreSQL helper cleanup batch.
+A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC cleanup, two in-memory repository cleanup batches, a PostgreSQL helper cleanup batch, and a config helper cleanup batch.
 
 ## Final 0.4.0 status
 ### Validation
@@ -339,6 +339,31 @@ Validation:
 - `python -m pytest tests/test_coverage_targets.py -q`
 - `237 passed`
  
+### 11. `src/ctxledger/config.py`
+Small file-local cleanup completed.
+
+Refactoring completed:
+- consolidated repeated integer parsing logic
+- consolidated repeated string-enum parsing logic
+
+Added helpers:
+- `_parse_required_int_value(...)`
+- `_parse_str_enum(...)`
+
+Affected parsing paths:
+- `_parse_int(...)`
+- `_parse_optional_int(...)`
+- `_parse_log_level(...)`
+- `_parse_embedding_provider(...)`
+
+Result:
+- less repeated parsing logic inside the configuration module
+- behavior preserved while keeping the cleanup file-local and low-risk
+
+Validation:
+- `python -m pytest tests/test_config.py -q`
+- `41 passed`
+
 ## 0.5.0 refactoring commits recorded
 Relevant recent refactoring commits:
 - `07f59d0`
@@ -365,6 +390,8 @@ Relevant recent refactoring commits:
   - `Refresh last session notes`
 - `b751944`
   - `Refactor postgres parsing helpers`
+- `b7b6f93`
+  - `Refactor config parsing helpers`
 
 ## Current judgment for 0.5.0 work quality
 So far the `0.5.0` work is still tracking the intended plan correctly:
@@ -377,6 +404,7 @@ So far the `0.5.0` work is still tracking the intended plan correctly:
 - MCP RPC request handling has now also received a first dedicated file-local cleanup pass
 - in-memory repository query helpers have now received dedicated file-local cleanup passes, including projection failure repository follow-up cleanup
 - PostgreSQL parsing/normalization helpers have now also received a small dedicated file-local cleanup pass
+- configuration parsing helpers have now also received a small dedicated file-local cleanup pass
 
 A useful lesson from the latest slices:
 - some apparent duplication is partially intentional because it preserves test seams
@@ -405,12 +433,13 @@ Good next candidates to inspect:
 - `src/ctxledger/mcp/rpc.py`
 - `src/ctxledger/db/__init__.py`
 - `src/ctxledger/db/postgres.py`
+- `src/ctxledger/config.py`
 - `tests/test_config.py`
 - `tests/test_cli.py`
 - `tests/test_server.py`
 
 ## Notes on local workspace state
-At the end of this session, the tracked refactoring work described above has been committed in seven follow-up commits:
+At the end of this session, the tracked refactoring work described above has been committed in eight follow-up commits:
 - `5c2ce31`
   - `Refactor server and runtime helpers`
 - `df03372`
@@ -425,6 +454,8 @@ At the end of this session, the tracked refactoring work described above has bee
   - `Refresh last session notes`
 - `b751944`
   - `Refactor postgres parsing helpers`
+- `b7b6f93`
+  - `Refactor config parsing helpers`
 
 Current remaining untracked/local-generated items still include:
 - coverage output
