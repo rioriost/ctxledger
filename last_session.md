@@ -9,7 +9,7 @@ The roadmap has been updated so that:
 - `0.5.0` focuses on safe refactoring of existing `src/` and `tests/`
 - hierarchical memory retrieval has been moved from `0.5.0` to `0.6.0`
 
-A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC cleanup, two in-memory repository cleanup batches, a PostgreSQL helper cleanup batch, a config helper cleanup batch, and an HTTP app helper cleanup batch.
+A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC cleanup, two in-memory repository cleanup batches, a PostgreSQL helper cleanup batch, a config helper cleanup batch, an HTTP app helper cleanup batch, and a server response helper cleanup batch.
 
 ## Final 0.4.0 status
 ### Validation
@@ -391,6 +391,33 @@ Validation:
 - `python -m pytest tests/test_coverage_targets.py -q`
 - `237 passed`
 
+### 13. `src/ctxledger/runtime/server_responses.py`
+Small file-local cleanup completed.
+
+Refactoring completed:
+- consolidated repeated projection failure action response construction for ignore/resolve flows
+- consolidated repeated projection failure error classification logic
+
+Added helpers:
+- `_build_projection_failure_action_response(...)`
+- `_projection_failure_error_status(...)`
+
+Affected response builders:
+- `build_projection_failures_ignore_response(...)`
+- `build_projection_failures_resolve_response(...)`
+
+Important note:
+- attempted to normalize the non-UOW workflow-detail branch more aggressively
+- reverted that part because existing minimal-stub tests rely on the original compatibility behavior in that branch
+
+Result:
+- less repeated projection failure response/error mapping logic inside the runtime response layer
+- behavior preserved while keeping existing test seams intact
+
+Validation:
+- `python -m pytest tests/test_coverage_targets.py -q`
+- `237 passed`
+
 ## 0.5.0 refactoring commits recorded
 Relevant recent refactoring commits:
 - `07f59d0`
@@ -421,6 +448,8 @@ Relevant recent refactoring commits:
   - `Refactor config parsing helpers`
 - `4716ac5`
   - `Refactor HTTP app request helpers`
+- `3686082`
+  - `Refactor server response helpers`
 
 ## Current judgment for 0.5.0 work quality
 So far the `0.5.0` work is still tracking the intended plan correctly:
@@ -435,6 +464,7 @@ So far the `0.5.0` work is still tracking the intended plan correctly:
 - PostgreSQL parsing/normalization helpers have now also received a small dedicated file-local cleanup pass
 - configuration parsing helpers have now also received a small dedicated file-local cleanup pass
 - HTTP app request helpers have now also received a small dedicated file-local cleanup pass
+- server response helpers have now also received a small dedicated file-local cleanup pass
 
 A useful lesson from the latest slices:
 - some apparent duplication is partially intentional because it preserves test seams
@@ -465,12 +495,13 @@ Good next candidates to inspect:
 - `src/ctxledger/db/postgres.py`
 - `src/ctxledger/config.py`
 - `src/ctxledger/http_app.py`
+- `src/ctxledger/runtime/server_responses.py`
 - `tests/test_config.py`
 - `tests/test_cli.py`
 - `tests/test_server.py`
 
 ## Notes on local workspace state
-At the end of this session, the tracked refactoring work described above has been committed in nine follow-up commits:
+At the end of this session, the tracked refactoring work described above has been committed in ten follow-up commits:
 - `5c2ce31`
   - `Refactor server and runtime helpers`
 - `df03372`
@@ -487,6 +518,8 @@ At the end of this session, the tracked refactoring work described above has bee
   - `Refactor postgres parsing helpers`
 - `b7b6f93`
   - `Refactor config parsing helpers`
+- `3686082`
+  - `Refactor server response helpers`
 
 Current remaining untracked/local-generated items still include:
 - coverage output
