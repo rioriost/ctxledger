@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from ctxledger.workflow.service import (
-    ProjectionArtifactType,
     VerifyStatus,
     WorkflowInstanceStatus,
 )
@@ -182,53 +181,6 @@ WORKFLOW_COMPLETE_TOOL_SCHEMA = McpToolSchema(
     required=("workflow_instance_id", "attempt_id", "workflow_status"),
 )
 
-PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "workspace_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workspace identity for the projection failures.",
-        },
-        "workflow_instance_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workflow instance identity for the projection failures.",
-        },
-        "projection_type": {
-            "type": "string",
-            "enum": [
-                projection_type.value for projection_type in ProjectionArtifactType
-            ],
-            "description": "Optional projection type filter.",
-        },
-    },
-    required=("workspace_id", "workflow_instance_id"),
-)
-
-PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA = McpToolSchema(
-    type="object",
-    properties={
-        "workspace_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workspace identity for the projection failures.",
-        },
-        "workflow_instance_id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Workflow instance identity for the projection failures.",
-        },
-        "projection_type": {
-            "type": "string",
-            "enum": [
-                projection_type.value for projection_type in ProjectionArtifactType
-            ],
-            "description": "Optional projection type filter.",
-        },
-    },
-    required=("workspace_id", "workflow_instance_id"),
-)
 
 MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA = McpToolSchema(
     type="object",

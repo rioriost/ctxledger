@@ -23,21 +23,6 @@ class WorkflowResumeResponse:
     status_code: int
     payload: dict[str, Any]
     headers: dict[str, str]
-    include_closed_projection_failures: bool = True
-
-
-@dataclass(slots=True)
-class ProjectionFailureHistoryResponse:
-    status_code: int
-    payload: dict[str, Any]
-    headers: dict[str, str]
-
-
-@dataclass(slots=True)
-class ProjectionFailureActionResponse:
-    status_code: int
-    payload: dict[str, Any]
-    headers: dict[str, str]
 
 
 @dataclass(slots=True)
@@ -78,8 +63,6 @@ __all__ = [
     "HealthStatus",
     "ReadinessStatus",
     "WorkflowResumeResponse",
-    "ProjectionFailureHistoryResponse",
-    "ProjectionFailureActionResponse",
     "RuntimeIntrospectionResponse",
     "McpResourceResponse",
     "McpToolResponse",

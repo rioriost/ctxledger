@@ -15,8 +15,6 @@ from ..mcp.tool_handlers import (
     build_memory_get_context_tool_handler,
     build_memory_remember_episode_tool_handler,
     build_memory_search_tool_handler,
-    build_projection_failures_ignore_tool_handler,
-    build_projection_failures_resolve_tool_handler,
     build_resume_workflow_tool_handler,
     build_workflow_backed_memory_service,
     build_workflow_checkpoint_tool_handler,
@@ -29,8 +27,6 @@ from ..mcp.tool_schemas import (
     MEMORY_GET_CONTEXT_TOOL_SCHEMA,
     MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
     MEMORY_SEARCH_TOOL_SCHEMA,
-    PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA,
-    PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA,
     WORKFLOW_CHECKPOINT_TOOL_SCHEMA,
     WORKFLOW_COMPLETE_TOOL_SCHEMA,
     WORKFLOW_RESUME_TOOL_SCHEMA,
@@ -40,10 +36,7 @@ from ..mcp.tool_schemas import (
 )
 from ..memory.service import MemoryService
 from .http_handlers import (
-    build_closed_projection_failures_http_handler,
     build_mcp_http_handler,
-    build_projection_failures_ignore_http_handler,
-    build_projection_failures_resolve_http_handler,
     build_runtime_introspection_http_handler,
     build_runtime_routes_http_handler,
     build_runtime_tools_http_handler,
@@ -104,8 +97,6 @@ class HttpRuntimeAdapter:
             "memory_get_context",
             "memory_remember_episode",
             "memory_search",
-            "projection_failures_ignore",
-            "projection_failures_resolve",
             "workflow_checkpoint",
             "workflow_complete",
             "workflow_resume",
@@ -118,8 +109,6 @@ class HttpRuntimeAdapter:
             "memory_get_context": MEMORY_GET_CONTEXT_TOOL_SCHEMA,
             "memory_remember_episode": MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
             "memory_search": MEMORY_SEARCH_TOOL_SCHEMA,
-            "projection_failures_ignore": PROJECTION_FAILURES_IGNORE_TOOL_SCHEMA,
-            "projection_failures_resolve": PROJECTION_FAILURES_RESOLVE_TOOL_SCHEMA,
             "workflow_checkpoint": WORKFLOW_CHECKPOINT_TOOL_SCHEMA,
             "workflow_complete": WORKFLOW_COMPLETE_TOOL_SCHEMA,
             "workflow_resume": WORKFLOW_RESUME_TOOL_SCHEMA,
@@ -168,12 +157,6 @@ class HttpRuntimeAdapter:
                 memory_service
             ),
             "memory_search": build_memory_search_tool_handler(memory_service),
-            "projection_failures_ignore": build_projection_failures_ignore_tool_handler(
-                self._server
-            ),
-            "projection_failures_resolve": build_projection_failures_resolve_tool_handler(
-                self._server
-            ),
             "workflow_checkpoint": build_workflow_checkpoint_tool_handler(self._server),
             "workflow_complete": build_workflow_complete_tool_handler(self._server),
             "workflow_resume": build_resume_workflow_tool_handler(self._server),
@@ -284,18 +267,6 @@ def register_http_runtime_handlers(
     runtime.register_handler(
         "workflow_resume",
         build_workflow_resume_http_handler(server),
-    )
-    runtime.register_handler(
-        "workflow_closed_projection_failures",
-        build_closed_projection_failures_http_handler(server),
-    )
-    runtime.register_handler(
-        "projection_failures_ignore",
-        build_projection_failures_ignore_http_handler(server),
-    )
-    runtime.register_handler(
-        "projection_failures_resolve",
-        build_projection_failures_resolve_http_handler(server),
     )
     return runtime
 

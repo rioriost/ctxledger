@@ -7,7 +7,7 @@ from .types import McpResourceResponse, McpToolResponse
 
 if TYPE_CHECKING:
     from ..mcp.tool_schemas import McpToolSchema
-    from ..workflow.service import ProjectionArtifactType, WorkflowService
+    from ..workflow.service import WorkflowService
     from .introspection import RuntimeIntrospection
 
 
@@ -64,24 +64,6 @@ class WorkflowResponseBuilderServer(HttpHandlerFactoryServer, Protocol):
     def get_workflow_resume(self, workflow_instance_id): ...
 
     def build_workflow_resume_response(self, workflow_instance_id): ...
-    def build_closed_projection_failures_response(self, workflow_instance_id): ...
-
-    def build_projection_failures_ignore_response(
-        self,
-        *,
-        workspace_id,
-        workflow_instance_id,
-        projection_type: ProjectionArtifactType | None = None,
-    ): ...
-
-    def build_projection_failures_resolve_response(
-        self,
-        *,
-        workspace_id,
-        workflow_instance_id,
-        projection_type: ProjectionArtifactType | None = None,
-    ): ...
-
     def build_runtime_introspection_response(self): ...
     def build_runtime_routes_response(self): ...
     def build_runtime_tools_response(self): ...

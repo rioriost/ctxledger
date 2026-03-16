@@ -11,7 +11,6 @@ from ctxledger.mcp.tool_handlers import (
     _map_workflow_error_to_mcp_response,
     _mcp_tool_response_cls,
     _parse_optional_dict_argument,
-    _parse_optional_projection_type_argument,
     _parse_optional_string_argument,
     _parse_optional_verify_status_argument,
     _parse_required_string_argument,
@@ -22,8 +21,6 @@ from ctxledger.mcp.tool_handlers import (
     build_memory_get_context_tool_handler,
     build_memory_remember_episode_tool_handler,
     build_memory_search_tool_handler,
-    build_projection_failures_ignore_tool_handler,
-    build_projection_failures_resolve_tool_handler,
     build_resume_workflow_tool_handler,
     build_workflow_checkpoint_tool_handler,
     build_workflow_complete_tool_handler,
@@ -42,7 +39,6 @@ from ctxledger.memory.service import (
 )
 from ctxledger.runtime.types import McpToolResponse, WorkflowResumeResponse
 from ctxledger.workflow.service import (
-    ProjectionArtifactType,
     VerifyStatus,
     WorkflowError,
     WorkflowInstanceStatus,
@@ -129,53 +125,6 @@ def test_parse_required_uuid_argument_returns_uuid() -> None:
     )
 
     assert result == value
-
-
-def test_parse_optional_projection_type_argument_returns_none_when_missing() -> None:
-    assert _parse_optional_projection_type_argument({}) is None
-
-
-@pytest.mark.parametrize("raw_value", ["", "   ", 1])
-def test_parse_optional_projection_type_argument_rejects_blank_or_non_string(
-    raw_value: object,
-) -> None:
-    result = _parse_optional_projection_type_argument({"projection_type": raw_value})
-
-    assert result == McpToolResponse(
-        payload={
-            "ok": False,
-            "error": {
-                "code": "invalid_request",
-                "message": "projection_type must be a non-empty string when provided",
-                "details": {"field": "projection_type"},
-            },
-        }
-    )
-
-
-def test_parse_optional_projection_type_argument_rejects_unknown_value() -> None:
-    result = _parse_optional_projection_type_argument({"projection_type": "unknown"})
-
-    assert result == McpToolResponse(
-        payload={
-            "ok": False,
-            "error": {
-                "code": "invalid_request",
-                "message": "projection_type must be a supported projection artifact type",
-                "details": {
-                    "field": "projection_type",
-                    "allowed_values": ["resume_json", "resume_md"],
-                },
-            },
-        }
-    )
-
-
-def test_parse_optional_projection_type_argument_returns_enum_value() -> None:
-    assert (
-        _parse_optional_projection_type_argument({"projection_type": "resume_json"})
-        is ProjectionArtifactType.RESUME_JSON
-    )
 
 
 @pytest.mark.parametrize("raw_value", [None, "", "   ", 1])
@@ -1117,135 +1066,6 @@ def test_build_workflow_complete_tool_handler_falls_back_to_attempt_verify_statu
     assert response.payload["result"]["auto_memory_details"] is None
 
 
-@pytest.mark.parametrize(
-    ("message", "expected_code"),
-    [
-        ("workflow not found", "not_found"),
-        ("workflow does not belong to workspace", "invalid_request"),
-        ("attempt mismatch", "invalid_request"),
-        ("boom", "server_error"),
-    ],
-)
-def test_build_projection_failures_ignore_tool_handler_maps_exceptions(
-    message: str,
-    expected_code: str,
-) -> None:
-    service = FakeWorkflowService(ignore_exc=RuntimeError(message))
-    handler = build_projection_failures_ignore_tool_handler(
-        make_server(workflow_service=service)
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": str(uuid4()),
-        }
-    )
-
-    assert response.payload["error"]["code"] == expected_code
-    assert response.payload["error"]["message"] == message
-
-
-def test_build_projection_failures_ignore_tool_handler_returns_success() -> None:
-    workspace_id = uuid4()
-    workflow_instance_id = uuid4()
-    service = FakeWorkflowService(ignore_result=3)
-    handler = build_projection_failures_ignore_tool_handler(
-        make_server(workflow_service=service)
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-            "projection_type": "resume_md",
-        }
-    )
-
-    assert response.payload == {
-        "ok": True,
-        "result": {
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-            "projection_type": "resume_md",
-            "updated_failure_count": 3,
-            "status": "ignored",
-        },
-    }
-    assert service.ignore_calls == [
-        {
-            "workspace_id": workspace_id,
-            "workflow_instance_id": workflow_instance_id,
-            "projection_type": ProjectionArtifactType.RESUME_MD,
-        }
-    ]
-
-
-@pytest.mark.parametrize(
-    ("message", "expected_code"),
-    [
-        ("workflow not found", "not_found"),
-        ("workflow does not belong to workspace", "invalid_request"),
-        ("attempt mismatch", "invalid_request"),
-        ("boom", "server_error"),
-    ],
-)
-def test_build_projection_failures_resolve_tool_handler_maps_exceptions(
-    message: str,
-    expected_code: str,
-) -> None:
-    service = FakeWorkflowService(resolve_exc=RuntimeError(message))
-    handler = build_projection_failures_resolve_tool_handler(
-        make_server(workflow_service=service)
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": str(uuid4()),
-        }
-    )
-
-    assert response.payload["error"]["code"] == expected_code
-    assert response.payload["error"]["message"] == message
-
-
-def test_build_projection_failures_resolve_tool_handler_returns_success_without_projection_type() -> (
-    None
-):
-    workspace_id = uuid4()
-    workflow_instance_id = uuid4()
-    service = FakeWorkflowService(resolve_result=2)
-    handler = build_projection_failures_resolve_tool_handler(
-        make_server(workflow_service=service)
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-        }
-    )
-
-    assert response.payload == {
-        "ok": True,
-        "result": {
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-            "projection_type": None,
-            "updated_failure_count": 2,
-            "status": "resolved",
-        },
-    }
-    assert service.resolve_calls == [
-        {
-            "workspace_id": workspace_id,
-            "workflow_instance_id": workflow_instance_id,
-            "projection_type": None,
-        }
-    ]
-
-
 def test_build_workspace_register_tool_handler_rejects_missing_repo_url() -> None:
     handler = build_workspace_register_tool_handler(
         make_server(workflow_service=FakeWorkflowService())
@@ -1478,50 +1298,6 @@ def test_build_workflow_complete_tool_handler_rejects_missing_workflow_status() 
             "code": "invalid_request",
             "message": "workflow_status must be a non-empty string",
             "details": {"field": "workflow_status"},
-        },
-    }
-
-
-def test_build_projection_failures_ignore_tool_handler_requires_service() -> None:
-    handler = build_projection_failures_ignore_tool_handler(
-        make_server(workflow_service=None)
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": str(uuid4()),
-        }
-    )
-
-    assert response.payload == {
-        "ok": False,
-        "error": {
-            "code": "server_not_ready",
-            "message": "workflow service is not initialized",
-            "details": {},
-        },
-    }
-
-
-def test_build_projection_failures_resolve_tool_handler_requires_service() -> None:
-    handler = build_projection_failures_resolve_tool_handler(
-        make_server(workflow_service=None)
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": str(uuid4()),
-        }
-    )
-
-    assert response.payload == {
-        "ok": False,
-        "error": {
-            "code": "server_not_ready",
-            "message": "workflow service is not initialized",
-            "details": {},
         },
     }
 

@@ -31,15 +31,6 @@ from .runtime.server_factory import (
     build_workflow_service_factory,
 )
 from .runtime.server_responses import (
-    build_closed_projection_failures_response as extracted_build_closed_projection_failures_response,
-)
-from .runtime.server_responses import (
-    build_projection_failures_ignore_response as extracted_build_projection_failures_ignore_response,
-)
-from .runtime.server_responses import (
-    build_projection_failures_resolve_response as extracted_build_projection_failures_resolve_response,
-)
-from .runtime.server_responses import (
     build_runtime_introspection_response as extracted_build_runtime_introspection_response,
 )
 from .runtime.server_responses import (
@@ -58,14 +49,11 @@ from .runtime.status import (
 from .runtime.types import (
     HealthStatus,
     McpResourceResponse,
-    ProjectionFailureActionResponse,
-    ProjectionFailureHistoryResponse,
     ReadinessStatus,
     RuntimeIntrospectionResponse,
     WorkflowResumeResponse,
 )
 from .workflow.service import (
-    ProjectionArtifactType,
     ResumeWorkflowInput,
     WorkflowResume,
     WorkflowService,
@@ -111,15 +99,12 @@ class CtxLedgerServer:
     def get_workflow_resume(
         self,
         workflow_instance_id: UUID,
-        *,
-        include_closed_projection_failures: bool = False,
     ) -> WorkflowResume:
         if self.workflow_service is None:
             raise ServerBootstrapError("workflow service is not initialized")
         return self.workflow_service.resume_workflow(
             ResumeWorkflowInput(
                 workflow_instance_id=workflow_instance_id,
-                include_closed_projection_failures=include_closed_projection_failures,
             )
         )
 
@@ -128,43 +113,6 @@ class CtxLedgerServer:
         workflow_instance_id: UUID,
     ) -> WorkflowResumeResponse:
         return extracted_build_workflow_resume_response(self, workflow_instance_id)
-
-    def build_closed_projection_failures_response(
-        self,
-        workflow_instance_id: UUID,
-    ) -> ProjectionFailureHistoryResponse:
-        return extracted_build_closed_projection_failures_response(
-            self,
-            workflow_instance_id,
-        )
-
-    def build_projection_failures_ignore_response(
-        self,
-        *,
-        workspace_id: UUID,
-        workflow_instance_id: UUID,
-        projection_type: ProjectionArtifactType | None = None,
-    ) -> ProjectionFailureActionResponse:
-        return extracted_build_projection_failures_ignore_response(
-            self,
-            workspace_id=workspace_id,
-            workflow_instance_id=workflow_instance_id,
-            projection_type=projection_type,
-        )
-
-    def build_projection_failures_resolve_response(
-        self,
-        *,
-        workspace_id: UUID,
-        workflow_instance_id: UUID,
-        projection_type: ProjectionArtifactType | None = None,
-    ) -> ProjectionFailureActionResponse:
-        return extracted_build_projection_failures_resolve_response(
-            self,
-            workspace_id=workspace_id,
-            workflow_instance_id=workflow_instance_id,
-            projection_type=projection_type,
-        )
 
     def build_runtime_introspection_response(self) -> RuntimeIntrospectionResponse:
         return extracted_build_runtime_introspection_response(self)

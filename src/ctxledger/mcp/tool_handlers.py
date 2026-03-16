@@ -19,7 +19,6 @@ from ..memory.service import (
 from ..workflow.service import (
     CompleteWorkflowInput,
     CreateCheckpointInput,
-    ProjectionArtifactType,
     RegisterWorkspaceInput,
     StartWorkflowInput,
     VerifyStatus,
@@ -90,35 +89,6 @@ def _parse_required_uuid_argument(
             code="invalid_request",
             message=f"{field_name} must be a valid UUID",
             details={"field": field_name},
-        )
-
-
-def _parse_optional_projection_type_argument(
-    arguments: dict[str, Any],
-) -> ProjectionArtifactType | None | "McpToolResponse":
-    raw_value = arguments.get("projection_type")
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        return build_mcp_error_response(
-            code="invalid_request",
-            message="projection_type must be a non-empty string when provided",
-            details={"field": "projection_type"},
-        )
-
-    try:
-        return ProjectionArtifactType(raw_value.strip())
-    except ValueError:
-        allowed_values = [
-            projection_type.value for projection_type in ProjectionArtifactType
-        ]
-        return build_mcp_error_response(
-            code="invalid_request",
-            message="projection_type must be a supported projection artifact type",
-            details={
-                "field": "projection_type",
-                "allowed_values": allowed_values,
-            },
         )
 
 
@@ -670,134 +640,6 @@ def build_workflow_complete_tool_handler(
                     for warning in result.warnings
                 ],
                 "auto_memory_details": result.auto_memory_details,
-            }
-        )
-
-    return _handler
-
-
-def build_projection_failures_ignore_tool_handler(
-    server: "CtxLedgerServer",
-):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
-        workspace_id = _parse_required_uuid_argument(arguments, "workspace_id")
-        if isinstance(workspace_id, _mcp_tool_response_cls()):
-            return workspace_id
-
-        workflow_instance_id = _parse_required_uuid_argument(
-            arguments,
-            "workflow_instance_id",
-        )
-        if isinstance(workflow_instance_id, _mcp_tool_response_cls()):
-            return workflow_instance_id
-
-        projection_type = _parse_optional_projection_type_argument(arguments)
-        if isinstance(projection_type, _mcp_tool_response_cls()):
-            return projection_type
-
-        if server.workflow_service is None:
-            return build_mcp_error_response(
-                code="server_not_ready",
-                message="workflow service is not initialized",
-                details={},
-            )
-
-        try:
-            updated_failure_count = (
-                server.workflow_service.ignore_resume_projection_failures(
-                    workspace_id=workspace_id,
-                    workflow_instance_id=workflow_instance_id,
-                    projection_type=projection_type,
-                )
-            )
-        except Exception as exc:
-            message = str(exc) or "failed to ignore projection failures"
-            lowered = message.lower()
-            if "not found" in lowered:
-                code = "not_found"
-            elif "does not belong to workspace" in lowered or "mismatch" in lowered:
-                code = "invalid_request"
-            else:
-                code = "server_error"
-            return build_mcp_error_response(
-                code=code,
-                message=message,
-                details={},
-            )
-
-        return build_mcp_success_response(
-            {
-                "workspace_id": str(workspace_id),
-                "workflow_instance_id": str(workflow_instance_id),
-                "projection_type": (
-                    projection_type.value if projection_type is not None else None
-                ),
-                "updated_failure_count": updated_failure_count,
-                "status": "ignored",
-            }
-        )
-
-    return _handler
-
-
-def build_projection_failures_resolve_tool_handler(
-    server: "CtxLedgerServer",
-):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
-        workspace_id = _parse_required_uuid_argument(arguments, "workspace_id")
-        if isinstance(workspace_id, _mcp_tool_response_cls()):
-            return workspace_id
-
-        workflow_instance_id = _parse_required_uuid_argument(
-            arguments,
-            "workflow_instance_id",
-        )
-        if isinstance(workflow_instance_id, _mcp_tool_response_cls()):
-            return workflow_instance_id
-
-        projection_type = _parse_optional_projection_type_argument(arguments)
-        if isinstance(projection_type, _mcp_tool_response_cls()):
-            return projection_type
-
-        if server.workflow_service is None:
-            return build_mcp_error_response(
-                code="server_not_ready",
-                message="workflow service is not initialized",
-                details={},
-            )
-
-        try:
-            updated_failure_count = (
-                server.workflow_service.resolve_resume_projection_failures(
-                    workspace_id=workspace_id,
-                    workflow_instance_id=workflow_instance_id,
-                    projection_type=projection_type,
-                )
-            )
-        except Exception as exc:
-            message = str(exc) or "failed to resolve projection failures"
-            lowered = message.lower()
-            if "not found" in lowered:
-                code = "not_found"
-            elif "does not belong to workspace" in lowered or "mismatch" in lowered:
-                code = "invalid_request"
-            else:
-                code = "server_error"
-            return build_mcp_error_response(
-                code=code,
-                message=message,
-                details={},
-            )
-
-        return build_mcp_success_response(
-            {
-                "workspace_id": str(workspace_id),
-                "workflow_instance_id": str(workflow_instance_id),
-                "projection_type": (
-                    projection_type.value if projection_type is not None else None
-                ),
-                "updated_failure_count": updated_failure_count,
-                "status": "resolved",
             }
         )
 

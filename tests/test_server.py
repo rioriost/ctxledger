@@ -18,7 +18,6 @@ from ctxledger.config import (
     HttpSettings,
     LoggingSettings,
     LogLevel,
-    ProjectionSettings,
 )
 from ctxledger.mcp.resource_handlers import (
     build_workflow_detail_resource_handler,
@@ -30,8 +29,6 @@ from ctxledger.mcp.tool_handlers import (
     build_memory_get_context_tool_handler,
     build_memory_remember_episode_tool_handler,
     build_memory_search_tool_handler,
-    build_projection_failures_ignore_tool_handler,
-    build_projection_failures_resolve_tool_handler,
     build_resume_workflow_tool_handler,
     build_workflow_checkpoint_tool_handler,
     build_workflow_complete_tool_handler,
@@ -42,12 +39,8 @@ from ctxledger.memory.service import MemoryService
 from ctxledger.runtime.database_health import build_database_health_checker
 from ctxledger.runtime.errors import ServerBootstrapError
 from ctxledger.runtime.http_handlers import (
-    build_closed_projection_failures_http_handler,
-    build_projection_failures_ignore_http_handler,
-    build_projection_failures_resolve_http_handler,
     build_runtime_introspection_http_handler,
     build_workflow_resume_http_handler,
-    parse_closed_projection_failures_request_path,
     parse_workflow_resume_request_path,
 )
 from ctxledger.runtime.http_runtime import (
@@ -65,15 +58,12 @@ from ctxledger.runtime.serializers import (
     serialize_workflow_resume,
 )
 from ctxledger.runtime.server_responses import (
-    build_closed_projection_failures_response,
     build_runtime_introspection_response,
 )
 from ctxledger.runtime.types import (
     McpHttpResponse,
     McpResourceResponse,
     McpToolResponse,
-    ProjectionFailureActionResponse,
-    ProjectionFailureHistoryResponse,
     ReadinessStatus,
     WorkflowResumeResponse,
 )
@@ -357,12 +347,6 @@ def make_settings(
         ),
         debug=DebugSettings(
             enabled=True,
-        ),
-        projection=ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
         ),
         logging=LoggingSettings(
             level=LogLevel.INFO,
@@ -1007,98 +991,6 @@ def test_build_workflow_resume_response_returns_503_when_workflow_service_is_not
     }
 
 
-def test_build_closed_projection_failures_response_returns_success_payload() -> None:
-    attempt_id = uuid4()
-    closed_projection_failures = (
-        type(
-            "ClosedProjectionFailure",
-            (),
-            {
-                "projection_type": ProjectionArtifactType.RESUME_JSON,
-                "target_path": ".agent/resume.json",
-                "attempt_id": attempt_id,
-                "error_code": "EACCES",
-                "error_message": "permission denied",
-                "occurred_at": datetime(2024, 1, 9, tzinfo=UTC),
-                "resolved_at": datetime(2024, 1, 10, tzinfo=UTC),
-                "open_failure_count": 0,
-                "retry_count": 2,
-                "status": "ignored",
-            },
-        )(),
-    )
-    resume = make_resume_fixture(
-        closed_projection_failures=closed_projection_failures,
-    )
-    settings = make_settings()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
-        settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
-    )
-
-    server.startup()
-
-    response = build_closed_projection_failures_response(
-        server,
-        resume.workflow_instance.workflow_instance_id,
-    )
-
-    assert isinstance(response, ProjectionFailureHistoryResponse)
-    assert response.status_code == 200
-    assert response.headers == {"content-type": "application/json"}
-    assert response.payload == {
-        "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
-        "closed_projection_failures": [
-            {
-                "projection_type": "resume_json",
-                "target_path": ".agent/resume.json",
-                "attempt_id": str(attempt_id),
-                "error_code": "EACCES",
-                "error_message": "permission denied",
-                "occurred_at": "2024-01-09T00:00:00+00:00",
-                "resolved_at": "2024-01-10T00:00:00+00:00",
-                "open_failure_count": 0,
-                "retry_count": 2,
-                "status": "ignored",
-            }
-        ],
-    }
-    assert fake_workflow_service.resume_calls is not None
-    assert len(fake_workflow_service.resume_calls) == 1
-    assert (
-        fake_workflow_service.resume_calls[0].workflow_instance_id
-        == resume.workflow_instance.workflow_instance_id
-    )
-    assert (
-        fake_workflow_service.resume_calls[0].include_closed_projection_failures is True
-    )
-
-
-def test_build_closed_projection_failures_response_returns_503_when_workflow_service_is_not_initialized() -> (
-    None
-):
-    settings = make_settings()
-    server = CtxLedgerServer(
-        settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-    )
-
-    response = build_closed_projection_failures_response(server, uuid4())
-
-    assert isinstance(response, ProjectionFailureHistoryResponse)
-    assert response.status_code == 503
-    assert response.payload == {
-        "error": {
-            "code": "server_not_ready",
-            "message": "workflow service is not initialized",
-        }
-    }
-
-
 def test_parse_workflow_resume_request_path_returns_uuid_for_valid_path() -> None:
     workflow_instance_id = uuid4()
 
@@ -1120,44 +1012,6 @@ def test_parse_workflow_resume_request_path_returns_none_for_invalid_path() -> N
     assert parse_workflow_resume_request_path("/workflow-resume") is None
     assert parse_workflow_resume_request_path("/workflow-resume/not-a-uuid") is None
     assert parse_workflow_resume_request_path("/other/endpoint") is None
-
-
-def test_parse_closed_projection_failures_request_path_returns_uuid_for_valid_path() -> (
-    None
-):
-    workflow_instance_id = uuid4()
-
-    assert (
-        parse_closed_projection_failures_request_path(
-            f"/workflow-resume/{workflow_instance_id}/closed-projection-failures"
-        )
-        == workflow_instance_id
-    )
-    assert (
-        parse_closed_projection_failures_request_path(
-            f"/workflow-resume/{workflow_instance_id}/closed-projection-failures?format=json"
-        )
-        == workflow_instance_id
-    )
-
-
-def test_parse_closed_projection_failures_request_path_returns_none_for_invalid_path() -> (
-    None
-):
-    assert parse_closed_projection_failures_request_path("") is None
-    assert parse_closed_projection_failures_request_path("/") is None
-    assert parse_closed_projection_failures_request_path("/workflow-resume") is None
-    assert (
-        parse_closed_projection_failures_request_path(
-            "/workflow-resume/not-a-uuid/closed-projection-failures"
-        )
-        is None
-    )
-    assert (
-        parse_closed_projection_failures_request_path("/workflow-resume/not-a-uuid")
-        is None
-    )
-    assert parse_closed_projection_failures_request_path("/other/endpoint") is None
 
 
 def test_build_workflow_resume_http_handler_returns_success_response() -> None:
@@ -1228,643 +1082,6 @@ def test_build_workflow_resume_http_handler_returns_503_when_server_is_not_ready
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_closed_projection_failures_http_handler_returns_success_response() -> (
-    None
-):
-    attempt_id = uuid4()
-    closed_projection_failures = (
-        type(
-            "ClosedProjectionFailure",
-            (),
-            {
-                "projection_type": ProjectionArtifactType.RESUME_JSON,
-                "target_path": ".agent/resume.json",
-                "attempt_id": attempt_id,
-                "error_code": "EACCES",
-                "error_message": "permission denied",
-                "occurred_at": datetime(2024, 1, 9, tzinfo=UTC),
-                "resolved_at": datetime(2024, 1, 10, tzinfo=UTC),
-                "open_failure_count": 0,
-                "retry_count": 2,
-                "status": "ignored",
-            },
-        )(),
-    )
-    resume = make_resume_fixture(
-        closed_projection_failures=closed_projection_failures,
-    )
-    settings = make_settings()
-    server, resume, _ = make_ready_server_with_resume(
-        resume=resume,
-        settings=settings,
-    )
-    handler = build_closed_projection_failures_http_handler(server)
-
-    response = handler(
-        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}/closed-projection-failures"
-    )
-
-    assert isinstance(response, ProjectionFailureHistoryResponse)
-    assert response.status_code == 200
-    assert response.headers == {"content-type": "application/json"}
-    assert response.payload == {
-        "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
-        "closed_projection_failures": [
-            {
-                "projection_type": "resume_json",
-                "target_path": ".agent/resume.json",
-                "attempt_id": str(attempt_id),
-                "error_code": "EACCES",
-                "error_message": "permission denied",
-                "occurred_at": "2024-01-09T00:00:00+00:00",
-                "resolved_at": "2024-01-10T00:00:00+00:00",
-                "open_failure_count": 0,
-                "retry_count": 2,
-                "status": "ignored",
-            }
-        ],
-    }
-
-
-def test_build_closed_projection_failures_http_handler_returns_not_found_for_invalid_path() -> (
-    None
-):
-    settings = make_settings()
-    server = make_server(settings=settings)
-    handler = build_closed_projection_failures_http_handler(server)
-
-    response = handler("/workflow-resume/not-a-uuid/closed-projection-failures")
-
-    assert isinstance(response, ProjectionFailureHistoryResponse)
-    assert response.status_code == 404
-    assert response.payload == {
-        "error": {
-            "code": "not_found",
-            "message": "closed projection failures endpoint requires /workflow-resume/{workflow_instance_id}/closed-projection-failures",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_closed_projection_failures_http_handler_returns_503_when_server_is_not_ready() -> (
-    None
-):
-    settings = make_settings()
-    server = make_server(settings=settings)
-    handler = build_closed_projection_failures_http_handler(server)
-
-    response = handler(f"/workflow-resume/{uuid4()}/closed-projection-failures")
-
-    assert isinstance(response, ProjectionFailureHistoryResponse)
-    assert response.status_code == 503
-    assert response.payload == {
-        "error": {
-            "code": "server_not_ready",
-            "message": "workflow service is not initialized",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_ignore_http_handler_returns_success_response() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    workspace_id = resume.workspace.workspace_id
-    workflow_instance_id = resume.workflow_instance.workflow_instance_id
-    fake_workflow_service = FakeWorkflowService(
-        resume,
-        ignore_result=2,
-    )
-    server, _, fake_workflow_service = make_ready_server_with_resume(
-        resume=resume,
-        settings=settings,
-        fake_workflow_service=fake_workflow_service,
-    )
-    handler = build_projection_failures_ignore_http_handler(server)
-
-    response = handler(
-        (
-            "/projection_failures_ignore"
-            f"?workspace_id={workspace_id}"
-            f"&workflow_instance_id={workflow_instance_id}"
-            "&projection_type=resume_json"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 200
-    assert response.payload == {
-        "workspace_id": str(workspace_id),
-        "workflow_instance_id": str(workflow_instance_id),
-        "projection_type": "resume_json",
-        "updated_failure_count": 2,
-        "status": "ignored",
-    }
-    assert response.headers == {"content-type": "application/json"}
-    assert fake_workflow_service.ignore_calls == [
-        {
-            "workspace_id": workspace_id,
-            "workflow_instance_id": workflow_instance_id,
-            "projection_type": ProjectionArtifactType.RESUME_JSON,
-        }
-    ]
-
-
-def test_build_projection_failures_ignore_http_handler_returns_not_found_for_invalid_path() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    server, resume, _ = make_ready_server_with_resume(
-        resume=resume,
-        settings=settings,
-    )
-    handler = build_projection_failures_ignore_http_handler(server)
-
-    response = handler(
-        (
-            "/not_projection_failures_ignore"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 404
-    assert response.payload == {
-        "error": {
-            "code": "not_found",
-            "message": "projection failure ignore endpoint requires /projection_failures_ignore",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_ignore_http_handler_returns_invalid_request_for_bad_projection_type() -> (
-    None
-):
-    settings = make_settings()
-    server, handler, resume, _ = make_ready_server_with_handler(
-        build_projection_failures_ignore_http_handler,
-        settings=settings,
-    )
-
-    response = handler(
-        (
-            "/projection_failures_ignore"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-            "&projection_type=not-a-real-projection"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 400
-    assert response.payload == {
-        "error": {
-            "code": "invalid_request",
-            "message": "projection_type must be a supported projection artifact type",
-            "details": {
-                "field": "projection_type",
-                "allowed_values": ["resume_json", "resume_md"],
-            },
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_ignore_http_handler_returns_invalid_request_for_missing_workspace_id() -> (
-    None
-):
-    settings = make_settings()
-    server, handler, resume, _ = make_ready_server_with_handler(
-        build_projection_failures_ignore_http_handler,
-        settings=settings,
-    )
-
-    response = handler(
-        (
-            "/projection_failures_ignore"
-            f"?workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 400
-    assert response.payload == {
-        "error": {
-            "code": "invalid_request",
-            "message": "workspace_id must be a non-empty string",
-            "details": {"field": "workspace_id"},
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_ignore_http_handler_returns_not_found_for_service_not_found_error() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-
-    def raise_not_found(
-        *,
-        workspace_id: object,
-        workflow_instance_id: object,
-        projection_type: object = None,
-    ) -> int:
-        raise RuntimeError("workflow not found")
-
-    fake_workflow_service.ignore_resume_projection_failures = raise_not_found
-    server, handler, resume, _ = make_ready_server_with_handler(
-        build_projection_failures_ignore_http_handler,
-        settings=settings,
-        resume=resume,
-        fake_workflow_service=fake_workflow_service,
-    )
-
-    response = handler(
-        (
-            "/projection_failures_ignore"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 404
-    assert response.payload == {
-        "error": {
-            "code": "not_found",
-            "message": "workflow not found",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_ignore_http_handler_returns_invalid_request_for_workspace_mismatch_error() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-
-    def raise_workspace_mismatch(
-        *,
-        workspace_id: object,
-        workflow_instance_id: object,
-        projection_type: object = None,
-    ) -> int:
-        raise RuntimeError("workflow instance does not belong to workspace")
-
-    fake_workflow_service.ignore_resume_projection_failures = raise_workspace_mismatch
-    server, handler, resume, _ = make_ready_server_with_handler(
-        build_projection_failures_ignore_http_handler,
-        settings=settings,
-        resume=resume,
-        fake_workflow_service=fake_workflow_service,
-    )
-
-    response = handler(
-        (
-            "/projection_failures_ignore"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 400
-    assert response.payload == {
-        "error": {
-            "code": "invalid_request",
-            "message": "workflow instance does not belong to workspace",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_ignore_http_handler_returns_server_error_for_unmapped_service_error() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-
-    def raise_generic_error(
-        *,
-        workspace_id: object,
-        workflow_instance_id: object,
-        projection_type: object = None,
-    ) -> int:
-        raise RuntimeError("projection storage exploded")
-
-    fake_workflow_service.ignore_resume_projection_failures = raise_generic_error
-    server, handler, resume, _ = make_ready_server_with_handler(
-        build_projection_failures_ignore_http_handler,
-        settings=settings,
-        resume=resume,
-        fake_workflow_service=fake_workflow_service,
-    )
-
-    response = handler(
-        (
-            "/projection_failures_ignore"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 500
-    assert response.payload == {
-        "error": {
-            "code": "server_error",
-            "message": "projection storage exploded",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_resolve_http_handler_returns_success_response() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    workspace_id = resume.workspace.workspace_id
-    workflow_instance_id = resume.workflow_instance.workflow_instance_id
-    fake_workflow_service = FakeWorkflowService(
-        resume,
-        resolve_result=3,
-    )
-    server, handler, _, fake_workflow_service = make_ready_server_with_handler(
-        build_projection_failures_resolve_http_handler,
-        settings=settings,
-        resume=resume,
-        fake_workflow_service=fake_workflow_service,
-    )
-
-    response = handler(
-        (
-            "/projection_failures_resolve"
-            f"?workspace_id={workspace_id}"
-            f"&workflow_instance_id={workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 200
-    assert response.payload == {
-        "workspace_id": str(workspace_id),
-        "workflow_instance_id": str(workflow_instance_id),
-        "projection_type": None,
-        "updated_failure_count": 3,
-        "status": "resolved",
-    }
-    assert response.headers == {"content-type": "application/json"}
-    assert fake_workflow_service.resolve_calls == [
-        {
-            "workspace_id": workspace_id,
-            "workflow_instance_id": workflow_instance_id,
-            "projection_type": None,
-        }
-    ]
-
-
-def test_build_projection_failures_resolve_http_handler_returns_not_found_for_invalid_path() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    server, handler, resume, _ = make_ready_server_with_handler(
-        build_projection_failures_resolve_http_handler,
-        settings=settings,
-        resume=resume,
-    )
-
-    response = handler(
-        (
-            "/not_projection_failures_resolve"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 404
-    assert response.payload == {
-        "error": {
-            "code": "not_found",
-            "message": "projection failure resolve endpoint requires /projection_failures_resolve",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_resolve_http_handler_returns_invalid_request_for_bad_workflow_id() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    server, handler, resume, _ = make_ready_server_with_handler(
-        build_projection_failures_resolve_http_handler,
-        settings=settings,
-        resume=resume,
-    )
-
-    response = handler(
-        (
-            "/projection_failures_resolve"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            "&workflow_instance_id=not-a-uuid"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 400
-    assert response.payload == {
-        "error": {
-            "code": "invalid_request",
-            "message": "workflow_instance_id must be a valid UUID",
-            "details": {"field": "workflow_instance_id"},
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_resolve_http_handler_returns_invalid_request_for_bad_projection_type() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    server, handler, resume, _ = make_ready_server_with_handler(
-        build_projection_failures_resolve_http_handler,
-        settings=settings,
-        resume=resume,
-    )
-
-    response = handler(
-        (
-            "/projection_failures_resolve"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-            "&projection_type=not-a-real-projection"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 400
-    assert response.payload == {
-        "error": {
-            "code": "invalid_request",
-            "message": "projection_type must be a supported projection artifact type",
-            "details": {
-                "field": "projection_type",
-                "allowed_values": ["resume_json", "resume_md"],
-            },
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_resolve_http_handler_returns_not_found_for_service_not_found_error() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-
-    def raise_not_found(
-        *,
-        workspace_id: object,
-        workflow_instance_id: object,
-        projection_type: object = None,
-    ) -> int:
-        raise RuntimeError("workflow not found")
-
-    fake_workflow_service.resolve_resume_projection_failures = raise_not_found
-    server = CtxLedgerServer(
-        settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
-    )
-    handler = build_projection_failures_resolve_http_handler(server)
-
-    server.startup()
-
-    response = handler(
-        (
-            "/projection_failures_resolve"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 404
-    assert response.payload == {
-        "error": {
-            "code": "not_found",
-            "message": "workflow not found",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_resolve_http_handler_returns_invalid_request_for_workspace_mismatch_error() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-
-    def raise_workspace_mismatch(
-        *,
-        workspace_id: object,
-        workflow_instance_id: object,
-        projection_type: object = None,
-    ) -> int:
-        raise RuntimeError("workflow instance does not belong to workspace")
-
-    fake_workflow_service.resolve_resume_projection_failures = raise_workspace_mismatch
-    server = CtxLedgerServer(
-        settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
-    )
-    handler = build_projection_failures_resolve_http_handler(server)
-
-    server.startup()
-
-    response = handler(
-        (
-            "/projection_failures_resolve"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 400
-    assert response.payload == {
-        "error": {
-            "code": "invalid_request",
-            "message": "workflow instance does not belong to workspace",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_build_projection_failures_resolve_http_handler_returns_server_error_for_unmapped_service_error() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-
-    def raise_generic_error(
-        *,
-        workspace_id: object,
-        workflow_instance_id: object,
-        projection_type: object = None,
-    ) -> int:
-        raise RuntimeError("projection storage exploded")
-
-    fake_workflow_service.resolve_resume_projection_failures = raise_generic_error
-    server = CtxLedgerServer(
-        settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
-    )
-    handler = build_projection_failures_resolve_http_handler(server)
-
-    server.startup()
-
-    response = handler(
-        (
-            "/projection_failures_resolve"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        )
-    )
-
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.status_code == 500
-    assert response.payload == {
-        "error": {
-            "code": "server_error",
-            "message": "projection storage exploded",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
 def test_http_runtime_adapter_dispatches_registered_workflow_resume_handler() -> None:
     settings = make_settings()
     resume = make_resume_fixture()
@@ -1921,12 +1138,9 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
     assert isinstance(runtime, HttpRuntimeAdapter)
     assert runtime.introspection_endpoints() == (
         "mcp_rpc",
-        "projection_failures_ignore",
-        "projection_failures_resolve",
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
-        "workflow_closed_projection_failures",
         "workflow_resume",
     )
 
@@ -2002,8 +1216,6 @@ def test_http_mcp_route_supports_tools_list_over_http() -> None:
         "memory_get_context",
         "memory_remember_episode",
         "memory_search",
-        "projection_failures_ignore",
-        "projection_failures_resolve",
         "workflow_checkpoint",
         "workflow_complete",
         "workflow_resume",
@@ -2116,240 +1328,6 @@ def test_http_mcp_route_requires_configured_mcp_path() -> None:
     }
 
 
-def test_http_runtime_adapter_dispatches_registered_closed_projection_failures_handler() -> (
-    None
-):
-    attempt_id = uuid4()
-    closed_projection_failures = (
-        type(
-            "ClosedProjectionFailure",
-            (),
-            {
-                "projection_type": ProjectionArtifactType.RESUME_JSON,
-                "target_path": ".agent/resume.json",
-                "attempt_id": attempt_id,
-                "error_code": "EACCES",
-                "error_message": "permission denied",
-                "occurred_at": datetime(2024, 1, 9, tzinfo=UTC),
-                "resolved_at": datetime(2024, 1, 10, tzinfo=UTC),
-                "open_failure_count": 0,
-                "retry_count": 2,
-                "status": "ignored",
-            },
-        )(),
-    )
-    resume = make_resume_fixture(
-        closed_projection_failures=closed_projection_failures,
-    )
-    settings = make_settings()
-    _, runtime, resume, _ = make_http_runtime(
-        settings=settings,
-        resume=resume,
-        started=True,
-    )
-
-    response = runtime.dispatch(
-        "workflow_closed_projection_failures",
-        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}/closed-projection-failures",
-    )
-
-    assert response.status_code == 200
-    assert response.payload == {
-        "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
-        "closed_projection_failures": [
-            {
-                "projection_type": "resume_json",
-                "target_path": ".agent/resume.json",
-                "attempt_id": str(attempt_id),
-                "error_code": "EACCES",
-                "error_message": "permission denied",
-                "occurred_at": "2024-01-09T00:00:00+00:00",
-                "resolved_at": "2024-01-10T00:00:00+00:00",
-                "open_failure_count": 0,
-                "retry_count": 2,
-                "status": "ignored",
-            }
-        ],
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_http_projection_failures_ignore_route_returns_invalid_request_for_bad_projection_type() -> (
-    None
-):
-    settings = make_settings()
-    _, runtime, resume, _ = make_http_runtime(
-        settings=settings,
-        started=True,
-    )
-
-    response = runtime.dispatch(
-        "projection_failures_ignore",
-        (
-            "/projection_failures_ignore"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-            "&projection_type=not-a-real-projection"
-        ),
-    )
-
-    assert response.status_code == 400
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.payload == {
-        "error": {
-            "code": "invalid_request",
-            "message": "projection_type must be a supported projection artifact type",
-            "details": {
-                "field": "projection_type",
-                "allowed_values": ["resume_json", "resume_md"],
-            },
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_http_projection_failures_ignore_route_returns_not_found_for_invalid_path() -> (
-    None
-):
-    settings = make_settings()
-    _, runtime, resume, _ = make_http_runtime(
-        settings=settings,
-        started=True,
-    )
-
-    response = runtime.dispatch(
-        "projection_failures_ignore",
-        (
-            "/not_projection_failures_ignore"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        ),
-    )
-
-    assert response.status_code == 404
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.payload == {
-        "error": {
-            "code": "not_found",
-            "message": "projection failure ignore endpoint requires /projection_failures_ignore",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_http_projection_failures_ignore_route_returns_server_not_ready_error() -> None:
-    settings = make_settings()
-    server, runtime, _, _ = make_http_runtime(
-        settings=settings,
-    )
-
-    response = runtime.dispatch(
-        "projection_failures_ignore",
-        (
-            "/projection_failures_ignore"
-            f"?workspace_id={uuid4()}"
-            f"&workflow_instance_id={uuid4()}"
-        ),
-    )
-
-    assert response.status_code == 503
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.payload == {
-        "error": {
-            "code": "server_not_ready",
-            "message": "workflow service is not initialized",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_http_projection_failures_resolve_route_returns_invalid_request_for_bad_workflow_id() -> (
-    None
-):
-    settings = make_settings()
-    _, runtime, resume, _ = make_http_runtime(
-        settings=settings,
-        started=True,
-    )
-
-    response = runtime.dispatch(
-        "projection_failures_resolve",
-        (
-            "/projection_failures_resolve"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            "&workflow_instance_id=not-a-uuid"
-        ),
-    )
-
-    assert response.status_code == 400
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.payload == {
-        "error": {
-            "code": "invalid_request",
-            "message": "workflow_instance_id must be a valid UUID",
-            "details": {"field": "workflow_instance_id"},
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_http_projection_failures_resolve_route_returns_not_found_for_invalid_path() -> (
-    None
-):
-    settings = make_settings()
-    _, runtime, resume, _ = make_http_runtime(
-        settings=settings,
-        started=True,
-    )
-
-    response = runtime.dispatch(
-        "projection_failures_resolve",
-        (
-            "/not_projection_failures_resolve"
-            f"?workspace_id={resume.workspace.workspace_id}"
-            f"&workflow_instance_id={resume.workflow_instance.workflow_instance_id}"
-        ),
-    )
-
-    assert response.status_code == 404
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.payload == {
-        "error": {
-            "code": "not_found",
-            "message": "projection failure resolve endpoint requires /projection_failures_resolve",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
-def test_http_projection_failures_resolve_route_returns_server_not_ready_error() -> (
-    None
-):
-    settings = make_settings()
-    server, runtime, _, _ = make_http_runtime(
-        settings=settings,
-    )
-
-    response = runtime.dispatch(
-        "projection_failures_resolve",
-        (
-            "/projection_failures_resolve"
-            f"?workspace_id={uuid4()}"
-            f"&workflow_instance_id={uuid4()}"
-        ),
-    )
-
-    assert response.status_code == 503
-    assert isinstance(response, ProjectionFailureActionResponse)
-    assert response.payload == {
-        "error": {
-            "code": "server_not_ready",
-            "message": "workflow service is not initialized",
-        }
-    }
-    assert response.headers == {"content-type": "application/json"}
-
-
 def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
     settings = make_settings()
     resume = make_resume_fixture()
@@ -2364,12 +1342,9 @@ def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
-        "projection_failures_ignore",
-        "projection_failures_resolve",
         "runtime_introspection",
         "runtime_routes",
         "runtime_tools",
-        "workflow_closed_projection_failures",
         "workflow_resume",
     )
 
@@ -3084,289 +2059,6 @@ def test_build_workflow_complete_tool_handler_returns_server_not_ready_error() -
     }
 
 
-def test_build_projection_failures_ignore_tool_handler_returns_success_payload() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    workspace_id = resume.workspace.workspace_id
-    workflow_instance_id = resume.workflow_instance.workflow_instance_id
-    fake_workflow_service = FakeWorkflowService(
-        resume,
-        ignore_result=2,
-    )
-    handler, _, fake_workflow_service = make_ready_tool_handler(
-        build_projection_failures_ignore_tool_handler,
-        settings=settings,
-        resume=resume,
-        fake_workflow_service=fake_workflow_service,
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-            "projection_type": "resume_json",
-        }
-    )
-
-    assert isinstance(response, McpToolResponse)
-    assert response.payload == {
-        "ok": True,
-        "result": {
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-            "projection_type": "resume_json",
-            "updated_failure_count": 2,
-            "status": "ignored",
-        },
-    }
-    assert fake_workflow_service.ignore_calls == [
-        {
-            "workspace_id": workspace_id,
-            "workflow_instance_id": workflow_instance_id,
-            "projection_type": ProjectionArtifactType.RESUME_JSON,
-        }
-    ]
-
-
-def test_build_projection_failures_ignore_tool_handler_returns_invalid_request_for_missing_workspace_id() -> (
-    None
-):
-    settings = make_settings()
-    handler, _, _ = make_tool_handler(
-        build_projection_failures_ignore_tool_handler,
-        settings=settings,
-    )
-
-    response = handler({"workflow_instance_id": str(uuid4())})
-
-    assert isinstance(response, McpToolResponse)
-    assert response.payload == {
-        "ok": False,
-        "error": {
-            "code": "invalid_request",
-            "message": "workspace_id must be a non-empty string",
-            "details": {"field": "workspace_id"},
-        },
-    }
-
-
-def test_build_projection_failures_ignore_tool_handler_returns_invalid_request_for_bad_workflow_id() -> (
-    None
-):
-    settings = make_settings()
-    handler, _, _ = make_tool_handler(
-        build_projection_failures_ignore_tool_handler,
-        settings=settings,
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": "not-a-uuid",
-        }
-    )
-
-    assert isinstance(response, McpToolResponse)
-    assert response.payload == {
-        "ok": False,
-        "error": {
-            "code": "invalid_request",
-            "message": "workflow_instance_id must be a valid UUID",
-            "details": {"field": "workflow_instance_id"},
-        },
-    }
-
-
-def test_build_projection_failures_ignore_tool_handler_returns_invalid_request_for_bad_projection_type() -> (
-    None
-):
-    settings = make_settings()
-    handler, _, _ = make_tool_handler(
-        build_projection_failures_ignore_tool_handler,
-        settings=settings,
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": str(uuid4()),
-            "projection_type": "not-a-real-projection",
-        }
-    )
-
-    assert isinstance(response, McpToolResponse)
-    assert response.payload == {
-        "ok": False,
-        "error": {
-            "code": "invalid_request",
-            "message": "projection_type must be a supported projection artifact type",
-            "details": {
-                "field": "projection_type",
-                "allowed_values": ["resume_json", "resume_md"],
-            },
-        },
-    }
-
-
-def test_build_projection_failures_ignore_tool_handler_returns_server_not_ready_error() -> (
-    None
-):
-    settings = make_settings()
-    handler, _, _ = make_tool_handler(
-        build_projection_failures_ignore_tool_handler,
-        settings=settings,
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": str(uuid4()),
-        }
-    )
-
-    assert isinstance(response, McpToolResponse)
-    assert response.payload == {
-        "ok": False,
-        "error": {
-            "code": "server_not_ready",
-            "message": "workflow service is not initialized",
-            "details": {},
-        },
-    }
-
-
-def test_build_projection_failures_resolve_tool_handler_returns_success_payload() -> (
-    None
-):
-    settings = make_settings()
-    resume = make_resume_fixture()
-    workspace_id = resume.workspace.workspace_id
-    workflow_instance_id = resume.workflow_instance.workflow_instance_id
-    fake_workflow_service = FakeWorkflowService(
-        resume,
-        resolve_result=3,
-    )
-    handler, _, fake_workflow_service = make_ready_tool_handler(
-        build_projection_failures_resolve_tool_handler,
-        settings=settings,
-        resume=resume,
-        fake_workflow_service=fake_workflow_service,
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-        }
-    )
-
-    assert isinstance(response, McpToolResponse)
-    assert response.payload == {
-        "ok": True,
-        "result": {
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-            "projection_type": None,
-            "updated_failure_count": 3,
-            "status": "resolved",
-        },
-    }
-    assert fake_workflow_service.resolve_calls == [
-        {
-            "workspace_id": workspace_id,
-            "workflow_instance_id": workflow_instance_id,
-            "projection_type": None,
-        }
-    ]
-
-
-def test_build_projection_failures_resolve_tool_handler_returns_invalid_request_for_bad_workflow_id() -> (
-    None
-):
-    settings = make_settings()
-    handler, _, _ = make_tool_handler(
-        build_projection_failures_resolve_tool_handler,
-        settings=settings,
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": "not-a-uuid",
-        }
-    )
-
-    assert isinstance(response, McpToolResponse)
-    assert response.payload == {
-        "ok": False,
-        "error": {
-            "code": "invalid_request",
-            "message": "workflow_instance_id must be a valid UUID",
-            "details": {"field": "workflow_instance_id"},
-        },
-    }
-
-
-def test_build_projection_failures_resolve_tool_handler_returns_server_not_ready_error() -> (
-    None
-):
-    settings = make_settings()
-    handler, _, _ = make_tool_handler(
-        build_projection_failures_resolve_tool_handler,
-        settings=settings,
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": str(uuid4()),
-        }
-    )
-
-    assert isinstance(response, McpToolResponse)
-    assert response.payload == {
-        "ok": False,
-        "error": {
-            "code": "server_not_ready",
-            "message": "workflow service is not initialized",
-            "details": {},
-        },
-    }
-
-
-def test_build_projection_failures_resolve_tool_handler_returns_invalid_request_for_bad_projection_type() -> (
-    None
-):
-    settings = make_settings()
-    handler, _, _ = make_tool_handler(
-        build_projection_failures_resolve_tool_handler,
-        settings=settings,
-    )
-
-    response = handler(
-        {
-            "workspace_id": str(uuid4()),
-            "workflow_instance_id": str(uuid4()),
-            "projection_type": "not-a-real-projection",
-        }
-    )
-
-    assert isinstance(response, McpToolResponse)
-    assert response.payload == {
-        "ok": False,
-        "error": {
-            "code": "invalid_request",
-            "message": "projection_type must be a supported projection artifact type",
-            "details": {
-                "field": "projection_type",
-                "allowed_values": ["resume_json", "resume_md"],
-            },
-        },
-    }
-
-
 def test_build_memory_remember_episode_tool_handler_returns_stub_payload() -> None:
     handler = build_memory_remember_episode_tool_handler(MemoryService())
 
@@ -3796,8 +2488,6 @@ def test_http_runtime_adapter_introspect_returns_registered_routes() -> None:
         "memory_get_context",
         "memory_remember_episode",
         "memory_search",
-        "projection_failures_ignore",
-        "projection_failures_resolve",
         "workflow_checkpoint",
         "workflow_complete",
         "workflow_resume",
@@ -4015,8 +2705,6 @@ def test_collect_runtime_introspection_returns_http_runtime_introspection() -> N
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
-                "projection_failures_ignore",
-                "projection_failures_resolve",
                 "workflow_checkpoint",
                 "workflow_complete",
                 "workflow_resume",
@@ -4091,20 +2779,15 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
                 "transport": "http",
                 "routes": [
                     "mcp_rpc",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
-                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
                 "tools": [
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "workflow_checkpoint",
                     "workflow_complete",
                     "workflow_resume",
@@ -4156,20 +2839,15 @@ def test_build_runtime_introspection_http_handler_returns_success_response() -> 
                 "transport": "http",
                 "routes": [
                     "mcp_rpc",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
-                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
                 "tools": [
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "workflow_checkpoint",
                     "workflow_complete",
                     "workflow_resume",
@@ -4223,9 +2901,6 @@ def test_build_http_runtime_adapter_omits_runtime_introspection_route_when_debug
     assert server.runtime.handler("runtime_introspection") is None
     assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
-        "projection_failures_ignore",
-        "projection_failures_resolve",
-        "workflow_closed_projection_failures",
         "workflow_resume",
     )
 
@@ -4253,20 +2928,15 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
                 "transport": "http",
                 "routes": [
                     "mcp_rpc",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
-                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
                 "tools": [
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "workflow_checkpoint",
                     "workflow_complete",
                     "workflow_resume",
@@ -4297,20 +2967,15 @@ def test_health_includes_runtime_summary_details_for_http_runtime() -> None:
             "transport": "http",
             "routes": [
                 "mcp_rpc",
-                "projection_failures_ignore",
-                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
-                "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
             "tools": [
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
-                "projection_failures_ignore",
-                "projection_failures_resolve",
                 "workflow_checkpoint",
                 "workflow_complete",
                 "workflow_resume",
@@ -4341,20 +3006,15 @@ def test_readiness_includes_runtime_summary_details_for_http_runtime() -> None:
             "transport": "http",
             "routes": [
                 "mcp_rpc",
-                "projection_failures_ignore",
-                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
-                "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
             "tools": [
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
-                "projection_failures_ignore",
-                "projection_failures_resolve",
                 "workflow_checkpoint",
                 "workflow_complete",
                 "workflow_resume",
@@ -4405,20 +3065,15 @@ def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
             "transport": "http",
             "routes": [
                 "mcp_rpc",
-                "projection_failures_ignore",
-                "projection_failures_resolve",
                 "runtime_introspection",
                 "runtime_routes",
                 "runtime_tools",
-                "workflow_closed_projection_failures",
                 "workflow_resume",
             ],
             "tools": [
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
-                "projection_failures_ignore",
-                "projection_failures_resolve",
                 "workflow_checkpoint",
                 "workflow_complete",
                 "workflow_resume",
@@ -4451,12 +3106,9 @@ def test_build_debug_routes_http_handler_returns_runtime_routes_only() -> None:
                 "transport": "http",
                 "routes": [
                     "mcp_rpc",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
-                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
             }
@@ -4500,9 +3152,6 @@ def test_build_http_runtime_adapter_omits_runtime_routes_handler_when_debug_endp
     assert server.runtime.handler("runtime_routes") is None
     assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
-        "projection_failures_ignore",
-        "projection_failures_resolve",
-        "workflow_closed_projection_failures",
         "workflow_resume",
     )
 
@@ -4527,8 +3176,6 @@ def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "workflow_checkpoint",
                     "workflow_complete",
                     "workflow_resume",
@@ -4560,8 +3207,6 @@ def test_build_debug_tools_http_handler_returns_http_only_empty_tools() -> None:
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "workflow_checkpoint",
                     "workflow_complete",
                     "workflow_resume",
@@ -4609,9 +3254,6 @@ def test_build_http_runtime_adapter_omits_runtime_tools_handler_when_debug_endpo
     assert server.runtime.handler("runtime_tools") is None
     assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
-        "projection_failures_ignore",
-        "projection_failures_resolve",
-        "workflow_closed_projection_failures",
         "workflow_resume",
     )
 
@@ -4634,13 +3276,11 @@ def test_print_runtime_summary_includes_http_runtime_introspection(
     assert "readiness=ready" in captured.err
     assert (
         "runtime=[{'transport': 'http', 'routes': ['mcp_rpc', "
-        "'projection_failures_ignore', 'projection_failures_resolve', "
         "'runtime_introspection', 'runtime_routes', 'runtime_tools', "
-        "'workflow_closed_projection_failures', 'workflow_resume'], 'tools': "
-        "['memory_get_context', 'memory_remember_episode', 'memory_search', "
-        "'projection_failures_ignore', 'projection_failures_resolve', "
-        "'workflow_checkpoint', 'workflow_complete', 'workflow_resume', "
-        "'workflow_start', 'workspace_register'], 'resources': "
+        "'workflow_resume'], 'tools': ['memory_get_context', "
+        "'memory_remember_episode', 'memory_search', 'workflow_checkpoint', "
+        "'workflow_complete', 'workflow_resume', 'workflow_start', "
+        "'workspace_register'], 'resources': "
         "['workspace://{workspace_id}/resume', "
         "'workspace://{workspace_id}/workflow/{workflow_instance_id}']}]"
         in captured.err
@@ -4668,12 +3308,9 @@ def test_http_runtime_adapter_dispatches_registered_debug_routes_handler() -> No
                 "transport": "http",
                 "routes": [
                     "mcp_rpc",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "runtime_introspection",
                     "runtime_routes",
                     "runtime_tools",
-                    "workflow_closed_projection_failures",
                     "workflow_resume",
                 ],
             }
@@ -4703,8 +3340,6 @@ def test_http_runtime_adapter_dispatches_registered_debug_tools_handler() -> Non
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
-                    "projection_failures_ignore",
-                    "projection_failures_resolve",
                     "workflow_checkpoint",
                     "workflow_complete",
                     "workflow_resume",

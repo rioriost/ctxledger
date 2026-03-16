@@ -3,14 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from ..workflow.service import ProjectionArtifactType, WorkflowError
+from ..workflow.service import WorkflowError
 
 if TYPE_CHECKING:
     from ..server import CtxLedgerServer
     from .types import (
         McpResourceResponse,
-        ProjectionFailureActionResponse,
-        ProjectionFailureHistoryResponse,
         RuntimeIntrospectionResponse,
         WorkflowResumeResponse,
     )
@@ -25,10 +23,7 @@ def build_workflow_resume_response(
     from .types import WorkflowResumeResponse
 
     try:
-        resume = server.get_workflow_resume(
-            workflow_instance_id,
-            include_closed_projection_failures=False,
-        )
+        resume = server.get_workflow_resume(workflow_instance_id)
     except ServerBootstrapError as exc:
         return WorkflowResumeResponse(
             status_code=503,
@@ -59,95 +54,8 @@ def build_workflow_resume_response(
 
     return WorkflowResumeResponse(
         status_code=200,
-        payload=serialize_workflow_resume(
-            resume,
-            include_closed_projection_failures=False,
-        ),
+        payload=serialize_workflow_resume(resume),
         headers={"content-type": "application/json"},
-        include_closed_projection_failures=False,
-    )
-
-
-def build_closed_projection_failures_response(
-    server: CtxLedgerServer,
-    workflow_instance_id: UUID,
-) -> ProjectionFailureHistoryResponse:
-    from ..runtime.database_health import ServerBootstrapError
-    from .serializers import serialize_closed_projection_failures_history
-    from .types import ProjectionFailureHistoryResponse
-
-    try:
-        resume = server.get_workflow_resume(
-            workflow_instance_id,
-            include_closed_projection_failures=True,
-        )
-    except ServerBootstrapError as exc:
-        return ProjectionFailureHistoryResponse(
-            status_code=503,
-            payload={
-                "error": {
-                    "code": "server_not_ready",
-                    "message": str(exc),
-                }
-            },
-            headers={"content-type": "application/json"},
-        )
-
-    return ProjectionFailureHistoryResponse(
-        status_code=200,
-        payload=serialize_closed_projection_failures_history(
-            workflow_instance_id,
-            getattr(resume, "closed_projection_failures", ()),
-        ),
-        headers={"content-type": "application/json"},
-    )
-
-
-def build_projection_failures_ignore_response(
-    server: CtxLedgerServer,
-    *,
-    workspace_id: UUID,
-    workflow_instance_id: UUID,
-    projection_type: ProjectionArtifactType | None = None,
-) -> ProjectionFailureActionResponse:
-    return _build_projection_failure_action_response(
-        server,
-        workspace_id=workspace_id,
-        workflow_instance_id=workflow_instance_id,
-        projection_type=projection_type,
-        action="ignored",
-        operation=lambda workflow_service: (
-            workflow_service.ignore_resume_projection_failures(
-                workspace_id=workspace_id,
-                workflow_instance_id=workflow_instance_id,
-                projection_type=projection_type,
-            )
-        ),
-        default_error_message="failed to ignore projection failures",
-    )
-
-
-def build_projection_failures_resolve_response(
-    server: CtxLedgerServer,
-    *,
-    workspace_id: UUID,
-    workflow_instance_id: UUID,
-    projection_type: ProjectionArtifactType | None = None,
-) -> ProjectionFailureActionResponse:
-    return _build_projection_failure_action_response(
-        server,
-        workspace_id=workspace_id,
-        workflow_instance_id=workflow_instance_id,
-        projection_type=projection_type,
-        action="resolved",
-        operation=lambda workflow_service: (
-            workflow_service.resolve_resume_projection_failures(
-                workspace_id=workspace_id,
-                workflow_instance_id=workflow_instance_id,
-                projection_type=projection_type,
-            )
-        ),
-        default_error_message="failed to resolve projection failures",
     )
 
 

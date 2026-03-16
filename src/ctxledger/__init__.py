@@ -648,63 +648,12 @@ def _resume_workflow(args: argparse.Namespace) -> int:
         else:
             print("Latest checkpoint: none")
 
-        print("Projections:")
-        if not resume.projections:
-            print("- none")
-        else:
-            for projection in resume.projections:
-                line = (
-                    f"- {projection.projection_type.value}: {projection.status.value}"
-                )
-                if projection.target_path:
-                    line += f" [{projection.target_path}]"
-                line += f" failures={projection.open_failure_count}"
-                print(line)
-
         print("Warnings:")
         if not resume.warnings:
             print("- none")
         else:
             for warning in resume.warnings:
-                line = f"- {warning.code}: {warning.message}"
-                details = warning.details or {}
-                projection_type = details.get("projection_type")
-                target_path = details.get("target_path")
-                open_failure_count = details.get("open_failure_count")
-
-                if projection_type:
-                    line += f" [projection={projection_type}]"
-                if target_path:
-                    line += f" [path={target_path}]"
-                if open_failure_count is not None:
-                    line += f" [open_failures={open_failure_count}]"
-
-                print(line)
-
-        print("Closed projection failures:")
-        closed_projection_failures = tuple(
-            getattr(resume, "closed_projection_failures", ())
-        )
-        if not closed_projection_failures:
-            print("- none")
-        else:
-            for failure in closed_projection_failures:
-                line = (
-                    f"- {failure.status}: {failure.projection_type.value} "
-                    f"[path={failure.target_path}]"
-                )
-                if getattr(failure, "attempt_id", None) is not None:
-                    line += f" [attempt_id={failure.attempt_id}]"
-                if failure.error_code:
-                    line += f" [error_code={failure.error_code}]"
-                line += f" [message={failure.error_message}]"
-                if failure.occurred_at is not None:
-                    line += f" [occurred_at={failure.occurred_at.isoformat()}]"
-                if failure.resolved_at is not None:
-                    line += f" [resolved_at={failure.resolved_at.isoformat()}]"
-                line += f" [open_failures={failure.open_failure_count}]"
-                line += f" [retry_count={failure.retry_count}]"
-                print(line)
+                print(f"- {warning.code}: {warning.message}")
 
         print(f"Next hint: {resume.next_hint or 'none'}")
         return 0
@@ -752,8 +701,6 @@ def main(argv: list[str] | None = None) -> int:
         return _print_schema_path(args.absolute)
     if command == "apply-schema":
         return _apply_schema(args)
-    if command == "write-resume-projection":
-        return _write_resume_projection(args)
     if command == "resume-workflow":
         return _resume_workflow(args)
     if command == "version":

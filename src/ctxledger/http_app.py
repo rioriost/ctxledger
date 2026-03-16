@@ -10,10 +10,7 @@ from fastapi import FastAPI, Request, Response
 
 from .config import AppSettings
 from .runtime.http_handlers import (
-    build_closed_projection_failures_http_handler,
     build_mcp_http_handler,
-    build_projection_failures_ignore_http_handler,
-    build_projection_failures_resolve_http_handler,
     build_runtime_introspection_http_handler,
     build_runtime_routes_http_handler,
     build_runtime_tools_http_handler,
@@ -191,21 +188,6 @@ def create_fastapi_app(server: CtxLedgerServer) -> FastAPI:
     app.add_api_route(
         "/workflow-resume/{workflow_instance_id}",
         _build_get_route(server, build_workflow_resume_http_handler),
-        methods=["GET"],
-    )
-    app.add_api_route(
-        "/workflow-resume/{workflow_instance_id}/closed-projection-failures",
-        _build_get_route(server, build_closed_projection_failures_http_handler),
-        methods=["GET"],
-    )
-    app.add_api_route(
-        "/projection_failures_ignore",
-        _build_get_route(server, build_projection_failures_ignore_http_handler),
-        methods=["GET"],
-    )
-    app.add_api_route(
-        "/projection_failures_resolve",
-        _build_get_route(server, build_projection_failures_resolve_http_handler),
         methods=["GET"],
     )
 
