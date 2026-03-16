@@ -9,7 +9,7 @@ The roadmap has been updated so that:
 - `0.5.0` focuses on safe refactoring of existing `src/` and `tests/`
 - hierarchical memory retrieval has been moved from `0.5.0` to `0.6.0`
 
-A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including an additional MCP RPC cleanup batch.
+A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC and in-memory repository cleanup batches.
 
 ## Final 0.4.0 status
 ### Validation
@@ -254,6 +254,40 @@ Result:
 Validation:
 - `python -m pytest tests/test_mcp_modules.py tests/test_coverage_targets.py -q`
 - `289 passed`
+
+### 9. `src/ctxledger/db/__init__.py`
+Small file-local cleanup completed.
+
+Refactoring completed:
+- consolidated repeated in-memory repository collection query patterns for:
+  - latest matching item selection
+  - sorted-and-limited result slicing
+- migrated repeated local filtering/sorting blocks to shared helpers while preserving repository-specific ordering keys
+
+Added helpers:
+- `_latest_or_none(...)`
+- `_sorted_limited(...)`
+
+Affected in-memory repositories:
+- `InMemoryWorkflowInstanceRepository`
+- `InMemoryWorkflowAttemptRepository`
+- `InMemoryWorkflowCheckpointRepository`
+- `InMemoryVerifyReportRepository`
+- `InMemoryMemoryEpisodeRepository`
+- `InMemoryMemoryItemRepository`
+- `InMemoryMemoryEmbeddingRepository`
+
+Important note:
+- the first attempt failed with a `NameError` because the new helpers had been referenced before being added to the module
+- after adding the helpers near the top-level helper section, focused validation passed
+
+Result:
+- less repeated latest/sorted/limited query logic across the in-memory repository layer
+- behavior preserved while staying file-local and reviewable
+
+Validation:
+- `python -m pytest tests/test_coverage_targets.py -q`
+- `237 passed`
  
 ## 0.5.0 refactoring commits recorded
 Relevant recent refactoring commits:
@@ -271,6 +305,10 @@ Relevant recent refactoring commits:
   - `Refactor server and runtime helpers`
 - `df03372`
   - `Refactor MCP RPC parameter handling`
+- `9ad8b55`
+  - `Update refactoring continuation notes`
+- `ed2df4c`
+  - `Refactor in-memory repository query helpers`
 
 ## Current judgment for 0.5.0 work quality
 So far the `0.5.0` work is still tracking the intended plan correctly:
@@ -281,6 +319,7 @@ So far the `0.5.0` work is still tracking the intended plan correctly:
 - internal duplication is meaningfully decreasing
 - several high-value parsing/response/setup hot spots have now been cleaned up
 - MCP RPC request handling has now also received a first dedicated file-local cleanup pass
+- in-memory repository query helpers have now received a first dedicated file-local cleanup pass
 
 A useful lesson from the latest slices:
 - some apparent duplication is partially intentional because it preserves test seams
@@ -307,16 +346,21 @@ Good next candidates to inspect:
 - `src/ctxledger/runtime/http_handlers.py`
 - `src/ctxledger/server.py`
 - `src/ctxledger/mcp/rpc.py`
+- `src/ctxledger/db/__init__.py`
 - `tests/test_config.py`
 - `tests/test_cli.py`
 - `tests/test_server.py`
 
 ## Notes on local workspace state
-At the end of this session, the tracked refactoring work described above has been committed in two follow-up commits:
+At the end of this session, the tracked refactoring work described above has been committed in four follow-up commits:
 - `5c2ce31`
   - `Refactor server and runtime helpers`
 - `df03372`
   - `Refactor MCP RPC parameter handling`
+- `9ad8b55`
+  - `Update refactoring continuation notes`
+- `ed2df4c`
+  - `Refactor in-memory repository query helpers`
 
 Current remaining untracked/local-generated items still include:
 - coverage output
