@@ -474,44 +474,22 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
         workspace_id: object,
         workflow_instance_id: object,
     ) -> list[ProjectionFailureInfo]:
-        failures: list[ProjectionFailureInfo] = []
-        for (
-            candidate_workspace_id,
-            candidate_workflow_instance_id,
-            _,
-        ), candidate_failures in self._failures_by_key.items():
-            if (
-                candidate_workspace_id == workspace_id
-                and candidate_workflow_instance_id == workflow_instance_id
-            ):
-                failures.extend(
-                    failure
-                    for failure in candidate_failures
-                    if failure.status == "open"
-                )
-        return list(failures)
+        return self._workflow_failures_by_status(
+            workspace_id,
+            workflow_instance_id,
+            statuses={"open"},
+        )
 
     def get_closed_failures_by_workflow_id(
         self,
         workspace_id: object,
         workflow_instance_id: object,
     ) -> list[ProjectionFailureInfo]:
-        failures: list[ProjectionFailureInfo] = []
-        for (
-            candidate_workspace_id,
-            candidate_workflow_instance_id,
-            _,
-        ), candidate_failures in self._failures_by_key.items():
-            if (
-                candidate_workspace_id == workspace_id
-                and candidate_workflow_instance_id == workflow_instance_id
-            ):
-                failures.extend(
-                    failure
-                    for failure in candidate_failures
-                    if failure.status in {"resolved", "ignored"}
-                )
-        return list(failures)
+        return self._workflow_failures_by_status(
+            workspace_id,
+            workflow_instance_id,
+            statuses={"resolved", "ignored"},
+        )
 
     def list_failures(
         self,
@@ -520,9 +498,11 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
         status: str | None = None,
         open_only: bool = False,
     ) -> tuple[ProjectionFailureInfo, ...]:
-        failures: list[ProjectionFailureInfo] = []
-        for candidate_failures in self._failures_by_key.values():
-            failures.extend(candidate_failures)
+        failures = [
+            failure
+            for candidate_failures in self._failures_by_key.values()
+            for failure in candidate_failures
+        ]
 
         if open_only:
             failures = [failure for failure in failures if failure.status == "open"]
@@ -563,18 +543,7 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
         )
         existing.append(failure_info)
         self._failures_by_key[key] = existing
-
-        current_projection = self._projection_states_by_key.get(key)
-        if current_projection is not None:
-            self._projection_states_by_key[key] = ProjectionInfo(
-                projection_type=current_projection.projection_type,
-                status=current_projection.status,
-                target_path=current_projection.target_path,
-                last_successful_write_at=current_projection.last_successful_write_at,
-                last_canonical_update_at=current_projection.last_canonical_update_at,
-                open_failure_count=len(existing),
-            )
-
+        self._set_projection_open_failure_count(key, len(existing))
         return failure_info
 
     def resolve_resume_projection_failures(
@@ -583,56 +552,12 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
         workflow_instance_id: object,
         projection_type: ProjectionArtifactType | None = None,
     ) -> int:
-        resolved_count = 0
-
-        projection_types = (
-            (projection_type,)
-            if projection_type is not None
-            else (
-                ProjectionArtifactType.RESUME_JSON,
-                ProjectionArtifactType.RESUME_MD,
-            )
+        return self._close_resume_projection_failures(
+            workspace_id,
+            workflow_instance_id,
+            projection_type=projection_type,
+            closed_status="resolved",
         )
-
-        for candidate_projection_type in projection_types:
-            key = (
-                workspace_id,
-                workflow_instance_id,
-                candidate_projection_type,
-            )
-            existing = self._failures_by_key.get(key, [])
-            resolved_count += len(existing)
-
-            if existing:
-                resolved_at = utc_now()
-                self._failures_by_key[key] = [
-                    ProjectionFailureInfo(
-                        projection_type=failure.projection_type,
-                        error_code=failure.error_code,
-                        error_message=failure.error_message,
-                        target_path=failure.target_path,
-                        attempt_id=failure.attempt_id,
-                        occurred_at=failure.occurred_at,
-                        resolved_at=resolved_at,
-                        open_failure_count=failure.open_failure_count,
-                        retry_count=failure.retry_count,
-                        status="resolved",
-                    )
-                    for failure in existing
-                ]
-
-            current_projection = self._projection_states_by_key.get(key)
-            if current_projection is not None:
-                self._projection_states_by_key[key] = ProjectionInfo(
-                    projection_type=current_projection.projection_type,
-                    status=current_projection.status,
-                    target_path=current_projection.target_path,
-                    last_successful_write_at=current_projection.last_successful_write_at,
-                    last_canonical_update_at=current_projection.last_canonical_update_at,
-                    open_failure_count=0,
-                )
-
-        return resolved_count
 
     def ignore_resume_projection_failures(
         self,
@@ -640,7 +565,47 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
         workflow_instance_id: object,
         projection_type: ProjectionArtifactType | None = None,
     ) -> int:
-        ignored_count = 0
+        return self._close_resume_projection_failures(
+            workspace_id,
+            workflow_instance_id,
+            projection_type=projection_type,
+            closed_status="ignored",
+        )
+
+    def _workflow_failures_by_status(
+        self,
+        workspace_id: object,
+        workflow_instance_id: object,
+        *,
+        statuses: set[str],
+    ) -> list[ProjectionFailureInfo]:
+        failures: list[ProjectionFailureInfo] = []
+        for (
+            candidate_workspace_id,
+            candidate_workflow_instance_id,
+            _,
+        ), candidate_failures in self._failures_by_key.items():
+            if (
+                candidate_workspace_id == workspace_id
+                and candidate_workflow_instance_id == workflow_instance_id
+            ):
+                failures.extend(
+                    failure
+                    for failure in candidate_failures
+                    if failure.status in statuses
+                )
+        return list(failures)
+
+    def _close_resume_projection_failures(
+        self,
+        workspace_id: object,
+        workflow_instance_id: object,
+        *,
+        projection_type: ProjectionArtifactType | None,
+        closed_status: str,
+    ) -> int:
+        closed_count = 0
+        resolved_at = utc_now()
 
         projection_types = (
             (projection_type,)
@@ -658,10 +623,9 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
                 candidate_projection_type,
             )
             existing = self._failures_by_key.get(key, [])
-            ignored_count += len(existing)
+            closed_count += len(existing)
 
             if existing:
-                resolved_at = utc_now()
                 self._failures_by_key[key] = [
                     ProjectionFailureInfo(
                         projection_type=failure.projection_type,
@@ -673,23 +637,32 @@ class InMemoryProjectionFailureRepository(ProjectionFailureRepository):
                         resolved_at=resolved_at,
                         open_failure_count=failure.open_failure_count,
                         retry_count=failure.retry_count,
-                        status="ignored",
+                        status=closed_status,
                     )
                     for failure in existing
                 ]
 
-            current_projection = self._projection_states_by_key.get(key)
-            if current_projection is not None:
-                self._projection_states_by_key[key] = ProjectionInfo(
-                    projection_type=current_projection.projection_type,
-                    status=current_projection.status,
-                    target_path=current_projection.target_path,
-                    last_successful_write_at=current_projection.last_successful_write_at,
-                    last_canonical_update_at=current_projection.last_canonical_update_at,
-                    open_failure_count=0,
-                )
+            self._set_projection_open_failure_count(key, 0)
 
-        return ignored_count
+        return closed_count
+
+    def _set_projection_open_failure_count(
+        self,
+        key: tuple[object, object, ProjectionArtifactType],
+        open_failure_count: int,
+    ) -> None:
+        current_projection = self._projection_states_by_key.get(key)
+        if current_projection is None:
+            return
+
+        self._projection_states_by_key[key] = ProjectionInfo(
+            projection_type=current_projection.projection_type,
+            status=current_projection.status,
+            target_path=current_projection.target_path,
+            last_successful_write_at=current_projection.last_successful_write_at,
+            last_canonical_update_at=current_projection.last_canonical_update_at,
+            open_failure_count=open_failure_count,
+        )
 
 
 class InMemoryUnitOfWork(UnitOfWork):
