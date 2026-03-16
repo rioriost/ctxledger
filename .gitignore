@@ -6,6 +6,13 @@ dist/
 wheels/
 *.egg-info
 
+# Coverage artifacts
+.coverage
+coverage.json
+
+# Local Traefik development certs
+docker/traefik/certs/
+
 # Virtual environments
 .venv
 .envrc
