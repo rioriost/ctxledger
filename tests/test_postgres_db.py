@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import importlib
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from types import TracebackType
+from types import SimpleNamespace, TracebackType
 from uuid import UUID, uuid4
 
 import pytest
@@ -20,6 +21,7 @@ from ctxledger.workflow.service import (
     ProjectionInfo,
     ProjectionStateRepository,
     ProjectionStatus,
+    RecordProjectionFailureInput,
     RecordProjectionStateInput,
     UnitOfWork,
     VerifyReport,
@@ -74,8 +76,8 @@ class FakeCursor(AbstractContextManager["FakeCursor"]):
 class FakeConnection(AbstractContextManager["FakeConnection"]):
     def __init__(self) -> None:
         self.executed: list[tuple[str, tuple[object, ...] | None]] = []
-        self.fetchone_results: list[tuple[object, ...] | None] = []
-        self.fetchall_results: list[list[tuple[object, ...]]] = []
+        self.fetchone_results: list[object | None] = []
+        self.fetchall_results: list[list[object]] = []
         self.commit_calls = 0
         self.rollback_calls = 0
         self.closed = False
@@ -760,3 +762,1176 @@ class _ProjectionStateRepoStub(ProjectionStateRepository):
             last_canonical_update_at=projection.last_canonical_update_at,
             open_failure_count=0,
         )
+
+
+def test_postgres_low_level_helpers_and_pool_builder() -> None:
+    postgres = importlib.import_module("ctxledger.db.postgres")
+
+    assert postgres._json_dumps({"b": 2, "a": 1}) == '{"a":1,"b":2}'
+    assert postgres._json_loads(None) == {}
+    assert postgres._json_loads('{"a": 1}') == {"a": 1}
+    assert postgres._json_object_or_none(None) is None
+    assert postgres._json_object_or_none({"a": 1}) == {"a": 1}
+    assert postgres._json_object_or_none('{"a": 1}') == {"a": 1}
+    assert postgres._json_object_or_none("[1,2]") is None
+    assert postgres._json_object_or_none([("a", 1)]) == {"a": 1}
+
+    aware = datetime(2024, 1, 1, tzinfo=UTC)
+    naive = datetime(2024, 1, 1)
+    assert postgres._to_datetime(aware) == aware
+    assert postgres._to_datetime(naive).tzinfo == UTC
+    with pytest.raises(PersistenceError, match="Expected datetime, got str"):
+        postgres._to_datetime("bad")
+
+    value_uuid = uuid4()
+    assert postgres._to_uuid(value_uuid) == value_uuid
+    assert postgres._to_uuid(str(value_uuid)) == value_uuid
+    assert postgres._optional_datetime(None) is None
+    assert postgres._optional_datetime(aware) == aware
+    assert postgres._optional_str_enum(VerifyStatus, None) is None
+    assert postgres._optional_str_enum(VerifyStatus, "passed") == VerifyStatus.PASSED
+    assert postgres._normalized_schema_name(None) == "public"
+    assert postgres._normalized_schema_name("  ") == "public"
+    assert postgres._normalized_schema_name(" custom ") == "custom"
+    assert postgres._parse_embedding_values(None) == ()
+    assert postgres._parse_embedding_values("") == ()
+    assert postgres._parse_embedding_values("[1, 2.5]") == (1.0, 2.5)
+    assert postgres._parse_embedding_values((1, "2.5")) == (1.0, 2.5)
+    assert postgres._quote_ident('a"b') == '"a""b"'
+    assert postgres._episode_status(None) == "recorded"
+    assert postgres._episode_status("ignored") == "ignored"
+    assert postgres._pgvector_literal((1.0, 2.5)) == "[1,2.5]"
+
+    class FakePool:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+    original_pool = postgres.ConnectionPool
+    try:
+        postgres.ConnectionPool = FakePool
+        config = postgres.PostgresConfig(
+            database_url="postgresql://example/db",
+            pool_min_size=2,
+            pool_max_size=7,
+            pool_timeout_seconds=9,
+        )
+        pool = postgres.build_connection_pool(config)
+    finally:
+        postgres.ConnectionPool = original_pool
+
+    assert isinstance(pool, FakePool)
+    assert pool.kwargs["conninfo"] == "postgresql://example/db"
+    assert pool.kwargs["min_size"] == 2
+    assert pool.kwargs["max_size"] == 7
+    assert pool.kwargs["timeout"] == 9
+    assert pool.kwargs["open"] is True
+
+
+def test_postgres_config_from_settings_and_schema_loader() -> None:
+    postgres = importlib.import_module("ctxledger.db.postgres")
+
+    settings = SimpleNamespace(
+        database=SimpleNamespace(
+            url="postgresql://example/db",
+            connect_timeout_seconds=11,
+            statement_timeout_ms=222,
+            schema_name="  custom  ",
+            pool_min_size=3,
+            pool_max_size=6,
+            pool_timeout_seconds=12,
+        )
+    )
+
+    config = postgres.PostgresConfig.from_settings(settings)
+
+    assert config.database_url == "postgresql://example/db"
+    assert config.connect_timeout_seconds == 11
+    assert config.statement_timeout_ms == 222
+    assert config.schema_name == "custom"
+    assert config.pool_min_size == 3
+    assert config.pool_max_size == 6
+    assert config.pool_timeout_seconds == 12
+
+    schema_sql = postgres.load_postgres_schema_sql()
+    assert "-- ctxledger PostgreSQL schema" in schema_sql
+
+
+def test_postgres_database_health_checker_ping_and_schema_ready() -> None:
+    from ctxledger.db.postgres import PostgresConfig, PostgresDatabaseHealthChecker
+
+    config = PostgresConfig(
+        database_url="postgresql://example/db",
+        statement_timeout_ms=250,
+        schema_name="custom",
+    )
+    checker = PostgresDatabaseHealthChecker(config)
+
+    ping_connection = FakeConnection()
+    schema_connection = FakeConnection()
+    schema_connection.fetchall_results.append(
+        [
+            {"table_name": "workspaces"},
+            {"table_name": "workflow_instances"},
+            {"table_name": "workflow_attempts"},
+            {"table_name": "workflow_checkpoints"},
+            {"table_name": "verify_reports"},
+            {"table_name": "projection_states"},
+        ]
+    )
+
+    postgres = importlib.import_module("ctxledger.db.postgres")
+    original_connect = postgres._connect
+    calls = [ping_connection, schema_connection]
+
+    try:
+        postgres._connect = lambda database_url: calls.pop(0)
+        checker.ping()
+        ready = checker.schema_ready()
+    finally:
+        postgres._connect = original_connect
+
+    assert ready is True
+    assert ping_connection.executed[0][0] == "SET statement_timeout = 250"
+    assert ping_connection.executed[1][0] == 'SET search_path TO "custom", public'
+    assert ping_connection.executed[2][0] == "SELECT 1"
+    assert "FROM information_schema.tables" in schema_connection.executed[2][0]
+
+    not_ready_connection = FakeConnection()
+    not_ready_connection.fetchall_results.append([{"table_name": "workspaces"}])
+    try:
+        postgres._connect = lambda database_url: not_ready_connection
+        not_ready = checker.schema_ready()
+    finally:
+        postgres._connect = original_connect
+
+    assert not_ready is False
+
+
+def test_postgres_workspace_repository_create_update_and_queries() -> None:
+    from ctxledger.db.postgres import PostgresWorkspaceRepository
+
+    connection = FakeConnection()
+    repo = PostgresWorkspaceRepository(connection)
+    workspace = sample_workspace()
+
+    connection.fetchone_results.append(
+        {
+            "workspace_id": workspace.workspace_id,
+            "repo_url": workspace.repo_url,
+            "canonical_path": workspace.canonical_path,
+            "default_branch": workspace.default_branch,
+            "metadata_json": workspace.metadata,
+            "created_at": workspace.created_at,
+            "updated_at": workspace.updated_at,
+        }
+    )
+    created = repo.create(workspace)
+    assert created == workspace
+
+    updated_workspace = Workspace(
+        workspace_id=workspace.workspace_id,
+        repo_url=workspace.repo_url,
+        canonical_path="/tmp/updated-repo",
+        default_branch="develop",
+        metadata={"language": "python", "team": "platform"},
+        created_at=workspace.created_at,
+        updated_at=datetime(2024, 1, 3, tzinfo=UTC),
+    )
+    connection.fetchone_results.append(
+        {
+            "workspace_id": updated_workspace.workspace_id,
+            "repo_url": updated_workspace.repo_url,
+            "canonical_path": updated_workspace.canonical_path,
+            "default_branch": updated_workspace.default_branch,
+            "metadata_json": updated_workspace.metadata,
+            "created_at": updated_workspace.created_at,
+            "updated_at": updated_workspace.updated_at,
+        }
+    )
+    updated = repo.update(updated_workspace)
+    assert updated == updated_workspace
+
+    connection.fetchone_results.append(
+        {
+            "workspace_id": workspace.workspace_id,
+            "repo_url": workspace.repo_url,
+            "canonical_path": workspace.canonical_path,
+            "default_branch": workspace.default_branch,
+            "metadata_json": workspace.metadata,
+            "created_at": workspace.created_at,
+            "updated_at": workspace.updated_at,
+        }
+    )
+    assert repo.get_by_id(workspace.workspace_id) == workspace
+
+    connection.fetchone_results.append(None)
+    assert repo.get_by_id(uuid4()) is None
+
+    connection.fetchone_results.append(
+        {
+            "workspace_id": workspace.workspace_id,
+            "repo_url": workspace.repo_url,
+            "canonical_path": workspace.canonical_path,
+            "default_branch": workspace.default_branch,
+            "metadata_json": workspace.metadata,
+            "created_at": workspace.created_at,
+            "updated_at": workspace.updated_at,
+        }
+    )
+    assert repo.get_by_canonical_path(workspace.canonical_path) == workspace
+
+    connection.fetchall_results.append(
+        [
+            {
+                "workspace_id": workspace.workspace_id,
+                "repo_url": workspace.repo_url,
+                "canonical_path": workspace.canonical_path,
+                "default_branch": workspace.default_branch,
+                "metadata_json": workspace.metadata,
+                "created_at": workspace.created_at,
+                "updated_at": workspace.updated_at,
+            },
+            {
+                "workspace_id": updated_workspace.workspace_id,
+                "repo_url": updated_workspace.repo_url,
+                "canonical_path": updated_workspace.canonical_path,
+                "default_branch": updated_workspace.default_branch,
+                "metadata_json": updated_workspace.metadata,
+                "created_at": updated_workspace.created_at,
+                "updated_at": updated_workspace.updated_at,
+            },
+        ]
+    )
+    by_repo = repo.get_by_repo_url(workspace.repo_url)
+    assert by_repo == [workspace, updated_workspace]
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to insert workspace"):
+        repo.create(workspace)
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to update workspace"):
+        repo.update(workspace)
+
+
+def test_postgres_workflow_instance_repository_create_update_and_list_recent() -> None:
+    from ctxledger.db.postgres import PostgresWorkflowInstanceRepository
+
+    connection = FakeConnection()
+    repo = PostgresWorkflowInstanceRepository(connection)
+    workspace = sample_workspace()
+    workflow = sample_workflow(workspace.workspace_id)
+
+    connection.fetchone_results.append(
+        {
+            "workflow_instance_id": workflow.workflow_instance_id,
+            "workspace_id": workflow.workspace_id,
+            "ticket_id": workflow.ticket_id,
+            "status": workflow.status.value,
+            "metadata_json": workflow.metadata,
+            "created_at": workflow.created_at,
+            "updated_at": workflow.updated_at,
+        }
+    )
+    created = repo.create(workflow)
+    assert created == workflow
+
+    updated_workflow = WorkflowInstance(
+        workflow_instance_id=workflow.workflow_instance_id,
+        workspace_id=workflow.workspace_id,
+        ticket_id="TICKET-456",
+        status=WorkflowInstanceStatus.COMPLETED,
+        metadata={"priority": "low"},
+        created_at=workflow.created_at,
+        updated_at=datetime(2024, 1, 5, tzinfo=UTC),
+    )
+    connection.fetchone_results.append(
+        {
+            "workflow_instance_id": updated_workflow.workflow_instance_id,
+            "workspace_id": updated_workflow.workspace_id,
+            "ticket_id": updated_workflow.ticket_id,
+            "status": updated_workflow.status.value,
+            "metadata_json": updated_workflow.metadata,
+            "created_at": updated_workflow.created_at,
+            "updated_at": updated_workflow.updated_at,
+        }
+    )
+    updated = repo.update(updated_workflow)
+    assert updated == updated_workflow
+
+    connection.fetchone_results.append(
+        {
+            "workflow_instance_id": workflow.workflow_instance_id,
+            "workspace_id": workflow.workspace_id,
+            "ticket_id": workflow.ticket_id,
+            "status": workflow.status.value,
+            "metadata_json": workflow.metadata,
+            "created_at": workflow.created_at,
+            "updated_at": workflow.updated_at,
+        }
+    )
+    assert repo.get_by_id(workflow.workflow_instance_id) == workflow
+
+    connection.fetchone_results.append(
+        {
+            "workflow_instance_id": workflow.workflow_instance_id,
+            "workspace_id": workflow.workspace_id,
+            "ticket_id": workflow.ticket_id,
+            "status": workflow.status.value,
+            "metadata_json": workflow.metadata,
+            "created_at": workflow.created_at,
+            "updated_at": workflow.updated_at,
+        }
+    )
+    assert repo.get_running_by_workspace_id(workflow.workspace_id) == workflow
+
+    connection.fetchone_results.append(
+        {
+            "workflow_instance_id": updated_workflow.workflow_instance_id,
+            "workspace_id": updated_workflow.workspace_id,
+            "ticket_id": updated_workflow.ticket_id,
+            "status": updated_workflow.status.value,
+            "metadata_json": updated_workflow.metadata,
+            "created_at": updated_workflow.created_at,
+            "updated_at": updated_workflow.updated_at,
+        }
+    )
+    assert repo.get_latest_by_workspace_id(workflow.workspace_id) == updated_workflow
+
+    another_workflow = WorkflowInstance(
+        workflow_instance_id=uuid4(),
+        workspace_id=workflow.workspace_id,
+        ticket_id="TICKET-789",
+        status=WorkflowInstanceStatus.RUNNING,
+        metadata={},
+        created_at=datetime(2024, 1, 6, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 7, tzinfo=UTC),
+    )
+    connection.fetchall_results.append(
+        [
+            {
+                "workflow_instance_id": updated_workflow.workflow_instance_id,
+                "workspace_id": updated_workflow.workspace_id,
+                "ticket_id": updated_workflow.ticket_id,
+                "status": updated_workflow.status.value,
+                "metadata_json": updated_workflow.metadata,
+                "created_at": updated_workflow.created_at,
+                "updated_at": updated_workflow.updated_at,
+            },
+            {
+                "workflow_instance_id": another_workflow.workflow_instance_id,
+                "workspace_id": another_workflow.workspace_id,
+                "ticket_id": another_workflow.ticket_id,
+                "status": another_workflow.status.value,
+                "metadata_json": another_workflow.metadata,
+                "created_at": another_workflow.created_at,
+                "updated_at": another_workflow.updated_at,
+            },
+        ]
+    )
+    recent = repo.list_recent(
+        limit=5,
+        status=WorkflowInstanceStatus.RUNNING.value,
+        workspace_id=workflow.workspace_id,
+        ticket_id="TICKET",
+    )
+    assert recent == (updated_workflow, another_workflow)
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to insert workflow instance"):
+        repo.create(workflow)
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to update workflow instance"):
+        repo.update(workflow)
+
+
+def test_postgres_workflow_attempt_repository_create_update_and_next_number() -> None:
+    from ctxledger.db.postgres import PostgresWorkflowAttemptRepository
+
+    connection = FakeConnection()
+    repo = PostgresWorkflowAttemptRepository(connection)
+    attempt = sample_attempt(uuid4())
+
+    connection.fetchone_results.append(
+        {
+            "attempt_id": attempt.attempt_id,
+            "workflow_instance_id": attempt.workflow_instance_id,
+            "attempt_number": attempt.attempt_number,
+            "status": attempt.status.value,
+            "failure_reason": attempt.failure_reason,
+            "verify_status": attempt.verify_status.value,
+            "started_at": attempt.started_at,
+            "finished_at": attempt.finished_at,
+            "created_at": attempt.created_at,
+            "updated_at": attempt.updated_at,
+        }
+    )
+    created = repo.create(attempt)
+    assert created == attempt
+
+    updated_attempt = WorkflowAttempt(
+        attempt_id=attempt.attempt_id,
+        workflow_instance_id=attempt.workflow_instance_id,
+        attempt_number=attempt.attempt_number,
+        status=WorkflowAttemptStatus.SUCCEEDED,
+        failure_reason=None,
+        verify_status=VerifyStatus.PASSED,
+        started_at=attempt.started_at,
+        finished_at=datetime(2024, 1, 6, tzinfo=UTC),
+        created_at=attempt.created_at,
+        updated_at=datetime(2024, 1, 6, tzinfo=UTC),
+    )
+    connection.fetchone_results.append(
+        {
+            "attempt_id": updated_attempt.attempt_id,
+            "workflow_instance_id": updated_attempt.workflow_instance_id,
+            "attempt_number": updated_attempt.attempt_number,
+            "status": updated_attempt.status.value,
+            "failure_reason": updated_attempt.failure_reason,
+            "verify_status": updated_attempt.verify_status.value,
+            "started_at": updated_attempt.started_at,
+            "finished_at": updated_attempt.finished_at,
+            "created_at": updated_attempt.created_at,
+            "updated_at": updated_attempt.updated_at,
+        }
+    )
+    updated = repo.update(updated_attempt)
+    assert updated == updated_attempt
+
+    connection.fetchone_results.append(
+        {
+            "attempt_id": attempt.attempt_id,
+            "workflow_instance_id": attempt.workflow_instance_id,
+            "attempt_number": attempt.attempt_number,
+            "status": attempt.status.value,
+            "failure_reason": attempt.failure_reason,
+            "verify_status": attempt.verify_status.value,
+            "started_at": attempt.started_at,
+            "finished_at": attempt.finished_at,
+            "created_at": attempt.created_at,
+            "updated_at": attempt.updated_at,
+        }
+    )
+    assert repo.get_by_id(attempt.attempt_id) == attempt
+
+    connection.fetchone_results.append(
+        {
+            "attempt_id": attempt.attempt_id,
+            "workflow_instance_id": attempt.workflow_instance_id,
+            "attempt_number": attempt.attempt_number,
+            "status": attempt.status.value,
+            "failure_reason": attempt.failure_reason,
+            "verify_status": attempt.verify_status.value,
+            "started_at": attempt.started_at,
+            "finished_at": attempt.finished_at,
+            "created_at": attempt.created_at,
+            "updated_at": attempt.updated_at,
+        }
+    )
+    assert repo.get_running_by_workflow_id(attempt.workflow_instance_id) == attempt
+
+    connection.fetchone_results.append(
+        {
+            "attempt_id": updated_attempt.attempt_id,
+            "workflow_instance_id": updated_attempt.workflow_instance_id,
+            "attempt_number": updated_attempt.attempt_number,
+            "status": updated_attempt.status.value,
+            "failure_reason": updated_attempt.failure_reason,
+            "verify_status": updated_attempt.verify_status.value,
+            "started_at": updated_attempt.started_at,
+            "finished_at": updated_attempt.finished_at,
+            "created_at": updated_attempt.created_at,
+            "updated_at": updated_attempt.updated_at,
+        }
+    )
+    assert (
+        repo.get_latest_by_workflow_id(attempt.workflow_instance_id) == updated_attempt
+    )
+
+    connection.fetchone_results.append({"max_attempt_number": 3})
+    assert repo.get_next_attempt_number(attempt.workflow_instance_id) == 4
+
+    connection.fetchone_results.append(None)
+    assert repo.get_next_attempt_number(attempt.workflow_instance_id) == 1
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to insert workflow attempt"):
+        repo.create(attempt)
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to update workflow attempt"):
+        repo.update(attempt)
+
+
+def test_postgres_checkpoint_verify_episode_repositories_create_and_lookup() -> None:
+    from ctxledger.db.postgres import (
+        PostgresMemoryEpisodeRepository,
+        PostgresVerifyReportRepository,
+        PostgresWorkflowCheckpointRepository,
+    )
+
+    connection = FakeConnection()
+    checkpoint_repo = PostgresWorkflowCheckpointRepository(connection)
+    verify_repo = PostgresVerifyReportRepository(connection)
+    episode_repo = PostgresMemoryEpisodeRepository(connection)
+
+    workflow = sample_workflow(uuid4())
+    attempt = sample_attempt(workflow.workflow_instance_id)
+    checkpoint = sample_checkpoint(workflow.workflow_instance_id, attempt.attempt_id)
+    verify_report = sample_verify_report(attempt.attempt_id)
+    episode = importlib.import_module("ctxledger.workflow.service").EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow.workflow_instance_id,
+        summary="Episode summary",
+        attempt_id=attempt.attempt_id,
+        metadata={"kind": "checkpoint"},
+        status="recorded",
+        created_at=datetime(2024, 1, 9, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 9, tzinfo=UTC),
+    )
+
+    connection.fetchone_results.append(
+        {
+            "checkpoint_id": checkpoint.checkpoint_id,
+            "workflow_instance_id": checkpoint.workflow_instance_id,
+            "attempt_id": checkpoint.attempt_id,
+            "step_name": checkpoint.step_name,
+            "summary": checkpoint.summary,
+            "checkpoint_json": checkpoint.checkpoint_json,
+            "created_at": checkpoint.created_at,
+        }
+    )
+    assert checkpoint_repo.create(checkpoint) == checkpoint
+
+    connection.fetchone_results.append(
+        {
+            "checkpoint_id": checkpoint.checkpoint_id,
+            "workflow_instance_id": checkpoint.workflow_instance_id,
+            "attempt_id": checkpoint.attempt_id,
+            "step_name": checkpoint.step_name,
+            "summary": checkpoint.summary,
+            "checkpoint_json": checkpoint.checkpoint_json,
+            "created_at": checkpoint.created_at,
+        }
+    )
+    assert (
+        checkpoint_repo.get_latest_by_workflow_id(workflow.workflow_instance_id)
+        == checkpoint
+    )
+
+    connection.fetchone_results.append(
+        {
+            "checkpoint_id": checkpoint.checkpoint_id,
+            "workflow_instance_id": checkpoint.workflow_instance_id,
+            "attempt_id": checkpoint.attempt_id,
+            "step_name": checkpoint.step_name,
+            "summary": checkpoint.summary,
+            "checkpoint_json": checkpoint.checkpoint_json,
+            "created_at": checkpoint.created_at,
+        }
+    )
+    assert checkpoint_repo.get_latest_by_attempt_id(attempt.attempt_id) == checkpoint
+
+    connection.fetchone_results.append(
+        {
+            "verify_id": verify_report.verify_id,
+            "attempt_id": verify_report.attempt_id,
+            "status": verify_report.status.value,
+            "report_json": verify_report.report_json,
+            "created_at": verify_report.created_at,
+        }
+    )
+    assert verify_repo.create(verify_report) == verify_report
+
+    connection.fetchone_results.append(
+        {
+            "verify_id": verify_report.verify_id,
+            "attempt_id": verify_report.attempt_id,
+            "status": verify_report.status.value,
+            "report_json": verify_report.report_json,
+            "created_at": verify_report.created_at,
+        }
+    )
+    assert verify_repo.get_latest_by_attempt_id(attempt.attempt_id) == verify_report
+
+    connection.fetchone_results.append(
+        {
+            "episode_id": episode.episode_id,
+            "workflow_instance_id": episode.workflow_instance_id,
+            "summary": episode.summary,
+            "attempt_id": episode.attempt_id,
+            "metadata_json": episode.metadata,
+            "status": episode.status,
+            "created_at": episode.created_at,
+            "updated_at": episode.updated_at,
+        }
+    )
+    assert episode_repo.create(episode) == episode
+
+    connection.fetchall_results.append(
+        [
+            {
+                "episode_id": episode.episode_id,
+                "workflow_instance_id": episode.workflow_instance_id,
+                "summary": episode.summary,
+                "attempt_id": episode.attempt_id,
+                "metadata_json": episode.metadata,
+                "status": episode.status,
+                "created_at": episode.created_at,
+                "updated_at": episode.updated_at,
+            }
+        ]
+    )
+    assert episode_repo.list_by_workflow_id(workflow.workflow_instance_id, limit=5) == (
+        episode,
+    )
+
+
+def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> None:
+    from ctxledger.db.postgres import (
+        PostgresMemoryEmbeddingRepository,
+        PostgresMemoryItemRepository,
+    )
+
+    connection = FakeConnection()
+    item_repo = PostgresMemoryItemRepository(connection)
+    embedding_repo = PostgresMemoryEmbeddingRepository(connection)
+
+    memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=uuid4(),
+        episode_id=uuid4(),
+        type="episode_note",
+        provenance="episode",
+        content="Stored memory item",
+        metadata={"kind": "note"},
+        created_at=datetime(2024, 1, 8, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 8, tzinfo=UTC),
+    )
+    embedding = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=memory_item.memory_id,
+        embedding_model="test-model",
+        embedding=(0.1, 0.2, 0.3),
+        content_hash="hash-123",
+        created_at=datetime(2024, 1, 9, tzinfo=UTC),
+    )
+
+    connection.fetchone_results.append(
+        {
+            "memory_id": memory_item.memory_id,
+            "workspace_id": memory_item.workspace_id,
+            "episode_id": memory_item.episode_id,
+            "type": memory_item.type,
+            "provenance": memory_item.provenance,
+            "content": memory_item.content,
+            "metadata_json": memory_item.metadata,
+            "created_at": memory_item.created_at,
+            "updated_at": memory_item.updated_at,
+        }
+    )
+    assert item_repo.create(memory_item) == memory_item
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_id": memory_item.memory_id,
+                "workspace_id": memory_item.workspace_id,
+                "episode_id": memory_item.episode_id,
+                "type": memory_item.type,
+                "provenance": memory_item.provenance,
+                "content": memory_item.content,
+                "metadata_json": memory_item.metadata,
+                "created_at": memory_item.created_at,
+                "updated_at": memory_item.updated_at,
+            }
+        ]
+    )
+    assert item_repo.list_by_workspace_id(memory_item.workspace_id, limit=5) == (
+        memory_item,
+    )
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_id": memory_item.memory_id,
+                "workspace_id": memory_item.workspace_id,
+                "episode_id": memory_item.episode_id,
+                "type": memory_item.type,
+                "provenance": memory_item.provenance,
+                "content": memory_item.content,
+                "metadata_json": memory_item.metadata,
+                "created_at": memory_item.created_at,
+                "updated_at": memory_item.updated_at,
+            }
+        ]
+    )
+    assert item_repo.list_by_episode_id(memory_item.episode_id, limit=5) == (
+        memory_item,
+    )
+
+    connection.fetchone_results.append(
+        {
+            "memory_embedding_id": embedding.memory_embedding_id,
+            "memory_id": embedding.memory_id,
+            "embedding_model": embedding.embedding_model,
+            "embedding": "[0.1,0.2,0.3]",
+            "content_hash": embedding.content_hash,
+            "created_at": embedding.created_at,
+        }
+    )
+    created_embedding = embedding_repo.create(embedding)
+    assert created_embedding.embedding == (0.1, 0.2, 0.3)
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_embedding_id": embedding.memory_embedding_id,
+                "memory_id": embedding.memory_id,
+                "embedding_model": embedding.embedding_model,
+                "embedding": [0.1, 0.2, 0.3],
+                "content_hash": embedding.content_hash,
+                "created_at": embedding.created_at,
+            }
+        ]
+    )
+    listed = embedding_repo.list_by_memory_id(memory_item.memory_id, limit=5)
+    assert len(listed) == 1
+    assert listed[0].embedding == (0.1, 0.2, 0.3)
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_embedding_id": embedding.memory_embedding_id,
+                "memory_id": embedding.memory_id,
+                "embedding_model": embedding.embedding_model,
+                "embedding": "[0.1,0.2,0.3]",
+                "content_hash": embedding.content_hash,
+                "created_at": embedding.created_at,
+            }
+        ]
+    )
+    similar = embedding_repo.find_similar((0.1, 0.2, 0.3), limit=3)
+    assert len(similar) == 1
+    assert similar[0].memory_id == memory_item.memory_id
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_embedding_id": embedding.memory_embedding_id,
+                "memory_id": embedding.memory_id,
+                "embedding_model": embedding.embedding_model,
+                "embedding": "[0.1,0.2,0.3]",
+                "content_hash": embedding.content_hash,
+                "created_at": embedding.created_at,
+            }
+        ]
+    )
+    similar_with_workspace = embedding_repo.find_similar(
+        (0.1, 0.2, 0.3),
+        limit=3,
+        workspace_id=memory_item.workspace_id,
+    )
+    assert len(similar_with_workspace) == 1
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to create memory item"):
+        item_repo.create(memory_item)
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to create memory embedding"):
+        embedding_repo.create(embedding)
+
+
+def test_postgres_projection_state_and_failure_repositories_cover_main_paths() -> None:
+    from ctxledger.db.postgres import (
+        PostgresProjectionFailureRepository,
+        PostgresProjectionStateRepository,
+    )
+
+    connection = FakeConnection()
+    state_repo = PostgresProjectionStateRepository(connection)
+    failure_repo = PostgresProjectionFailureRepository(connection)
+
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+    attempt_id = uuid4()
+
+    state_projection = RecordProjectionStateInput(
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        status=ProjectionStatus.FRESH,
+        target_path=".agent/resume.json",
+        last_successful_write_at=datetime(2024, 1, 1, tzinfo=UTC),
+        last_canonical_update_at=datetime(2024, 1, 2, tzinfo=UTC),
+    )
+    state_repo.record_resume_projection(state_projection)
+    assert "INSERT INTO projection_states" in connection.executed[0][0]
+
+    connection.fetchall_results.append(
+        [
+            {
+                "projection_type": "resume_json",
+                "status": "fresh",
+                "target_path": ".agent/resume.json",
+                "last_successful_write_at": datetime(2024, 1, 1, tzinfo=UTC),
+                "last_canonical_update_at": datetime(2024, 1, 2, tzinfo=UTC),
+                "open_failure_count": 2,
+            }
+        ]
+    )
+    projections = state_repo.get_resume_projections(workspace_id, workflow_instance_id)
+    assert projections == (
+        ProjectionInfo(
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            status=ProjectionStatus.FRESH,
+            target_path=".agent/resume.json",
+            last_successful_write_at=datetime(2024, 1, 1, tzinfo=UTC),
+            last_canonical_update_at=datetime(2024, 1, 2, tzinfo=UTC),
+            open_failure_count=2,
+        ),
+    )
+
+    connection.fetchall_results.append(
+        [
+            {
+                "projection_type": "resume_json",
+                "attempt_id": attempt_id,
+                "error_code": "io_error",
+                "error_message": "write failed",
+                "target_path": ".agent/resume.json",
+                "retry_count": 1,
+                "occurred_at": datetime(2024, 1, 3, tzinfo=UTC),
+                "resolved_at": None,
+                "status": "open",
+            }
+        ]
+    )
+    listed = failure_repo.list_failures(limit=5, status=None)
+    assert len(listed) == 1
+    assert listed[0].status == "open"
+    assert listed[0].open_failure_count == 1
+
+    connection.fetchall_results.append(
+        [
+            {
+                "projection_type": "resume_json",
+                "attempt_id": attempt_id,
+                "error_code": "io_error",
+                "error_message": "write failed",
+                "target_path": ".agent/resume.json",
+                "retry_count": 1,
+                "occurred_at": datetime(2024, 1, 3, tzinfo=UTC),
+                "resolved_at": None,
+                "status": "open",
+            }
+        ]
+    )
+    open_failures = failure_repo.get_open_failures_by_workflow_id(
+        workspace_id,
+        workflow_instance_id,
+    )
+    assert len(open_failures) == 1
+    assert open_failures[0].status == "open"
+
+    connection.fetchall_results.append(
+        [
+            {
+                "projection_type": "resume_md",
+                "attempt_id": None,
+                "error_code": None,
+                "error_message": "ignored once",
+                "target_path": ".agent/resume.md",
+                "retry_count": 2,
+                "occurred_at": datetime(2024, 1, 4, tzinfo=UTC),
+                "resolved_at": datetime(2024, 1, 5, tzinfo=UTC),
+                "status": "ignored",
+            }
+        ]
+    )
+    closed_failures = failure_repo.get_closed_failures_by_workflow_id(
+        workspace_id,
+        workflow_instance_id,
+    )
+    assert len(closed_failures) == 1
+    assert closed_failures[0].status == "ignored"
+
+    connection.fetchone_results.append({"failure_count": 0})
+    connection.fetchone_results.append({"failure_count": 1})
+    recorded = failure_repo.record_resume_projection_failure(
+        RecordProjectionFailureInput(
+            workspace_id=workspace_id,
+            workflow_instance_id=workflow_instance_id,
+            projection_type=ProjectionArtifactType.RESUME_JSON,
+            target_path=".agent/resume.json",
+            error_message="write failed",
+            attempt_id=attempt_id,
+            error_code="io_error",
+        )
+    )
+    assert recorded.status == "open"
+    assert recorded.open_failure_count == 1
+    assert recorded.retry_count == 0
+
+    class RowCountCursor(FakeCursor):
+        def __init__(self, connection: FakeConnection, rowcount: int) -> None:
+            super().__init__(connection)
+            self.rowcount = rowcount
+
+    class RowCountConnection(FakeConnection):
+        def __init__(self, rowcount: int) -> None:
+            super().__init__()
+            self._rowcount = rowcount
+
+        def cursor(self) -> FakeCursor:
+            return RowCountCursor(self, self._rowcount)
+
+    resolved_connection = RowCountConnection(2)
+    resolved_repo = PostgresProjectionFailureRepository(resolved_connection)
+    assert (
+        resolved_repo.resolve_resume_projection_failures(
+            workspace_id,
+            workflow_instance_id,
+        )
+        == 2
+    )
+
+    ignored_connection = RowCountConnection(3)
+    ignored_repo = PostgresProjectionFailureRepository(ignored_connection)
+    assert (
+        ignored_repo.ignore_resume_projection_failures(
+            workspace_id,
+            workflow_instance_id,
+            ProjectionArtifactType.RESUME_MD,
+        )
+        == 3
+    )
+
+
+def test_postgres_unit_of_work_and_factory_cover_pool_lifecycle() -> None:
+    from ctxledger.db.postgres import (
+        PostgresConfig,
+        PostgresUnitOfWork,
+        build_postgres_uow_factory,
+    )
+
+    connection = FakeConnection()
+
+    class PoolConnectionContext:
+        def __init__(self, conn: FakeConnection) -> None:
+            self._conn = conn
+            self.exit_calls: list[tuple[object, object, object]] = []
+
+        def __enter__(self) -> FakeConnection:
+            return self._conn
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            self.exit_calls.append((exc_type, exc, tb))
+
+    class FakePool:
+        def __init__(self, conn: FakeConnection) -> None:
+            self._context = PoolConnectionContext(conn)
+
+        def connection(self) -> PoolConnectionContext:
+            return self._context
+
+    config = PostgresConfig(
+        database_url="postgresql://example/db",
+        statement_timeout_ms=123,
+        schema_name="custom",
+    )
+    pool = FakePool(connection)
+    uow = PostgresUnitOfWork(config, pool)
+
+    with uow as current:
+        assert current.workspaces is not None
+        assert current.workflow_instances is not None
+        assert current.workflow_attempts is not None
+        assert current.workflow_checkpoints is not None
+        assert current.verify_reports is not None
+        assert current.memory_items is not None
+        assert current.memory_embeddings is not None
+        assert current.projection_states is not None
+        assert current.projection_failures is not None
+        current.commit()
+
+    assert connection.commit_calls == 1
+    assert connection.rollback_calls == 0
+    assert pool._context.exit_calls == [(None, None, None)]
+    assert connection.executed[0][0] == "SET statement_timeout = 123"
+    assert connection.executed[1][0] == 'SET search_path TO "custom", public'
+
+    rollback_connection = FakeConnection()
+    rollback_pool = FakePool(rollback_connection)
+    rollback_uow = PostgresUnitOfWork(config, rollback_pool)
+    with rollback_uow:
+        pass
+
+    assert rollback_connection.commit_calls == 0
+    assert rollback_connection.rollback_calls == 1
+
+    exception_connection = FakeConnection()
+    exception_pool = FakePool(exception_connection)
+    exception_uow = PostgresUnitOfWork(config, exception_pool)
+    with pytest.raises(RuntimeError, match="boom"):
+        with exception_uow:
+            raise RuntimeError("boom")
+
+    assert exception_connection.rollback_calls == 1
+
+    inactive_uow = PostgresUnitOfWork(config, pool)
+    with pytest.raises(PersistenceError, match="Unit of work is not active"):
+        inactive_uow.commit()
+    with pytest.raises(PersistenceError, match="Unit of work is not active"):
+        inactive_uow.rollback()
+
+    factory = build_postgres_uow_factory(config, pool)
+    produced_uow = factory()
+    assert isinstance(produced_uow, PostgresUnitOfWork)
+
+    with pytest.raises(
+        ValueError,
+        match="A shared PostgreSQL connection pool is required",
+    ):
+        build_postgres_uow_factory(config, None)
+
+
+def test_postgres_row_mapping_helpers_cover_memory_records() -> None:
+    postgres = importlib.import_module("ctxledger.db.postgres")
+    memory_id = uuid4()
+    workspace_id = uuid4()
+    episode_id = uuid4()
+    embedding_id = uuid4()
+
+    item_record = postgres._memory_item_row_to_record(
+        {
+            "memory_id": memory_id,
+            "workspace_id": workspace_id,
+            "episode_id": episode_id,
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "Memory item content",
+            "metadata_json": {"kind": "note"},
+            "created_at": datetime(2024, 1, 1, tzinfo=UTC),
+            "updated_at": datetime(2024, 1, 2, tzinfo=UTC),
+        }
+    )
+    assert item_record.memory_id == memory_id
+    assert item_record.workspace_id == workspace_id
+    assert item_record.episode_id == episode_id
+
+    item_without_optional_ids = postgres._memory_item_row_to_record(
+        {
+            "memory_id": memory_id,
+            "workspace_id": None,
+            "episode_id": None,
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "Memory item content",
+            "metadata_json": None,
+            "created_at": datetime(2024, 1, 1, tzinfo=UTC),
+            "updated_at": datetime(2024, 1, 2, tzinfo=UTC),
+        }
+    )
+    assert item_without_optional_ids.workspace_id is None
+    assert item_without_optional_ids.episode_id is None
+    assert item_without_optional_ids.metadata == {}
+
+    embedding_record = postgres._memory_embedding_row_to_record(
+        {
+            "memory_embedding_id": embedding_id,
+            "memory_id": memory_id,
+            "embedding_model": "test-model",
+            "embedding": "[1,2.5]",
+            "content_hash": "hash-123",
+            "created_at": datetime(2024, 1, 3, tzinfo=UTC),
+        }
+    )
+    assert embedding_record.memory_embedding_id == embedding_id
+    assert embedding_record.embedding == (1.0, 2.5)
+    assert embedding_record.content_hash == "hash-123"
+
+    embedding_without_hash = postgres._memory_embedding_row_to_record(
+        {
+            "memory_embedding_id": embedding_id,
+            "memory_id": memory_id,
+            "embedding_model": "test-model",
+            "embedding": None,
+            "content_hash": None,
+            "created_at": datetime(2024, 1, 3, tzinfo=UTC),
+        }
+    )
+    assert embedding_without_hash.embedding == ()
+    assert embedding_without_hash.content_hash is None
+
+
+def test_postgres_connect_requires_driver_and_passes_row_factory() -> None:
+    postgres = importlib.import_module("ctxledger.db.postgres")
+    original_psycopg = postgres.psycopg
+    original_dict_row = postgres.dict_row
+
+    try:
+        postgres.psycopg = None
+        postgres.dict_row = None
+        with pytest.raises(RuntimeError, match="psycopg is required"):
+            postgres._require_psycopg()
+
+        class FakePsycopg:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, object]] = []
+
+            def connect(self, database_url: str, row_factory: object = None) -> str:
+                self.calls.append((database_url, row_factory))
+                return "CONNECTION"
+
+        fake_psycopg = FakePsycopg()
+        postgres.psycopg = fake_psycopg
+        postgres.dict_row = "DICT_ROW"
+        connection = postgres._connect("postgresql://example/db")
+    finally:
+        postgres.psycopg = original_psycopg
+        postgres.dict_row = original_dict_row
+
+    assert connection == "CONNECTION"
+    assert fake_psycopg.calls == [("postgresql://example/db", "DICT_ROW")]
+
+
+def test_postgres_relation_and_projection_count_helpers_cover_edge_cases() -> None:
+    from ctxledger.db.postgres import (
+        PostgresMemoryRelationRepository,
+        PostgresProjectionFailureRepository,
+    )
+
+    relation_connection = FakeConnection()
+    relation_repo = PostgresMemoryRelationRepository(relation_connection)
+
+    relation_connection.fetchone_results.append({"count": 0})
+    assert relation_repo.count_all() == 0
+
+    relation_connection.fetchone_results.append(
+        {"value": datetime(2024, 1, 1, tzinfo=UTC)}
+    )
+    assert relation_repo.max_datetime("created_at") == datetime(2024, 1, 1, tzinfo=UTC)
+
+    with pytest.raises(
+        PersistenceError,
+        match="Unsupported datetime field 'updated_at' for memory_relations",
+    ):
+        relation_repo.max_datetime("updated_at")
+
+    failure_connection = FakeConnection()
+    failure_repo = PostgresProjectionFailureRepository(failure_connection)
+
+    failure_connection.fetchone_results.append({"count": 0})
+    assert failure_repo.count_open_failures() == 0
+
+    failure_connection.fetchall_results.append([])
+    assert failure_repo.list_failures(limit=3, status="resolved") == ()
+
+    failure_connection.fetchall_results.append([])
+    assert failure_repo.get_open_failures_by_workflow_id(uuid4(), uuid4()) == []
+
+    failure_connection.fetchall_results.append([])
+    assert failure_repo.get_closed_failures_by_workflow_id(uuid4(), uuid4()) == []

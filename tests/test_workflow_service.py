@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -3724,3 +3725,474 @@ def test_record_resume_projection_fresh_status_fills_missing_timestamps() -> Non
     assert recorded.last_canonical_update_at is not None
     assert recorded.last_canonical_update_at == recorded.last_successful_write_at
     assert recorded.open_failure_count == 0
+
+
+def test_repository_contract_base_methods_cover_remaining_not_implemented_branches() -> (
+    None
+):
+    from ctxledger.workflow.service import (
+        MemoryEmbeddingRepository,
+        MemoryEpisodeRepository,
+        MemoryItemRepository,
+        ProjectionFailureRepository,
+        WorkflowInstanceRepository,
+    )
+
+    episode_repo = MemoryEpisodeRepository()
+    workflow_repo = WorkflowInstanceRepository()
+    projection_failure_repo = ProjectionFailureRepository()
+    memory_item_repo = MemoryItemRepository()
+    memory_embedding_repo = MemoryEmbeddingRepository()
+
+    with pytest.raises(NotImplementedError):
+        episode_repo.create(
+            EpisodeRecord(
+                episode_id=uuid4(),
+                workflow_instance_id=uuid4(),
+                summary="episode",
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        episode_repo.list_by_workflow_id(uuid4(), limit=1)
+
+    with pytest.raises(NotImplementedError):
+        workflow_repo.list_by_workspace_id(uuid4(), limit=1)
+
+    with pytest.raises(NotImplementedError):
+        workflow_repo.list_by_ticket_id("TICKET-1", limit=1)
+
+    with pytest.raises(NotImplementedError):
+        workflow_repo.list_recent(limit=1)
+
+    with pytest.raises(NotImplementedError):
+        projection_failure_repo.list_failures(limit=1)
+
+    with pytest.raises(NotImplementedError):
+        memory_item_repo.count_by_provenance()
+
+    with pytest.raises(NotImplementedError):
+        memory_embedding_repo.list_by_memory_id(uuid4(), limit=1)
+
+
+def test_status_count_dict_and_grouped_status_zero_fill_behavior() -> None:
+    from ctxledger.workflow.service import _status_count_dict
+
+    counts = _status_count_dict(
+        ("running", "completed", "failed"),
+        {"running": 2, "failed": 1, "ignored": 99},
+    )
+
+    assert counts == {
+        "running": 2,
+        "completed": 0,
+        "failed": 1,
+    }
+
+
+def test_resume_workflow_debug_logging_path_executes_without_changing_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="DEBUG-RESUME",
+        )
+    )
+    checkpoint_result = service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="debug_resume",
+            summary="Checkpoint for debug logging coverage",
+            checkpoint_json={"next_intended_action": "Resume with debug enabled"},
+        )
+    )
+
+    logger = importlib.import_module("ctxledger.workflow.service").logger
+    monkeypatch.setattr(logger, "isEnabledFor", lambda level: level == logging.DEBUG)
+
+    debug_messages: list[tuple[str, dict[str, object] | None]] = []
+
+    def fake_debug(message: str, *args: object, **kwargs: object) -> None:
+        debug_messages.append((message, kwargs.get("extra")))
+
+    monkeypatch.setattr(logger, "debug", fake_debug)
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert resume.workspace.workspace_id == workspace.workspace_id
+    assert resume.attempt is not None
+    assert resume.latest_checkpoint is not None
+    assert (
+        resume.latest_checkpoint.checkpoint_id
+        == checkpoint_result.checkpoint.checkpoint_id
+    )
+    assert len(debug_messages) >= 6
+    assert debug_messages[0][0] == "resume_workflow started"
+    assert any(message == "resume_workflow complete" for message, _ in debug_messages)
+
+
+def test_complete_workflow_returns_default_auto_memory_details_when_bridge_returns_none() -> (
+    None
+):
+    class NoneReturningBridge:
+        embedding_generator = None
+
+        def record_workflow_completion_memory(self, **kwargs: object) -> None:
+            return None
+
+    service, _ = make_service_and_uow(
+        workflow_memory_bridge=NoneReturningBridge()  # type: ignore[arg-type]
+    )
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="AUTO-MEMORY-NONE",
+        )
+    )
+
+    result = service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+        )
+    )
+
+    assert result.auto_memory_details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "no_completion_summary_source",
+    }
+    assert result.warnings == ()
+
+
+def test_complete_workflow_adds_embedding_warning_when_auto_memory_embedding_fails() -> (
+    None
+):
+    class EmbeddingFailureBridge:
+        embedding_generator = None
+
+        def record_workflow_completion_memory(self, **kwargs: object):
+            return SimpleNamespace(
+                details={
+                    "auto_memory_recorded": True,
+                    "embedding_persistence_status": "failed",
+                    "embedding_generation_skipped_reason": "embedding_generation_failed:test",
+                    "embedding_generation_failure": {
+                        "provider": "test",
+                        "message": "boom",
+                    },
+                }
+            )
+
+    service, _ = make_service_and_uow(
+        workflow_memory_bridge=EmbeddingFailureBridge()  # type: ignore[arg-type]
+    )
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="AUTO-MEMORY-EMBEDDING-FAIL",
+        )
+    )
+
+    result = service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+        )
+    )
+
+    assert result.auto_memory_details == {
+        "auto_memory_recorded": True,
+        "embedding_persistence_status": "failed",
+        "embedding_generation_skipped_reason": "embedding_generation_failed:test",
+        "embedding_generation_failure": {
+            "provider": "test",
+            "message": "boom",
+        },
+    }
+    assert len(result.warnings) == 1
+    assert result.warnings[0].code == "auto_memory_embedding_failed"
+    assert result.warnings[0].details == {
+        "embedding_generation_skipped_reason": "embedding_generation_failed:test",
+        "embedding_generation_failure": {
+            "provider": "test",
+            "message": "boom",
+        },
+    }
+
+
+def test_reconcile_resume_projection_records_failures_without_success_updates() -> None:
+    service = WorkflowService(lambda: None)
+
+    recorded_failures: list[RecordProjectionFailureInput] = []
+
+    def fake_record_resume_projection_failure(
+        data: RecordProjectionFailureInput,
+    ) -> ProjectionFailureInfo:
+        recorded_failures.append(data)
+        return ProjectionFailureInfo(
+            projection_type=data.projection_type,
+            error_code=data.error_code,
+            error_message=data.error_message,
+            target_path=data.target_path,
+            attempt_id=data.attempt_id,
+            open_failure_count=1,
+            retry_count=0,
+            status="open",
+        )
+
+    service.record_resume_projection_failure = (  # type: ignore[method-assign]
+        fake_record_resume_projection_failure
+    )
+
+    failure = RecordProjectionFailureInput(
+        workspace_id=uuid4(),
+        workflow_instance_id=uuid4(),
+        attempt_id=uuid4(),
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        target_path=".agent/resume.json",
+        error_message="write failed",
+        error_code="io_error",
+    )
+
+    reconciled = service.reconcile_resume_projection(
+        success_updates=(),
+        failure_updates=(failure,),
+    )
+
+    assert reconciled == ()
+    assert recorded_failures == [failure]
+
+
+def test_reconcile_resume_projection_resolves_each_key_once_across_duplicate_success_updates() -> (
+    None
+):
+    service = WorkflowService(lambda: None)
+
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    first_json = RecordProjectionStateInput(
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        status=ProjectionStatus.STALE,
+        target_path=".agent/resume.json",
+    )
+    second_json = RecordProjectionStateInput(
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        status=ProjectionStatus.FRESH,
+        target_path=".agent/resume.json",
+    )
+    markdown = RecordProjectionStateInput(
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        projection_type=ProjectionArtifactType.RESUME_MD,
+        status=ProjectionStatus.FRESH,
+        target_path=".agent/resume.md",
+    )
+
+    resolved_calls: list[tuple[UUID, UUID, ProjectionArtifactType | None]] = []
+    recorded_states: list[RecordProjectionStateInput] = []
+
+    def fake_resolve_resume_projection_failures(
+        *,
+        workspace_id: UUID,
+        workflow_instance_id: UUID,
+        projection_type: ProjectionArtifactType | None = None,
+    ) -> int:
+        resolved_calls.append((workspace_id, workflow_instance_id, projection_type))
+        return 1
+
+    def fake_record_resume_projection(
+        data: RecordProjectionStateInput,
+    ) -> ProjectionInfo:
+        recorded_states.append(data)
+        return ProjectionInfo(
+            projection_type=data.projection_type,
+            status=data.status,
+            target_path=data.target_path,
+            last_successful_write_at=data.last_successful_write_at,
+            last_canonical_update_at=data.last_canonical_update_at,
+            open_failure_count=0,
+        )
+
+    service.resolve_resume_projection_failures = (  # type: ignore[method-assign]
+        fake_resolve_resume_projection_failures
+    )
+    service.record_resume_projection = fake_record_resume_projection  # type: ignore[method-assign]
+
+    reconciled = service.reconcile_resume_projection(
+        success_updates=(first_json, second_json, markdown),
+        failure_updates=(),
+    )
+
+    assert [projection.projection_type for projection in reconciled] == [
+        ProjectionArtifactType.RESUME_JSON,
+        ProjectionArtifactType.RESUME_JSON,
+        ProjectionArtifactType.RESUME_MD,
+    ]
+    assert resolved_calls == [
+        (workspace_id, workflow_instance_id, ProjectionArtifactType.RESUME_JSON),
+        (workspace_id, workflow_instance_id, ProjectionArtifactType.RESUME_MD),
+    ]
+    assert recorded_states == [first_json, second_json, markdown]
+
+
+def test_stats_helpers_cover_records_by_id_and_values_by_id_paths() -> None:
+    service = WorkflowService(lambda: None)
+    now = datetime(2024, 1, 10, tzinfo=UTC)
+
+    records_repo = SimpleNamespace(
+        _records_by_id={
+            uuid4(): SimpleNamespace(
+                status=WorkflowInstanceStatus.RUNNING,
+                updated_at=now,
+            ),
+            uuid4(): SimpleNamespace(
+                status=WorkflowInstanceStatus.COMPLETED,
+                updated_at=now.replace(day=11),
+            ),
+        }
+    )
+    values_repo = SimpleNamespace(
+        _values_by_id={
+            uuid4(): SimpleNamespace(
+                status=VerifyStatus.PASSED,
+                created_at=now,
+            ),
+            uuid4(): SimpleNamespace(
+                status=VerifyStatus.FAILED,
+                created_at=now.replace(day=12),
+            ),
+        }
+    )
+
+    records_count = service._count_rows(
+        SimpleNamespace(workflow_instances=records_repo),
+        "workflow_instances",
+    )
+    values_count = service._count_rows(
+        SimpleNamespace(verify_reports=values_repo),
+        "verify_reports",
+    )
+    grouped_records = service._count_grouped_statuses(
+        SimpleNamespace(workflow_instances=records_repo),
+        repository_name="workflow_instances",
+        allowed_statuses=(
+            WorkflowInstanceStatus.RUNNING.value,
+            WorkflowInstanceStatus.COMPLETED.value,
+            WorkflowInstanceStatus.FAILED.value,
+        ),
+    )
+    grouped_values = service._count_grouped_statuses(
+        SimpleNamespace(verify_reports=values_repo),
+        repository_name="verify_reports",
+        allowed_statuses=(
+            VerifyStatus.PASSED.value,
+            VerifyStatus.FAILED.value,
+            VerifyStatus.SKIPPED.value,
+        ),
+    )
+    max_records = service._max_datetime_field(
+        SimpleNamespace(workflow_instances=records_repo),
+        repository_name="workflow_instances",
+        field_name="updated_at",
+    )
+    max_values = service._max_datetime_field(
+        SimpleNamespace(verify_reports=values_repo),
+        repository_name="verify_reports",
+        field_name="created_at",
+    )
+
+    assert records_count == 2
+    assert values_count == 2
+    assert grouped_records == {
+        "running": 1,
+        "completed": 1,
+        "failed": 0,
+    }
+    assert grouped_values == {
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0,
+    }
+    assert max_records == now.replace(day=11)
+    assert max_values == now.replace(day=12)
+
+
+def test_stats_helpers_cover_projection_state_and_failure_backing_dict_paths() -> None:
+    service = WorkflowService(lambda: None)
+
+    projection_states_repo = SimpleNamespace(
+        _projection_states_by_key={
+            (uuid4(), uuid4(), ProjectionArtifactType.RESUME_JSON): ProjectionInfo(
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                status=ProjectionStatus.FRESH,
+                target_path=".agent/resume.json",
+            ),
+            (uuid4(), uuid4(), ProjectionArtifactType.RESUME_MD): ProjectionInfo(
+                projection_type=ProjectionArtifactType.RESUME_MD,
+                status=ProjectionStatus.STALE,
+                target_path=".agent/resume.md",
+            ),
+        }
+    )
+    projection_failures_repo = SimpleNamespace(
+        _failures_by_key={
+            (uuid4(), uuid4(), ProjectionArtifactType.RESUME_JSON): [
+                ProjectionFailureInfo(
+                    projection_type=ProjectionArtifactType.RESUME_JSON,
+                    error_code="io_error",
+                    error_message="open failure",
+                    target_path=".agent/resume.json",
+                    status="open",
+                ),
+                ProjectionFailureInfo(
+                    projection_type=ProjectionArtifactType.RESUME_JSON,
+                    error_code="resolved_error",
+                    error_message="resolved failure",
+                    target_path=".agent/resume.json",
+                    status="resolved",
+                ),
+            ],
+            (uuid4(), uuid4(), ProjectionArtifactType.RESUME_MD): [
+                ProjectionFailureInfo(
+                    projection_type=ProjectionArtifactType.RESUME_MD,
+                    error_code="open_md",
+                    error_message="another open failure",
+                    target_path=".agent/resume.md",
+                    status="open",
+                )
+            ],
+        }
+    )
+
+    projection_state_count = service._count_rows(
+        SimpleNamespace(projection_states=projection_states_repo),
+        "projection_states",
+    )
+    projection_failure_count = service._count_rows(
+        SimpleNamespace(projection_failures=projection_failures_repo),
+        "projection_failures",
+    )
+    open_projection_failure_count = service._count_open_projection_failures(
+        SimpleNamespace(projection_failures=projection_failures_repo)
+    )
+
+    assert projection_state_count == 2
+    assert projection_failure_count == 3
+    assert open_projection_failure_count == 2
