@@ -168,6 +168,25 @@ Expected themes:
 
 Planned focus:
 
+- targeted refactoring across `src/` and `tests/`
+- file-by-file consolidation of duplicated logic and overlapping responsibilities
+- cross-file consolidation of duplicated logic, helper behavior, and reusable patterns
+- reduction of maintenance overhead without changing externally expected behavior
+- safer internal structure to support later feature work
+
+Expected themes:
+
+- identify duplicate logic within individual files first
+- extract or reorganize repeated code paths inside the same module before broader moves
+- identify duplication across modules only after file-local cleanup is stable
+- improve internal boundaries, naming, helper placement, and reuse
+- preserve current behavior through incremental, test-backed refactoring
+- avoid release claims that depend on new product features rather than structural cleanup
+
+## 0.6
+
+Planned focus:
+
 - hierarchical memory retrieval
 - summary layers
 - relation-aware context assembly
@@ -190,13 +209,11 @@ Expected themes:
 
 ## Immediate next steps
 
-- finish aligning release-facing docs with the implemented `0.3.0` memory search surface
-- keep the documented `memory_get_context` details contract aligned with the implemented episode-oriented `0.2.0` scope
-- clarify the intended meaning difference between `matched_episode_count` and `episodes_returned`
-- continue refining lightweight filtering and relevance behavior without conflating it with later `0.5` hierarchical retrieval work
-- refresh README and API docs to reflect the current memory tool reality
-- decide the `0.3.0` release boundary for embedding provider support and document it explicitly
-- keep versioning aligned with the highest release scope that the implementation and docs can honestly support
+- create and document a `0.5.0` refactoring plan focused on preserving current behavior while improving internal structure
+- start with file-local duplication review across `src/` and `tests/`
+- follow with cross-file duplication review only after file-local cleanup candidates are identified
+- define refactoring sequencing, safety rules, and validation expectations before broad code movement
+- keep the `0.6.0` hierarchical retrieval scope clearly deferred while `0.5.0` is dedicated to refactoring
 
 ## 0.0
 

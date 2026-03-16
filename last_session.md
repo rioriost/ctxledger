@@ -1,107 +1,104 @@
 # ctxledger last session
 
 ## Summary
-`0.3.0` is now effectively closed out.
+`0.4.0` is now effectively closed out.
 
-The repository was revalidated after stale test expectations were corrected, the docs were aligned with the actual implemented scope, and the release tag was created.
-
-The next planned work is `0.4.0`, which is now defined as the **observability milestone**:
+The observability milestone was completed with:
 - operator-facing CLI inspection/reporting
-- optional deployable **Grafana-based** dashboard support
+- optional deployable Grafana-based dashboard support
+- versioning and runtime-visible metadata aligned to `0.4.0`
+- docs and dashboard/operator UX polished for the release boundary
 
-Hierarchical memory retrieval is no longer the `0.4.0` focus.
-That work has been shifted to `0.5.0`.
+The repository is now ready to begin `0.5.0`.
 
-## Final 0.3.0 status
+## Final 0.4.0 status
 ### Validation
-- focused duplicate-closeout rerun passed:
-  - `python -m pytest tests/test_coverage_targets.py -q -k old_episode_and_non_auto_memory_paths`
-  - `1 passed`
-- full suite rerun passed:
+- focused coverage-target suite passed:
+  - `python -m pytest tests/test_coverage_targets.py -q`
+  - `237 passed`
+- full suite passed:
   - `python -m pytest -q`
-  - `780 passed, 1 skipped`
+  - `799 passed, 1 skipped`
 
 ### Skipped test
 The single skipped test is expected:
 - real OpenAI integration requires `OPENAI_API_KEY`
 
 ### Release judgment
-- internal `0.3.0` release judgment: **GO**
-- provider wording should remain honest:
-  - strongest validated paths:
-    - `openai`
-    - `local_stub`
-    - `custom_http`
-  - `voyageai` and `cohere` config surfaces exist, but full provider-specific runtime support remains incomplete
-- `memory_get_context` should still be described as:
-  - episode-oriented
-  - not yet a finished hierarchical retrieval surface
+- internal `0.4.0` release judgment: **GO**
+- release tag created:
+  - `v0.4.0`
 
 ## Important implementation/result notes
-### Duplicate closeout behavior
-A stale expectation in `tests/test_coverage_targets.py` was corrected.
+### Observability CLI surfaces
+The following operator-facing commands are implemented and validated:
+- `ctxledger stats`
+- `ctxledger workflows`
+- `ctxledger memory-stats`
+- `ctxledger failures`
 
-Current behavior:
-- exact-summary duplicate suppression still applies to prior auto-memory episodes even when the prior episode is old
-- `_recent_workflow_completion_memory()` filters to:
-  - `memory_origin == "workflow_complete_auto"`
-- exact normalized-summary equality is checked before the near-duplicate time-window gate
-- non-auto episodes are ignored for that duplicate path
+Current CLI capabilities include:
+- text output
+- `--format json`
 
-Correct expected result:
-- `AutoMemoryDuplicateCheckResult(should_record=False, skipped_reason="duplicate_closeout_auto_memory")`
+Additional implemented filtering/reporting:
+- `ctxledger workflows`
+  - `--limit`
+  - `--status`
+  - `--workspace-id`
+  - `--ticket-id`
+- `ctxledger failures`
+  - `--limit`
+  - `--status`
+  - `--open-only`
 
-### Runtime auto-memory + embeddings
-The runtime `workflow_complete` auto-memory path was debugged end-to-end.
+### Grafana support
+Grafana deployment support is now in place with:
+- Compose overlay support
+- datasource provisioning
+- dashboard provisioning
+- initial dashboards for:
+  - runtime overview
+  - memory overview
+  - failure overview
 
-Confirmed:
-- `OPENAI_API_KEY` forwarding was working
-- direct `memory_remember_episode` with OpenAI embeddings was healthy
-- the runtime blocker was a stale live PostgreSQL constraint:
-  - `memory_items_provenance_valid`
-- after updating the live constraint to allow:
-  - `workflow_complete_auto`
-- MCP/runtime closeout auto-memory stored:
-  - the episode
-  - the memory item
-  - the OpenAI embedding
+Important live/dashboard notes:
+- dashboards must use datasource UID:
+  - `ctxledger-postgres`
+- table rendering issues caused by panel-wide datetime formatting were corrected with timestamp-only overrides
+- operator-facing table labels and timeline legends were improved for runtime, memory, and failure dashboards
 
-### Deployment / schema drift note
-A durable deployment note was added for the live-schema drift failure mode:
-- stale `memory_items_provenance_valid`
-- retained PostgreSQL volume means restart/rebuild alone may not fix it
+### Version and validation closeout
+The previously noted version-string drift is resolved.
 
-## Live PostgreSQL observability insight
-A live inspection of the running PostgreSQL container showed that canonical state has already accumulated enough meaningful activity that direct observability now feels more valuable than repository projection files.
+Confirmed active `0.4.0` surfaces include:
+- `pyproject.toml`
+- `src/ctxledger/__init__.py`
+- `src/ctxledger/config.py`
+- `src/ctxledger/memory/service.py`
+- `docker/auth_small/src/auth_small_app.py`
+- `docker/docker-compose.yml`
+- `docker/docker-compose.small-auth.yml`
+- `uv.lock`
 
-Representative observed counts:
-- `40` workspaces
-- `58` workflow instances
-- `58` workflow attempts
-- `369` workflow checkpoints
-- `369` verify reports
-- `34` episodes
-- `24` memory items
-- `3` memory embeddings
-
-Takeaway:
-- projection still exists as implemented derived behavior
-- but product direction now feels better served by:
-  - canonical workflow observability
-  - canonical memory observability
-  - operator-facing inspection surfaces
+Stale test expectations were also aligned to `0.4.0` in:
+- `tests/test_cli.py`
+- `tests/test_config.py`
+- `tests/test_server.py`
+- `tests/test_coverage_targets.py`
 
 ## Roadmap shift now in effect
-### 0.4.0
-`0.4.0` is now the observability milestone.
+### 0.5.0
+`0.5.0` is now the **refactoring milestone**.
 
 Focus:
-- workflow and memory observability
-- operator-facing CLI inspection tools
-- optional deployable **Grafana** dashboard support
-- better visibility into canonical runtime state
+- refactoring existing `src/` and `tests/`
+- preserving current behavior while reducing duplication
+- first organizing duplicated functionality and logic within individual files
+- then organizing duplicated functionality and logic across files
+- improving maintainability without changing the product surface unnecessarily
 
-### 0.5.0
+### 0.6.0
 Hierarchical retrieval work moved here.
 
 Focus:
@@ -110,289 +107,57 @@ Focus:
 - relation-aware context assembly
 - more multi-layer `memory_get_context` behavior
 
-## Docs updated
-The roadmap/scope shift was aligned across:
-- `README.md`
-- `docs/roadmap.md`
-- `docs/mcp-api.md`
-- `docs/deployment.md`
-- `docs/CHANGELOG.md`
+## Required planning direction for next session
+Before starting broad refactoring work, create and save a dedicated plan under `docs/`.
 
-A dedicated implementation plan was also added:
-- `docs/plans/observability_0_4_0_plan.md`
+That plan should:
+- define a non-destructive refactoring strategy for `src/` and `tests/`
+- explicitly prioritize behavior preservation
+- separate the work into at least two phases:
+  1. file-local duplication and logic cleanup
+  2. cross-file duplication and shared abstraction cleanup
+- identify likely high-churn or high-duplication areas
+- define validation gates after each phase
+- specify how to avoid breaking existing operator/runtime behavior
+
+## Recommended refactoring guardrails
+The `0.5.0` refactoring plan should assume:
+- no intentional feature removal
+- no silent behavioral drift
+- no opportunistic redesign unless needed to reduce duplication safely
+- tests should be used as the primary safety net
+- refactoring should proceed in small, reviewable slices
+- shared helper extraction should be favored only when it reduces real duplication and keeps ownership clear
+
+## Important files for next session
+- `docs/roadmap.md`
+- `docs/CHANGELOG.md`
+- `last_session.md`
+- `src/ctxledger/`
+- `tests/`
+- `docs/plans/`
+- `README.md`
 
 ## Git state recorded
 Relevant recent commit/tag state:
-- `92035f5`
-  - `Align coverage tests and document schema drift recovery`
-- `8e4f3fb`
-  - `Finalize 0.3.0 docs and observability roadmap`
-- `d627f25`
-  - `Add 0.4.0 observability implementation plan`
+- `b87bc71`
+  - `Finalize 0.4.0 versioning and validation`
+- `2238045`
+  - `Polish Grafana dashboards and localhost docs`
 - git tag:
-  - `v0.3.0`
-
-## Important files for next session
-- `docs/plans/observability_0_4_0_plan.md`
-- `docs/roadmap.md`
-- `README.md`
-- `docs/deployment.md`
-- `docs/mcp-api.md`
-- `docs/CHANGELOG.md`
-- `src/ctxledger/__init__.py`
-- `src/ctxledger/db/postgres.py`
-- `src/ctxledger/workflow/service.py`
-- `src/ctxledger/workflow/memory_bridge.py`
-- `src/ctxledger/memory/service.py`
-- `tests/test_cli.py`
-- `tests/test_coverage_targets.py`
+  - `v0.4.0`
 
 ## Next recommended action
-Continue concrete `0.4.0` implementation work from the observability plan.
+Start `0.5.0` planning work.
 
-Current progress:
-- `ctxledger stats` has now been implemented as the first observability CLI surface
-- `ctxledger workflows` is now implemented as the second observability CLI surface
-- `ctxledger memory-stats` is now implemented as the third observability CLI surface
-- `ctxledger failures` is now implemented as the fourth observability CLI surface
-- the CLI supports:
-  - text output
-  - `--format json`
-- `ctxledger workflows` currently supports:
-  - `--limit`
-  - `--status`
-  - `--workspace-id`
-  - `--ticket-id`
-  - `--format json`
-- `ctxledger memory-stats` currently reports:
-  - episode count
-  - memory item count
-  - memory embedding count
-  - memory relation count
-  - memory item provenance breakdown
-  - latest memory activity timestamps
-- `ctxledger failures` currently supports:
-  - `--limit`
-  - `--status`
-  - `--open-only`
-  - `--format json`
-- `ctxledger failures` currently reports:
-  - failure scope/type
-  - lifecycle state (`open`, `resolved`, `ignored`)
-  - target path
-  - error code
-  - error message
-  - occurred/resolved timestamps
-  - retry count
-  - open failure count
-  - attempt id when present
-- canonical aggregation/query support was added across the workflow service and both PostgreSQL and in-memory repositories
-- focused CLI validation passed:
-  - `python -m pytest tests/test_cli.py -q`
-  - `46 passed`
-- manual operator verification confirmed the CLI observability commands work:
-  - `ctxledger workflows`
-  - `ctxledger memory-stats`
-  - `ctxledger failures`
-- Grafana groundwork has now been validated live:
-  - observability SQL bootstrap file added and applied:
-    - `docs/sql/observability_views.sql`
-  - Grafana compose overlay added and verified with the current local stack shape:
-    - `docker/docker-compose.observability.yml`
-    - startup used together with:
-      - `docker/docker-compose.yml`
-      - `docker/docker-compose.small-auth.yml`
-  - datasource provisioning added and confirmed working:
-    - `docker/grafana/provisioning/datasources/postgres.yml`
-  - dashboard provider provisioning added and confirmed working:
-    - `docker/grafana/provisioning/dashboards/dashboards.yml`
-  - initial dashboards added and confirmed rendering real data:
-    - `docker/grafana/dashboards/runtime_overview.json`
-    - `docker/grafana/dashboards/memory_overview.json`
-    - `docker/grafana/dashboards/failure_overview.json`
-  - operator runbook added:
-    - `docs/grafana_operator_runbook.md`
-- important live Grafana bring-up note:
-  - dashboard datasource UID references originally needed correction
-  - dashboards should use the provisioned fixed UID:
-    - `ctxledger-postgres`
-  - this was necessary for live dashboard data rendering
-- deployment guidance was expanded to describe:
-  - read-only Grafana PostgreSQL access
-  - `observability` schema / view approach
-  - SQL-injection risk posture and mitigations
-- `ctxledger workflows` text output includes:
-  - workflow instance id
-  - workspace path fallbacking to workspace id when needed
-  - ticket id
-  - latest checkpoint step
-  - latest verify status
-  - updated timestamp
-- `ctxledger memory-stats` text output includes:
-  - counts section
-  - provenance breakdown section
-  - latest activity section
-- `ctxledger failures` text output includes:
-  - lifecycle-first summary line
-  - scope
-  - path
-  - error code
-  - error message
-  - occurred/resolved timestamps
-  - retry count
-  - open failure count
-- current dashboard/operator UX gaps:
-  - stat panels still show series label `value` in places
-  - pie chart/table presentation can be made more operator-friendly with better aliases and panel options
-- Grafana table rendering root cause was identified after the second SQL hardening pass:
-  - the remaining `NaN` / epoch-like rendering was caused by dashboard table panels using a global `dateTimeAsIso` unit
-  - this panel-level default was being applied to non-timestamp columns as well
-- Grafana table field configuration was then corrected:
-  - `docker/grafana/dashboards/runtime_overview.json`
-    - `Recent Workflows` now uses a timestamp-only override for `updated_at`
-    - `Latest Workflow Activity Markers` now uses timestamp-only overrides for its actual timestamp columns
-  - `docker/grafana/dashboards/failure_overview.json`
-    - `Recent Failures` now uses timestamp-only overrides for `occurred_at` and `resolved_at`
-    - `Current Open Failures` now uses a timestamp-only override for `occurred_at`
-  - `docker/grafana/dashboards/memory_overview.json`
-    - `Latest Memory Activity` no longer applies datetime formatting at the panel default level because the query already emits text timestamps via `to_char(...)`
-- expected operator-visible result after dashboard reload / hard refresh:
-  - `Recent Workflows` should stop showing `NaN`
-  - `Recent Failures` should stop showing `NaN`
-  - `Current Open Failures` should stop showing `NaN`
-  - `retry_count` should render as an integer instead of an epoch-like timestamp
-  - `Latest Memory Activity` should stay readable as text timestamps
-- README quick start has now been rewritten to be more user-first and self-contained:
-  - key local startup steps were moved higher
-  - Grafana compose overlay usage is now documented in README
-  - Grafana setup no longer depends on jumping out to other docs for the minimum working path
-  - MCP client configuration examples were aligned to `localhost`
-  - Grafana login guidance using:
-    - `CTXLEDGER_GRAFANA_ADMIN_USER`
-    - `CTXLEDGER_GRAFANA_ADMIN_PASSWORD`
-    is now included directly in the quick start flow
-  - standard shell `export` examples were added for Grafana env setup
-  - `envrcctl` is now clearly presented as optional rather than the default path
-
-Recommended next sequence:
-1. check that all README quick-start and live Grafana bring-up fixes are reflected consistently across repository docs
-   - especially any remaining `127.0.0.1` vs `localhost` user-facing examples
-   - and any places where quick-start-critical steps still only exist in linked docs
-2. verify the latest Grafana panel field-override fix in the browser
-   - hard refresh dashboards
-   - confirm `NaN` is gone from:
-     - `Recent Workflows`
-     - `Recent Failures`
-     - `Current Open Failures`
-   - confirm `retry_count` renders as an integer
-   - confirm `Latest Memory Activity` remains readable
-3. continue Grafana dashboard UX polish
-   - runtime dashboard polish applied:
-     - clearer legend labels for runtime activity timeline
-       - `workflow` → `Workflow events`
-       - `attempt` → `Attempt events`
-       - `verify_report` → `Verify reports`
-     - `Recent Workflows` table now uses operator-facing column labels:
-       - `Workflow ID`
-       - `Workspace`
-       - `Ticket`
-       - `Status`
-       - `Latest step`
-       - `Latest verify status`
-       - `Updated`
-     - `Latest Workflow Activity Markers` table now uses clearer labels:
-       - `Latest workflow update`
-       - `Latest checkpoint`
-       - `Latest verify report`
-   - failure dashboard polish applied:
-     - `Recent Failures` table now uses operator-facing column labels:
-       - `Status`
-       - `Failure type`
-       - `Target path`
-       - `Error code`
-       - `Error message`
-       - `Retry count`
-       - `Occurred`
-       - `Resolved`
-       - `Attempt ID`
-     - `Current Open Failures` table now uses operator-facing column labels:
-       - `Failure ID`
-       - `Failure type`
-       - `Target path`
-       - `Error code`
-       - `Error message`
-       - `Retry count`
-       - `Occurred`
-     - failure timeline series display names were prepared for cleaner operator reading
-   - memory dashboard polish applied:
-     - memory activity timeline legend labels improved:
-       - `episode` → `Episodes`
-       - `memory_item` → `Memory items`
-       - `memory_embedding` → `Embeddings`
-     - `Latest Memory Activity` table now uses clearer labels:
-       - `Latest episode`
-       - `Latest memory item`
-       - `Latest embedding`
-       - `Latest relation`
-     - `Provenance Breakdown` table now uses clearer labels:
-       - `Provenance`
-       - `Memory items`
-4. live follow-up still recommended
-   - hard refresh Grafana again and confirm the label polish is visible
-   - check whether any panel still shows generic `value`
-   - check whether pie/table readability now feels good enough without more transformations
-5. decide whether to add a dedicated workflow-activity dashboard
-   - only if it adds real operator value beyond the current runtime overview
-
-## 0.4.0 validation update
-### Version-state recheck
-The previously noted runtime/distribution version mismatch is now resolved.
-
-Confirmed active values:
-- `pyproject.toml`
-  - project version is `0.4.0`
-- `src/ctxledger/config.py`
-  - default `CTXLEDGER_APP_VERSION` is `0.4.0`
-- `docker/docker-compose.yml`
-  - `CTXLEDGER_APP_VERSION: 0.4.0`
-- `docker/docker-compose.small-auth.yml`
-  - `CTXLEDGER_APP_VERSION: 0.4.0`
-- `docker/auth_small/src/auth_small_app.py`
-  - FastAPI app version is `0.4.0`
-- `src/ctxledger/memory/service.py`
-  - implemented `memory_search` now reports `available_in_version="0.4.0"`
-
-Conclusion:
-- the earlier `NO-GO` from version-string drift is no longer current
-- remaining release judgment should be based on current docs/runtime validation, not stale version metadata concerns
-
-### Validation reruns
-- focused coverage-target suite passed:
-  - `python -m pytest tests/test_coverage_targets.py -q`
-  - `237 passed`
-- full suite initially exposed stale test expectations after the `0.4.0` bump:
-  - `tests/test_cli.py`
-    - version fallback expected `0.2.0`
-  - `tests/test_config.py`
-    - default app version expected `0.3.0`
-  - `tests/test_server.py`
-    - `memory_search.available_in_version` expected `0.3.0`
-- these stale test expectations were updated to match current `0.4.0` behavior
-- full suite rerun then passed:
-  - `python -m pytest -q`
-  - `799 passed, 1 skipped`
-
-### Current release judgment
-- current internal `0.4.0` validation status: **GO pending final docs/changelog/commit closeout**
-- single skipped test remains expected:
-  - real OpenAI integration requires `OPENAI_API_KEY`
-
-### Important files touched in this validation pass
-- `tests/test_cli.py`
-- `tests/test_config.py`
-- `tests/test_server.py`
-
-### Next recommended action
-1. update `docs/CHANGELOG.md` with a real `0.4.0` entry
-2. do a final docs consistency / release-note pass
-3. commit the `0.4.0` test expectation alignment and closeout notes
+Suggested sequence:
+1. update `docs/roadmap.md`
+   - move hierarchical retrieval from `0.5` to `0.6`
+   - define `0.5` as the refactoring milestone
+2. create a dedicated refactoring plan in `docs/plans/`
+   - focused on safe refactoring of `src/` and `tests/`
+3. identify the first likely refactoring candidates
+   - duplicate helper logic within files
+   - duplicate formatting/serialization/validation patterns
+   - repeated test fixture/setup patterns
+4. begin with the smallest behavior-preserving refactor slice and validate immediately after each change
