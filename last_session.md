@@ -1,15 +1,15 @@
 # ctxledger last session
 
 ## Summary
-`0.4.0` is now effectively closed out.
+`0.4.0` is closed out and tagged as `v0.4.0`.
 
-The observability milestone was completed with:
-- operator-facing CLI inspection/reporting
-- optional deployable Grafana-based dashboard support
-- versioning and runtime-visible metadata aligned to `0.4.0`
-- docs and dashboard/operator UX polished for the release boundary
+`0.5.0` is now the active milestone, and its scope is **refactoring**, not new product-surface expansion.
 
-The repository is now ready to begin `0.5.0`.
+The roadmap has been updated so that:
+- `0.5.0` focuses on safe refactoring of existing `src/` and `tests/`
+- hierarchical memory retrieval has been moved from `0.5.0` to `0.6.0`
+
+A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`.
 
 ## Final 0.4.0 status
 ### Validation
@@ -21,7 +21,7 @@ The repository is now ready to begin `0.5.0`.
   - `799 passed, 1 skipped`
 
 ### Skipped test
-The single skipped test is expected:
+The single skipped test remains expected:
 - real OpenAI integration requires `OPENAI_API_KEY`
 
 ### Release judgment
@@ -29,135 +29,263 @@ The single skipped test is expected:
 - release tag created:
   - `v0.4.0`
 
-## Important implementation/result notes
-### Observability CLI surfaces
-The following operator-facing commands are implemented and validated:
-- `ctxledger stats`
-- `ctxledger workflows`
-- `ctxledger memory-stats`
-- `ctxledger failures`
+## 0.5.0 planning artifacts now in place
+### Roadmap update
+`docs/roadmap.md` now reflects:
+- `0.5.0` = refactoring milestone
+- `0.6.0` = hierarchical retrieval milestone
 
-Current CLI capabilities include:
-- text output
-- `--format json`
+### Dedicated refactoring plan
+A new plan document now exists:
+- `docs/plans/refactoring_0_5_0_plan.md`
 
-Additional implemented filtering/reporting:
-- `ctxledger workflows`
-  - `--limit`
-  - `--status`
-  - `--workspace-id`
-  - `--ticket-id`
-- `ctxledger failures`
-  - `--limit`
-  - `--status`
-  - `--open-only`
+The plan defines:
+- behavior-preserving refactoring goals
+- within-file cleanup before cross-file cleanup
+- validation expectations after each slice
+- candidate high-value areas across `src/` and `tests/`
+- closeout criteria for `0.5.0`
 
-### Grafana support
-Grafana deployment support is now in place with:
-- Compose overlay support
-- datasource provisioning
-- dashboard provisioning
-- initial dashboards for:
-  - runtime overview
-  - memory overview
-  - failure overview
+## 0.5.0 refactoring progress completed so far
+The first implemented slices have all been **file-local** and validated.
 
-Important live/dashboard notes:
-- dashboards must use datasource UID:
-  - `ctxledger-postgres`
-- table rendering issues caused by panel-wide datetime formatting were corrected with timestamp-only overrides
-- operator-facing table labels and timeline legends were improved for runtime, memory, and failure dashboards
+### 1. `tests/test_config.py`
+Refactoring completed:
+- reduced repeated environment setup patterns
+- `minimum_valid_env(...)` now supports inline overrides
+- repeated temporary env mutation patterns were simplified
 
-### Version and validation closeout
-The previously noted version-string drift is resolved.
+Result:
+- lower boilerplate for validation-path tests
+- same behavior preserved
 
-Confirmed active `0.4.0` surfaces include:
-- `pyproject.toml`
-- `src/ctxledger/__init__.py`
-- `src/ctxledger/config.py`
-- `src/ctxledger/memory/service.py`
-- `docker/auth_small/src/auth_small_app.py`
-- `docker/docker-compose.yml`
-- `docker/docker-compose.small-auth.yml`
-- `uv.lock`
+Validation:
+- `python -m pytest tests/test_config.py -q`
+- `41 passed`
 
-Stale test expectations were also aligned to `0.4.0` in:
-- `tests/test_cli.py`
-- `tests/test_config.py`
-- `tests/test_server.py`
-- `tests/test_coverage_targets.py`
+### 2. `tests/test_cli.py`
+Refactoring completed:
+- introduced shared CLI test patch helpers for repeated monkeypatch/setup flows
 
-## Roadmap shift now in effect
-### 0.5.0
-`0.5.0` is now the **refactoring milestone**.
+Added patterns now centralized:
+- settings patching
+- PostgreSQL config patching
+- UOW factory patching
+- workflow service patching
 
-Focus:
-- refactoring existing `src/` and `tests/`
-- preserving current behavior while reducing duplication
-- first organizing duplicated functionality and logic within individual files
-- then organizing duplicated functionality and logic across files
-- improving maintainability without changing the product surface unnecessarily
+Result:
+- repeated CLI bootstrap setup reduced
+- command tests read more consistently
 
-### 0.6.0
-Hierarchical retrieval work moved here.
+Validation:
+- `python -m pytest tests/test_cli.py -q`
+- `46 passed`
 
-Focus:
-- hierarchical memory retrieval
-- summary layers
-- relation-aware context assembly
-- more multi-layer `memory_get_context` behavior
+### 3. `src/ctxledger/__init__.py`
+Refactoring completed:
+- extracted repeated CLI bootstrap and formatting helpers
 
-## Required planning direction for next session
-Before starting broad refactoring work, create and save a dedicated plan under `docs/`.
+Key helper consolidation includes:
+- missing-database-url reporting
+- PostgreSQL workflow service construction
+- JSON payload printing
+- `isoformat` / `None` conversion handling
 
-That plan should:
-- define a non-destructive refactoring strategy for `src/` and `tests/`
-- explicitly prioritize behavior preservation
-- separate the work into at least two phases:
-  1. file-local duplication and logic cleanup
-  2. cross-file duplication and shared abstraction cleanup
-- identify likely high-churn or high-duplication areas
-- define validation gates after each phase
-- specify how to avoid breaking existing operator/runtime behavior
+Affected command families:
+- `stats`
+- `workflows`
+- `failures`
+- `memory-stats`
+- `resume-workflow`
+- `write-resume-projection`
+- `apply-schema`
 
-## Recommended refactoring guardrails
-The `0.5.0` refactoring plan should assume:
-- no intentional feature removal
-- no silent behavioral drift
-- no opportunistic redesign unless needed to reduce duplication safely
-- tests should be used as the primary safety net
-- refactoring should proceed in small, reviewable slices
-- shared helper extraction should be favored only when it reduces real duplication and keeps ownership clear
+Result:
+- less repeated bootstrap logic inside CLI command implementations
+- behavior preserved while internal structure improved
+
+Validation:
+- `python -m pytest tests/test_cli.py tests/test_coverage_targets.py -q`
+- `283 passed`
+
+### 4. `tests/test_server.py`
+Multiple file-local cleanup slices completed.
+
+Added helper layers:
+- `make_server(...)`
+- `make_ready_server(...)`
+- `make_ready_server_with_resume(...)`
+- `make_ready_server_with_handler(...)`
+- `make_ready_resource_handler(...)`
+- `make_resource_handler(...)`
+- `make_tool_handler(...)`
+- `make_ready_tool_handler(...)`
+
+Refactoring completed across:
+- server startup/readiness setup
+- workflow-resume server setup
+- projection-failure HTTP handler setup
+- resource handler setup
+- tool handler setup
+
+This has reduced repeated patterns involving:
+- `CtxLedgerServer(...)`
+- fake DB/runtime setup
+- fake workflow service setup
+- startup vs not-ready setup
+- handler construction boilerplate
+
+Validation:
+- repeated reruns during cleanup stayed green
+- current focused result:
+  - `python -m pytest tests/test_server.py -q`
+  - `135 passed`
+
+Additional follow-up cleanup completed:
+- added `make_http_runtime(...)` to centralize repeated HTTP runtime adapter setup
+- migrated repeated `build_http_runtime_adapter(server)` + optional `startup()` flows to the shared helper
+- reduced repeated `create_server(...)`-based debug/introspection setup
+- fixed one helper bug during refactoring by ensuring `server.runtime` is rebound to the built `HttpRuntimeAdapter` before optional startup
+
+Focused validation after those follow-up slices:
+- `python -m pytest tests/test_server.py -q`
+- `135 passed`
+
+### 5. `src/ctxledger/mcp/resource_handlers.py`
+Refactoring completed:
+- extracted shared workspace resource URI normalization helpers
+- consolidated repeated `workspace://` prefix stripping and path splitting
+- consolidated repeated UUID parsing
+
+Added helpers:
+- `_parse_workspace_resource_uri(...)`
+- `_parse_uuid(...)`
+
+Result:
+- less duplicated parsing logic between workspace resume and workflow detail resource URI parsers
+- behavior preserved while keeping the module file-local and simple
+
+Validation:
+- `python -m pytest tests/test_mcp_modules.py tests/test_server.py -q`
+- `187 passed`
+
+### 6. `src/ctxledger/runtime/http_handlers.py`
+Multiple file-local cleanup slices completed.
+
+Refactoring completed:
+- extracted route-name constants
+- consolidated repeated request path parsing
+- consolidated repeated debug endpoint path normalization
+- consolidated repeated query argument extraction
+- consolidated repeated UUID parsing for path handlers
+- consolidated repeated HTTP error response construction
+- consolidated repeated projection-failure HTTP validation/error wrapping
+- consolidated repeated projection-failure request parsing between ignore/resolve handlers
+
+Added helpers:
+- `_build_http_error_response(...)`
+- `_build_http_validation_error_response(...)`
+- `_parse_query_arguments(...)`
+- `_parse_request_path_parts(...)`
+- `_normalize_debug_path(...)`
+- `_parse_uuid_value(...)`
+- `_parse_projection_failure_request(...)`
+
+Affected handler families:
+- workflow resume HTTP handler
+- closed projection failures HTTP handler
+- projection failure ignore/resolve HTTP handlers
+- runtime introspection/routes/tools debug HTTP handlers
+
+Result:
+- less repeated response and parsing logic inside HTTP transport handlers
+- behavior preserved with clearer local structure
+
+Validation:
+- `python -m pytest tests/test_coverage_targets.py tests/test_server.py -q`
+- `372 passed`
+
+### 7. `src/ctxledger/server.py`
+Small file-local cleanup completed.
+
+Refactoring completed:
+- extracted startup runtime introspection serialization into a dedicated helper:
+  - `_serialized_runtime_introspection()`
+
+Important note:
+- attempted to hoist resource-response delegate imports to module scope
+- reverted that part because existing monkeypatch-based delegation tests rely on method-local import seams for patchability
+
+Result:
+- startup logging path is slightly cleaner
+- behavior and test seams preserved intentionally
+
+Validation:
+- `python -m pytest tests/test_coverage_targets.py tests/test_server.py -q`
+- `372 passed`
+
+## 0.5.0 refactoring commits recorded
+Relevant recent refactoring commits:
+- `07f59d0`
+  - `Plan 0.5.0 refactoring milestone`
+- `3e9116f`
+  - `Refactor CLI and test setup helpers`
+- `844122c`
+  - `Refactor server test handler setup`
+- `388a28f`
+  - `Extract reusable server test handler builders`
+- `9157a57`
+  - `Refactor server resource and tool handler tests`
+
+## Current judgment for 0.5.0 work quality
+So far the `0.5.0` work is still tracking the intended plan correctly:
+- file-local first
+- behavior-preserving
+- test-backed after each slice
+- no opportunistic feature redesign
+- internal duplication is meaningfully decreasing
+- several high-value parsing/response/setup hot spots have now been cleaned up
+
+A useful lesson from the latest slices:
+- some apparent duplication is partially intentional because it preserves test seams
+- especially in `src/ctxledger/server.py`, monkeypatch-based delegation tests constrained how far import hoisting could safely go
+
+## Recommended next action
+The current targets are now showing **diminishing returns** for more micro-cleanups.
+
+Recommended next step:
+1. review remaining `0.5.0` refactoring candidates and choose the next highest-value file rather than continuing very small cleanups in the same files
+2. begin evaluating **safe cross-file consolidation candidates** only where the within-file patterns are now clearly stable
+3. record and commit the current refactoring batch before expanding scope further
+
+Good next candidates to inspect:
+- another `src/` module with repeated local validation/serialization logic
+- a carefully chosen cross-file consolidation around shared parsing/response helpers, if it remains readable and preserves boundaries
 
 ## Important files for next session
 - `docs/roadmap.md`
-- `docs/CHANGELOG.md`
+- `docs/plans/refactoring_0_5_0_plan.md`
 - `last_session.md`
-- `src/ctxledger/`
-- `tests/`
-- `docs/plans/`
-- `README.md`
+- `src/ctxledger/__init__.py`
+- `src/ctxledger/mcp/resource_handlers.py`
+- `src/ctxledger/runtime/http_handlers.py`
+- `src/ctxledger/server.py`
+- `tests/test_config.py`
+- `tests/test_cli.py`
+- `tests/test_server.py`
 
-## Git state recorded
-Relevant recent commit/tag state:
-- `b87bc71`
-  - `Finalize 0.4.0 versioning and validation`
-- `2238045`
-  - `Polish Grafana dashboards and localhost docs`
-- git tag:
-  - `v0.4.0`
+## Notes on local workspace state
+At the end of this session, tracked refactoring work is **modified locally but not yet committed**.
 
-## Next recommended action
-Start `0.5.0` planning work.
+Current tracked files updated in this refactoring batch:
+- `last_session.md`
+- `src/ctxledger/mcp/resource_handlers.py`
+- `src/ctxledger/runtime/http_handlers.py`
+- `src/ctxledger/server.py`
+- `tests/test_server.py`
 
-Suggested sequence:
-1. update `docs/roadmap.md`
-   - move hierarchical retrieval from `0.5` to `0.6`
-   - define `0.5` as the refactoring milestone
-2. create a dedicated refactoring plan in `docs/plans/`
-   - focused on safe refactoring of `src/` and `tests/`
-3. identify the first likely refactoring candidates
-   - duplicate helper logic within files
-   - duplicate formatting/serialization/validation patterns
-   - repeated test fixture/setup patterns
-4. begin with the smallest behavior-preserving refactor slice and validate immediately after each change
+Current untracked/local-generated items still include:
+- coverage output
+- local certificate material
+
+These are not part of the intended refactoring record unless explicitly needed later.

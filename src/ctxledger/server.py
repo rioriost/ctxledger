@@ -225,9 +225,7 @@ class CtxLedgerServer:
                 "port": self.settings.http.port,
                 "mcp_url": self.settings.http.mcp_url,
                 "workflow_service_initialized": self.workflow_service is not None,
-                "runtime": serialize_runtime_introspection_collection(
-                    collect_runtime_introspection(self.runtime)
-                ),
+                "runtime": self._serialized_runtime_introspection(),
             },
         )
 
@@ -246,6 +244,11 @@ class CtxLedgerServer:
 
     def readiness(self) -> ReadinessStatus:
         return build_readiness_status(self)
+
+    def _serialized_runtime_introspection(self) -> list[dict[str, object]]:
+        return serialize_runtime_introspection_collection(
+            collect_runtime_introspection(self.runtime)
+        )
 
 
 def create_server(

@@ -499,6 +499,28 @@ def make_ready_tool_handler(
     return handler, resume_result, workflow_service
 
 
+def make_http_runtime(
+    *,
+    settings: AppSettings | None = None,
+    resume: WorkflowResume | None = None,
+    fake_workflow_service: FakeWorkflowService | None = None,
+    started: bool = False,
+) -> tuple[CtxLedgerServer, HttpRuntimeAdapter, WorkflowResume, FakeWorkflowService]:
+    resume_result = resume or make_resume_fixture()
+    workflow_service = fake_workflow_service or FakeWorkflowService(resume_result)
+    runtime = FakeRuntime()
+    server = make_server(
+        settings=settings,
+        runtime=runtime,
+        workflow_service_factory=lambda: workflow_service,
+    )
+    http_runtime = build_http_runtime_adapter(server)
+    server.runtime = http_runtime
+    if started:
+        server.startup()
+    return server, http_runtime, resume_result, workflow_service
+
+
 def test_startup_marks_server_started_when_configuration_and_db_are_valid() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker()
@@ -1785,16 +1807,10 @@ def test_http_runtime_adapter_returns_404_for_unregistered_route() -> None:
 
 def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, runtime, resume, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-
-    runtime = build_http_runtime_adapter(server)
 
     assert isinstance(runtime, HttpRuntimeAdapter)
     assert runtime.introspection_endpoints() == (
@@ -1808,8 +1824,6 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
         "workflow_resume",
     )
 
-    server.startup()
-
     response = runtime.dispatch(
         "workflow_resume",
         f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}",
@@ -1821,17 +1835,10 @@ def test_build_http_runtime_adapter_registers_workflow_resume_route() -> None:
 
 def test_http_mcp_route_supports_initialize_over_http() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch(
         "mcp_rpc",
@@ -1866,17 +1873,10 @@ def test_http_mcp_route_supports_initialize_over_http() -> None:
 
 def test_http_mcp_route_supports_tools_list_over_http() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch(
         "mcp_rpc",
@@ -1944,17 +1944,10 @@ def test_http_mcp_route_supports_tools_list_over_http() -> None:
 
 def test_http_mcp_route_supports_tools_call_over_http() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, runtime, resume, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch(
         "mcp_rpc",
@@ -1977,17 +1970,10 @@ def test_http_mcp_route_supports_tools_call_over_http() -> None:
 
 def test_http_mcp_route_requires_json_rpc_body() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch("mcp_rpc", "/mcp")
 
@@ -2003,17 +1989,10 @@ def test_http_mcp_route_requires_json_rpc_body() -> None:
 
 def test_http_mcp_route_requires_configured_mcp_path() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch(
         "mcp_rpc",
@@ -2057,16 +2036,11 @@ def test_http_runtime_adapter_dispatches_registered_closed_projection_failures_h
         closed_projection_failures=closed_projection_failures,
     )
     settings = make_settings()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, resume, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
+        started=True,
     )
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch(
         "workflow_closed_projection_failures",
@@ -2098,18 +2072,10 @@ def test_http_projection_failures_ignore_route_returns_invalid_request_for_bad_p
     None
 ):
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, resume, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch(
         "projection_failures_ignore",
@@ -2140,18 +2106,10 @@ def test_http_projection_failures_ignore_route_returns_not_found_for_invalid_pat
     None
 ):
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, resume, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch(
         "projection_failures_ignore",
@@ -2175,13 +2133,9 @@ def test_http_projection_failures_ignore_route_returns_not_found_for_invalid_pat
 
 def test_http_projection_failures_ignore_route_returns_server_not_ready_error() -> None:
     settings = make_settings()
-    server = CtxLedgerServer(
+    server, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
-
-    runtime = build_http_runtime_adapter(server)
 
     response = runtime.dispatch(
         "projection_failures_ignore",
@@ -2207,18 +2161,10 @@ def test_http_projection_failures_resolve_route_returns_invalid_request_for_bad_
     None
 ):
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, resume, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch(
         "projection_failures_resolve",
@@ -2245,18 +2191,10 @@ def test_http_projection_failures_resolve_route_returns_not_found_for_invalid_pa
     None
 ):
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, resume, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-
-    runtime = build_http_runtime_adapter(server)
-
-    server.startup()
 
     response = runtime.dispatch(
         "projection_failures_resolve",
@@ -2282,13 +2220,9 @@ def test_http_projection_failures_resolve_route_returns_server_not_ready_error()
     None
 ):
     settings = make_settings()
-    server = CtxLedgerServer(
+    server, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
-
-    runtime = build_http_runtime_adapter(server)
 
     response = runtime.dispatch(
         "projection_failures_resolve",
@@ -3382,16 +3316,9 @@ def test_build_memory_get_context_tool_handler_returns_invalid_request() -> None
 
 def test_http_mcp_rpc_initialize_returns_success_payload() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
     )
-
-    runtime = build_http_runtime_adapter(server)
 
     response = runtime.dispatch(
         "mcp_rpc",
@@ -3428,16 +3355,9 @@ def test_http_mcp_rpc_initialize_returns_success_payload() -> None:
 
 def test_http_mcp_rpc_tools_list_returns_registered_tools_with_input_schemas() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
     )
-
-    runtime = build_http_runtime_adapter(server)
 
     response = runtime.dispatch(
         "mcp_rpc",
@@ -3490,15 +3410,12 @@ def test_http_mcp_rpc_tools_call_returns_workspace_register_success_payload() ->
         resume,
         register_workspace_result=registered_workspace,
     )
-    server = CtxLedgerServer(
+    server, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
+        fake_workflow_service=fake_workflow_service,
+        started=True,
     )
-
-    runtime = build_http_runtime_adapter(server)
-    server.startup()
 
     response = runtime.dispatch(
         "mcp_rpc",
@@ -3532,16 +3449,9 @@ def test_http_mcp_rpc_tools_call_returns_workspace_register_success_payload() ->
 
 def test_http_mcp_rpc_resources_list_returns_registered_resources() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    _, runtime, _, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
     )
-
-    runtime = build_http_runtime_adapter(server)
 
     response = runtime.dispatch(
         "mcp_rpc",
@@ -3584,17 +3494,10 @@ def test_http_mcp_rpc_resources_list_returns_registered_resources() -> None:
 
 def test_http_mcp_rpc_resources_read_returns_workspace_resume_payload() -> None:
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, runtime, resume, _ = make_http_runtime(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        started=True,
     )
-
-    runtime = build_http_runtime_adapter(server)
-    server.startup()
 
     uri = f"workspace://{resume.workspace.workspace_id}/resume"
     response = runtime.dispatch(
@@ -4006,10 +3909,8 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
     None
 ):
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     response = build_runtime_introspection_response(server)
@@ -4072,10 +3973,8 @@ def test_build_runtime_introspection_response_returns_empty_runtime_list_when_ru
 
 def test_build_runtime_introspection_http_handler_returns_success_response() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
     handler = build_runtime_introspection_http_handler(server)
 
@@ -4123,10 +4022,8 @@ def test_build_runtime_introspection_http_handler_returns_not_found_for_invalid_
     None
 ):
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
     handler = build_runtime_introspection_http_handler(server)
 
@@ -4151,10 +4048,8 @@ def test_build_http_runtime_adapter_omits_runtime_introspection_route_when_debug
         settings,
         debug=DebugSettings(enabled=False),
     )
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
@@ -4172,10 +4067,8 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
     None
 ):
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
     assert isinstance(server.runtime, HttpRuntimeAdapter)
 
@@ -4224,10 +4117,8 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
 
 def test_health_includes_runtime_summary_details_for_http_runtime() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     health = server.health()
@@ -4269,13 +4160,11 @@ def test_health_includes_runtime_summary_details_for_http_runtime() -> None:
 
 def test_readiness_includes_runtime_summary_details_for_http_runtime() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
+        started=True,
     )
 
-    server.startup()
     readiness = server.readiness()
 
     assert readiness.ready is True
@@ -4317,10 +4206,8 @@ def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
     info_calls: list[tuple[str, dict[str, object]]] = []
 
@@ -4381,10 +4268,8 @@ def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
 
 def test_build_debug_routes_http_handler_returns_runtime_routes_only() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     handler = server.runtime.require_handler("runtime_routes")
@@ -4414,10 +4299,8 @@ def test_build_debug_routes_http_handler_returns_runtime_routes_only() -> None:
 
 def test_build_debug_routes_http_handler_returns_not_found_for_invalid_path() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     handler = server.runtime.require_handler("runtime_routes")
@@ -4442,10 +4325,8 @@ def test_build_http_runtime_adapter_omits_runtime_routes_handler_when_debug_endp
         settings,
         debug=DebugSettings(enabled=False),
     )
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
@@ -4461,10 +4342,8 @@ def test_build_http_runtime_adapter_omits_runtime_routes_handler_when_debug_endp
 
 def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     handler = server.runtime.require_handler("runtime_tools")
@@ -4496,10 +4375,8 @@ def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
 
 def test_build_debug_tools_http_handler_returns_http_only_empty_tools() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     handler = server.runtime.require_handler("runtime_tools")
@@ -4531,10 +4408,8 @@ def test_build_debug_tools_http_handler_returns_http_only_empty_tools() -> None:
 
 def test_build_debug_tools_http_handler_returns_not_found_for_invalid_path() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     handler = server.runtime.require_handler("runtime_tools")
@@ -4559,10 +4434,8 @@ def test_build_http_runtime_adapter_omits_runtime_tools_handler_when_debug_endpo
         settings,
         debug=DebugSettings(enabled=False),
     )
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     assert isinstance(server.runtime, HttpRuntimeAdapter)
@@ -4580,13 +4453,11 @@ def test_print_runtime_summary_includes_http_runtime_introspection(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
+        started=True,
     )
 
-    server.startup()
     print_runtime_summary(server)
 
     captured = capsys.readouterr()
@@ -4612,10 +4483,8 @@ def test_print_runtime_summary_includes_http_runtime_introspection(
 
 def test_http_runtime_adapter_dispatches_registered_debug_routes_handler() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     response = server.runtime.dispatch(
@@ -4647,10 +4516,8 @@ def test_http_runtime_adapter_dispatches_registered_debug_routes_handler() -> No
 
 def test_http_runtime_adapter_dispatches_registered_debug_tools_handler() -> None:
     settings = make_settings()
-    server = create_server(
-        settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        workflow_service_factory=lambda: FakeWorkflowService(make_resume_fixture()),
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
     )
 
     response = server.runtime.dispatch(
