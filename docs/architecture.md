@@ -33,7 +33,7 @@ In addition, the system distinguishes clearly between:
 - **truth**
   - canonical workflow and memory state in PostgreSQL
 - **projections**
-  - repository-facing derived files such as `.agent/resume.json`
+  - repository-facing derived artifacts generated from canonical state when explicitly supported
 - **indexes / read accelerators**
   - embeddings, summaries, and other derived retrieval structures
 
@@ -429,7 +429,7 @@ This rule is enforced primarily by the database, with application-side checks us
 This choice keeps:
 
 - `workspace://{workspace_id}/resume` unambiguous
-- `.agent/resume.*` projection semantics simple
+- repository-facing derived artifact handling simple
 - operational behavior predictable
 
 ### 8.3 Retry Model
@@ -671,20 +671,17 @@ They are not canonical.
 
 ### 12.2 Standard Projection Targets
 
-Standard workspace projection targets include:
-
-- `.agent/resume.json`
-- `.agent/resume.md`
+Historically, workspace projections could include repository-local resume artifacts.  
+As of `v0.5.3`, local `.agent/resume.*` files are no longer a supported user-facing feature.
 
 ### 12.3 Projection Path Policy
 
-Projection output is restricted to the registered workspace root.
+When repository-facing projections are explicitly supported, output must remain restricted to the registered workspace root.
 
 Rules:
 
-- projection files must be written under `workspace.canonical_path`
-- the `.agent/` directory may be created automatically if needed
-- arbitrary writes outside the workspace root are not permitted in `v0.1.0`
+- projection artifacts must remain under `workspace.canonical_path`
+- arbitrary writes outside the workspace root are not permitted
 
 ### 12.4 Projection Failure Tracking
 

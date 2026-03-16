@@ -132,16 +132,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the database URL instead of using CTXLEDGER_DATABASE_URL",
     )
 
-    write_resume_projection_parser = subparsers.add_parser(
-        "write-resume-projection",
-        help="Write resume projections for a workflow instance",
-    )
-    write_resume_projection_parser.add_argument(
-        "--workflow-instance-id",
-        required=True,
-        help="Workflow instance ID to project",
-    )
-
     resume_workflow_parser = subparsers.add_parser(
         "resume-workflow",
         help="Display resumable workflow state for a workflow instance",
@@ -259,56 +249,6 @@ def _apply_schema(args: argparse.Namespace) -> int:
         return 0
     except Exception as exc:
         print(f"Failed to apply schema: {exc}", file=sys.stderr)
-        return 1
-
-
-def _write_resume_projection(args: argparse.Namespace) -> int:
-    try:
-        from .projection.writer import ResumeProjectionWriter
-        from .workflow.service import ResumeWorkflowInput
-
-        workflow_instance_id = UUID(args.workflow_instance_id)
-
-        try:
-            settings, workflow_service, connection_pool = (
-                _build_postgres_workflow_service()
-            )
-        except RuntimeError as exc:
-            if str(exc) == "missing_database_url":
-                return _print_missing_database_url()
-            raise
-
-        try:
-            resume = workflow_service.resume_workflow(
-                ResumeWorkflowInput(workflow_instance_id=workflow_instance_id)
-            )
-            workspace = resume.workspace
-        finally:
-            connection_pool.close()
-
-        writer = ResumeProjectionWriter(
-            workflow_service=workflow_service,
-            projection_settings=settings.projection,
-        )
-        result = writer.write_and_reconcile_resume_projection(
-            workspace_root=workspace.canonical_path,
-            workflow_instance_id=workflow_instance_id,
-            workspace_id=workspace.workspace_id,
-        )
-
-        print("Resume projection written successfully.")
-        if result.json_path is not None:
-            print(f"JSON: {result.json_path}")
-        if result.markdown_path is not None:
-            print(f"Markdown: {result.markdown_path}")
-        print(
-            "Summary: "
-            f"{len(result.state_updates)} state update(s), "
-            f"{len(result.failure_updates)} failure update(s)"
-        )
-        return 0
-    except Exception as exc:
-        print(f"Failed to write resume projection: {exc}", file=sys.stderr)
         return 1
 
 

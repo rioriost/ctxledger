@@ -144,12 +144,9 @@ Operators should therefore treat `pgvector` as part of the active memory-search 
 
 ## 5.3 Filesystem Access
 
-Filesystem access is needed for derived projections such as:
+Filesystem access may be needed for derived artifacts and other non-canonical operational outputs.
 
-- `.agent/resume.json`
-- `.agent/resume.md`
-
-Projection writing is best-effort and must not be treated as canonical persistence.
+Any such writing is best-effort and must not be treated as canonical persistence.
 
 ## 5.4 Observability SQL Views and Grafana Read-only Access
 
@@ -368,7 +365,6 @@ Recommended environment variables include:
 - `CTXLEDGER_ENABLE_HTTP`
 
 - `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS`
-- `CTXLEDGER_PROJECTION_ENABLED`
 - `CTXLEDGER_LOG_LEVEL`
 
 ### 6.0 Environment Variable Guidance
@@ -390,7 +386,6 @@ See also:
 | `CTXLEDGER_PORT` | `8080` | HTTP listen port | `8080` is a reasonable default | set explicitly to match deployment and proxy routing |
 | `CTXLEDGER_HTTP_PATH` | `/mcp` | MCP HTTP endpoint path | keep default unless integration requires a different path | keep stable and document it for proxy configuration |
 | `CTXLEDGER_ENABLE_DEBUG_ENDPOINTS` | `true` | controls whether `/debug/*` routes are registered at all | `true` is acceptable for local/operator use | usually `false`; enable only for a clear operational need |
-| `CTXLEDGER_PROJECTION_ENABLED` | `true` | enables derived projection writing | `true` unless testing explicitly without projections | set according to operational need; does not replace canonical persistence |
 | `CTXLEDGER_LOG_LEVEL` | `info` | log verbosity | `info` or `debug` during development | `info` or stricter, depending on operational policy |
 
 Authentication and debug exposure expectations:
@@ -850,7 +845,7 @@ Examples:
 
 - projection is stale
 - projection write failed previously
-- `.agent/` path is currently unavailable
+- a derived artifact path is currently unavailable
 - embedding generation is lagging
 - memory indexing is incomplete
 
@@ -911,19 +906,14 @@ Without persistent DB storage, the system would lose canonical workflow state, w
 
 Projection files are derived artifacts, not canonical state.
 
-Standard projection targets are:
-
-- `.agent/resume.json`
-- `.agent/resume.md`
+As of `v0.5.3`, local repository `.agent/resume.json` and `.agent/resume.md` files are no longer a supported user-facing feature. Historical projection records and failure metadata may still exist in canonical storage, but current workflow inspection should rely on supported PostgreSQL-backed interfaces.
 
 ## 10.1 Projection Path Policy
 
-Projection output should be restricted to the registered workspace root:
+When derived artifacts are generated, output should remain restricted to the registered workspace root:
 
 - under `workspace.canonical_path`
-- typically inside `.agent/`
-
-If `.agent/` does not exist, it may be created automatically.
+- never outside the workspace root
 
 ## 10.2 Projection Failure Semantics
 
@@ -1071,7 +1061,7 @@ Impact:
 
 ## 14.5 Stale Projection
 Impact:
-- `.agent/resume.*` may lag behind canonical state
+- historical derived artifacts may lag behind canonical state
 - MCP resources/tools should still reflect canonical data
 - operators should inspect freshness/failure state
 

@@ -1,11 +1,7 @@
-from ctxledger.projection.writer import (
-    ProjectionWriteError,
-    ResumeProjectionResult,
-    ResumeProjectionWriter,
-)
+"""Projection package.
 
-__all__ = [
-    "ProjectionWriteError",
-    "ResumeProjectionResult",
-    "ResumeProjectionWriter",
-]
+Repository-local resume projection writers were removed in v0.5.3.
+This package is intentionally left without public exports.
+"""
+
+__all__: list[str] = []

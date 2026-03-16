@@ -20,7 +20,6 @@ from ctxledger.config import (
     HttpSettings,
     LoggingSettings,
     LogLevel,
-    ProjectionSettings,
 )
 from ctxledger.workflow.service import (
     CreateCheckpointInput,
@@ -58,12 +57,6 @@ def make_settings(
             path="/mcp",
         ),
         debug=DebugSettings(enabled=True),
-        projection=ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        ),
         logging=LoggingSettings(
             level=LogLevel.INFO,
             structured=False,
@@ -160,7 +153,7 @@ class FakeWriter:
     instances: list["FakeWriter"] = []
 
     def __init__(
-        self, *, workflow_service: object, projection_settings: ProjectionSettings
+        self, *, workflow_service: object, projection_settings: object
     ) -> None:
         self.workflow_service = workflow_service
         self.projection_settings = projection_settings
@@ -217,211 +210,6 @@ def test_main_write_resume_projection_uses_workflow_lookup_and_writer(
     def fake_build_postgres_uow_factory(config: object, pool: object = None) -> object:
         uow_factory_calls.append(config)
         return "fake-uow-factory"
-
-    patch_cli_postgres_uow_factory(monkeypatch, fake_build_postgres_uow_factory)
-
-    def fake_workflow_service_ctor(uow_factory: object) -> FakeWorkflowService:
-        workflow_service_ctor_args.append(uow_factory)
-        return fake_service
-
-    patch_cli_workflow_service(monkeypatch, fake_workflow_service_ctor)
-    monkeypatch.setattr(
-        "ctxledger.projection.writer.ResumeProjectionWriter", FakeWriter
-    )
-
-    exit_code = cli_module.main(
-        [
-            "write-resume-projection",
-            "--workflow-instance-id",
-            str(workflow_instance_id),
-        ]
-    )
-
-    captured = capsys.readouterr()
-
-    assert exit_code == 0
-    assert "Resume projection written successfully." in captured.out
-    assert f"JSON: {tmp_path / '.agent' / 'resume.json'}" in captured.out
-    assert f"Markdown: {tmp_path / '.agent' / 'resume.md'}" in captured.out
-    assert "Summary: 0 state update(s), 0 failure update(s)" in captured.out
-    assert captured.err == ""
-
-    assert len(uow_factory_calls) == 1
-    assert getattr(uow_factory_calls[0], "settings") is settings
-    assert workflow_service_ctor_args == ["fake-uow-factory"]
-
-    assert len(fake_service.resume_calls) == 1
-    assert fake_service.resume_calls[0].workflow_instance_id == workflow_instance_id
-
-    assert len(FakeWriter.instances) == 1
-    writer = FakeWriter.instances[0]
-    assert writer.workflow_service is fake_service
-    assert writer.projection_settings == settings.projection
-    assert writer.calls == [
-        {
-            "workspace_root": str(tmp_path),
-            "workflow_instance_id": workflow_instance_id,
-            "workspace_id": workspace_id,
-        }
-    ]
-
-
-def test_main_write_resume_projection_returns_error_when_resume_projection_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    workflow_instance_id = uuid4()
-
-    monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
-    patch_cli_settings(monkeypatch, make_settings())
-
-    def fake_build_postgres_uow_factory(config: object, pool: object = None) -> object:
-        return "fake-uow-factory"
-
-    patch_cli_postgres_config(monkeypatch)
-    patch_cli_connection_pool(monkeypatch)
-    patch_cli_postgres_uow_factory(monkeypatch, fake_build_postgres_uow_factory)
-
-    class ExplodingWorkflowService:
-        def __init__(self, uow_factory: object) -> None:
-            self.uow_factory = uow_factory
-
-        def resume_workflow(self, data: object) -> object:
-            raise RuntimeError("workflow not found")
-
-    patch_cli_workflow_service(monkeypatch, ExplodingWorkflowService)
-    monkeypatch.setattr(
-        "ctxledger.projection.writer.ResumeProjectionWriter", FakeWriter
-    )
-
-    exit_code = cli_module.main(
-        [
-            "write-resume-projection",
-            "--workflow-instance-id",
-            str(workflow_instance_id),
-        ]
-    )
-
-    captured = capsys.readouterr()
-
-    assert exit_code == 1
-    assert captured.out == ""
-    assert "Failed to write resume projection: workflow not found" in captured.err
-
-
-def test_main_write_resume_projection_reports_missing_database_url(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    workflow_instance_id = uuid4()
-    settings = make_settings(database_url="")
-
-    monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
-    patch_cli_settings(monkeypatch, settings)
-
-    exit_code = cli_module.main(
-        [
-            "write-resume-projection",
-            "--workflow-instance-id",
-            str(workflow_instance_id),
-        ]
-    )
-
-    captured = capsys.readouterr()
-
-    assert exit_code == 1
-    assert captured.out == ""
-    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
-
-
-def test_main_write_resume_projection_wires_real_command_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    tmp_path: Path,
-) -> None:
-    from ctxledger.db import InMemoryStore, build_in_memory_uow_factory
-    from ctxledger.projection.writer import ResumeProjectionWriter
-    from ctxledger.workflow.service import ResumeWorkflowInput, WorkflowService
-
-    settings = make_settings()
-    store = InMemoryStore.create()
-    service = WorkflowService(build_in_memory_uow_factory(store))
-
-    workspace = service.register_workspace(
-        RegisterWorkspaceInput(
-            repo_url="https://example.com/org/repo.git",
-            canonical_path=str(tmp_path),
-            default_branch="main",
-        )
-    )
-    started = service.start_workflow(
-        StartWorkflowInput(
-            workspace_id=workspace.workspace_id,
-            ticket_id="CLI-123",
-        )
-    )
-    service.create_checkpoint(
-        CreateCheckpointInput(
-            workflow_instance_id=started.workflow_instance.workflow_instance_id,
-            attempt_id=started.attempt.attempt_id,
-            step_name="implement_cli",
-            summary="Connect CLI to projection writer",
-            checkpoint_json={
-                "next_intended_action": "Run write-resume-projection",
-            },
-        )
-    )
-
-    patch_cli_settings(monkeypatch, settings)
-    patch_cli_postgres_config(monkeypatch)
-    patch_cli_connection_pool(monkeypatch)
-    patch_cli_postgres_uow_factory(
-        monkeypatch,
-        lambda config, pool=None: build_in_memory_uow_factory(store),
-    )
-    patch_cli_workflow_service(
-        monkeypatch,
-        lambda uow_factory: WorkflowService(uow_factory),
-    )
-    monkeypatch.setattr(
-        "ctxledger.projection.writer.ResumeProjectionWriter",
-        ResumeProjectionWriter,
-    )
-
-    exit_code = cli_module.main(
-        [
-            "write-resume-projection",
-            "--workflow-instance-id",
-            str(started.workflow_instance.workflow_instance_id),
-        ]
-    )
-
-    captured = capsys.readouterr()
-
-    assert exit_code == 0
-    assert "Resume projection written successfully." in captured.out
-    assert f"JSON: {tmp_path / '.agent' / 'resume.json'}" in captured.out
-    assert f"Markdown: {tmp_path / '.agent' / 'resume.md'}" in captured.out
-    assert "Summary: 2 state update(s), 0 failure update(s)" in captured.out
-    assert captured.err == ""
-
-    json_path = tmp_path / ".agent" / "resume.json"
-    markdown_path = tmp_path / ".agent" / "resume.md"
-
-    assert json_path.exists()
-    assert markdown_path.exists()
-
-    resume = service.resume_workflow(
-        ResumeWorkflowInput(
-            workflow_instance_id=started.workflow_instance.workflow_instance_id
-        )
-    )
-    assert len(resume.projections) == 2
-    assert {projection.target_path for projection in resume.projections} == {
-        ".agent/resume.json",
-        ".agent/resume.md",
-    }
-    assert all(projection.open_failure_count == 0 for projection in resume.projections)
 
 
 def test_main_stats_renders_text_output(
@@ -1765,7 +1553,6 @@ def test_build_parser_includes_expected_subcommands() -> None:
         "serve",
         "print-schema-path",
         "apply-schema",
-        "write-resume-projection",
         "resume-workflow",
         "version",
     }

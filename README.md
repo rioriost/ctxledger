@@ -354,14 +354,14 @@ The most important design rule in `ctxledger` is:
 - PostgreSQL is the source of truth
 - projection files are derived artifacts
 
-Examples of derived files:
+Examples of derived artifacts include historical resume projection outputs and other non-canonical repository-facing files.
 
-- `.agent/resume.json`
-- `.agent/resume.md`
+As of `v0.5.3`, local repository `.agent/resume.json` and `.agent/resume.md` files are no longer a supported user-facing feature.
 
 This means:
 
 - resume and workflow state must be reconstructable from PostgreSQL
+- canonical resume inspection should happen through supported service interfaces
 - projection failures do not redefine truth
 - Grafana should read PostgreSQL directly, not projection files
 - CLI observability commands also summarize PostgreSQL-backed state

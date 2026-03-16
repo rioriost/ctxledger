@@ -16,7 +16,6 @@ from ctxledger.config import (
     HttpSettings,
     LoggingSettings,
     LogLevel,
-    ProjectionSettings,
 )
 from ctxledger.mcp.lifecycle import (
     MCP_PROTOCOL_VERSION,
@@ -74,12 +73,6 @@ def make_settings(
         ),
         debug=DebugSettings(
             enabled=True,
-        ),
-        projection=ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
         ),
         logging=LoggingSettings(
             level=LogLevel.INFO,

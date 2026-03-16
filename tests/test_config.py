@@ -16,7 +16,6 @@ from ctxledger.config import (
     HttpSettings,
     LoggingSettings,
     LogLevel,
-    ProjectionSettings,
     _format_expected_values,
     _get_env,
     _parse_bool,
@@ -60,10 +59,6 @@ def minimum_valid_env(**overrides: str | None) -> dict[str, str | None]:
         "CTXLEDGER_PORT": "8080",
         "CTXLEDGER_HTTP_PATH": "/mcp",
         "CTXLEDGER_ENABLE_DEBUG_ENDPOINTS": "true",
-        "CTXLEDGER_PROJECTION_ENABLED": "true",
-        "CTXLEDGER_PROJECTION_DIRECTORY": ".agent",
-        "CTXLEDGER_PROJECTION_WRITE_JSON": "true",
-        "CTXLEDGER_PROJECTION_WRITE_MARKDOWN": "true",
         "CTXLEDGER_LOG_LEVEL": "info",
         "CTXLEDGER_LOG_STRUCTURED": "true",
         "CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS": "5",
@@ -100,8 +95,6 @@ def test_load_settings_with_minimum_valid_env(clean_ctxledger_env: None) -> None
     assert settings.http.mcp_url == "http://0.0.0.0:8080/mcp"
     assert settings.logging.level == LogLevel.INFO
     assert settings.debug.enabled is True
-    assert settings.projection.enabled is True
-    assert settings.projection.directory_name == ".agent"
     assert settings.embedding.enabled is False
     assert settings.embedding.provider is EmbeddingProvider.OPENAI
     assert settings.embedding.model == "text-embedding-3-small"
@@ -177,32 +170,6 @@ def test_debug_endpoints_can_be_disabled(clean_ctxledger_env: None) -> None:
         settings = load_settings()
 
     assert settings.debug.enabled is False
-
-
-def test_projection_directory_must_not_be_empty(clean_ctxledger_env: None) -> None:
-    with patched_env(**minimum_valid_env(CTXLEDGER_PROJECTION_DIRECTORY=None)):
-        os.environ["CTXLEDGER_PROJECTION_DIRECTORY"] = ""
-        with pytest.raises(
-            ConfigError,
-            match="CTXLEDGER_PROJECTION_DIRECTORY must not be empty",
-        ):
-            load_settings()
-
-
-def test_projection_outputs_must_include_at_least_one_format(
-    clean_ctxledger_env: None,
-) -> None:
-    with patched_env(
-        **minimum_valid_env(
-            CTXLEDGER_PROJECTION_WRITE_JSON="false",
-            CTXLEDGER_PROJECTION_WRITE_MARKDOWN="false",
-        )
-    ):
-        with pytest.raises(
-            ConfigError,
-            match="At least one projection output must be enabled when projections are enabled",
-        ):
-            load_settings()
 
 
 def test_db_connect_timeout_must_be_positive(clean_ctxledger_env: None) -> None:
@@ -393,7 +360,7 @@ def test_app_settings_validate_rejects_empty_host() -> None:
         app_version="0.1.0",
         environment="test",
         database=DatabaseSettings(
-            url="postgresql://example/db",
+            url="postgresql://ctxledger:test@localhost:5432/ctxledger",
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
@@ -403,20 +370,14 @@ def test_app_settings_validate_rejects_empty_host() -> None:
         ),
         http=HttpSettings(host="", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
-        projection=ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        ),
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
-            enabled=False,
             provider=EmbeddingProvider.DISABLED,
-            model="local-stub-v1",
+            model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=None,
+            enabled=False,
         ),
     )
 
@@ -430,7 +391,7 @@ def test_app_settings_validate_rejects_empty_http_path() -> None:
         app_version="0.1.0",
         environment="test",
         database=DatabaseSettings(
-            url="postgresql://example/db",
+            url="postgresql://ctxledger:test@localhost:5432/ctxledger",
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
@@ -440,20 +401,14 @@ def test_app_settings_validate_rejects_empty_http_path() -> None:
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path=""),
         debug=DebugSettings(enabled=True),
-        projection=ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        ),
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
-            enabled=False,
             provider=EmbeddingProvider.DISABLED,
-            model="local-stub-v1",
+            model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=None,
+            enabled=False,
         ),
     )
 
@@ -467,7 +422,7 @@ def test_app_settings_validate_requires_embedding_model_when_enabled() -> None:
         app_version="0.1.0",
         environment="test",
         database=DatabaseSettings(
-            url="postgresql://example/db",
+            url="postgresql://ctxledger:test@localhost:5432/ctxledger",
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
@@ -477,25 +432,20 @@ def test_app_settings_validate_requires_embedding_model_when_enabled() -> None:
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
-        projection=ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        ),
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
-            enabled=True,
-            provider=EmbeddingProvider.LOCAL_STUB,
-            model="",
+            provider=EmbeddingProvider.OPENAI,
+            model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=None,
+            enabled=True,
         ),
     )
 
     with pytest.raises(
-        ConfigError, match="CTXLEDGER_EMBEDDING_MODEL must not be empty"
+        ConfigError,
+        match="OPENAI_API_KEY is required for the selected embedding provider",
     ):
         settings.validate()
 
@@ -508,7 +458,7 @@ def test_app_settings_validate_requires_api_key_for_external_embedding_provider(
         app_version="0.1.0",
         environment="test",
         database=DatabaseSettings(
-            url="postgresql://example/db",
+            url="postgresql://ctxledger:test@localhost:5432/ctxledger",
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
@@ -518,26 +468,20 @@ def test_app_settings_validate_requires_api_key_for_external_embedding_provider(
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
-        projection=ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        ),
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
-            enabled=True,
             provider=EmbeddingProvider.OPENAI,
-            model="text-embedding-3-small",
-            api_key=None,
+            model="",
+            api_key="secret",
             base_url=None,
             dimensions=None,
+            enabled=True,
         ),
     )
 
     with pytest.raises(
         ConfigError,
-        match="OPENAI_API_KEY is required for the selected embedding provider",
+        match="CTXLEDGER_EMBEDDING_MODEL must not be empty",
     ):
         settings.validate()
 
@@ -550,7 +494,7 @@ def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provi
         app_version="0.1.0",
         environment="test",
         database=DatabaseSettings(
-            url="postgresql://example/db",
+            url="postgresql://ctxledger:test@localhost:5432/ctxledger",
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
@@ -560,20 +504,14 @@ def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provi
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
-        projection=ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        ),
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
-            enabled=True,
             provider=EmbeddingProvider.CUSTOM_HTTP,
-            model="custom-model",
+            model="text-embedding-3-small",
             api_key="secret",
             base_url=None,
             dimensions=None,
+            enabled=True,
         ),
     )
 
@@ -590,7 +528,7 @@ def test_app_settings_validate_rejects_non_positive_embedding_dimensions() -> No
         app_version="0.1.0",
         environment="test",
         database=DatabaseSettings(
-            url="postgresql://example/db",
+            url="postgresql://ctxledger:test@localhost:5432/ctxledger",
             connect_timeout_seconds=5,
             statement_timeout_ms=None,
             schema_name="public",
@@ -600,20 +538,14 @@ def test_app_settings_validate_rejects_non_positive_embedding_dimensions() -> No
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
-        projection=ProjectionSettings(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        ),
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
-            enabled=True,
             provider=EmbeddingProvider.LOCAL_STUB,
-            model="local-stub-v1",
+            model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=0,
+            enabled=True,
         ),
     )
 
@@ -637,10 +569,6 @@ def test_load_settings_uses_defaults_for_optional_values(
     assert settings.http.port == 8080
     assert settings.http.path == "/mcp"
     assert settings.debug.enabled is True
-    assert settings.projection.enabled is True
-    assert settings.projection.directory_name == ".agent"
-    assert settings.projection.write_markdown is True
-    assert settings.projection.write_json is True
     assert settings.logging.level is LogLevel.INFO
     assert settings.database.pool_min_size == 1
     assert settings.database.pool_max_size == 10

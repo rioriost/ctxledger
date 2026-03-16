@@ -160,14 +160,6 @@ class DebugSettings:
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectionSettings:
-    enabled: bool
-    directory_name: str
-    write_markdown: bool
-    write_json: bool
-
-
-@dataclass(frozen=True, slots=True)
 class LoggingSettings:
     level: LogLevel
     structured: bool
@@ -200,7 +192,6 @@ class AppSettings:
     database: DatabaseSettings
     http: HttpSettings
     debug: DebugSettings
-    projection: ProjectionSettings
     logging: LoggingSettings
     embedding: EmbeddingSettings
 
@@ -214,14 +205,6 @@ class AppSettings:
             raise ConfigError("CTXLEDGER_PORT must be between 1 and 65535")
         if not self.http.path:
             raise ConfigError("CTXLEDGER_HTTP_PATH must not be empty")
-
-        if self.projection.directory_name == "":
-            raise ConfigError("CTXLEDGER_PROJECTION_DIRECTORY must not be empty")
-
-        if not self.projection.write_json and not self.projection.write_markdown:
-            raise ConfigError(
-                "At least one projection output must be enabled when projections are enabled"
-            )
 
         if self.database.connect_timeout_seconds <= 0:
             raise ConfigError(
@@ -314,12 +297,6 @@ def load_settings() -> AppSettings:
         ),
         debug=DebugSettings(
             enabled=_parse_bool("CTXLEDGER_ENABLE_DEBUG_ENDPOINTS", True),
-        ),
-        projection=ProjectionSettings(
-            enabled=_parse_bool("CTXLEDGER_PROJECTION_ENABLED", True),
-            directory_name=_get_env("CTXLEDGER_PROJECTION_DIRECTORY", ".agent"),
-            write_markdown=_parse_bool("CTXLEDGER_PROJECTION_WRITE_MARKDOWN", True),
-            write_json=_parse_bool("CTXLEDGER_PROJECTION_WRITE_JSON", True),
         ),
         logging=LoggingSettings(
             level=_parse_log_level("CTXLEDGER_LOG_LEVEL", LogLevel.INFO),

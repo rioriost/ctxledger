@@ -39,10 +39,6 @@ services:
       # Debug endpoints are enabled by default for local operator visibility.
       # Disable them in production unless there is a clear operational need.
       CTXLEDGER_ENABLE_DEBUG_ENDPOINTS: "true"
-      CTXLEDGER_PROJECTION_ENABLED: "true"
-      CTXLEDGER_PROJECTION_DIRECTORY: .agent
-      CTXLEDGER_PROJECTION_WRITE_JSON: "true"
-      CTXLEDGER_PROJECTION_WRITE_MARKDOWN: "true"
       CTXLEDGER_LOG_LEVEL: info
       CTXLEDGER_LOG_STRUCTURED: "true"
       CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS: 5
