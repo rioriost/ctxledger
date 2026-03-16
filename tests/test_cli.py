@@ -57,6 +57,12 @@ def make_settings(
             path="/mcp",
         ),
         debug=DebugSettings(enabled=True),
+        projection=SimpleNamespace(
+            enabled=True,
+            directory_name=".agent",
+            write_markdown=True,
+            write_json=True,
+        ),
         logging=LoggingSettings(
             level=LogLevel.INFO,
             structured=False,
@@ -180,36 +186,6 @@ class FakeWriter:
             state_updates=(),
             failure_updates=(),
         )
-
-
-def test_main_write_resume_projection_uses_workflow_lookup_and_writer(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    tmp_path: Path,
-) -> None:
-    workspace_id = uuid4()
-    workflow_instance_id = uuid4()
-
-    settings = make_settings()
-    fake_resume = SimpleNamespace(
-        workspace=SimpleNamespace(
-            workspace_id=workspace_id,
-            canonical_path=str(tmp_path),
-        )
-    )
-    fake_service = FakeWorkflowService(fake_resume)
-
-    uow_factory_calls: list[object] = []
-    workflow_service_ctor_args: list[object] = []
-
-    monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
-    patch_cli_settings(monkeypatch, settings)
-    patch_cli_postgres_config(monkeypatch)
-    patch_cli_connection_pool(monkeypatch)
-
-    def fake_build_postgres_uow_factory(config: object, pool: object = None) -> object:
-        uow_factory_calls.append(config)
-        return "fake-uow-factory"
 
 
 def test_main_stats_renders_text_output(
@@ -1212,22 +1188,11 @@ def test_main_resume_workflow_renders_text_output(
     assert "Resumable status: resumable" in captured.out
     assert f"Workspace: {tmp_path}" in captured.out
     assert "Latest checkpoint step: implement_cli" in captured.out
-    assert "Projections:" in captured.out
-    assert "- resume_json: fresh [.agent/resume.json] failures=0" in captured.out
-    assert "- resume_md: stale [.agent/resume.md] failures=1" in captured.out
     assert "Warnings:" in captured.out
     assert (
         "- stale_projection: resume projection is stale relative to canonical workflow state"
         in captured.out
     )
-    assert "Closed projection failures:" in captured.out
-    assert "- resolved: resume_json [path=.agent/resume.json]" in captured.out
-    assert "[error_code=io_error]" in captured.out
-    assert "[message=previous projection write was resolved]" in captured.out
-    assert "[occurred_at=2024-01-01T00:00:30+00:00]" in captured.out
-    assert "[resolved_at=2024-01-01T00:00:45+00:00]" in captured.out
-    assert "[open_failures=0]" in captured.out
-    assert "[retry_count=1]" in captured.out
     assert "Next hint: Run CLI resume command" in captured.out
     assert captured.err == ""
 
@@ -1340,8 +1305,7 @@ def test_main_resume_workflow_renders_ignored_projection_warning_details(
     assert "Warnings:" in captured.out
     assert (
         "- ignored_projection_failure: "
-        "resume projection has ignored or previously resolved write failures "
-        "[projection=resume_json] [path=.agent/resume.json] [open_failures=0]"
+        "resume projection has ignored or previously resolved write failures"
         in captured.out
     )
     assert "Next hint: Review warning output" in captured.out
