@@ -84,63 +84,20 @@ def build_projection_failures_ignore_response(
     workflow_instance_id: UUID,
     projection_type: ProjectionArtifactType | None = None,
 ) -> ProjectionFailureActionResponse:
-    from .types import ProjectionFailureActionResponse
-
-    if server.workflow_service is None:
-        return ProjectionFailureActionResponse(
-            status_code=503,
-            payload={
-                "error": {
-                    "code": "server_not_ready",
-                    "message": "workflow service is not initialized",
-                }
-            },
-            headers={"content-type": "application/json"},
-        )
-
-    try:
-        updated_failure_count = (
-            server.workflow_service.ignore_resume_projection_failures(
+    return _build_projection_failure_action_response(
+        server,
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        projection_type=projection_type,
+        action="ignored",
+        operation=lambda workflow_service: (
+            workflow_service.ignore_resume_projection_failures(
                 workspace_id=workspace_id,
                 workflow_instance_id=workflow_instance_id,
                 projection_type=projection_type,
             )
-        )
-    except Exception as exc:
-        message = str(exc) or "failed to ignore projection failures"
-        lowered = message.lower()
-        if "not found" in lowered:
-            status_code = 404
-            code = "not_found"
-        elif "does not belong to workspace" in lowered or "mismatch" in lowered:
-            status_code = 400
-            code = "invalid_request"
-        else:
-            status_code = 500
-            code = "server_error"
-        return ProjectionFailureActionResponse(
-            status_code=status_code,
-            payload={
-                "error": {
-                    "code": code,
-                    "message": message,
-                }
-            },
-            headers={"content-type": "application/json"},
-        )
-
-    return ProjectionFailureActionResponse(
-        status_code=200,
-        payload={
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-            "projection_type": (
-                projection_type.value if projection_type is not None else None
-            ),
-            "updated_failure_count": updated_failure_count,
-            "status": "ignored",
-        },
-        headers={"content-type": "application/json"},
+        ),
+        default_error_message="failed to ignore projection failures",
     )
 
 
@@ -151,63 +108,20 @@ def build_projection_failures_resolve_response(
     workflow_instance_id: UUID,
     projection_type: ProjectionArtifactType | None = None,
 ) -> ProjectionFailureActionResponse:
-    from .types import ProjectionFailureActionResponse
-
-    if server.workflow_service is None:
-        return ProjectionFailureActionResponse(
-            status_code=503,
-            payload={
-                "error": {
-                    "code": "server_not_ready",
-                    "message": "workflow service is not initialized",
-                }
-            },
-            headers={"content-type": "application/json"},
-        )
-
-    try:
-        updated_failure_count = (
-            server.workflow_service.resolve_resume_projection_failures(
+    return _build_projection_failure_action_response(
+        server,
+        workspace_id=workspace_id,
+        workflow_instance_id=workflow_instance_id,
+        projection_type=projection_type,
+        action="resolved",
+        operation=lambda workflow_service: (
+            workflow_service.resolve_resume_projection_failures(
                 workspace_id=workspace_id,
                 workflow_instance_id=workflow_instance_id,
                 projection_type=projection_type,
             )
-        )
-    except Exception as exc:
-        message = str(exc) or "failed to resolve projection failures"
-        lowered = message.lower()
-        if "not found" in lowered:
-            status_code = 404
-            code = "not_found"
-        elif "does not belong to workspace" in lowered or "mismatch" in lowered:
-            status_code = 400
-            code = "invalid_request"
-        else:
-            status_code = 500
-            code = "server_error"
-        return ProjectionFailureActionResponse(
-            status_code=status_code,
-            payload={
-                "error": {
-                    "code": code,
-                    "message": message,
-                }
-            },
-            headers={"content-type": "application/json"},
-        )
-
-    return ProjectionFailureActionResponse(
-        status_code=200,
-        payload={
-            "workspace_id": str(workspace_id),
-            "workflow_instance_id": str(workflow_instance_id),
-            "projection_type": (
-                projection_type.value if projection_type is not None else None
-            ),
-            "updated_failure_count": updated_failure_count,
-            "status": "resolved",
-        },
-        headers={"content-type": "application/json"},
+        ),
+        default_error_message="failed to resolve projection failures",
     )
 
 
@@ -422,6 +336,11 @@ def build_workflow_detail_resource_response(
                     },
                     headers={"content-type": "application/json"},
                 )
+
+        workflow_response = build_workflow_resume_response(
+            server,
+            workflow_instance_id,
+        )
     else:
         resume = server.workflow_service.resume_result
         if resume.workflow_instance.workflow_instance_id != workflow_instance_id:
@@ -447,7 +366,8 @@ def build_workflow_detail_resource_response(
                 headers={"content-type": "application/json"},
             )
 
-    workflow_response = build_workflow_resume_response(server, workflow_instance_id)
+        workflow_response = build_workflow_resume_response(server, workflow_instance_id)
+
     if workflow_response.status_code != 200:
         return McpResourceResponse(
             status_code=workflow_response.status_code,
@@ -463,6 +383,70 @@ def build_workflow_detail_resource_response(
         },
         headers={"content-type": "application/json"},
     )
+
+
+def _build_projection_failure_action_response(
+    server: CtxLedgerServer,
+    *,
+    workspace_id: UUID,
+    workflow_instance_id: UUID,
+    projection_type: ProjectionArtifactType | None,
+    action: str,
+    operation,
+    default_error_message: str,
+) -> ProjectionFailureActionResponse:
+    from .types import ProjectionFailureActionResponse
+
+    if server.workflow_service is None:
+        return ProjectionFailureActionResponse(
+            status_code=503,
+            payload={
+                "error": {
+                    "code": "server_not_ready",
+                    "message": "workflow service is not initialized",
+                }
+            },
+            headers={"content-type": "application/json"},
+        )
+
+    try:
+        updated_failure_count = operation(server.workflow_service)
+    except Exception as exc:
+        message = str(exc) or default_error_message
+        status_code, code = _projection_failure_error_status(message)
+        return ProjectionFailureActionResponse(
+            status_code=status_code,
+            payload={
+                "error": {
+                    "code": code,
+                    "message": message,
+                }
+            },
+            headers={"content-type": "application/json"},
+        )
+
+    return ProjectionFailureActionResponse(
+        status_code=200,
+        payload={
+            "workspace_id": str(workspace_id),
+            "workflow_instance_id": str(workflow_instance_id),
+            "projection_type": (
+                projection_type.value if projection_type is not None else None
+            ),
+            "updated_failure_count": updated_failure_count,
+            "status": action,
+        },
+        headers={"content-type": "application/json"},
+    )
+
+
+def _projection_failure_error_status(message: str) -> tuple[int, str]:
+    lowered = message.lower()
+    if "not found" in lowered:
+        return 404, "not_found"
+    if "does not belong to workspace" in lowered or "mismatch" in lowered:
+        return 400, "invalid_request"
+    return 500, "server_error"
 
 
 __all__ = [
