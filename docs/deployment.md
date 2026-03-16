@@ -479,15 +479,15 @@ That smoke script now supports:
 Representative local validation command shapes:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --tool-name memory_get_context --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token replace-me-with-a-strong-secret --tool-name memory_get_context --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
 Operational meaning of this evidence:
@@ -584,7 +584,7 @@ The intended shape is:
 With the no-auth HTTPS overlay running:
 
 - HTTPS MCP endpoint:
-  - `https://127.0.0.1:8444/mcp`
+  - `https://localhost:8444/mcp`
 
 Representative startup command:
 
@@ -595,11 +595,11 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-au
 Representative smoke validation commands:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8444 --tool-name memory_get_context --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8444 --tool-name memory_get_context --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8444 --scenario workflow --workflow-resource-read --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8444 --scenario workflow --workflow-resource-read --insecure
 ```
 
 ### 6.4.2 Local HTTPS-only small-auth path
@@ -621,7 +621,7 @@ The intended shape is:
 With the small-auth overlay running:
 
 - HTTPS MCP endpoint:
-  - `https://127.0.0.1:8443/mcp`
+  - `https://localhost:8443/mcp`
 
 Representative startup command:
 
@@ -632,7 +632,7 @@ CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f doc
 Representative smoke validation command for local self-signed testing:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --insecure --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --insecure --scenario workflow --workflow-resource-read
 ```
 
 ### Certificate guidance
@@ -882,7 +882,7 @@ For local deployment, the expected development path is:
 
 For the documented operator-facing deployment path, the expected MCP endpoint is:
 
-- `https://127.0.0.1:8443/mcp`
+- `https://localhost:8443/mcp`
 
 ## 9.3 Compose Expectations
 
@@ -1111,7 +1111,7 @@ A valid `v0.1.0` deployment should provide:
 - durable canonical workflow persistence
 - readiness tied to DB and schema availability
 - projection support as best-effort derived output
-- HTTPS MCP access at `https://127.0.0.1:8443/mcp` for the documented local operator-facing deployment path
+- HTTPS MCP access at `https://localhost:8443/mcp` for the documented local operator-facing deployment path
 
 The most important deployment property is not simply that the service starts, but that:
 

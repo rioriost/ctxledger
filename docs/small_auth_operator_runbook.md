@@ -145,7 +145,7 @@ The first operator task after startup should be to verify both rejection and all
 ### 7.1 Missing token must fail
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 Expected result:
@@ -156,7 +156,7 @@ Expected result:
 ### 7.2 Invalid token must fail
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 Expected result:
@@ -167,7 +167,7 @@ Expected result:
 ### 7.3 Valid token must pass
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token replace-me-with-a-strong-secret --scenario workflow --workflow-resource-read --insecure
 ```
 
 Expected result:
@@ -209,7 +209,7 @@ Point the client at the Traefik endpoint, not the private backend.
 Representative endpoint:
 
 ```/dev/null/txt#L1-1
-https://127.0.0.1:8443/mcp
+https://localhost:8443/mcp
 ```
 
 The client should send the same bearer token configured through `CTXLEDGER_SMALL_AUTH_TOKEN`.
@@ -223,7 +223,7 @@ Authorization: Bearer replace-me-with-a-strong-secret
 Operational rule:
 
 - if the client is configured for `http://127.0.0.1:8080/mcp`, that is a stale direct-local path and not the small-pattern proxy path
-- for this runbook, the intended operator path is `https://127.0.0.1:8443/mcp`
+- for this runbook, the intended operator path is `https://localhost:8443/mcp`
 
 ---
 
@@ -276,7 +276,7 @@ Likely causes:
 Check:
 
 - that the stack was started with both compose files
-- that the request target is `https://127.0.0.1:8443/mcp`
+- that the request target is `https://localhost:8443/mcp`
 - that `docker/traefik/certs/localhost.crt` and `docker/traefik/certs/localhost.key` exist
 - container logs if needed
 
@@ -377,7 +377,7 @@ Use this quick checklist for a normal work loop.
 - run valid-token workflow/resource smoke and confirm success
 
 ### Client setup
-- point the client to `https://127.0.0.1:8443/mcp`
+- point the client to `https://localhost:8443/mcp`
 - send `Authorization: Bearer <token>`
 - trust the local certificate chain or use a local-only insecure/testing mode when appropriate
 

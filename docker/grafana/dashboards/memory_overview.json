@@ -59,9 +59,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -77,7 +75,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT episode_count AS value FROM observability.memory_overview;",
+          "rawSql": "SELECT episode_count AS \"Episodes\" FROM observability.memory_overview;",
           "refId": "A"
         }
       ],
@@ -122,9 +120,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -140,7 +136,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT memory_item_count AS value FROM observability.memory_overview;",
+          "rawSql": "SELECT memory_item_count AS \"Memory Items\" FROM observability.memory_overview;",
           "refId": "A"
         }
       ],
@@ -185,9 +181,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -203,7 +197,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT memory_embedding_count AS value FROM observability.memory_overview;",
+          "rawSql": "SELECT memory_embedding_count AS \"Memory Embeddings\" FROM observability.memory_overview;",
           "refId": "A"
         }
       ],
@@ -248,9 +242,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -266,7 +258,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT memory_relation_count AS value FROM observability.memory_overview;",
+          "rawSql": "SELECT memory_relation_count AS \"Memory Relations\" FROM observability.memory_overview;",
           "refId": "A"
         }
       ],
@@ -295,7 +287,44 @@
           },
           "unit": "none"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "episode"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Episodes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "memory_item"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Memory items"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "memory_embedding"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Embeddings"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 9,
@@ -305,11 +334,7 @@
       },
       "id": 5,
       "options": {
-        "displayLabels": [
-          "name",
-          "value",
-          "percent"
-        ],
+        "displayLabels": ["name", "value", "percent"],
         "legend": {
           "displayMode": "table",
           "placement": "bottom",
@@ -317,9 +342,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -338,11 +361,11 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT provenance, memory_item_count AS value FROM observability.memory_item_provenance_counts ORDER BY provenance ASC;",
+          "rawSql": "SELECT initcap(replace(provenance, '_', ' '))::text AS provenance, memory_item_count AS \"Memory Items\" FROM observability.memory_item_provenance_counts ORDER BY memory_item_count DESC, provenance ASC;",
           "refId": "A"
         }
       ],
-      "title": "Memory Item Provenance Distribution",
+      "title": "Memory Item Provenance",
       "type": "piechart"
     },
     {
@@ -390,7 +413,56 @@
           "mappings": [],
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_episode_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest episode"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_memory_item_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest memory item"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_memory_embedding_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest embedding"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_memory_relation_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest relation"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 9,
@@ -444,10 +516,34 @@
                 "value": null
               }
             ]
-          },
-          "unit": "dateTimeAsIso"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "provenance"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Provenance"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "memory_item_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Memory items"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -460,9 +556,7 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true
@@ -477,11 +571,11 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  latest_episode_created_at,\n  latest_memory_item_created_at,\n  latest_memory_embedding_created_at,\n  latest_memory_relation_created_at\nFROM observability.memory_overview;",
+          "rawSql": "SELECT\n  COALESCE(to_char(latest_episode_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_episode_created_at,\n  COALESCE(to_char(latest_memory_item_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_memory_item_created_at,\n  COALESCE(to_char(latest_memory_embedding_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_memory_embedding_created_at,\n  COALESCE(to_char(latest_memory_relation_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_memory_relation_created_at\nFROM observability.memory_overview;",
           "refId": "A"
         }
       ],
-      "title": "Latest Memory Activity Markers",
+      "title": "Latest Memory Activity",
       "type": "table"
     },
     {
@@ -516,9 +610,7 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true
@@ -533,11 +625,11 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT provenance, memory_item_count\nFROM observability.memory_item_provenance_counts\nORDER BY memory_item_count DESC, provenance ASC;",
+          "rawSql": "SELECT initcap(replace(provenance, '_', ' '))::text AS provenance, memory_item_count\nFROM observability.memory_item_provenance_counts\nORDER BY memory_item_count DESC, provenance ASC;",
           "refId": "A"
         }
       ],
-      "title": "Provenance Breakdown Table",
+      "title": "Provenance Breakdown",
       "type": "table"
     },
     {
@@ -578,9 +670,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -596,7 +686,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS value\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'workflow_complete_auto';",
+          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS \"Auto Workflow Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'workflow_complete_auto';",
           "refId": "A"
         }
       ],
@@ -641,9 +731,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -659,7 +747,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS value\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'episode';",
+          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS \"Episode Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'episode';",
           "refId": "A"
         }
       ],
@@ -704,9 +792,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -722,7 +808,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS value\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'derived';",
+          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS \"Derived Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'derived';",
           "refId": "A"
         }
       ],
@@ -732,11 +818,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": [
-    "ctxledger",
-    "observability",
-    "memory"
-  ],
+  "tags": ["ctxledger", "observability", "memory"],
   "templating": {
     "list": []
   },

@@ -59,9 +59,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -77,7 +75,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT workspace_count AS value FROM observability.workflow_overview;",
+          "rawSql": "SELECT workspace_count AS \"Workspaces\" FROM observability.workflow_overview;",
           "refId": "A"
         }
       ],
@@ -122,9 +120,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -140,7 +136,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT workflow_count AS value FROM observability.workflow_overview;",
+          "rawSql": "SELECT workflow_count AS \"Workflow Instances\" FROM observability.workflow_overview;",
           "refId": "A"
         }
       ],
@@ -185,9 +181,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -203,7 +197,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT workflow_attempt_count AS value FROM observability.workflow_overview;",
+          "rawSql": "SELECT workflow_attempt_count AS \"Workflow Attempts\" FROM observability.workflow_overview;",
           "refId": "A"
         }
       ],
@@ -248,9 +242,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -266,7 +258,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT workflow_checkpoint_count AS value FROM observability.workflow_overview;",
+          "rawSql": "SELECT workflow_checkpoint_count AS \"Checkpoints\" FROM observability.workflow_overview;",
           "refId": "A"
         }
       ],
@@ -305,11 +297,7 @@
       },
       "id": 5,
       "options": {
-        "displayLabels": [
-          "name",
-          "value",
-          "percent"
-        ],
+        "displayLabels": ["name", "value", "percent"],
         "legend": {
           "displayMode": "table",
           "placement": "bottom",
@@ -317,9 +305,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -338,12 +324,28 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT status, workflow_count AS value FROM observability.workflow_status_counts ORDER BY status ASC;",
+          "rawSql": "SELECT initcap(status) AS status, workflow_count AS \"Workflows\" FROM observability.workflow_status_counts ORDER BY status ASC;",
           "refId": "A"
         }
       ],
       "title": "Workflow Status Distribution",
-      "type": "piechart"
+      "type": "piechart",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Workflows": 1,
+              "status": 0
+            },
+            "renameByName": {
+              "Workflows": "Workflows",
+              "status": "Status"
+            }
+          }
+        }
+      ]
     },
     {
       "datasource": {
@@ -377,11 +379,7 @@
       },
       "id": 6,
       "options": {
-        "displayLabels": [
-          "name",
-          "value",
-          "percent"
-        ],
+        "displayLabels": ["name", "value", "percent"],
         "legend": {
           "displayMode": "table",
           "placement": "bottom",
@@ -389,9 +387,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -410,12 +406,28 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT status, attempt_count AS value FROM observability.workflow_attempt_status_counts ORDER BY status ASC;",
+          "rawSql": "SELECT initcap(status) AS status, attempt_count AS \"Attempts\" FROM observability.workflow_attempt_status_counts ORDER BY status ASC;",
           "refId": "A"
         }
       ],
       "title": "Attempt Status Distribution",
-      "type": "piechart"
+      "type": "piechart",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Attempts": 1,
+              "status": 0
+            },
+            "renameByName": {
+              "Attempts": "Attempts",
+              "status": "Status"
+            }
+          }
+        }
+      ]
     },
     {
       "datasource": {
@@ -449,11 +461,7 @@
       },
       "id": 7,
       "options": {
-        "displayLabels": [
-          "name",
-          "value",
-          "percent"
-        ],
+        "displayLabels": ["name", "value", "percent"],
         "legend": {
           "displayMode": "table",
           "placement": "bottom",
@@ -461,9 +469,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -482,12 +488,28 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT status, verify_report_count AS value FROM observability.verify_report_status_counts ORDER BY status ASC;",
+          "rawSql": "SELECT initcap(status) AS status, verify_report_count AS \"Verify Reports\" FROM observability.verify_report_status_counts ORDER BY status ASC;",
           "refId": "A"
         }
       ],
-      "title": "Verify Report Status Distribution",
-      "type": "piechart"
+      "title": "Verify Status Distribution",
+      "type": "piechart",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Verify Reports": 1,
+              "status": 0
+            },
+            "renameByName": {
+              "Verify Reports": "Verify Reports",
+              "status": "Status"
+            }
+          }
+        }
+      ]
     },
     {
       "datasource": {
@@ -534,7 +556,44 @@
           "mappings": [],
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "workflow"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Workflow events"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempt"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Attempt events"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "verify_report"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Verify reports"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 9,
@@ -604,9 +663,7 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true,
@@ -627,12 +684,116 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  workflow_instance_id,\n  canonical_path,\n  ticket_id,\n  workflow_status,\n  latest_step_name,\n  latest_verify_status,\n  updated_at\nFROM observability.workflow_recent\nORDER BY updated_at DESC\nLIMIT 20;",
+          "rawSql": "SELECT\n  workflow_instance_id::text AS workflow_instance_id,\n  COALESCE(canonical_path, workspace_id::text) AS canonical_path,\n  ticket_id::text AS ticket_id,\n  workflow_status::text AS workflow_status,\n  COALESCE(latest_step_name, '') AS latest_step_name,\n  COALESCE(latest_verify_status, '') AS latest_verify_status,\n  updated_at\nFROM observability.workflow_recent\nORDER BY updated_at DESC\nLIMIT 20;",
           "refId": "A"
         }
       ],
       "title": "Recent Workflows",
-      "type": "table"
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "workflow_instance_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Workflow ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "canonical_path"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Workspace"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ticket_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Ticket"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "workflow_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Status"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_step_name"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest step"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_verify_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest verify status"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "updated_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Updated"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "datasource": {
@@ -650,10 +811,58 @@
                 "value": null
               }
             ]
-          },
-          "unit": "dateTimeAsIso"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_workflow_updated_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest workflow update"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_checkpoint_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest checkpoint"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_verify_report_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest verify report"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 7,
@@ -666,9 +875,7 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true
@@ -693,11 +900,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": [
-    "ctxledger",
-    "observability",
-    "runtime"
-  ],
+  "tags": ["ctxledger", "observability", "runtime"],
   "templating": {
     "list": []
   },

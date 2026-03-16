@@ -223,15 +223,15 @@ CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f doc
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --expect-http-status 401 --expect-auth-failure --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token wrong-token --expect-http-status 401 --expect-auth-failure --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --bearer-token replace-me-with-a-strong-secret --insecure --scenario workflow --workflow-resource-read
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token replace-me-with-a-strong-secret --insecure --scenario workflow --workflow-resource-read
 ```
 
 If your change also affects the HTTPS no-auth path, validate that flow too:
@@ -245,11 +245,11 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-au
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8444 --tool-name memory_get_context --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8444 --tool-name memory_get_context --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8444 --scenario workflow --workflow-resource-read --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8444 --scenario workflow --workflow-resource-read --insecure
 ```
 
 Expected local HTTPS setup notes:

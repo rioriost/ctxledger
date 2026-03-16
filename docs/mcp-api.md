@@ -412,15 +412,15 @@ A repository-provided smoke client exists at:
 Representative validation command shapes include:
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --tool-name memory_get_context --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --tool-name memory_get_context --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --scenario workflow --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --scenario workflow --insecure
 ```
 
 ```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://127.0.0.1:8443 --scenario workflow --workflow-resource-read --insecure
+python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --scenario workflow --workflow-resource-read --insecure
 ```
 
 These validations now cover:

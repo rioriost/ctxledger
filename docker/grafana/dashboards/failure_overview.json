@@ -59,9 +59,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -77,7 +75,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT failure_count AS value FROM observability.projection_failure_status_counts WHERE status = 'open';",
+          "rawSql": "SELECT COALESCE(failure_count, 0) AS \"Open Failures\" FROM observability.projection_failure_status_counts WHERE status = 'open';",
           "refId": "A"
         }
       ],
@@ -122,9 +120,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -140,7 +136,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT failure_count AS value FROM observability.projection_failure_status_counts WHERE status = 'resolved';",
+          "rawSql": "SELECT COALESCE(failure_count, 0) AS \"Resolved Failures\" FROM observability.projection_failure_status_counts WHERE status = 'resolved';",
           "refId": "A"
         }
       ],
@@ -185,9 +181,7 @@
         "justifyMode": "center",
         "orientation": "horizontal",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -203,7 +197,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT failure_count AS value FROM observability.projection_failure_status_counts WHERE status = 'ignored';",
+          "rawSql": "SELECT COALESCE(failure_count, 0) AS \"Ignored Failures\" FROM observability.projection_failure_status_counts WHERE status = 'ignored';",
           "refId": "A"
         }
       ],
@@ -242,11 +236,7 @@
       },
       "id": 4,
       "options": {
-        "displayLabels": [
-          "name",
-          "value",
-          "percent"
-        ],
+        "displayLabels": ["name", "value", "percent"],
         "legend": {
           "displayMode": "table",
           "placement": "bottom",
@@ -254,9 +244,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -275,7 +263,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT status, failure_count AS value FROM observability.projection_failure_status_counts ORDER BY status ASC;",
+          "rawSql": "SELECT initcap(status) AS status, failure_count AS \"Failures\" FROM observability.projection_failure_status_counts ORDER BY failure_count DESC, status ASC;",
           "refId": "A"
         }
       ],
@@ -304,7 +292,44 @@
           },
           "unit": "none"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "open"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Open"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "resolved"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Resolved"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ignored"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Ignored"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -314,11 +339,7 @@
       },
       "id": 5,
       "options": {
-        "displayLabels": [
-          "name",
-          "value",
-          "percent"
-        ],
+        "displayLabels": ["name", "value", "percent"],
         "legend": {
           "displayMode": "table",
           "placement": "bottom",
@@ -326,9 +347,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -347,7 +366,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT projection_type, COUNT(*)::bigint AS value FROM observability.projection_failures_recent GROUP BY projection_type ORDER BY projection_type ASC;",
+          "rawSql": "SELECT COALESCE(initcap(replace(projection_type, '_', ' ')), 'Unknown') AS projection_type, COUNT(*)::bigint AS \"Failures\" FROM observability.projection_failures_recent GROUP BY 1 ORDER BY \"Failures\" DESC, projection_type ASC;",
           "refId": "A"
         }
       ],
@@ -453,10 +472,126 @@
                 "value": null
               }
             ]
-          },
-          "unit": "dateTimeAsIso"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Status"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "projection_type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failure type"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "target_path"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Target path"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_code"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error code"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_message"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error message"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retry_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Retry count"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "occurred_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Occurred"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "resolved_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Resolved"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempt_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Attempt ID"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 9,
@@ -469,9 +604,7 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true,
@@ -492,7 +625,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  status,\n  projection_type,\n  target_path,\n  error_code,\n  error_message,\n  retry_count,\n  occurred_at,\n  resolved_at,\n  attempt_id\nFROM observability.projection_failures_recent\nORDER BY occurred_at DESC\nLIMIT 50;",
+          "rawSql": "SELECT\n  initcap(status)::text AS status,\n  COALESCE(initcap(replace(projection_type, '_', ' ')), 'Unknown')::text AS projection_type,\n  COALESCE(target_path, '')::text AS target_path,\n  COALESCE(NULLIF(error_code, ''), '')::text AS error_code,\n  COALESCE(error_message, '')::text AS error_message,\n  retry_count,\n  occurred_at,\n  resolved_at,\n  COALESCE(attempt_id::text, '') AS attempt_id\nFROM observability.projection_failures_recent\nORDER BY occurred_at DESC\nLIMIT 50;",
           "refId": "A"
         }
       ],
@@ -516,7 +649,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -531,9 +664,7 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true
@@ -571,10 +702,98 @@
                 "value": null
               }
             ]
-          },
-          "unit": "dateTimeAsIso"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "projection_failure_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failure ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "projection_type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failure type"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "target_path"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Target path"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_code"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error code"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_message"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Error message"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retry_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Retry count"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "occurred_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Occurred"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 7,
@@ -587,9 +806,7 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true
@@ -604,21 +821,17 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  projection_failure_id,\n  projection_type,\n  target_path,\n  error_code,\n  error_message,\n  retry_count,\n  occurred_at\nFROM observability.projection_failures_open\nORDER BY occurred_at DESC\nLIMIT 20;",
+          "rawSql": "SELECT\n  projection_failure_id::text AS projection_failure_id,\n  COALESCE(initcap(replace(projection_type, '_', ' ')), 'Unknown')::text AS projection_type,\n  COALESCE(target_path, '')::text AS target_path,\n  COALESCE(NULLIF(error_code, ''), '')::text AS error_code,\n  COALESCE(error_message, '')::text AS error_message,\n  retry_count,\n  occurred_at\nFROM observability.projection_failures_open\nORDER BY occurred_at DESC\nLIMIT 20;",
           "refId": "A"
         }
       ],
-      "title": "Currently Open Failures",
+      "title": "Current Open Failures",
       "type": "table"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": [
-    "ctxledger",
-    "observability",
-    "failures"
-  ],
+  "tags": ["ctxledger", "observability", "failures"],
   "templating": {
     "list": []
   },
