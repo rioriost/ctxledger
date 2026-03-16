@@ -1264,7 +1264,7 @@ class MemoryService:
             implemented=True,
             message=message,
             status="ok",
-            available_in_version="0.3.0",
+            available_in_version="0.4.0",
             results=limited_results,
             details=details,
         )

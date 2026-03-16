@@ -72,7 +72,7 @@ services:
         condition: service_healthy
     environment:
       CTXLEDGER_APP_NAME: ctxledger
-      CTXLEDGER_APP_VERSION: 0.1.0
+      CTXLEDGER_APP_VERSION: 0.4.0
       CTXLEDGER_ENV: docker
       CTXLEDGER_DATABASE_URL: postgresql://ctxledger:ctxledger@postgres:5432/ctxledger
       CTXLEDGER_TRANSPORT: http

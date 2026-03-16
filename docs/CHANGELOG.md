@@ -10,6 +10,69 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 - No unreleased entries yet.
 
+## [0.4.0] - 2026-03-16
+
+### Added
+
+- operator-facing observability CLI commands:
+  - `ctxledger stats`
+  - `ctxledger workflows`
+  - `ctxledger memory-stats`
+  - `ctxledger failures`
+- text and `--format json` output support for the observability CLI surfaces
+- canonical workflow aggregation and listing support for observability reporting across in-memory and PostgreSQL repositories
+- canonical memory statistics reporting, including:
+  - episode count
+  - memory item count
+  - memory embedding count
+  - memory relation count
+  - provenance breakdown
+  - latest activity timestamps
+- canonical failure inspection reporting, including:
+  - failure scope/type
+  - lifecycle state
+  - target path
+  - error code and message
+  - occurred/resolved timestamps
+  - retry count
+  - open failure count
+  - attempt id when present
+- optional Grafana deployment support for runtime observability, including:
+  - Compose overlay support
+  - datasource provisioning
+  - dashboard provisioning
+  - initial runtime, memory, and failure dashboards
+- observability SQL bootstrap views for PostgreSQL-backed dashboarding
+- Grafana operator runbook and expanded deployment guidance for read-only PostgreSQL observability access
+
+### Changed
+
+- the `0.4.0` milestone is now defined around observability rather than hierarchical retrieval
+- README quick start was rewritten to be more user-first and self-contained for local startup, MCP access, and Grafana bring-up
+- user-facing quick-start guidance now consistently favors `localhost` examples
+- stale test expectations were aligned to the active `0.4.0` version across CLI, config, and server validation paths
+- Grafana dashboards were polished with clearer operator-facing labels, improved legends, and timestamp-only field overrides to prevent `NaN` and epoch-like misrendering in mixed-value tables
+
+### Validation
+
+- focused coverage-target suite passed:
+  - `python -m pytest tests/test_coverage_targets.py -q`
+  - `237 passed`
+- full test suite passed:
+  - `python -m pytest -q`
+  - `799 passed, 1 skipped`
+
+### Notes
+
+- the single skipped test remains expected because real OpenAI integration requires `OPENAI_API_KEY`
+- `memory_search` is now reported as available in `0.4.0` in the current runtime-visible payloads
+- the strongest validated embedding/runtime paths remain:
+  - `openai`
+  - `local_stub`
+  - `custom_http`
+- `voyageai` and `cohere` configuration surfaces still exist, but full provider-specific runtime support remains incomplete
+- hierarchical memory retrieval remains deferred to `0.5.0`
+
 ## [0.3.0] - 2026-03-14
 
 ### Added

@@ -244,6 +244,24 @@ Current progress:
 - current dashboard/operator UX gaps:
   - stat panels still show series label `value` in places
   - pie chart/table presentation can be made more operator-friendly with better aliases and panel options
+- Grafana table rendering root cause was identified after the second SQL hardening pass:
+  - the remaining `NaN` / epoch-like rendering was caused by dashboard table panels using a global `dateTimeAsIso` unit
+  - this panel-level default was being applied to non-timestamp columns as well
+- Grafana table field configuration was then corrected:
+  - `docker/grafana/dashboards/runtime_overview.json`
+    - `Recent Workflows` now uses a timestamp-only override for `updated_at`
+    - `Latest Workflow Activity Markers` now uses timestamp-only overrides for its actual timestamp columns
+  - `docker/grafana/dashboards/failure_overview.json`
+    - `Recent Failures` now uses timestamp-only overrides for `occurred_at` and `resolved_at`
+    - `Current Open Failures` now uses a timestamp-only override for `occurred_at`
+  - `docker/grafana/dashboards/memory_overview.json`
+    - `Latest Memory Activity` no longer applies datetime formatting at the panel default level because the query already emits text timestamps via `to_char(...)`
+- expected operator-visible result after dashboard reload / hard refresh:
+  - `Recent Workflows` should stop showing `NaN`
+  - `Recent Failures` should stop showing `NaN`
+  - `Current Open Failures` should stop showing `NaN`
+  - `retry_count` should render as an integer instead of an epoch-like timestamp
+  - `Latest Memory Activity` should stay readable as text timestamps
 - README quick start has now been rewritten to be more user-first and self-contained:
   - key local startup steps were moved higher
   - Grafana compose overlay usage is now documented in README
@@ -260,10 +278,121 @@ Recommended next sequence:
 1. check that all README quick-start and live Grafana bring-up fixes are reflected consistently across repository docs
    - especially any remaining `127.0.0.1` vs `localhost` user-facing examples
    - and any places where quick-start-critical steps still only exist in linked docs
-2. make Grafana dashboards more operator-friendly
-   - improve panel aliases/labels
-   - remove generic `value` presentation where possible
-   - improve pie/table readability
-   - make latest-activity tables easier to scan
-3. decide whether to add a dedicated workflow-activity dashboard
+2. verify the latest Grafana panel field-override fix in the browser
+   - hard refresh dashboards
+   - confirm `NaN` is gone from:
+     - `Recent Workflows`
+     - `Recent Failures`
+     - `Current Open Failures`
+   - confirm `retry_count` renders as an integer
+   - confirm `Latest Memory Activity` remains readable
+3. continue Grafana dashboard UX polish
+   - runtime dashboard polish applied:
+     - clearer legend labels for runtime activity timeline
+       - `workflow` → `Workflow events`
+       - `attempt` → `Attempt events`
+       - `verify_report` → `Verify reports`
+     - `Recent Workflows` table now uses operator-facing column labels:
+       - `Workflow ID`
+       - `Workspace`
+       - `Ticket`
+       - `Status`
+       - `Latest step`
+       - `Latest verify status`
+       - `Updated`
+     - `Latest Workflow Activity Markers` table now uses clearer labels:
+       - `Latest workflow update`
+       - `Latest checkpoint`
+       - `Latest verify report`
+   - failure dashboard polish applied:
+     - `Recent Failures` table now uses operator-facing column labels:
+       - `Status`
+       - `Failure type`
+       - `Target path`
+       - `Error code`
+       - `Error message`
+       - `Retry count`
+       - `Occurred`
+       - `Resolved`
+       - `Attempt ID`
+     - `Current Open Failures` table now uses operator-facing column labels:
+       - `Failure ID`
+       - `Failure type`
+       - `Target path`
+       - `Error code`
+       - `Error message`
+       - `Retry count`
+       - `Occurred`
+     - failure timeline series display names were prepared for cleaner operator reading
+   - memory dashboard polish applied:
+     - memory activity timeline legend labels improved:
+       - `episode` → `Episodes`
+       - `memory_item` → `Memory items`
+       - `memory_embedding` → `Embeddings`
+     - `Latest Memory Activity` table now uses clearer labels:
+       - `Latest episode`
+       - `Latest memory item`
+       - `Latest embedding`
+       - `Latest relation`
+     - `Provenance Breakdown` table now uses clearer labels:
+       - `Provenance`
+       - `Memory items`
+4. live follow-up still recommended
+   - hard refresh Grafana again and confirm the label polish is visible
+   - check whether any panel still shows generic `value`
+   - check whether pie/table readability now feels good enough without more transformations
+5. decide whether to add a dedicated workflow-activity dashboard
    - only if it adds real operator value beyond the current runtime overview
+
+## 0.4.0 validation update
+### Version-state recheck
+The previously noted runtime/distribution version mismatch is now resolved.
+
+Confirmed active values:
+- `pyproject.toml`
+  - project version is `0.4.0`
+- `src/ctxledger/config.py`
+  - default `CTXLEDGER_APP_VERSION` is `0.4.0`
+- `docker/docker-compose.yml`
+  - `CTXLEDGER_APP_VERSION: 0.4.0`
+- `docker/docker-compose.small-auth.yml`
+  - `CTXLEDGER_APP_VERSION: 0.4.0`
+- `docker/auth_small/src/auth_small_app.py`
+  - FastAPI app version is `0.4.0`
+- `src/ctxledger/memory/service.py`
+  - implemented `memory_search` now reports `available_in_version="0.4.0"`
+
+Conclusion:
+- the earlier `NO-GO` from version-string drift is no longer current
+- remaining release judgment should be based on current docs/runtime validation, not stale version metadata concerns
+
+### Validation reruns
+- focused coverage-target suite passed:
+  - `python -m pytest tests/test_coverage_targets.py -q`
+  - `237 passed`
+- full suite initially exposed stale test expectations after the `0.4.0` bump:
+  - `tests/test_cli.py`
+    - version fallback expected `0.2.0`
+  - `tests/test_config.py`
+    - default app version expected `0.3.0`
+  - `tests/test_server.py`
+    - `memory_search.available_in_version` expected `0.3.0`
+- these stale test expectations were updated to match current `0.4.0` behavior
+- full suite rerun then passed:
+  - `python -m pytest -q`
+  - `799 passed, 1 skipped`
+
+### Current release judgment
+- current internal `0.4.0` validation status: **GO pending final docs/changelog/commit closeout**
+- single skipped test remains expected:
+  - real OpenAI integration requires `OPENAI_API_KEY`
+
+### Important files touched in this validation pass
+- `tests/test_cli.py`
+- `tests/test_config.py`
+- `tests/test_server.py`
+
+### Next recommended action
+1. update `docs/CHANGELOG.md` with a real `0.4.0` entry
+2. do a final docs consistency / release-note pass
+3. commit the `0.4.0` test expectation alignment and closeout notes

@@ -951,7 +951,7 @@ def test_cli_helpers_cover_schema_path_and_version_fallback(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.2.0"
+    assert captured.out.strip() == "0.4.0"
 
 
 def test_cli_apply_schema_covers_missing_url_and_driver_paths(
@@ -4180,7 +4180,7 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert search_response.feature == MemoryFeature.SEARCH
     assert search_response.implemented is True
     assert search_response.status == "ok"
-    assert search_response.available_in_version == "0.3.0"
+    assert search_response.available_in_version == "0.4.0"
     assert search_response.details["limit"] == 5
     assert search_response.details["filters"] == {"kind": "episode"}
     assert search_response.details["search_mode"] == "memory_item_lexical"

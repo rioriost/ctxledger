@@ -3330,7 +3330,7 @@ def test_build_memory_search_tool_handler_returns_implemented_payload() -> None:
     assert response.payload["result"]["feature"] == "memory_search"
     assert response.payload["result"]["implemented"] is True
     assert response.payload["result"]["status"] == "ok"
-    assert response.payload["result"]["available_in_version"] == "0.3.0"
+    assert response.payload["result"]["available_in_version"] == "0.4.0"
     assert response.payload["result"]["details"] == {
         "query": "projection drift",
         "normalized_query": "projection drift",
