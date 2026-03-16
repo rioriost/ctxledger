@@ -967,7 +967,7 @@ def test_cli_helpers_cover_schema_path_and_version_fallback(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.5.2"
+    assert captured.out.strip() == "0.5.3"
 
 
 def test_workflow_service_stats_helper_error_branches() -> None:

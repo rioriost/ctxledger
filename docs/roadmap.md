@@ -234,7 +234,7 @@ Expected themes:
 - focused validation for transaction behavior, cleanup, and regression safety
 - runtime/bootstrap correctness for both CLI and HTTP-driven resume behavior
 
-## 0.5.2
+## 0.5.3
 
 Planned focus:
 
@@ -261,7 +261,7 @@ Current investigation framing:
 - because `ctxledger` tools are commonly invoked by AI agents that read repository `.rules`, guidance quality in `.rules` is part of the problem space and should be treated as potentially causal rather than merely advisory
 - the current resume path performs synchronous, multi-step PostgreSQL-backed resume assembly, so pool waits, blocking queries, or transport timeout budget mismatches remain relevant suspects even when agent misuse is also present
 
-Likely workstreams for `0.5.2`:
+Likely workstreams for `0.5.3`:
 
 - tool-surface and service hardening for incorrect identifier usage
 - `.rules` guidance refinement for resume/start decision-making and identifier selection
@@ -269,7 +269,7 @@ Likely workstreams for `0.5.2`:
 - selective query/index/runtime review for resume-related lookup stages
 - documentation updates that make the correct operational flow obvious for both humans and agent-driven tool callers
 
-Success shape for `0.5.2`:
+Success shape for `0.5.3`:
 
 - AI agents following `.rules` are less likely to call `workflow_resume` with a `workspace_id`
 - incorrect resume calls produce clearer, faster failure behavior instead of opaque timeouts where possible
