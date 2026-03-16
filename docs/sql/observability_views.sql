@@ -106,44 +106,6 @@ SELECT
 FROM memory_items
 GROUP BY provenance;
 
-CREATE OR REPLACE VIEW observability.projection_failures_recent AS
-SELECT
-  projection_failure_id,
-  workspace_id,
-  workflow_instance_id,
-  attempt_id,
-  projection_type,
-  target_path,
-  error_code,
-  error_message,
-  status,
-  retry_count,
-  occurred_at,
-  resolved_at
-FROM projection_failures;
-
-CREATE OR REPLACE VIEW observability.projection_failure_status_counts AS
-SELECT
-  status,
-  COUNT(*)::bigint AS failure_count
-FROM projection_failures
-GROUP BY status;
-
-CREATE OR REPLACE VIEW observability.projection_failures_open AS
-SELECT
-  projection_failure_id,
-  workspace_id,
-  workflow_instance_id,
-  attempt_id,
-  projection_type,
-  target_path,
-  error_code,
-  error_message,
-  retry_count,
-  occurred_at
-FROM projection_failures
-WHERE status = 'open';
-
 CREATE OR REPLACE VIEW observability.runtime_activity_timeline AS
 SELECT
   'workflow_instance'::text AS event_type,
@@ -179,13 +141,7 @@ SELECT
   'memory_embedding'::text AS event_type,
   memory_embedding_id::text AS entity_id,
   created_at AS event_at
-FROM memory_embeddings
-UNION ALL
-SELECT
-  'projection_failure'::text AS event_type,
-  projection_failure_id::text AS entity_id,
-  occurred_at AS event_at
-FROM projection_failures;
+FROM memory_embeddings;
 
 COMMIT;
 

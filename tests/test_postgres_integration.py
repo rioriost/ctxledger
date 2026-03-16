@@ -63,7 +63,7 @@ DOCKER_COMPOSE_FILE = (
     Path(__file__).resolve().parents[1] / "docker" / "docker-compose.yml"
 )
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATABASE_URL = "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger"
+DEFAULT_DATABASE_URL = "postgresql://ctxledger:ctxledger@localhost:55432/ctxledger"
 POSTGRES_SERVICE_NAME = "postgres"
 TEST_SCHEMA_PREFIX = "ctxledger_test_"
 

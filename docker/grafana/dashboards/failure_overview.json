@@ -75,7 +75,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(failure_count, 0) AS \"Open Failures\" FROM observability.projection_failure_status_counts WHERE status = 'open';",
+          "rawSql": "SELECT COUNT(*)::bigint AS \"Open Failures\"\nFROM observability.failure_overview\nWHERE failure_status = 'open';",
           "refId": "A"
         }
       ],
@@ -136,7 +136,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(failure_count, 0) AS \"Resolved Failures\" FROM observability.projection_failure_status_counts WHERE status = 'resolved';",
+          "rawSql": "SELECT COUNT(*)::bigint AS \"Resolved Failures\"\nFROM observability.failure_overview\nWHERE failure_status = 'resolved';",
           "refId": "A"
         }
       ],
@@ -197,7 +197,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(failure_count, 0) AS \"Ignored Failures\" FROM observability.projection_failure_status_counts WHERE status = 'ignored';",
+          "rawSql": "SELECT COUNT(*)::bigint AS \"Ignored Failures\"\nFROM observability.failure_overview\nWHERE failure_status = 'ignored';",
           "refId": "A"
         }
       ],
@@ -230,7 +230,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
         "y": 5
       },
@@ -263,114 +263,11 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT initcap(status) AS status, failure_count AS \"Failures\" FROM observability.projection_failure_status_counts ORDER BY failure_count DESC, status ASC;",
+          "rawSql": "SELECT initcap(failure_status) AS status, COUNT(*)::bigint AS \"Failures\"\nFROM observability.failure_overview\nGROUP BY 1\nORDER BY \"Failures\" DESC, status ASC;",
           "refId": "A"
         }
       ],
       "title": "Failure Status Distribution",
-      "type": "piechart"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "open"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Open"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "resolved"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Resolved"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "ignored"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Ignored"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 5
-      },
-      "id": 5,
-      "options": {
-        "displayLabels": ["name", "value", "percent"],
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "pieType": "pie",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COALESCE(initcap(replace(projection_type, '_', ' ')), 'Unknown') AS projection_type, COUNT(*)::bigint AS \"Failures\" FROM observability.projection_failures_recent GROUP BY 1 ORDER BY \"Failures\" DESC, projection_type ASC;",
-          "refId": "A"
-        }
-      ],
-      "title": "Failure Type Distribution",
       "type": "piechart"
     },
     {
@@ -422,11 +319,11 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 12,
+        "x": 12,
         "y": 5
       },
-      "id": 6,
+      "id": 5,
       "options": {
         "legend": {
           "calcs": [],
@@ -449,7 +346,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('hour', occurred_at) AS time, status AS metric, COUNT(*)::bigint AS value\nFROM observability.projection_failures_recent\nWHERE occurred_at IS NOT NULL\nGROUP BY 1, 2\nORDER BY 1, 2;",
+          "rawSql": "SELECT date_trunc('hour', occurred_at) AS time, failure_status AS metric, COUNT(*)::bigint AS value\nFROM observability.failure_overview\nWHERE occurred_at IS NOT NULL\nGROUP BY 1, 2\nORDER BY 1, 2;",
           "refId": "A"
         }
       ],
@@ -478,24 +375,36 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "status"
+              "options": "failure_scope"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Status"
+                "value": "Failure scope"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "projection_type"
+              "options": "failure_type"
             },
             "properties": [
               {
                 "id": "displayName",
                 "value": "Failure type"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failure_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Status"
               }
             ]
           },
@@ -599,7 +508,7 @@
         "x": 0,
         "y": 13
       },
-      "id": 7,
+      "id": 6,
       "options": {
         "footer": {
           "countRows": false,
@@ -625,7 +534,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  initcap(status)::text AS status,\n  COALESCE(initcap(replace(projection_type, '_', ' ')), 'Unknown')::text AS projection_type,\n  COALESCE(target_path, '')::text AS target_path,\n  COALESCE(NULLIF(error_code, ''), '')::text AS error_code,\n  COALESCE(error_message, '')::text AS error_message,\n  retry_count,\n  occurred_at,\n  resolved_at,\n  COALESCE(attempt_id::text, '') AS attempt_id\nFROM observability.projection_failures_recent\nORDER BY occurred_at DESC\nLIMIT 50;",
+          "rawSql": "SELECT\n  failure_scope,\n  failure_type,\n  failure_status,\n  COALESCE(target_path, '')::text AS target_path,\n  COALESCE(NULLIF(error_code, ''), '')::text AS error_code,\n  COALESCE(error_message, '')::text AS error_message,\n  retry_count,\n  occurred_at,\n  resolved_at,\n  COALESCE(attempt_id::text, '') AS attempt_id\nFROM observability.failure_overview\nORDER BY occurred_at DESC\nLIMIT 50;",
           "refId": "A"
         }
       ],
@@ -659,7 +568,7 @@
         "x": 0,
         "y": 22
       },
-      "id": 8,
+      "id": 7,
       "options": {
         "footer": {
           "countRows": false,
@@ -679,153 +588,11 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  error_message,\n  COUNT(*)::bigint AS occurrence_count\nFROM observability.projection_failures_recent\nGROUP BY error_message\nORDER BY occurrence_count DESC, error_message ASC\nLIMIT 20;",
+          "rawSql": "SELECT\n  COALESCE(error_message, '')::text AS error_message,\n  COUNT(*)::bigint AS occurrence_count\nFROM observability.failure_overview\nGROUP BY 1\nORDER BY occurrence_count DESC, error_message ASC\nLIMIT 20;",
           "refId": "A"
         }
       ],
       "title": "Top Failure Messages",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "projection_failure_id"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Failure ID"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "projection_type"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Failure type"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "target_path"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Target path"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "error_code"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Error code"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "error_message"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Error message"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "retry_count"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Retry count"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "occurred_at"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Occurred"
-              },
-              {
-                "id": "unit",
-                "value": "dateTimeAsIso"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 22
-      },
-      "id": 9,
-      "options": {
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  projection_failure_id::text AS projection_failure_id,\n  COALESCE(initcap(replace(projection_type, '_', ' ')), 'Unknown')::text AS projection_type,\n  COALESCE(target_path, '')::text AS target_path,\n  COALESCE(NULLIF(error_code, ''), '')::text AS error_code,\n  COALESCE(error_message, '')::text AS error_message,\n  retry_count,\n  occurred_at\nFROM observability.projection_failures_open\nORDER BY occurred_at DESC\nLIMIT 20;",
-          "refId": "A"
-        }
-      ],
-      "title": "Current Open Failures",
       "type": "table"
     }
   ],
@@ -843,6 +610,6 @@
   "timezone": "browser",
   "title": "ctxledger Failure Overview",
   "uid": "ctxledger-failure-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

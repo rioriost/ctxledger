@@ -27,7 +27,6 @@ from ctxledger.db.postgres import (
     _schema_path,
     _to_datetime,
     _to_uuid,
-    build_connection_pool,
     build_postgres_uow_factory,
     load_postgres_schema_sql,
 )
@@ -612,7 +611,7 @@ def test_postgres_verify_report_repository_create_raises_when_missing_row() -> N
 def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    cursor = FakeCursor()
+    cursor = FakeCursor(executed=[])
     connection = FakeConnection(cursor)
 
     monkeypatch.setattr(postgres_module, "_connect", lambda database_url: connection)
@@ -621,24 +620,19 @@ def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle(
         database_url="postgresql://ctxledger/db",
         statement_timeout_ms=456,
     )
+    pool = FakeConnectionPool(connection)
+    uow = PostgresUnitOfWork(config, pool)
 
-    def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle() -> None:
-        connection = FakeConnection(FakeCursor(executed=[]))
-        pool = FakeConnectionPool(connection)
-        uow = PostgresUnitOfWork(pool)
-
-        with uow as active_uow:
-            assert active_uow is uow
-            assert isinstance(uow.workspaces, PostgresWorkspaceRepository)
-            assert isinstance(
-                uow.workflow_instances, PostgresWorkflowInstanceRepository
-            )
-            assert isinstance(uow.workflow_attempts, PostgresWorkflowAttemptRepository)
-            assert isinstance(
-                uow.workflow_checkpoints, PostgresWorkflowCheckpointRepository
-            )
-            assert isinstance(uow.verify_reports, PostgresVerifyReportRepository)
-            uow.commit()
+    with uow as active_uow:
+        assert active_uow is uow
+        assert isinstance(uow.workspaces, PostgresWorkspaceRepository)
+        assert isinstance(uow.workflow_instances, PostgresWorkflowInstanceRepository)
+        assert isinstance(uow.workflow_attempts, PostgresWorkflowAttemptRepository)
+        assert isinstance(
+            uow.workflow_checkpoints, PostgresWorkflowCheckpointRepository
+        )
+        assert isinstance(uow.verify_reports, PostgresVerifyReportRepository)
+        uow.commit()
 
     assert connection.commit_calls == 1
     assert connection.rollback_calls == 0

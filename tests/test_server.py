@@ -232,11 +232,11 @@ def make_resume_fixture() -> WorkflowResume:
     )
     warnings = (
         ResumeIssue(
-            code="stale_projection",
-            message="resume projection is stale relative to canonical workflow state",
+            code="resume_warning",
+            message="resume state requires operator review before continuing",
             details={
-                "projection_type": "resume_md",
-                "target_path": ".agent/resume.md",
+                "reason": "operator_review_required",
+                "scope": "workflow_resume",
             },
         ),
     )
@@ -808,11 +808,11 @@ def test_serialize_workflow_resume_returns_api_ready_payload() -> None:
     assert payload["latest_verify_report"]["status"] == VerifyStatus.PASSED.value
     assert payload["warnings"] == [
         {
-            "code": "stale_projection",
-            "message": "resume projection is stale relative to canonical workflow state",
+            "code": "resume_warning",
+            "message": "resume state requires operator review before continuing",
             "details": {
-                "projection_type": "resume_md",
-                "target_path": ".agent/resume.md",
+                "reason": "operator_review_required",
+                "scope": "workflow_resume",
             },
         }
     ]

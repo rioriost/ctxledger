@@ -504,7 +504,6 @@ def test_verify_report_repository_contract_returns_latest_by_attempt() -> None:
 def test_memory_item_repository_contract_tracks_workspace_and_episode_items() -> None:
     repo = _MemoryItemRepoStub()
     workspace = sample_workspace()
-    workflow = sample_workflow(workspace.workspace_id)
     older_item = MemoryItemRecord(
         memory_id=uuid4(),
         workspace_id=workspace.workspace_id,

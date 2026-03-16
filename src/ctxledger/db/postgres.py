@@ -7,8 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from ctxledger.workflow.service import (
     EpisodeRecord,
@@ -32,7 +31,6 @@ from ctxledger.workflow.service import (
     WorkflowInstanceStatus,
     Workspace,
     WorkspaceRepository,
-    utc_now,
 )
 
 try:

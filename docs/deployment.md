@@ -507,9 +507,6 @@ Representative HTTP route names exposed by these debug surfaces may include:
 - `runtime_routes`
 - `runtime_tools`
 - `workflow_resume`
-- `workflow_closed_projection_failures`
-- `projection_failures_ignore`
-- `projection_failures_resolve`
 
 Deployment policy:
 
@@ -659,75 +656,25 @@ These local HTTPS paths improve production-like operator validation, but they do
 
 These details are useful for diagnostics but increase observability exposure, so they should be treated as operationally sensitive.
 
-In addition to `/debug/*`, operators should also treat HTTP projection failure action routes as operational mutation surfaces:
+The local HTTPS paths do not add any additional operator-only mutation routes beyond the supported MCP and workflow inspection surfaces.
 
-- `projection_failures_ignore`
-- `projection_failures_resolve`
+Operational guidance for these paths:
 
-Operational guidance for these routes:
-
-- protect them with the same proxy-layer authentication boundary as other protected HTTP endpoints
-- expose them only to trusted operators or trusted automation
-- prefer TLS termination and reverse-proxy access control when the HTTP surface is network-accessible
-- require the strict implemented path shape for each action route:
-  - `/projection_failures_ignore`
-  - `/projection_failures_resolve`
-- treat requests using the wrong path shape as invalid route targets that should resolve to `404 not_found` rather than as alternate entry points for the same action
-- configure reverse proxies and gateways with exact path matching for these action routes so that unexpected alternate paths do not become accepted mutation entry points
-- keep request logging for these routes enabled at the proxy or gateway boundary so operator-triggered lifecycle closures remain observable during incident review
-- treat query parameters such as `workspace_id`, `workflow_instance_id`, and optional `projection_type` as operational identifiers that may reveal internal workflow metadata in logs or access traces
-- avoid using these routes as general client-facing APIs; they are intended for explicit lifecycle handling of projection failures
-- remember that `ignored` closes visibility of an open failure without claiming successful projection repair, while `resolved` should be used only when reconciliation or equivalent recovery evidence exists
+- protect operator-facing HTTPS access with the same proxy-layer authentication boundary used for other protected endpoints when authentication is enabled
+- expose the HTTPS surface only to trusted operators or trusted local automation
+- prefer exact path matching for supported entrypoints such as `/mcp` and `/debug/*`
+- keep request logging enabled at the proxy or gateway boundary so operational access remains observable during incident review
+- treat workflow-scoping identifiers that may appear in query strings, resource URIs, or logs as operational metadata
 
 Representative reverse-proxy expectations:
 
-- match `projection_failures_ignore` only on `/projection_failures_ignore`
-- match `projection_failures_resolve` only on `/projection_failures_resolve`
+- match only the intended HTTPS entrypoints
 - apply the same auth, TLS, and trusted-network policy used for other protected operator endpoints
 - preserve enough request logging to identify:
-  - which action route was called
+  - which route was called
   - whether auth succeeded or failed
   - which workflow-scoping identifiers were present
   - the response status returned to the caller
-
-Representative reverse-proxy example:
-
-This is a representative Nginx-style example showing exact path matching for the HTTP action routes.  It is intentionally illustrative rather than production-complete.
-
-```/dev/null/nginx.conf#L1-20
-location = /projection_failures_ignore {
-    proxy_pass http://ctxledger_upstream;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
-    # Preserve normal operator-facing request logging.
-    access_log /var/log/nginx/ctxledger-action-access.log;
-}
-
-location = /projection_failures_resolve {
-    proxy_pass http://ctxledger_upstream;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
-    # Preserve normal operator-facing request logging.
-    access_log /var/log/nginx/ctxledger-action-access.log;
-}
-```
-
-Representative proxy access-log example:
-
-```/dev/null/log#L1-2
-2026-03-12T10:15:30Z proxy=nginx request_id=req_123 remote_addr=10.0.0.12 method=GET path=/projection_failures_ignore query="workspace_id=11111111-1111-1111-1111-111111111111&workflow_instance_id=22222222-2222-2222-2222-222222222222&projection_type=resume_json" auth_result=success upstream_status=404 error_code=not_found
-2026-03-12T10:15:30Z proxy=nginx request_id=req_123 error_message="projection failure ignore endpoint requires /projection_failures_ignore" forwarded_host=ctxledger.internal operator_subject=ops-user-7
-```
-
-Representative implications of this example:
-
-- exact path matching avoids accidentally accepting alternate action paths such as prefixed or rewritten variants
-- operator-facing auth and TLS policy should be applied consistently to both action routes
-- access logging should preserve enough request/response visibility for later incident review
 - query parameters may contain operational identifiers, so log retention and access policy should reflect that sensitivity
 - proxy logs should make invalid-path `404 not_found` responses distinguishable from auth failures and validation-driven `400 invalid_request` responses
 
@@ -906,7 +853,7 @@ Without persistent DB storage, the system would lose canonical workflow state, w
 
 Projection files are derived artifacts, not canonical state.
 
-As of `v0.5.3`, local repository `.agent/resume.json` and `.agent/resume.md` files are no longer a supported user-facing feature. Historical projection records and failure metadata may still exist in canonical storage, but current workflow inspection should rely on supported PostgreSQL-backed interfaces.
+Current workflow inspection should rely on supported PostgreSQL-backed interfaces and operator-facing observability surfaces.
 
 ## 10.1 Projection Path Policy
 

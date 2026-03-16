@@ -8,7 +8,7 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ## [Unreleased]
 
-- planned `0.5.3` follow-up hardening work for `workflow_resume` timeout diagnosis and mitigation
+- planned `0.5.4` follow-up hardening work for `workflow_resume` timeout diagnosis and mitigation
 - roadmap/docs updates are being prepared for:
   - timeout-aware resume-path hardening
   - clearer workflow-versus-workspace identifier guidance

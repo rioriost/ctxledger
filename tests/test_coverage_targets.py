@@ -161,12 +161,6 @@ def make_settings(
             path=path,
         ),
         debug=DebugSettings(enabled=debug_enabled),
-        projection=SimpleNamespace(
-            enabled=True,
-            directory_name=".agent",
-            write_markdown=True,
-            write_json=True,
-        ),
         logging=LoggingSettings(
             level=LogLevel.INFO,
             structured=True,
@@ -821,7 +815,7 @@ def test_cli_helpers_cover_schema_path_and_version_fallback(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.5.3"
+    assert captured.out.strip() == "0.5.4"
 
 
 def test_workflow_service_stats_helper_error_branches() -> None:
@@ -1405,7 +1399,6 @@ def test_cli_serve_and_main_dispatch_paths(
 
 
 def test_workflow_service_stats_and_listing_cover_none_and_validation_paths() -> None:
-    now = datetime(2024, 10, 3, tzinfo=UTC)
 
     class NoneStatsUow:
         def __init__(self) -> None:

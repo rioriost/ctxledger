@@ -4,7 +4,6 @@ import importlib
 import logging
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -24,7 +23,6 @@ from ctxledger.workflow.service import (
     InvalidStateTransitionError,
     RegisterWorkspaceInput,
     ResumableStatus,
-    ResumeIssue,
     ResumeWorkflowInput,
     StartWorkflowInput,
     ValidationError,
@@ -39,12 +37,10 @@ from ctxledger.workflow.service import (
     WorkflowInstance,
     WorkflowInstanceStatus,
     WorkflowNotFoundError,
-    WorkflowResume,
     WorkflowService,
     Workspace,
     WorkspaceNotFoundError,
     WorkspaceRegistrationConflictError,
-    utc_now,
 )
 
 

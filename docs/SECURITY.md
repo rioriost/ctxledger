@@ -129,9 +129,6 @@ Representative HTTP route names exposed by these debug surfaces may include:
 - `runtime_routes`
 - `runtime_tools`
 - `workflow_resume`
-- `workflow_closed_projection_failures`
-- `projection_failures_ignore`
-- `projection_failures_resolve`
 
 These endpoints are useful for diagnostics, but they can reveal operational metadata such as:
 
@@ -140,9 +137,6 @@ These endpoints are useful for diagnostics, but they can reveal operational meta
   - `runtime_routes`
   - `runtime_tools`
   - `workflow_resume`
-  - `workflow_closed_projection_failures`
-  - `projection_failures_ignore`
-  - `projection_failures_resolve`
 - runtime wiring state
 
 Because of this, `/debug/*` should be treated as operationally sensitive.
@@ -199,55 +193,7 @@ This recommendation is especially important for the documented proxy-first deplo
 - in the small pattern, `/debug/*` should remain behind the same Traefik + forward-auth gate as `/mcp`
 - in a future large pattern, `/debug/*` should remain behind the identity-aware proxy/gateway layer and should not become a casually exposed multi-user surface
 
-## 4.4 HTTP Action Route Cautions
 
-`ctxledger` also exposes HTTP mutation routes for projection failure lifecycle handling.
-
-Current action routes include:
-
-- `projection_failures_ignore`
-- `projection_failures_resolve`
-
-These routes mutate canonical projection failure lifecycle state.  They do not merely return diagnostic metadata, and they should not be treated like low-risk read endpoints.
-
-They also require strict path shapes:
-
-- `projection_failures_ignore` requires `/projection_failures_ignore`
-- `projection_failures_resolve` requires `/projection_failures_resolve`
-
-Requests sent to unexpected path shapes should be treated as `404 not_found` rather than as valid action requests that only fail later during query validation.
-
-Operational cautions:
-
-1. treat these routes as state-changing operator actions, even though their current HTTP contract may be invoked through query-parameter-based requests
-2. protect them with the same proxy-layer authentication boundary as other protected HTTP endpoints whenever they are exposed
-3. avoid exposing them to untrusted callers, because a successful request can change whether open projection failures remain operationally visible
-4. prefer routing them only through trusted operator paths such as an authenticated reverse proxy, VPN, private network, or equivalent internal access boundary
-5. do not treat `projection_failures_ignore` as a repair mechanism; it closes visibility of matching open failures without claiming successful projection recovery
-6. reserve `projection_failures_resolve` for cases where successful reconciliation or equivalent recovery evidence exists
-7. preserve normal operational logging around the use of these routes so that manual lifecycle closure actions remain observable during incident review
-8. document and monitor the exact path shapes in reverse proxies, gateway policy, and access control rules so that unexpected alternate paths do not accidentally become accepted operator conventions
-9. keep reverse proxy or gateway policy aligned with the exact implemented action paths so that only the intended route shapes are forwarded to the application
-10. retain enough request/response observability for these routes to support incident review, operator accountability, and post-hoc reconstruction of manual lifecycle closure activity
-
-Representative observability guidance includes:
-
-- log which exact action path was requested
-- log whether proxy-layer authentication succeeded or failed
-- log the HTTP response status returned for the action request
-- treat `workspace_id`, `workflow_instance_id`, and optional `projection_type` as sensitive operational identifiers that may appear in access logs
-- prefer structured logs or proxy fields that make operator-triggered closure events easy to correlate during incident review
-
-Representative edge logging example:
-
-```/dev/null/log#L1-8
-ts=2026-03-12T10:15:30Z layer=edge event=projection_failure_action_request method=GET path=/projection_failures_ignore auth.result=success response.status=404
-workspace_id=11111111-1111-1111-1111-111111111111 workflow_instance_id=22222222-2222-2222-2222-222222222222 projection_type=resume_json
-error.code=not_found error.message="projection failure ignore endpoint requires /projection_failures_ignore"
-forwarded_host=ctxledger.internal request_id=req_123 operator.subject=ops-user-7
-```
-
-This kind of logging should make it possible to distinguish at least:
 
 - successful operator-triggered ignore/resolve actions
 - rejected requests caused by proxy-auth failure

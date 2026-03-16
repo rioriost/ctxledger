@@ -288,7 +288,6 @@ def _format_stats_text(stats: object) -> str:
         "",
         "Other:",
         f"- checkpoints: {getattr(stats, 'checkpoint_count', 0)}",
-        f"- open_projection_failures: {getattr(stats, 'open_projection_failure_count', 0)}",
         "",
         "Latest activity:",
         f"- workflow_updated_at: {getattr(stats, 'latest_workflow_updated_at', None)}",
@@ -326,9 +325,6 @@ def _stats(args: argparse.Namespace) -> int:
                     "episode_count": stats.episode_count,
                     "memory_item_count": stats.memory_item_count,
                     "memory_embedding_count": stats.memory_embedding_count,
-                    "open_projection_failure_count": (
-                        stats.open_projection_failure_count
-                    ),
                     "latest_workflow_updated_at": _isoformat_or_none(
                         stats.latest_workflow_updated_at
                     ),

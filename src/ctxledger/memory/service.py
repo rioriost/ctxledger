@@ -1622,9 +1622,6 @@ class MemoryService:
             latest_attempt_started_at = freshness.get(
                 "latest_attempt_started_at"
             ) or datetime.min.replace(tzinfo=timezone.utc)
-            workflow_updated_at = freshness.get(
-                "workflow_updated_at"
-            ) or datetime.min.replace(tzinfo=timezone.utc)
             workflow_recencies.append(
                 (
                     not workflow_is_terminal,
