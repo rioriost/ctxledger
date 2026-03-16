@@ -9,7 +9,7 @@ The roadmap has been updated so that:
 - `0.5.0` focuses on safe refactoring of existing `src/` and `tests/`
 - hierarchical memory retrieval has been moved from `0.5.0` to `0.6.0`
 
-A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`.
+A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including an additional MCP RPC cleanup batch.
 
 ## Final 0.4.0 status
 ### Validation
@@ -224,6 +224,37 @@ Validation:
 - `python -m pytest tests/test_coverage_targets.py tests/test_server.py -q`
 - `372 passed`
 
+### 8. `src/ctxledger/mcp/rpc.py`
+Small file-local cleanup completed.
+ 
+Refactoring completed:
+- consolidated repeated RPC parameter validation/normalization for:
+  - required object `params`
+  - required non-empty string fields
+  - required object fields with defaults
+- replaced the non-lifecycle RPC method `if` chain with a small local dispatch table
+- extracted shared JSON text payload rendering helper:
+  - `_json_text_payload(...)`
+ 
+Added helpers:
+- `_require_object_params(...)`
+- `_require_non_empty_string_field(...)`
+- `_require_object_field(...)`
+- `_json_text_payload(...)`
+ 
+Affected MCP RPC paths:
+- `tools/call`
+- `resources/read`
+- non-lifecycle method dispatch inside `dispatch_rpc_method(...)`
+ 
+Result:
+- less repeated argument validation and payload rendering logic inside the MCP RPC transport layer
+- behavior preserved while staying file-local and test-backed
+ 
+Validation:
+- `python -m pytest tests/test_mcp_modules.py tests/test_coverage_targets.py -q`
+- `289 passed`
+ 
 ## 0.5.0 refactoring commits recorded
 Relevant recent refactoring commits:
 - `07f59d0`
@@ -236,6 +267,10 @@ Relevant recent refactoring commits:
   - `Extract reusable server test handler builders`
 - `9157a57`
   - `Refactor server resource and tool handler tests`
+- `5c2ce31`
+  - `Refactor server and runtime helpers`
+- `df03372`
+  - `Refactor MCP RPC parameter handling`
 
 ## Current judgment for 0.5.0 work quality
 So far the `0.5.0` work is still tracking the intended plan correctly:
@@ -245,6 +280,7 @@ So far the `0.5.0` work is still tracking the intended plan correctly:
 - no opportunistic feature redesign
 - internal duplication is meaningfully decreasing
 - several high-value parsing/response/setup hot spots have now been cleaned up
+- MCP RPC request handling has now also received a first dedicated file-local cleanup pass
 
 A useful lesson from the latest slices:
 - some apparent duplication is partially intentional because it preserves test seams
@@ -270,21 +306,19 @@ Good next candidates to inspect:
 - `src/ctxledger/mcp/resource_handlers.py`
 - `src/ctxledger/runtime/http_handlers.py`
 - `src/ctxledger/server.py`
+- `src/ctxledger/mcp/rpc.py`
 - `tests/test_config.py`
 - `tests/test_cli.py`
 - `tests/test_server.py`
 
 ## Notes on local workspace state
-At the end of this session, tracked refactoring work is **modified locally but not yet committed**.
+At the end of this session, the tracked refactoring work described above has been committed in two follow-up commits:
+- `5c2ce31`
+  - `Refactor server and runtime helpers`
+- `df03372`
+  - `Refactor MCP RPC parameter handling`
 
-Current tracked files updated in this refactoring batch:
-- `last_session.md`
-- `src/ctxledger/mcp/resource_handlers.py`
-- `src/ctxledger/runtime/http_handlers.py`
-- `src/ctxledger/server.py`
-- `tests/test_server.py`
-
-Current untracked/local-generated items still include:
+Current remaining untracked/local-generated items still include:
 - coverage output
 - local certificate material
 
