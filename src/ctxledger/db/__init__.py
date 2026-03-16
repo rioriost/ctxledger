@@ -36,6 +36,24 @@ from ctxledger.workflow.service import (
 )
 
 
+def _latest_or_none(
+    items: Any,
+    *,
+    key: Callable[[Any], Any],
+) -> Any | None:
+    sorted_items = sorted(items, key=key, reverse=True)
+    return sorted_items[0] if sorted_items else None
+
+
+def _sorted_limited(
+    items: Any,
+    *,
+    key: Callable[[Any], Any],
+    limit: int,
+) -> tuple[Any, ...]:
+    return tuple(sorted(items, key=key, reverse=True)[:limit])
+
+
 class InMemoryWorkspaceRepository(WorkspaceRepository):
     def __init__(
         self,
@@ -90,25 +108,27 @@ class InMemoryWorkflowInstanceRepository(WorkflowInstanceRepository):
     def get_running_by_workspace_id(
         self, workspace_id: object
     ) -> WorkflowInstance | None:
-        workflows = [
-            workflow
-            for workflow in self._workflows_by_id.values()
-            if workflow.workspace_id == workspace_id
-            and workflow.status.value == "running"
-        ]
-        workflows.sort(key=lambda workflow: workflow.created_at, reverse=True)
-        return workflows[0] if workflows else None
+        return _latest_or_none(
+            (
+                workflow
+                for workflow in self._workflows_by_id.values()
+                if workflow.workspace_id == workspace_id
+                and workflow.status.value == "running"
+            ),
+            key=lambda workflow: workflow.created_at,
+        )
 
     def get_latest_by_workspace_id(
         self, workspace_id: object
     ) -> WorkflowInstance | None:
-        workflows = [
-            workflow
-            for workflow in self._workflows_by_id.values()
-            if workflow.workspace_id == workspace_id
-        ]
-        workflows.sort(key=lambda workflow: workflow.updated_at, reverse=True)
-        return workflows[0] if workflows else None
+        return _latest_or_none(
+            (
+                workflow
+                for workflow in self._workflows_by_id.values()
+                if workflow.workspace_id == workspace_id
+            ),
+            key=lambda workflow: workflow.updated_at,
+        )
 
     def list_by_workspace_id(
         self,
@@ -116,13 +136,15 @@ class InMemoryWorkflowInstanceRepository(WorkflowInstanceRepository):
         *,
         limit: int,
     ) -> tuple[WorkflowInstance, ...]:
-        workflows = [
-            workflow
-            for workflow in self._workflows_by_id.values()
-            if workflow.workspace_id == workspace_id
-        ]
-        workflows.sort(key=lambda workflow: workflow.updated_at, reverse=True)
-        return tuple(workflows[:limit])
+        return _sorted_limited(
+            (
+                workflow
+                for workflow in self._workflows_by_id.values()
+                if workflow.workspace_id == workspace_id
+            ),
+            key=lambda workflow: workflow.updated_at,
+            limit=limit,
+        )
 
     def list_by_ticket_id(
         self,
@@ -130,13 +152,15 @@ class InMemoryWorkflowInstanceRepository(WorkflowInstanceRepository):
         *,
         limit: int,
     ) -> tuple[WorkflowInstance, ...]:
-        workflows = [
-            workflow
-            for workflow in self._workflows_by_id.values()
-            if workflow.ticket_id == ticket_id
-        ]
-        workflows.sort(key=lambda workflow: workflow.updated_at, reverse=True)
-        return tuple(workflows[:limit])
+        return _sorted_limited(
+            (
+                workflow
+                for workflow in self._workflows_by_id.values()
+                if workflow.ticket_id == ticket_id
+            ),
+            key=lambda workflow: workflow.updated_at,
+            limit=limit,
+        )
 
     def list_recent(
         self,
@@ -146,28 +170,17 @@ class InMemoryWorkflowInstanceRepository(WorkflowInstanceRepository):
         workspace_id: object | None = None,
         ticket_id: str | None = None,
     ) -> tuple[WorkflowInstance, ...]:
-        workflows = list(self._workflows_by_id.values())
-
-        if status is not None:
-            workflows = [
-                workflow for workflow in workflows if workflow.status.value == status
-            ]
-        if workspace_id is not None:
-            workflows = [
+        return _sorted_limited(
+            (
                 workflow
-                for workflow in workflows
-                if workflow.workspace_id == workspace_id
-            ]
-        if ticket_id is not None:
-            workflows = [
-                workflow for workflow in workflows if workflow.ticket_id == ticket_id
-            ]
-
-        workflows.sort(
+                for workflow in self._workflows_by_id.values()
+                if (status is None or workflow.status.value == status)
+                and (workspace_id is None or workflow.workspace_id == workspace_id)
+                and (ticket_id is None or workflow.ticket_id == ticket_id)
+            ),
             key=lambda workflow: (workflow.updated_at, workflow.created_at),
-            reverse=True,
+            limit=limit,
         )
-        return tuple(workflows[:limit])
 
     def create(self, workflow: WorkflowInstance) -> WorkflowInstance:
         self._workflows_by_id[workflow.workflow_instance_id] = workflow
@@ -188,30 +201,29 @@ class InMemoryWorkflowAttemptRepository(WorkflowAttemptRepository):
     def get_running_by_workflow_id(
         self, workflow_instance_id: object
     ) -> WorkflowAttempt | None:
-        attempts = [
-            attempt
-            for attempt in self._attempts_by_id.values()
-            if (
-                attempt.workflow_instance_id == workflow_instance_id
-                and attempt.status.value == "running"
-            )
-        ]
-        attempts.sort(key=lambda attempt: attempt.started_at, reverse=True)
-        return attempts[0] if attempts else None
+        return _latest_or_none(
+            (
+                attempt
+                for attempt in self._attempts_by_id.values()
+                if (
+                    attempt.workflow_instance_id == workflow_instance_id
+                    and attempt.status.value == "running"
+                )
+            ),
+            key=lambda attempt: attempt.started_at,
+        )
 
     def get_latest_by_workflow_id(
         self, workflow_instance_id: object
     ) -> WorkflowAttempt | None:
-        attempts = [
-            attempt
-            for attempt in self._attempts_by_id.values()
-            if attempt.workflow_instance_id == workflow_instance_id
-        ]
-        attempts.sort(
+        return _latest_or_none(
+            (
+                attempt
+                for attempt in self._attempts_by_id.values()
+                if attempt.workflow_instance_id == workflow_instance_id
+            ),
             key=lambda attempt: (attempt.attempt_number, attempt.started_at),
-            reverse=True,
         )
-        return attempts[0] if attempts else None
 
     def get_next_attempt_number(self, workflow_instance_id: object) -> int:
         attempts = [
@@ -237,22 +249,24 @@ class InMemoryWorkflowCheckpointRepository(WorkflowCheckpointRepository):
     def get_latest_by_workflow_id(
         self, workflow_instance_id: object
     ) -> WorkflowCheckpoint | None:
-        checkpoints = [
-            checkpoint
-            for checkpoint in self._checkpoints_by_id.values()
-            if checkpoint.workflow_instance_id == workflow_instance_id
-        ]
-        checkpoints.sort(key=lambda checkpoint: checkpoint.created_at, reverse=True)
-        return checkpoints[0] if checkpoints else None
+        return _latest_or_none(
+            (
+                checkpoint
+                for checkpoint in self._checkpoints_by_id.values()
+                if checkpoint.workflow_instance_id == workflow_instance_id
+            ),
+            key=lambda checkpoint: checkpoint.created_at,
+        )
 
     def get_latest_by_attempt_id(self, attempt_id: object) -> WorkflowCheckpoint | None:
-        checkpoints = [
-            checkpoint
-            for checkpoint in self._checkpoints_by_id.values()
-            if checkpoint.attempt_id == attempt_id
-        ]
-        checkpoints.sort(key=lambda checkpoint: checkpoint.created_at, reverse=True)
-        return checkpoints[0] if checkpoints else None
+        return _latest_or_none(
+            (
+                checkpoint
+                for checkpoint in self._checkpoints_by_id.values()
+                if checkpoint.attempt_id == attempt_id
+            ),
+            key=lambda checkpoint: checkpoint.created_at,
+        )
 
     def create(self, checkpoint: WorkflowCheckpoint) -> WorkflowCheckpoint:
         self._checkpoints_by_id[checkpoint.checkpoint_id] = checkpoint
@@ -264,13 +278,14 @@ class InMemoryVerifyReportRepository(VerifyReportRepository):
         self._verify_reports_by_id = verify_reports_by_id
 
     def get_latest_by_attempt_id(self, attempt_id: object) -> VerifyReport | None:
-        verify_reports = [
-            verify_report
-            for verify_report in self._verify_reports_by_id.values()
-            if verify_report.attempt_id == attempt_id
-        ]
-        verify_reports.sort(key=lambda report: report.created_at, reverse=True)
-        return verify_reports[0] if verify_reports else None
+        return _latest_or_none(
+            (
+                verify_report
+                for verify_report in self._verify_reports_by_id.values()
+                if verify_report.attempt_id == attempt_id
+            ),
+            key=lambda report: report.created_at,
+        )
 
     def create(self, verify_report: VerifyReport) -> VerifyReport:
         self._verify_reports_by_id[verify_report.verify_id] = verify_report
@@ -291,13 +306,15 @@ class InMemoryMemoryEpisodeRepository:
         *,
         limit: int,
     ) -> tuple[EpisodeRecord, ...]:
-        episodes = [
-            episode
-            for episode in self._episodes_by_id.values()
-            if episode.workflow_instance_id == workflow_instance_id
-        ]
-        episodes.sort(key=lambda episode: episode.created_at, reverse=True)
-        return tuple(episodes[:limit])
+        return _sorted_limited(
+            (
+                episode
+                for episode in self._episodes_by_id.values()
+                if episode.workflow_instance_id == workflow_instance_id
+            ),
+            key=lambda episode: episode.created_at,
+            limit=limit,
+        )
 
 
 class InMemoryMemoryItemRepository(MemoryItemRepository):
@@ -314,13 +331,15 @@ class InMemoryMemoryItemRepository(MemoryItemRepository):
         *,
         limit: int,
     ) -> tuple[MemoryItemRecord, ...]:
-        memory_items = [
-            memory_item
-            for memory_item in self._memory_items_by_id.values()
-            if memory_item.workspace_id == workspace_id
-        ]
-        memory_items.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
-        return tuple(memory_items[:limit])
+        return _sorted_limited(
+            (
+                memory_item
+                for memory_item in self._memory_items_by_id.values()
+                if memory_item.workspace_id == workspace_id
+            ),
+            key=lambda memory_item: memory_item.created_at,
+            limit=limit,
+        )
 
     def list_by_episode_id(
         self,
@@ -328,13 +347,15 @@ class InMemoryMemoryItemRepository(MemoryItemRepository):
         *,
         limit: int,
     ) -> tuple[MemoryItemRecord, ...]:
-        memory_items = [
-            memory_item
-            for memory_item in self._memory_items_by_id.values()
-            if memory_item.episode_id == episode_id
-        ]
-        memory_items.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
-        return tuple(memory_items[:limit])
+        return _sorted_limited(
+            (
+                memory_item
+                for memory_item in self._memory_items_by_id.values()
+                if memory_item.episode_id == episode_id
+            ),
+            key=lambda memory_item: memory_item.created_at,
+            limit=limit,
+        )
 
     def count_by_provenance(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -360,13 +381,15 @@ class InMemoryMemoryEmbeddingRepository(MemoryEmbeddingRepository):
         *,
         limit: int,
     ) -> tuple[MemoryEmbeddingRecord, ...]:
-        embeddings = [
-            embedding
-            for embedding in self._memory_embeddings_by_id.values()
-            if embedding.memory_id == memory_id
-        ]
-        embeddings.sort(key=lambda embedding: embedding.created_at, reverse=True)
-        return tuple(embeddings[:limit])
+        return _sorted_limited(
+            (
+                embedding
+                for embedding in self._memory_embeddings_by_id.values()
+                if embedding.memory_id == memory_id
+            ),
+            key=lambda embedding: embedding.created_at,
+            limit=limit,
+        )
 
 
 class InMemoryProjectionStateRepository(ProjectionStateRepository):
