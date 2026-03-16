@@ -108,11 +108,19 @@ class CtxLedgerServer:
         )
         self._started = False
 
-    def get_workflow_resume(self, workflow_instance_id: UUID) -> WorkflowResume:
+    def get_workflow_resume(
+        self,
+        workflow_instance_id: UUID,
+        *,
+        include_closed_projection_failures: bool = False,
+    ) -> WorkflowResume:
         if self.workflow_service is None:
             raise ServerBootstrapError("workflow service is not initialized")
         return self.workflow_service.resume_workflow(
-            ResumeWorkflowInput(workflow_instance_id=workflow_instance_id)
+            ResumeWorkflowInput(
+                workflow_instance_id=workflow_instance_id,
+                include_closed_projection_failures=include_closed_projection_failures,
+            )
         )
 
     def build_workflow_resume_response(

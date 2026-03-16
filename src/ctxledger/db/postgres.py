@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import time
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from urllib.parse import parse_qs, urlparse
+from uuid import UUID, uuid4
 
 from ctxledger.workflow.service import (
     EpisodeRecord,
@@ -2062,11 +2064,32 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
         self._conn: Connection | None = None
         self._pool_conn_context: Any = None
         self._committed = False
+        self.checkout_context_create_duration_ms = 0
+        self.pool_checkout_duration_ms = 0
+        self.session_setup_duration_ms = 0
+        self.enter_duration_ms = 0
 
     def __enter__(self) -> PostgresUnitOfWork:
+        enter_started_at = time.perf_counter()
+
+        checkout_context_started_at = time.perf_counter()
         self._pool_conn_context = self._pool.connection()
+        self.checkout_context_create_duration_ms = int(
+            (time.perf_counter() - checkout_context_started_at) * 1000
+        )
+
+        pool_checkout_started_at = time.perf_counter()
         self._conn = self._pool_conn_context.__enter__()
+        self.pool_checkout_duration_ms = int(
+            (time.perf_counter() - pool_checkout_started_at) * 1000
+        )
+
+        session_setup_started_at = time.perf_counter()
         self._apply_session_settings()
+        self.session_setup_duration_ms = int(
+            (time.perf_counter() - session_setup_started_at) * 1000
+        )
+
         self.workspaces = PostgresWorkspaceRepository(self._conn)
         self.workflow_instances = PostgresWorkflowInstanceRepository(self._conn)
         self.workflow_attempts = PostgresWorkflowAttemptRepository(self._conn)
@@ -2079,6 +2102,7 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
         self.projection_states = PostgresProjectionStateRepository(self._conn)
         self.projection_failures = PostgresProjectionFailureRepository(self._conn)
         self._committed = False
+        self.enter_duration_ms = int((time.perf_counter() - enter_started_at) * 1000)
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:

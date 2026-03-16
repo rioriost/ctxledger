@@ -23,6 +23,7 @@ class WorkflowResumeResponse:
     status_code: int
     payload: dict[str, Any]
     headers: dict[str, str]
+    include_closed_projection_failures: bool = True
 
 
 @dataclass(slots=True)

@@ -1996,6 +1996,30 @@ def test_resume_workflow_raises_for_unknown_workflow() -> None:
         raise AssertionError("Expected WorkflowNotFoundError")
 
 
+def test_resume_workflow_rejects_workspace_id_misuse() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+
+    try:
+        service.resume_workflow(
+            ResumeWorkflowInput(workflow_instance_id=workspace.workspace_id)
+        )
+    except ValidationError as exc:
+        assert exc.code == "validation_error"
+        assert (
+            str(exc)
+            == "provided workflow_instance_id appears to be a workspace_id; use "
+            "workspace://{workspace_id}/resume or provide a real "
+            "workflow_instance_id"
+        )
+        assert exc.details == {
+            "workflow_instance_id": str(workspace.workspace_id),
+            "workspace_id": str(workspace.workspace_id),
+        }
+    else:
+        raise AssertionError("Expected ValidationError")
+
+
 def test_start_workflow_raises_for_unknown_workspace() -> None:
     service, _ = make_service_and_uow()
 
@@ -3837,6 +3861,361 @@ def test_resume_workflow_debug_logging_path_executes_without_changing_result(
     assert len(debug_messages) >= 6
     assert debug_messages[0][0] == "resume_workflow started"
     assert any(message == "resume_workflow complete" for message, _ in debug_messages)
+
+
+def test_resume_workflow_debug_logging_includes_stage_duration_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="DEBUG-RESUME-DURATIONS",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="debug_resume_durations",
+            summary="Checkpoint for duration metadata coverage",
+            checkpoint_json={"next_intended_action": "Inspect duration metadata"},
+        )
+    )
+
+    logger = importlib.import_module("ctxledger.workflow.service").logger
+    monkeypatch.setattr(logger, "isEnabledFor", lambda level: level == logging.DEBUG)
+
+    debug_messages: list[tuple[str, dict[str, object] | None]] = []
+
+    def fake_debug(message: str, *args: object, **kwargs: object) -> None:
+        debug_messages.append((message, kwargs.get("extra")))
+
+    monkeypatch.setattr(logger, "debug", fake_debug)
+
+    service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    expected_messages = {
+        "resume_workflow workflow lookup complete",
+        "resume_workflow workspace lookup complete",
+        "resume_workflow attempt lookup complete",
+        "resume_workflow checkpoint lookup complete",
+        "resume_workflow verify report lookup complete",
+        "resume_workflow projection lookup complete",
+        "resume_workflow projection failure lookup complete",
+        "resume_workflow response assembly complete",
+        "resume_workflow complete",
+    }
+
+    seen_messages = {message for message, _ in debug_messages}
+    assert expected_messages.issubset(seen_messages)
+
+    for message, extra in debug_messages:
+        if message not in expected_messages:
+            continue
+        assert isinstance(extra, dict)
+        assert "duration_ms" in extra
+        assert isinstance(extra["duration_ms"], int)
+        assert extra["duration_ms"] >= 0
+
+
+def test_resume_workflow_complete_debug_logging_includes_response_assembly_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="DEBUG-RESUME-ASSEMBLY-METADATA",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="debug_resume_response_assembly_metadata",
+            summary="Checkpoint for response assembly metadata coverage",
+            checkpoint_json={
+                "next_intended_action": "Inspect response assembly metadata"
+            },
+        )
+    )
+
+    logger = importlib.import_module("ctxledger.workflow.service").logger
+    monkeypatch.setattr(logger, "isEnabledFor", lambda level: level == logging.DEBUG)
+
+    debug_messages: list[tuple[str, dict[str, object] | None]] = []
+
+    def fake_debug(message: str, *args: object, **kwargs: object) -> None:
+        debug_messages.append((message, kwargs.get("extra")))
+
+    monkeypatch.setattr(logger, "debug", fake_debug)
+
+    service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    response_assembly_extras = [
+        extra
+        for message, extra in debug_messages
+        if message == "resume_workflow response assembly complete"
+    ]
+
+    assert len(response_assembly_extras) == 1
+    extra = response_assembly_extras[0]
+    assert isinstance(extra, dict)
+    assert extra["workflow_instance_id"] == str(
+        started.workflow_instance.workflow_instance_id
+    )
+    assert extra["workspace_id"] == str(workspace.workspace_id)
+    assert extra["attempt_id"] == str(started.attempt.attempt_id)
+    assert extra["projection_count"] == 0
+    assert extra["warning_count"] == 0
+    assert extra["resumable_status"] == "resumable"
+    assert "duration_ms" in extra
+    assert isinstance(extra["duration_ms"], int)
+    assert extra["duration_ms"] >= 0
+
+
+def test_resume_workflow_complete_debug_logging_includes_stage_breakdown_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="DEBUG-RESUME-STAGE-BREAKDOWN",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="debug_resume_stage_breakdown_metadata",
+            summary="Checkpoint for stage breakdown metadata coverage",
+            checkpoint_json={
+                "next_intended_action": "Inspect stage breakdown metadata"
+            },
+        )
+    )
+
+    logger = importlib.import_module("ctxledger.workflow.service").logger
+    monkeypatch.setattr(logger, "isEnabledFor", lambda level: level == logging.DEBUG)
+
+    debug_messages: list[tuple[str, dict[str, object] | None]] = []
+
+    def fake_debug(message: str, *args: object, **kwargs: object) -> None:
+        debug_messages.append((message, kwargs.get("extra")))
+
+    monkeypatch.setattr(logger, "debug", fake_debug)
+
+    service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    complete_extras = [
+        extra
+        for message, extra in debug_messages
+        if message == "resume_workflow complete"
+    ]
+
+    assert len(complete_extras) == 1
+    extra = complete_extras[0]
+    assert isinstance(extra, dict)
+    assert extra["workflow_instance_id"] == str(
+        started.workflow_instance.workflow_instance_id
+    )
+    assert extra["workspace_id"] == str(workspace.workspace_id)
+    assert extra["attempt_id"] == str(started.attempt.attempt_id)
+    assert extra["checkpoint_id"] is not None
+    assert extra["projection_count"] == 0
+    assert extra["open_projection_failure_count"] == 0
+    assert extra["closed_projection_failure_count"] == 0
+    assert extra["warning_count"] == 0
+    assert extra["resumable_status"] == "resumable"
+
+    duration_keys = (
+        "workflow_lookup_duration_ms",
+        "workspace_lookup_duration_ms",
+        "attempt_lookup_duration_ms",
+        "checkpoint_lookup_duration_ms",
+        "verify_report_lookup_duration_ms",
+        "projection_lookup_duration_ms",
+        "projection_failure_lookup_duration_ms",
+        "response_assembly_duration_ms",
+        "duration_ms",
+    )
+    for key in duration_keys:
+        assert key in extra
+        assert isinstance(extra[key], int)
+        assert extra[key] >= 0
+
+
+def test_resume_workflow_skips_closed_projection_failure_lookup_by_default() -> None:
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="RESUME-SKIP-CLOSED-FAILURES-DEFAULT",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="resume_skip_closed_projection_failures_default",
+            summary="Checkpoint for default closed failure lookup behavior",
+            checkpoint_json={
+                "next_intended_action": "Observe default projection failure lookup"
+            },
+        )
+    )
+
+    closed_failure = ProjectionFailureInfo(
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        error_code="io_error",
+        error_message="historical projection failure",
+        target_path=".agent/resume.json",
+        attempt_id=started.attempt.attempt_id,
+        occurred_at=datetime(2024, 1, 1, tzinfo=UTC),
+        resolved_at=datetime(2024, 1, 2, tzinfo=UTC),
+        open_failure_count=1,
+        retry_count=1,
+        status="resolved",
+    )
+    uow.projection_failures_by_key[
+        (
+            workspace.workspace_id,
+            started.workflow_instance.workflow_instance_id,
+            ProjectionArtifactType.RESUME_JSON,
+        )
+    ] = [closed_failure]
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    assert resume.closed_projection_failures == ()
+    assert resume.resumable_status == ResumableStatus.RESUMABLE
+
+
+def test_resume_workflow_can_include_closed_projection_failures_when_requested() -> (
+    None
+):
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="RESUME-INCLUDE-CLOSED-FAILURES-OPT-IN",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="resume_include_closed_projection_failures_opt_in",
+            summary="Checkpoint for opt-in closed failure lookup behavior",
+            checkpoint_json={
+                "next_intended_action": "Observe opt-in projection failure lookup"
+            },
+        )
+    )
+
+    closed_failure = ProjectionFailureInfo(
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        error_code="io_error",
+        error_message="historical projection failure",
+        target_path=".agent/resume.json",
+        attempt_id=started.attempt.attempt_id,
+        occurred_at=datetime(2024, 1, 1, tzinfo=UTC),
+        resolved_at=datetime(2024, 1, 2, tzinfo=UTC),
+        open_failure_count=1,
+        retry_count=1,
+        status="resolved",
+    )
+    uow.projection_failures_by_key[
+        (
+            workspace.workspace_id,
+            started.workflow_instance.workflow_instance_id,
+            ProjectionArtifactType.RESUME_JSON,
+        )
+    ] = [closed_failure]
+
+    resume = service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            include_closed_projection_failures=True,
+        )
+    )
+
+    assert len(resume.closed_projection_failures) == 1
+    assert resume.closed_projection_failures[0] == closed_failure
+    assert resume.resumable_status == ResumableStatus.RESUMABLE
+
+
+def test_resume_workflow_debug_logging_includes_attempt_lookup_strategy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="DEBUG-RESUME-ATTEMPT-STRATEGY",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="debug_resume_attempt_strategy",
+            summary="Checkpoint for attempt lookup strategy coverage",
+            checkpoint_json={"next_intended_action": "Inspect attempt lookup strategy"},
+        )
+    )
+
+    logger = importlib.import_module("ctxledger.workflow.service").logger
+    monkeypatch.setattr(logger, "isEnabledFor", lambda level: level == logging.DEBUG)
+
+    debug_messages: list[tuple[str, dict[str, object] | None]] = []
+
+    def fake_debug(message: str, *args: object, **kwargs: object) -> None:
+        debug_messages.append((message, kwargs.get("extra")))
+
+    monkeypatch.setattr(logger, "debug", fake_debug)
+
+    service.resume_workflow(
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
+    )
+
+    attempt_lookup_extras = [
+        extra
+        for message, extra in debug_messages
+        if message == "resume_workflow attempt lookup complete"
+    ]
+
+    assert len(attempt_lookup_extras) == 1
+    extra = attempt_lookup_extras[0]
+    assert isinstance(extra, dict)
+    assert extra["attempt_lookup_strategy"] == "running"
+    assert extra["attempt_id"] == str(started.attempt.attempt_id)
 
 
 def test_complete_workflow_returns_default_auto_memory_details_when_bridge_returns_none() -> (

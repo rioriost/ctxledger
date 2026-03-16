@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -109,6 +110,38 @@ class FakeConnectionFactory:
 
     def __call__(self) -> FakeConnection:
         return self.connection
+
+
+class FakePoolConnectionContext(AbstractContextManager["FakeConnection"]):
+    def __init__(self, connection: FakeConnection) -> None:
+        self.connection = connection
+        self.enter_calls = 0
+        self.exit_calls = 0
+
+    def __enter__(self) -> FakeConnection:
+        self.enter_calls += 1
+        return self.connection
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.exit_calls += 1
+
+
+class FakeConnectionPool:
+    def __init__(self, connection: FakeConnection) -> None:
+        self.connection_resource = connection
+        self.connection_calls = 0
+        self.contexts: list[FakePoolConnectionContext] = []
+
+    def connection(self) -> FakePoolConnectionContext:
+        self.connection_calls += 1
+        context = FakePoolConnectionContext(self.connection_resource)
+        self.contexts.append(context)
+        return context
 
 
 def sample_workspace() -> Workspace:
@@ -245,6 +278,162 @@ def test_unit_of_work_contract_shape_can_be_satisfied_by_postgres_impl() -> None
 
     assert uow.committed is True
     assert uow.rolled_back is True
+
+
+def test_postgres_unit_of_work_records_checkout_and_session_timing_fields() -> None:
+    postgres_module = importlib.import_module("ctxledger.db.postgres")
+    connection = FakeConnection()
+    pool = FakeConnectionPool(connection)
+    config = postgres_module.PostgresConfig(
+        database_url="postgresql://example",
+        schema_name="ctxledger",
+    )
+
+    original_perf_counter = postgres_module.time.perf_counter
+    perf_counter_values = iter(
+        [
+            100.0,
+            100.001,
+            100.003,
+            100.004,
+            100.009,
+            100.010,
+            100.016,
+            100.020,
+        ]
+    )
+
+    postgres_module.time.perf_counter = lambda: next(perf_counter_values)
+
+    try:
+        uow = postgres_module.PostgresUnitOfWork(config, pool)
+        entered = uow.__enter__()
+    finally:
+        postgres_module.time.perf_counter = original_perf_counter
+
+    assert entered is uow
+    assert 0 <= uow.checkout_context_create_duration_ms <= 2
+    assert 4 <= uow.pool_checkout_duration_ms <= 5
+    assert 5 <= uow.session_setup_duration_ms <= 6
+    assert 19 <= uow.enter_duration_ms <= 20
+    assert pool.connection_calls == 1
+    assert len(pool.contexts) == 1
+    assert pool.contexts[0].enter_calls == 1
+    assert connection.executed[:2] == [
+        ("SET statement_timeout = 0", None),
+        ('SET search_path TO "ctxledger", public', None),
+    ]
+
+
+def test_resume_workflow_debug_logging_includes_uow_timing_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workflow_module = importlib.import_module("ctxledger.workflow.service")
+    logger = workflow_module.logger
+
+    workspace = sample_workspace()
+    workflow = sample_workflow(workspace.workspace_id)
+    attempt = sample_attempt(workflow.workflow_instance_id)
+    checkpoint = sample_checkpoint(
+        workflow.workflow_instance_id,
+        attempt.attempt_id,
+    )
+    verify_report = sample_verify_report(attempt.attempt_id)
+
+    class ResumeLoggingUow:
+        def __init__(self) -> None:
+            self.enter_duration_ms = 23
+            self.pool_checkout_duration_ms = 17
+            self.session_setup_duration_ms = 5
+            self.checkout_context_create_duration_ms = 2
+            self.workspaces = SimpleNamespace(
+                get_by_id=lambda workspace_id: (
+                    workspace if workspace_id == workspace.workspace_id else None
+                )
+            )
+            self.workflow_instances = SimpleNamespace(
+                get_by_id=lambda workflow_instance_id: (
+                    workflow
+                    if workflow_instance_id == workflow.workflow_instance_id
+                    else None
+                )
+            )
+            self.workflow_attempts = SimpleNamespace(
+                get_running_by_workflow_id=lambda workflow_instance_id: (
+                    attempt
+                    if workflow_instance_id == workflow.workflow_instance_id
+                    else None
+                ),
+                get_latest_by_workflow_id=lambda workflow_instance_id: attempt,
+            )
+            self.workflow_checkpoints = SimpleNamespace(
+                get_latest_by_workflow_id=lambda workflow_instance_id: checkpoint
+            )
+            self.verify_reports = SimpleNamespace(
+                get_latest_by_attempt_id=lambda attempt_id: verify_report
+            )
+            self.projection_states = SimpleNamespace(
+                get_resume_projections=lambda workspace_id, workflow_instance_id: ()
+            )
+            self.projection_failures = SimpleNamespace(
+                get_open_failures_by_workflow_id=lambda workspace_id, workflow_instance_id: [],
+                get_closed_failures_by_workflow_id=lambda workspace_id, workflow_instance_id: [],
+            )
+
+        def __enter__(self) -> "ResumeLoggingUow":
+            return self
+
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: TracebackType | None,
+        ) -> None:
+            return None
+
+    debug_messages: list[tuple[str, dict[str, object] | None]] = []
+
+    monkeypatch.setattr(logger, "isEnabledFor", lambda level: level == logging.DEBUG)
+
+    def fake_debug(message: str, *args: object, **kwargs: object) -> None:
+        debug_messages.append((message, kwargs.get("extra")))
+
+    monkeypatch.setattr(logger, "debug", fake_debug)
+
+    service = workflow_module.WorkflowService(lambda: ResumeLoggingUow())
+    service.resume_workflow(
+        workflow_module.ResumeWorkflowInput(
+            workflow_instance_id=workflow.workflow_instance_id
+        )
+    )
+
+    uow_enter_extras = [
+        extra
+        for message, extra in debug_messages
+        if message == "resume_workflow unit of work enter complete"
+    ]
+    assert len(uow_enter_extras) == 1
+    enter_extra = uow_enter_extras[0]
+    assert isinstance(enter_extra, dict)
+    assert enter_extra["workflow_instance_id"] == str(workflow.workflow_instance_id)
+    assert enter_extra["uow_enter_duration_ms"] == 23
+    assert enter_extra["pool_checkout_duration_ms"] == 17
+    assert enter_extra["session_setup_duration_ms"] == 5
+    assert enter_extra["checkout_context_create_duration_ms"] == 2
+    assert enter_extra["duration_ms"] == 23
+
+    complete_extras = [
+        extra
+        for message, extra in debug_messages
+        if message == "resume_workflow complete"
+    ]
+    assert len(complete_extras) == 1
+    complete_extra = complete_extras[0]
+    assert isinstance(complete_extra, dict)
+    assert complete_extra["uow_enter_duration_ms"] == 23
+    assert complete_extra["pool_checkout_duration_ms"] == 17
+    assert complete_extra["session_setup_duration_ms"] == 5
+    assert complete_extra["checkout_context_create_duration_ms"] == 2
 
 
 def test_memory_embedding_repository_contract_exposes_similarity_query() -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from ..workflow.service import ProjectionArtifactType
+from ..workflow.service import ProjectionArtifactType, WorkflowError
 
 if TYPE_CHECKING:
     from ..server import CtxLedgerServer
@@ -25,7 +25,10 @@ def build_workflow_resume_response(
     from .types import WorkflowResumeResponse
 
     try:
-        resume = server.get_workflow_resume(workflow_instance_id)
+        resume = server.get_workflow_resume(
+            workflow_instance_id,
+            include_closed_projection_failures=False,
+        )
     except ServerBootstrapError as exc:
         return WorkflowResumeResponse(
             status_code=503,
@@ -37,11 +40,31 @@ def build_workflow_resume_response(
             },
             headers={"content-type": "application/json"},
         )
+    except WorkflowError as exc:
+        status_code, code, message, details = _workflow_resume_error_payload(
+            exc,
+            workflow_instance_id=workflow_instance_id,
+        )
+        return WorkflowResumeResponse(
+            status_code=status_code,
+            payload={
+                "error": {
+                    "code": code,
+                    "message": message,
+                    "details": details,
+                }
+            },
+            headers={"content-type": "application/json"},
+        )
 
     return WorkflowResumeResponse(
         status_code=200,
-        payload=serialize_workflow_resume(resume),
+        payload=serialize_workflow_resume(
+            resume,
+            include_closed_projection_failures=False,
+        ),
         headers={"content-type": "application/json"},
+        include_closed_projection_failures=False,
     )
 
 
@@ -54,7 +77,10 @@ def build_closed_projection_failures_response(
     from .types import ProjectionFailureHistoryResponse
 
     try:
-        resume = server.get_workflow_resume(workflow_instance_id)
+        resume = server.get_workflow_resume(
+            workflow_instance_id,
+            include_closed_projection_failures=True,
+        )
     except ServerBootstrapError as exc:
         return ProjectionFailureHistoryResponse(
             status_code=503,
@@ -440,13 +466,36 @@ def _build_projection_failure_action_response(
     )
 
 
-def _projection_failure_error_status(message: str) -> tuple[int, str]:
+def _projection_failure_error_status(exc: Exception) -> tuple[int, str]:
+    message = str(exc)
     lowered = message.lower()
     if "not found" in lowered:
         return 404, "not_found"
     if "does not belong to workspace" in lowered or "mismatch" in lowered:
         return 400, "invalid_request"
     return 500, "server_error"
+
+
+def _workflow_resume_error_payload(
+    exc: WorkflowError,
+    *,
+    workflow_instance_id: UUID,
+) -> tuple[int, str, str, dict[str, str]]:
+    details = {key: str(value) for key, value in getattr(exc, "details", {}).items()}
+    code = getattr(exc, "code", "workflow_error")
+
+    if code in {"workflow_not_found", "not_found"}:
+        if "workflow_instance_id" not in details:
+            details["workflow_instance_id"] = str(workflow_instance_id)
+        message = str(exc) or "workflow not found"
+        return 404, "not_found", message, details
+
+    if code in {"workflow_attempt_mismatch", "validation_error"}:
+        message = str(exc) or "invalid workflow resume request"
+        return 400, "invalid_request", message, details
+
+    message = str(exc) or "failed to resume workflow"
+    return 500, "server_error", message, details
 
 
 __all__ = [

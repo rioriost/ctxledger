@@ -14,8 +14,12 @@ from ..workflow.service import WorkflowResume
 from .introspection import RuntimeIntrospection
 
 
-def serialize_workflow_resume(resume: WorkflowResume) -> dict[str, Any]:
-    return {
+def serialize_workflow_resume(
+    resume: WorkflowResume,
+    *,
+    include_closed_projection_failures: bool = True,
+) -> dict[str, Any]:
+    payload = {
         "workspace": {
             "workspace_id": str(resume.workspace.workspace_id),
             "repo_url": resume.workspace.repo_url,
@@ -107,7 +111,9 @@ def serialize_workflow_resume(resume: WorkflowResume) -> dict[str, Any]:
             }
             for warning in resume.warnings
         ],
-        "closed_projection_failures": [
+    }
+    if include_closed_projection_failures:
+        payload["closed_projection_failures"] = [
             {
                 "projection_type": failure.projection_type.value,
                 "target_path": failure.target_path,
@@ -131,8 +137,8 @@ def serialize_workflow_resume(resume: WorkflowResume) -> dict[str, Any]:
                 "status": failure.status,
             }
             for failure in getattr(resume, "closed_projection_failures", ())
-        ],
-    }
+        ]
+    return payload
 
 
 def serialize_closed_projection_failures_history(

@@ -771,6 +771,10 @@ def test_get_workflow_resume_returns_resume_from_initialized_workflow_service() 
         fake_workflow_service.resume_calls[0].workflow_instance_id
         == resume.workflow_instance.workflow_instance_id
     )
+    assert (
+        fake_workflow_service.resume_calls[0].include_closed_projection_failures
+        is False
+    )
 
 
 def test_get_workflow_resume_raises_when_workflow_service_is_not_initialized() -> None:
@@ -973,6 +977,15 @@ def test_build_closed_projection_failures_response_returns_success_payload() -> 
             }
         ],
     }
+    assert fake_workflow_service.resume_calls is not None
+    assert len(fake_workflow_service.resume_calls) == 1
+    assert (
+        fake_workflow_service.resume_calls[0].workflow_instance_id
+        == resume.workflow_instance.workflow_instance_id
+    )
+    assert (
+        fake_workflow_service.resume_calls[0].include_closed_projection_failures is True
+    )
 
 
 def test_build_closed_projection_failures_response_returns_503_when_workflow_service_is_not_initialized() -> (
@@ -2373,6 +2386,67 @@ def test_build_resume_workflow_tool_handler_returns_server_not_ready_error() -> 
             "code": "server_not_ready",
             "message": "workflow service is not initialized",
             "details": {},
+        },
+    }
+
+
+def test_build_resume_workflow_tool_handler_preserves_misuse_details() -> None:
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(resume)
+    handler, _, _ = make_ready_tool_handler(
+        build_resume_workflow_tool_handler,
+        settings=settings,
+        resume=resume,
+        fake_workflow_service=fake_workflow_service,
+    )
+
+    workspace_id = resume.workspace.workspace_id
+
+    def build_workflow_resume_response(
+        workflow_instance_id: object,
+    ) -> WorkflowResumeResponse:
+        return WorkflowResumeResponse(
+            status_code=400,
+            payload={
+                "error": {
+                    "code": "invalid_request",
+                    "message": (
+                        "provided workflow_instance_id appears to be a workspace_id; "
+                        "use workspace://{workspace_id}/resume or provide a real "
+                        "workflow_instance_id"
+                    ),
+                    "details": {
+                        "workflow_instance_id": str(workflow_instance_id),
+                        "workspace_id": str(workspace_id),
+                    },
+                }
+            },
+            headers={"content-type": "application/json"},
+        )
+
+    handler.__closure__[0].cell_contents.build_workflow_resume_response = (  # type: ignore[attr-defined]
+        build_workflow_resume_response
+    )
+
+    response = handler(
+        {
+            "workflow_instance_id": str(workspace_id),
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload["ok"] is False
+    assert response.payload["error"] == {
+        "code": "invalid_request",
+        "message": (
+            "provided workflow_instance_id appears to be a workspace_id; "
+            "use workspace://{workspace_id}/resume or provide a real "
+            "workflow_instance_id"
+        ),
+        "details": {
+            "workflow_instance_id": str(workspace_id),
+            "workspace_id": str(workspace_id),
         },
     }
 

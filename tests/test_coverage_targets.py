@@ -2871,6 +2871,75 @@ def test_build_workflow_resume_response_returns_server_not_ready() -> None:
     assert response.headers == {"content-type": "application/json"}
 
 
+def test_build_workflow_resume_response_returns_not_found_when_workflow_is_missing() -> (
+    None
+):
+    workflow_instance_id = uuid4()
+    server = make_server()
+
+    def raise_workflow_not_found(_workflow_instance_id: object) -> object:
+        raise WorkflowNotFoundError(
+            "workflow not found",
+            details={"workflow_instance_id": str(workflow_instance_id)},
+        )
+
+    server.get_workflow_resume = raise_workflow_not_found
+
+    response = build_workflow_resume_response(server, workflow_instance_id)
+
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "workflow not found",
+            "details": {
+                "workflow_instance_id": str(workflow_instance_id),
+            },
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_resume_response_returns_invalid_request_for_workspace_id_misuse() -> (
+    None
+):
+    workflow_instance_id = uuid4()
+    workspace_id = uuid4()
+    server = make_server()
+
+    def raise_workspace_id_misuse(_workflow_instance_id: object) -> object:
+        raise ValidationError(
+            "provided workflow_instance_id appears to be a workspace_id; "
+            "use workspace://{workspace_id}/resume or provide a real "
+            "workflow_instance_id",
+            details={
+                "workflow_instance_id": str(workflow_instance_id),
+                "workspace_id": str(workspace_id),
+            },
+        )
+
+    server.get_workflow_resume = raise_workspace_id_misuse
+
+    response = build_workflow_resume_response(server, workflow_instance_id)
+
+    assert response.status_code == 400
+    assert response.payload == {
+        "error": {
+            "code": "invalid_request",
+            "message": (
+                "provided workflow_instance_id appears to be a workspace_id; "
+                "use workspace://{workspace_id}/resume or provide a real "
+                "workflow_instance_id"
+            ),
+            "details": {
+                "workflow_instance_id": str(workflow_instance_id),
+                "workspace_id": str(workspace_id),
+            },
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
 def test_build_workflow_resume_response_uses_default_string_when_bootstrap_error_has_no_message() -> (
     None
 ):
@@ -2900,7 +2969,7 @@ def test_build_workflow_resume_response_uses_default_string_when_bootstrap_error
 
 def test_build_workflow_resume_response_serializes_resume_payload() -> None:
     workflow_instance_id = uuid4()
-    expected_payload = {"workflow_instance_id": str(workflow_instance_id), "ok": True}
+    expected_payload = {"workflow_instance_id": str(workflow_instance_id)}
     server = make_server()
     server.workflow_service = SimpleNamespace(
         resume_workflow=lambda data: SimpleNamespace(
@@ -2908,15 +2977,20 @@ def test_build_workflow_resume_response_serializes_resume_payload() -> None:
         )
     )
 
-    import ctxledger.runtime.serializers as serializers_module
-
+    serializers_module = importlib.import_module("ctxledger.runtime.serializers")
     original_serializer = serializers_module.serialize_workflow_resume
 
-    def fake_serialize_workflow_resume(resume: object) -> dict[str, object]:
+    def fake_serialize_workflow_resume(
+        resume: object,
+        *,
+        include_closed_projection_failures: bool = True,
+    ) -> dict[str, object]:
         assert getattr(resume, "workflow_instance_id") == workflow_instance_id
+        assert include_closed_projection_failures is False
         return expected_payload
 
     serializers_module.serialize_workflow_resume = fake_serialize_workflow_resume
+
     try:
         response = build_workflow_resume_response(server, workflow_instance_id)
     finally:
@@ -2925,6 +2999,51 @@ def test_build_workflow_resume_response_serializes_resume_payload() -> None:
     assert response.status_code == 200
     assert response.payload == expected_payload
     assert response.headers == {"content-type": "application/json"}
+    assert response.include_closed_projection_failures is False
+
+
+def test_build_workflow_resume_response_can_include_closed_projection_failures_when_requested() -> (
+    None
+):
+    workflow_instance_id = uuid4()
+    expected_payload = {
+        "workflow_instance_id": str(workflow_instance_id),
+        "closed_projection_failures": [{"status": "resolved"}],
+    }
+    server = make_server()
+    server.workflow_service = SimpleNamespace(
+        resume_workflow=lambda data: SimpleNamespace(
+            workflow_instance_id=data.workflow_instance_id
+        )
+    )
+
+    serializers_module = importlib.import_module("ctxledger.runtime.serializers")
+    original_serializer = serializers_module.serialize_workflow_resume
+
+    def fake_serialize_workflow_resume(
+        resume: object,
+        *,
+        include_closed_projection_failures: bool = True,
+    ) -> dict[str, object]:
+        assert getattr(resume, "workflow_instance_id") == workflow_instance_id
+        assert include_closed_projection_failures is True
+        return expected_payload
+
+    serializers_module.serialize_workflow_resume = fake_serialize_workflow_resume
+
+    try:
+        response = build_workflow_resume_response(
+            server,
+            workflow_instance_id,
+            include_closed_projection_failures=True,
+        )
+    finally:
+        serializers_module.serialize_workflow_resume = original_serializer
+
+    assert response.status_code == 200
+    assert response.payload == expected_payload
+    assert response.headers == {"content-type": "application/json"}
+    assert response.include_closed_projection_failures is True
 
 
 def test_build_closed_projection_failures_response_returns_server_not_ready() -> None:
@@ -4226,11 +4345,13 @@ def test_serialize_workflow_resume_includes_optional_and_closed_failure_fields()
     attempt_id = uuid4()
     checkpoint_id = uuid4()
     verify_id = uuid4()
+    occurred_at = datetime(2024, 1, 9, tzinfo=UTC)
+    resolved_at = datetime(2024, 1, 10, tzinfo=UTC)
 
     resume = WorkflowResume(
         workspace=Workspace(
             workspace_id=workspace_id,
-            repo_url="https://example.com/org/repo.git",
+            repo_url="https://example.com/repo.git",
             canonical_path="/tmp/repo",
             default_branch="main",
             metadata={"team": "platform"},
@@ -4248,26 +4369,23 @@ def test_serialize_workflow_resume_includes_optional_and_closed_failure_fields()
             attempt_number=2,
             status=WorkflowAttemptStatus.RUNNING,
             verify_status=VerifyStatus.PASSED,
-            started_at=datetime(2024, 1, 1, tzinfo=UTC),
-            finished_at=None,
-            created_at=datetime(2024, 1, 1, tzinfo=UTC),
-            updated_at=datetime(2024, 1, 1, tzinfo=UTC),
+            started_at=datetime(2024, 1, 7, tzinfo=UTC),
         ),
         latest_checkpoint=WorkflowCheckpoint(
             checkpoint_id=checkpoint_id,
             workflow_instance_id=workflow_instance_id,
             attempt_id=attempt_id,
-            step_name="implement_feature",
-            summary="Add serializer coverage",
-            checkpoint_json={"next_intended_action": "Run tests"},
-            created_at=datetime(2024, 1, 2, tzinfo=UTC),
+            step_name="resume_step",
+            summary="Checkpoint summary",
+            checkpoint_json={"next_intended_action": "Resume safely"},
+            created_at=datetime(2024, 1, 8, tzinfo=UTC),
         ),
         latest_verify_report=VerifyReport(
             verify_id=verify_id,
             attempt_id=attempt_id,
             status=VerifyStatus.PASSED,
             report_json={"checks": ["pytest"]},
-            created_at=datetime(2024, 1, 3, tzinfo=UTC),
+            created_at=datetime(2024, 1, 8, tzinfo=UTC),
         ),
         resumable_status=ResumableStatus.RESUMABLE,
         projections=(
@@ -4275,8 +4393,8 @@ def test_serialize_workflow_resume_includes_optional_and_closed_failure_fields()
                 projection_type=ProjectionArtifactType.RESUME_JSON,
                 status=ProjectionStatus.FRESH,
                 target_path=".agent/resume.json",
-                last_successful_write_at=datetime(2024, 1, 4, tzinfo=UTC),
-                last_canonical_update_at=datetime(2024, 1, 4, tzinfo=UTC),
+                last_successful_write_at=datetime(2024, 1, 8, tzinfo=UTC),
+                last_canonical_update_at=datetime(2024, 1, 8, tzinfo=UTC),
                 open_failure_count=0,
             ),
         ),
@@ -4285,13 +4403,13 @@ def test_serialize_workflow_resume_includes_optional_and_closed_failure_fields()
             ProjectionFailureInfo(
                 projection_type=ProjectionArtifactType.RESUME_JSON,
                 error_code="io_error",
-                error_message="resolved failure",
+                error_message="Recovered from write error",
                 target_path=".agent/resume.json",
                 attempt_id=attempt_id,
-                occurred_at=datetime(2024, 1, 5, tzinfo=UTC),
-                resolved_at=datetime(2024, 1, 6, tzinfo=UTC),
-                open_failure_count=0,
-                retry_count=1,
+                occurred_at=occurred_at,
+                resolved_at=resolved_at,
+                open_failure_count=1,
+                retry_count=2,
                 status="resolved",
             ),
         ),
@@ -4308,6 +4426,69 @@ def test_serialize_workflow_resume_includes_optional_and_closed_failure_fields()
     assert payload["projections"][0]["projection_type"] == "resume_json"
     assert payload["closed_projection_failures"][0]["status"] == "resolved"
     assert payload["next_hint"] == "Resume safely"
+
+
+def test_serialize_workflow_resume_can_omit_closed_projection_failures() -> None:
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+    attempt_id = uuid4()
+
+    resume = WorkflowResume(
+        workspace=Workspace(
+            workspace_id=workspace_id,
+            repo_url="https://example.com/repo.git",
+            canonical_path="/tmp/repo",
+            default_branch="main",
+            metadata={"team": "platform"},
+        ),
+        workflow_instance=WorkflowInstance(
+            workflow_instance_id=workflow_instance_id,
+            workspace_id=workspace_id,
+            ticket_id="SER-OMIT-1",
+            status=WorkflowInstanceStatus.RUNNING,
+            metadata={"priority": "high"},
+        ),
+        attempt=WorkflowAttempt(
+            attempt_id=attempt_id,
+            workflow_instance_id=workflow_instance_id,
+            attempt_number=1,
+            status=WorkflowAttemptStatus.RUNNING,
+            verify_status=VerifyStatus.PASSED,
+            started_at=datetime(2024, 1, 7, tzinfo=UTC),
+        ),
+        latest_checkpoint=None,
+        latest_verify_report=None,
+        resumable_status=ResumableStatus.RESUMABLE,
+        projections=(),
+        warnings=(),
+        closed_projection_failures=(
+            ProjectionFailureInfo(
+                projection_type=ProjectionArtifactType.RESUME_JSON,
+                error_code="io_error",
+                error_message="Recovered from write error",
+                target_path=".agent/resume.json",
+                attempt_id=attempt_id,
+                occurred_at=datetime(2024, 1, 9, tzinfo=UTC),
+                resolved_at=datetime(2024, 1, 10, tzinfo=UTC),
+                open_failure_count=1,
+                retry_count=2,
+                status="resolved",
+            ),
+        ),
+        next_hint="Resume safely",
+    )
+
+    payload = serialize_workflow_resume(
+        resume,
+        include_closed_projection_failures=False,
+    )
+
+    assert payload["workspace"]["workspace_id"] == str(workspace_id)
+    assert payload["workflow"]["workflow_instance_id"] == str(workflow_instance_id)
+    assert payload["attempt"]["attempt_id"] == str(attempt_id)
+    assert payload["resumable_status"] == "resumable"
+    assert payload["next_hint"] == "Resume safely"
+    assert "closed_projection_failures" not in payload
 
 
 def test_serialize_closed_projection_failures_history_serializes_failures() -> None:
