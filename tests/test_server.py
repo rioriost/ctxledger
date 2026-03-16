@@ -409,6 +409,37 @@ def make_ready_server(
     return server
 
 
+def make_ready_server_with_handler(
+    handler_builder: object,
+    *,
+    settings: AppSettings | None = None,
+    resume: WorkflowResume | None = None,
+    fake_workflow_service: FakeWorkflowService | None = None,
+) -> tuple[CtxLedgerServer, object, WorkflowResume, FakeWorkflowService]:
+    server, resume_result, workflow_service = make_ready_server_with_resume(
+        resume=resume,
+        settings=settings,
+        fake_workflow_service=fake_workflow_service,
+    )
+    handler = handler_builder(server)
+    return server, handler, resume_result, workflow_service
+
+
+def make_ready_server_with_resume(
+    *,
+    resume: WorkflowResume | None = None,
+    settings: AppSettings | None = None,
+    fake_workflow_service: FakeWorkflowService | None = None,
+) -> tuple[CtxLedgerServer, WorkflowResume, FakeWorkflowService]:
+    resume_result = resume or make_resume_fixture()
+    workflow_service = fake_workflow_service or FakeWorkflowService(resume_result)
+    server = make_ready_server(
+        settings=settings,
+        workflow_service_factory=lambda: workflow_service,
+    )
+    return server, resume_result, workflow_service
+
+
 def test_startup_marks_server_started_when_configuration_and_db_are_valid() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker()
@@ -994,11 +1025,7 @@ def test_build_workflow_resume_http_handler_returns_503_when_server_is_not_ready
     None
 ):
     settings = make_settings()
-    server = CtxLedgerServer(
-        settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-    )
+    server = make_server(settings=settings)
     handler = build_workflow_resume_http_handler(server)
 
     response = handler(f"/workflow-resume/{uuid4()}")
@@ -1040,16 +1067,11 @@ def test_build_closed_projection_failures_http_handler_returns_success_response(
         closed_projection_failures=closed_projection_failures,
     )
     settings = make_settings()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, resume, _ = make_ready_server_with_resume(
+        resume=resume,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
     )
     handler = build_closed_projection_failures_http_handler(server)
-
-    server.startup()
 
     response = handler(
         f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}/closed-projection-failures"
@@ -1081,11 +1103,7 @@ def test_build_closed_projection_failures_http_handler_returns_not_found_for_inv
     None
 ):
     settings = make_settings()
-    server = CtxLedgerServer(
-        settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-    )
+    server = make_server(settings=settings)
     handler = build_closed_projection_failures_http_handler(server)
 
     response = handler("/workflow-resume/not-a-uuid/closed-projection-failures")
@@ -1105,11 +1123,7 @@ def test_build_closed_projection_failures_http_handler_returns_503_when_server_i
     None
 ):
     settings = make_settings()
-    server = CtxLedgerServer(
-        settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-    )
+    server = make_server(settings=settings)
     handler = build_closed_projection_failures_http_handler(server)
 
     response = handler(f"/workflow-resume/{uuid4()}/closed-projection-failures")
@@ -1136,15 +1150,12 @@ def test_build_projection_failures_ignore_http_handler_returns_success_response(
         resume,
         ignore_result=2,
     )
-    server = CtxLedgerServer(
+    server, _, fake_workflow_service = make_ready_server_with_resume(
+        resume=resume,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        fake_workflow_service=fake_workflow_service,
     )
     handler = build_projection_failures_ignore_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1179,16 +1190,11 @@ def test_build_projection_failures_ignore_http_handler_returns_not_found_for_inv
 ):
     settings = make_settings()
     resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, resume, _ = make_ready_server_with_resume(
+        resume=resume,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
     )
     handler = build_projection_failures_ignore_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1213,17 +1219,10 @@ def test_build_projection_failures_ignore_http_handler_returns_invalid_request_f
     None
 ):
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, handler, resume, _ = make_ready_server_with_handler(
+        build_projection_failures_ignore_http_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
     )
-    handler = build_projection_failures_ignore_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1253,17 +1252,10 @@ def test_build_projection_failures_ignore_http_handler_returns_invalid_request_f
     None
 ):
     settings = make_settings()
-    resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, handler, resume, _ = make_ready_server_with_handler(
+        build_projection_failures_ignore_http_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
     )
-    handler = build_projection_failures_ignore_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1300,15 +1292,12 @@ def test_build_projection_failures_ignore_http_handler_returns_not_found_for_ser
         raise RuntimeError("workflow not found")
 
     fake_workflow_service.ignore_resume_projection_failures = raise_not_found
-    server = CtxLedgerServer(
+    server, handler, resume, _ = make_ready_server_with_handler(
+        build_projection_failures_ignore_http_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
+        fake_workflow_service=fake_workflow_service,
     )
-    handler = build_projection_failures_ignore_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1345,15 +1334,12 @@ def test_build_projection_failures_ignore_http_handler_returns_invalid_request_f
         raise RuntimeError("workflow instance does not belong to workspace")
 
     fake_workflow_service.ignore_resume_projection_failures = raise_workspace_mismatch
-    server = CtxLedgerServer(
+    server, handler, resume, _ = make_ready_server_with_handler(
+        build_projection_failures_ignore_http_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
+        fake_workflow_service=fake_workflow_service,
     )
-    handler = build_projection_failures_ignore_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1390,15 +1376,12 @@ def test_build_projection_failures_ignore_http_handler_returns_server_error_for_
         raise RuntimeError("projection storage exploded")
 
     fake_workflow_service.ignore_resume_projection_failures = raise_generic_error
-    server = CtxLedgerServer(
+    server, handler, resume, _ = make_ready_server_with_handler(
+        build_projection_failures_ignore_http_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
+        fake_workflow_service=fake_workflow_service,
     )
-    handler = build_projection_failures_ignore_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1430,15 +1413,12 @@ def test_build_projection_failures_resolve_http_handler_returns_success_response
         resume,
         resolve_result=3,
     )
-    server = CtxLedgerServer(
+    server, handler, _, fake_workflow_service = make_ready_server_with_handler(
+        build_projection_failures_resolve_http_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
+        fake_workflow_service=fake_workflow_service,
     )
-    handler = build_projection_failures_resolve_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1472,16 +1452,11 @@ def test_build_projection_failures_resolve_http_handler_returns_not_found_for_in
 ):
     settings = make_settings()
     resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, handler, resume, _ = make_ready_server_with_handler(
+        build_projection_failures_resolve_http_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
     )
-    handler = build_projection_failures_resolve_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1507,16 +1482,11 @@ def test_build_projection_failures_resolve_http_handler_returns_invalid_request_
 ):
     settings = make_settings()
     resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, handler, resume, _ = make_ready_server_with_handler(
+        build_projection_failures_resolve_http_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
     )
-    handler = build_projection_failures_resolve_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
@@ -1543,16 +1513,11 @@ def test_build_projection_failures_resolve_http_handler_returns_invalid_request_
 ):
     settings = make_settings()
     resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server, handler, resume, _ = make_ready_server_with_handler(
+        build_projection_failures_resolve_http_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
     )
-    handler = build_projection_failures_resolve_http_handler(server)
-
-    server.startup()
 
     response = handler(
         (
