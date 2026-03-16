@@ -283,7 +283,10 @@ def build_workspace_resume_resource_response(
     else:
         workflow_response = build_workflow_resume_response(
             server,
-            getattr(server.workflow_service.resume_result.workspace, "workspace_id"),
+            getattr(
+                server.workflow_service.resume_result.workflow_instance,
+                "workflow_instance_id",
+            ),
         )
         if workflow_response.status_code == 200:
             response_workspace_id = workflow_response.payload.get("workspace", {}).get(

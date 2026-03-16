@@ -1,0 +1,4 @@
+services:
+  ctxledger-private:
+    environment:
+      CTXLEDGER_LOG_LEVEL: debug

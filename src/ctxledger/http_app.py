@@ -225,7 +225,9 @@ def create_default_fastapi_app() -> FastAPI:
     from .config import get_settings
 
     settings = get_settings()
-    return create_fastapi_app_from_settings(settings)
+    server = create_server(settings)
+    server.startup()
+    return create_fastapi_app_from_settings(settings, server=server)
 
 
 def _create_module_app() -> FastAPI:

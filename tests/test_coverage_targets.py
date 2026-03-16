@@ -3135,7 +3135,7 @@ def test_build_workspace_resume_resource_response_uses_resume_result_branch() ->
     def fake_build_workflow_resume_response(
         _server: object, workflow_id: object
     ) -> object:
-        assert workflow_id == workspace_id
+        assert workflow_id == workflow_instance_id
         return SimpleNamespace(
             status_code=200,
             payload={
@@ -3201,7 +3201,7 @@ def test_build_workspace_resume_resource_response_returns_not_found_for_workspac
     def fake_build_workflow_resume_response(
         _server: object, workflow_id: object
     ) -> object:
-        assert workflow_id == other_workspace_id
+        assert workflow_id == workflow_instance_id
         return SimpleNamespace(
             status_code=200,
             payload={
@@ -3452,7 +3452,7 @@ def test_build_workspace_resume_resource_response_propagates_non_success_workflo
     def fake_build_workflow_resume_response(
         _server: object, workflow_id: object
     ) -> object:
-        assert workflow_id == workspace_id
+        assert workflow_id == resume_result.workflow_instance.workflow_instance_id
         return SimpleNamespace(
             status_code=503,
             payload={
