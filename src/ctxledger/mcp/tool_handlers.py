@@ -277,10 +277,12 @@ def build_resume_workflow_tool_handler(
         response = server.build_workflow_resume_response(workflow_instance_id)
         if response.status_code != 200:
             error = response.payload.get("error", {})
+            raw_details = error.get("details", {})
+            details = raw_details if isinstance(raw_details, dict) else {}
             return build_mcp_error_response(
                 code=str(error.get("code", "server_error")),
                 message=str(error.get("message", "failed to resume workflow")),
-                details={},
+                details=details,
             )
 
         return build_mcp_success_response(response.payload)

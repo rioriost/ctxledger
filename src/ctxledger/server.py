@@ -213,6 +213,13 @@ class CtxLedgerServer:
             force=True,
         )
 
+        for logger_name in (
+            "uvicorn",
+            "uvicorn.error",
+            "uvicorn.access",
+        ):
+            logging.getLogger(logger_name).setLevel(level)
+
     def startup(self) -> None:
         self.configure_logging()
         logger.info(

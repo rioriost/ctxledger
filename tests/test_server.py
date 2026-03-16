@@ -4,6 +4,7 @@ import json
 import logging
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -554,6 +555,94 @@ def test_startup_marks_server_started_when_configuration_and_db_are_valid() -> N
     assert db_checker.ping_calls >= 2
     assert db_checker.schema_ready_calls >= 2
     assert runtime.start_calls == 1
+
+
+def test_configure_logging_sets_ctxledger_and_root_logger_levels() -> None:
+    settings = make_settings()
+    settings = replace(
+        settings,
+        logging=LoggingSettings(level=LogLevel.DEBUG, structured=True),
+    )
+    server = make_server(settings=settings)
+
+    original_basic_config = logging.basicConfig
+    original_root_level = logging.getLogger().level
+    original_ctxledger_level = logging.getLogger("ctxledger").level
+    original_workflow_level = logging.getLogger("ctxledger.workflow.service").level
+    original_server_level = logging.getLogger("ctxledger.server").level
+    basic_config_calls: list[dict[str, object]] = []
+
+    def fake_basic_config(**kwargs: object) -> None:
+        basic_config_calls.append(dict(kwargs))
+        level = kwargs.get("level", logging.INFO)
+        logging.getLogger().setLevel(level)
+        logging.getLogger("ctxledger").setLevel(level)
+        logging.getLogger("ctxledger.workflow.service").setLevel(level)
+        logging.getLogger("ctxledger.server").setLevel(level)
+
+    try:
+        logging.basicConfig = fake_basic_config
+        logging.getLogger().setLevel(logging.WARNING)
+        logging.getLogger("ctxledger").setLevel(logging.WARNING)
+        logging.getLogger("ctxledger.workflow.service").setLevel(logging.WARNING)
+        logging.getLogger("ctxledger.server").setLevel(logging.WARNING)
+
+        server.configure_logging()
+    finally:
+        logging.basicConfig = original_basic_config
+        logging.getLogger().setLevel(original_root_level)
+        logging.getLogger("ctxledger").setLevel(original_ctxledger_level)
+        logging.getLogger("ctxledger.workflow.service").setLevel(
+            original_workflow_level
+        )
+        logging.getLogger("ctxledger.server").setLevel(original_server_level)
+
+    assert basic_config_calls == [
+        {
+            "level": logging.DEBUG,
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+            "force": True,
+        }
+    ]
+
+
+def test_configure_logging_explicitly_sets_uvicorn_logger_levels() -> None:
+    settings = make_settings()
+    settings = replace(
+        settings,
+        logging=LoggingSettings(level=LogLevel.DEBUG, structured=True),
+    )
+    server = make_server(settings=settings)
+
+    original_basic_config = logging.basicConfig
+    original_root_level = logging.getLogger().level
+    original_uvicorn_level = logging.getLogger("uvicorn").level
+    original_uvicorn_error_level = logging.getLogger("uvicorn.error").level
+    original_uvicorn_access_level = logging.getLogger("uvicorn.access").level
+
+    def fake_basic_config(**kwargs: object) -> None:
+        level = kwargs.get("level", logging.INFO)
+        logging.getLogger().setLevel(level)
+
+    try:
+        logging.basicConfig = fake_basic_config
+        logging.getLogger().setLevel(logging.WARNING)
+        logging.getLogger("uvicorn").setLevel(logging.INFO)
+        logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+        logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+
+        server.configure_logging()
+
+        assert logging.getLogger().level == logging.DEBUG
+        assert logging.getLogger("uvicorn").level == logging.DEBUG
+        assert logging.getLogger("uvicorn.error").level == logging.DEBUG
+        assert logging.getLogger("uvicorn.access").level == logging.DEBUG
+    finally:
+        logging.basicConfig = original_basic_config
+        logging.getLogger().setLevel(original_root_level)
+        logging.getLogger("uvicorn").setLevel(original_uvicorn_level)
+        logging.getLogger("uvicorn.error").setLevel(original_uvicorn_error_level)
+        logging.getLogger("uvicorn.access").setLevel(original_uvicorn_access_level)
 
 
 def test_startup_raises_when_database_check_fails() -> None:

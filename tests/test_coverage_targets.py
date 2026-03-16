@@ -975,7 +975,7 @@ def test_cli_helpers_cover_schema_path_and_version_fallback(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.5.1"
+    assert captured.out.strip() == "0.5.2"
 
 
 def test_workflow_service_stats_helper_error_branches() -> None:
@@ -2426,6 +2426,44 @@ def test_http_app_create_fastapi_app_from_settings_and_default(
     assert created_apps == [sentinel_server, sentinel_server]
 
 
+def test_http_app_create_default_fastapi_app_does_not_start_server_eagerly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    http_app = _load_http_app_module(monkeypatch)
+    sentinel_app = object()
+    startup_calls = 0
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.settings = make_settings()
+
+        def startup(self) -> None:
+            nonlocal startup_calls
+            startup_calls += 1
+
+    original_create_server = http_app.create_server
+    original_create_fastapi_app = http_app.create_fastapi_app
+
+    def fake_create_server(received_settings: AppSettings) -> object:
+        assert isinstance(received_settings, AppSettings)
+        return FakeServer()
+
+    def fake_create_fastapi_app(server: object) -> object:
+        assert isinstance(server, FakeServer)
+        return sentinel_app
+
+    try:
+        http_app.create_server = fake_create_server
+        http_app.create_fastapi_app = fake_create_fastapi_app
+        app = http_app.create_default_fastapi_app()
+    finally:
+        http_app.create_server = original_create_server
+        http_app.create_fastapi_app = original_create_fastapi_app
+
+    assert app is sentinel_app
+    assert startup_calls == 0
+
+
 def test_http_app_create_fastapi_app_registers_expected_routes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2877,8 +2915,12 @@ def test_build_workflow_resume_response_returns_not_found_when_workflow_is_missi
     workflow_instance_id = uuid4()
     server = make_server()
 
-    def raise_workflow_not_found(_workflow_instance_id: object) -> object:
-        raise WorkflowNotFoundError(
+    def raise_workflow_not_found(
+        _workflow_instance_id: object,
+        *,
+        include_closed_projection_failures: bool = False,
+    ) -> object:
+        raise ValidationError(
             "workflow not found",
             details={"workflow_instance_id": str(workflow_instance_id)},
         )
@@ -2887,10 +2929,10 @@ def test_build_workflow_resume_response_returns_not_found_when_workflow_is_missi
 
     response = build_workflow_resume_response(server, workflow_instance_id)
 
-    assert response.status_code == 404
+    assert response.status_code == 400
     assert response.payload == {
         "error": {
-            "code": "not_found",
+            "code": "invalid_request",
             "message": "workflow not found",
             "details": {
                 "workflow_instance_id": str(workflow_instance_id),
@@ -2907,7 +2949,11 @@ def test_build_workflow_resume_response_returns_invalid_request_for_workspace_id
     workspace_id = uuid4()
     server = make_server()
 
-    def raise_workspace_id_misuse(_workflow_instance_id: object) -> object:
+    def raise_workspace_id_misuse(
+        _workflow_instance_id: object,
+        *,
+        include_closed_projection_failures: bool = False,
+    ) -> object:
         raise ValidationError(
             "provided workflow_instance_id appears to be a workspace_id; "
             "use workspace://{workspace_id}/resume or provide a real "
@@ -2950,7 +2996,11 @@ def test_build_workflow_resume_response_uses_default_string_when_bootstrap_error
         def __str__(self) -> str:
             return ""
 
-    def raise_silent_bootstrap_error(_workflow_instance_id: object) -> object:
+    def raise_silent_bootstrap_error(
+        _workflow_instance_id: object,
+        *,
+        include_closed_projection_failures: bool = False,
+    ) -> object:
         return (_ for _ in ()).throw(SilentBootstrapError("silent"))
 
     server.get_workflow_resume = raise_silent_bootstrap_error
@@ -2983,7 +3033,7 @@ def test_build_workflow_resume_response_serializes_resume_payload() -> None:
     def fake_serialize_workflow_resume(
         resume: object,
         *,
-        include_closed_projection_failures: bool = True,
+        include_closed_projection_failures: bool = False,
     ) -> dict[str, object]:
         assert getattr(resume, "workflow_instance_id") == workflow_instance_id
         assert include_closed_projection_failures is False
@@ -3002,48 +3052,53 @@ def test_build_workflow_resume_response_serializes_resume_payload() -> None:
     assert response.include_closed_projection_failures is False
 
 
-def test_build_workflow_resume_response_can_include_closed_projection_failures_when_requested() -> (
+def test_build_closed_projection_failures_response_serializes_history_when_requested() -> (
     None
 ):
     workflow_instance_id = uuid4()
+    closed_failures = (SimpleNamespace(status="resolved"),)
     expected_payload = {
         "workflow_instance_id": str(workflow_instance_id),
-        "closed_projection_failures": [{"status": "resolved"}],
+        "history": [],
     }
     server = make_server()
     server.workflow_service = SimpleNamespace(
         resume_workflow=lambda data: SimpleNamespace(
-            workflow_instance_id=data.workflow_instance_id
+            workflow_instance_id=data.workflow_instance_id,
+            closed_projection_failures=closed_failures,
         )
     )
 
     serializers_module = importlib.import_module("ctxledger.runtime.serializers")
-    original_serializer = serializers_module.serialize_workflow_resume
+    original_serializer = (
+        serializers_module.serialize_closed_projection_failures_history
+    )
 
-    def fake_serialize_workflow_resume(
-        resume: object,
-        *,
-        include_closed_projection_failures: bool = True,
+    def fake_serialize_closed_projection_failures_history(
+        current_workflow_instance_id: object,
+        current_closed_failures: object,
     ) -> dict[str, object]:
-        assert getattr(resume, "workflow_instance_id") == workflow_instance_id
-        assert include_closed_projection_failures is True
+        assert current_workflow_instance_id == workflow_instance_id
+        assert current_closed_failures == closed_failures
         return expected_payload
 
-    serializers_module.serialize_workflow_resume = fake_serialize_workflow_resume
+    serializers_module.serialize_closed_projection_failures_history = (
+        fake_serialize_closed_projection_failures_history
+    )
 
     try:
-        response = build_workflow_resume_response(
+        response = build_closed_projection_failures_response(
             server,
             workflow_instance_id,
-            include_closed_projection_failures=True,
         )
     finally:
-        serializers_module.serialize_workflow_resume = original_serializer
+        serializers_module.serialize_closed_projection_failures_history = (
+            original_serializer
+        )
 
     assert response.status_code == 200
     assert response.payload == expected_payload
     assert response.headers == {"content-type": "application/json"}
-    assert response.include_closed_projection_failures is True
 
 
 def test_build_closed_projection_failures_response_returns_server_not_ready() -> None:
@@ -3145,6 +3200,7 @@ def test_build_workspace_resume_resource_response_uses_resume_result_branch() ->
                 "workflow_instance_id": str(workflow_instance_id),
             },
             headers={"content-type": "application/json"},
+            include_closed_projection_failures=False,
         )
 
     build_workspace_resume_resource_response.__globals__[
@@ -3211,6 +3267,7 @@ def test_build_workspace_resume_resource_response_returns_not_found_for_workspac
                 "workflow_instance_id": str(workflow_instance_id),
             },
             headers={"content-type": "application/json"},
+            include_closed_projection_failures=False,
         )
 
     build_workspace_resume_resource_response.__globals__[
@@ -3462,6 +3519,7 @@ def test_build_workspace_resume_resource_response_propagates_non_success_workflo
                 }
             },
             headers={"content-type": "application/json"},
+            include_closed_projection_failures=False,
         )
 
     build_workspace_resume_resource_response.__globals__[
@@ -3596,6 +3654,7 @@ def test_build_workspace_resume_resource_response_uow_branch_uses_latest_when_ru
             status_code=200,
             payload={"workflow_instance_id": str(workflow_instance_id)},
             headers={"content-type": "application/json"},
+            include_closed_projection_failures=False,
         )
 
     build_workspace_resume_resource_response.__globals__[

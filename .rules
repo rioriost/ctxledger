@@ -21,13 +21,30 @@ user_notes: JA allowed
 
 - At the beginning of work, ensure the current repository is tracked in `ctxledger`:
   - register or confirm the workspace with `workspace_register`
-  - if the task appears to continue existing work, prefer `workflow_resume` before starting anything new
+  - if the task appears to continue existing work, prefer resuming existing work before starting anything new
   - use `workflow_start` only when the work is genuinely new or when no corresponding active workflow can be resumed
+- Be explicit about identifier types and never substitute one for another:
+  - `workspace_register` returns a `workspace_id`, not a `workflow_instance_id`
+  - `workflow_start` returns a `workflow_instance_id` and an `attempt_id`
+  - `workflow_resume` requires a `workflow_instance_id`
+  - `workflow_checkpoint` and `workflow_complete` require both `workflow_instance_id` and `attempt_id`
+- Before calling `workflow_resume`, verify that the identifier came from:
+  - a prior `workflow_start` result
+  - a prior `workflow_resume` result
+  - workflow-oriented stored context that explicitly labels it as `workflow_instance_id`
+- Never pass a `workspace_id` to `workflow_resume`.
+- If you only know a `workspace_id`, do not guess a workflow identifier:
+  - recover the active or latest workflow through available canonical workflow context first
+  - if no resumable workflow can be identified, start a new workflow instead of fabricating an id
+- If a resume-oriented tool call fails or times out, do not blindly retry the same malformed request:
+  - first re-check that the id type is correct
+  - then distinguish whether the problem appears to be identifier misuse, missing workflow state, or runtime/server degradation
 - When deciding between resume and start:
   - prefer reusing an existing workflow when the task objective, repository, or recent work context clearly matches ongoing work
   - avoid creating duplicate workflows for the same task just because context is incomplete
   - if uncertain, try to recover or inspect existing workflow state first, then start a new workflow only if needed
   - only treat a workflow as resumable when it is still operationally open; terminal workflows should be inspected, not continued
+  - prefer workspace-scoped discovery or inspection flows when you only know the repository/workspace context; prefer `workflow_resume` only when you already have a confirmed `workflow_instance_id`
 - During work, record meaningful progress with `workflow_checkpoint`, especially after:
   - planning or narrowing the task
   - identifying a root cause or important technical decision

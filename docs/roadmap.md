@@ -234,6 +234,53 @@ Expected themes:
 - focused validation for transaction behavior, cleanup, and regression safety
 - runtime/bootstrap correctness for both CLI and HTTP-driven resume behavior
 
+## 0.5.2
+
+Planned focus:
+
+- `workflow_resume` timeout hardening and root-cause reduction
+- safer resume/recovery behavior for AI agents that follow repository `.rules`
+- stronger distinction between `workspace_id` and `workflow_instance_id` at tool and docs boundaries
+- operational diagnosis for resume-path stalls, blocking queries, and transport timeout mismatches
+- close the gap between canonical workflow guidance and practical agent/tool usage
+
+Expected themes:
+
+- make `workflow_resume` fail fast and clearly when the wrong identifier type is supplied
+- reduce the chance that resume-related requests block long enough to hit context-server timeouts
+- improve observability around resume-stage timing, pool waits, and query hotspots
+- review whether `.rules` wording unintentionally nudges agents toward incorrect `workflow_resume` usage
+- document a safer agent workflow that prefers the correct identifier source and fallback path when resumption is ambiguous
+- preserve canonical workflow semantics while making misuse and degraded states easier to diagnose
+- keep this as a targeted hardening release rather than a broad feature expansion
+
+Current investigation framing:
+
+- recent timeout reports show `workspace_register` responding while `workflow_resume` times out, which suggests the server is reachable but the resume path can still block
+- at least one observed client call appears to have passed a `workspace_id` to `workflow_resume`, even though the tool expects a `workflow_instance_id`
+- because `ctxledger` tools are commonly invoked by AI agents that read repository `.rules`, guidance quality in `.rules` is part of the problem space and should be treated as potentially causal rather than merely advisory
+- the current resume path performs synchronous, multi-step PostgreSQL-backed resume assembly, so pool waits, blocking queries, or transport timeout budget mismatches remain relevant suspects even when agent misuse is also present
+
+Likely workstreams for `0.5.2`:
+
+- tool-surface and service hardening for incorrect identifier usage
+- `.rules` guidance refinement for resume/start decision-making and identifier selection
+- targeted resume-path observability and timeout-budget diagnosis
+- selective query/index/runtime review for resume-related lookup stages
+- documentation updates that make the correct operational flow obvious for both humans and agent-driven tool callers
+
+Success shape for `0.5.2`:
+
+- AI agents following `.rules` are less likely to call `workflow_resume` with a `workspace_id`
+- incorrect resume calls produce clearer, faster failure behavior instead of opaque timeouts where possible
+- resume-path diagnostics are explicit enough to distinguish:
+  - wrong identifier usage
+  - bootstrap/runtime readiness issues
+  - connection-pool acquisition delays
+  - slow or blocking database lookups
+  - upstream context-server timeout limits
+- docs and roadmap guidance reflect that reliability can depend on both implementation hardening and better agent-facing operational instructions
+
 ## 0.6
 
 Planned focus:

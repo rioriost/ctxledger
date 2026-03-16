@@ -574,7 +574,13 @@ def test_build_resume_workflow_tool_handler_maps_non_200_response() -> None:
         make_server(
             workflow_resume_response=WorkflowResumeResponse(
                 status_code=404,
-                payload={"error": {"code": "not_found", "message": "missing"}},
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": "missing",
+                        "details": {"workflow_instance_id": "wf-123"},
+                    }
+                },
                 headers={"content-type": "application/json"},
             )
         )
@@ -588,7 +594,7 @@ def test_build_resume_workflow_tool_handler_maps_non_200_response() -> None:
             "error": {
                 "code": "not_found",
                 "message": "missing",
-                "details": {},
+                "details": {"workflow_instance_id": "wf-123"},
             },
         }
     )

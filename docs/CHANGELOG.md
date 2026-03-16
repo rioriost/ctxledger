@@ -8,7 +8,12 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ## [Unreleased]
 
-- No unreleased entries yet.
+- planned `0.5.2` follow-up hardening work for `workflow_resume` timeout diagnosis and mitigation
+- roadmap/docs updates are being prepared for:
+  - timeout-aware resume-path hardening
+  - clearer workflow-versus-workspace identifier guidance
+  - AI-agent-facing `.rules` guidance improvements to reduce incorrect `workflow_resume` usage
+  - validation of whether rule/guidance changes can prevent a meaningful share of observed timeout-triggering misuse
 
 ## [0.4.0] - 2026-03-16
 
