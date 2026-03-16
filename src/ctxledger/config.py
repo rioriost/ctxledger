@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
 from urllib.parse import urlparse
@@ -200,9 +200,30 @@ class AppSettings:
     database: DatabaseSettings
     http: HttpSettings
     debug: DebugSettings
-    projection: ProjectionSettings
-    logging: LoggingSettings
-    embedding: EmbeddingSettings
+    projection: ProjectionSettings = field(
+        default_factory=lambda: ProjectionSettings(
+            enabled=True,
+            directory_name=".agent",
+            write_markdown=True,
+            write_json=True,
+        )
+    )
+    logging: LoggingSettings = field(
+        default_factory=lambda: LoggingSettings(
+            level=LogLevel.INFO,
+            structured=True,
+        )
+    )
+    embedding: EmbeddingSettings = field(
+        default_factory=lambda: EmbeddingSettings(
+            provider=EmbeddingProvider.OPENAI,
+            model="text-embedding-3-small",
+            api_key=None,
+            base_url=None,
+            dimensions=None,
+            enabled=False,
+        )
+    )
 
     def validate(self) -> None:
         if not self.database.url:
