@@ -53,8 +53,8 @@ def patched_env(**updates: str | None) -> Iterator[None]:
                 os.environ[key] = value
 
 
-def minimum_valid_env() -> dict[str, str]:
-    return {
+def minimum_valid_env(**overrides: str | None) -> dict[str, str | None]:
+    env: dict[str, str | None] = {
         "CTXLEDGER_DATABASE_URL": "postgresql://ctxledger:ctxledger@localhost:5432/ctxledger",
         "CTXLEDGER_HOST": "0.0.0.0",
         "CTXLEDGER_PORT": "8080",
@@ -71,6 +71,8 @@ def minimum_valid_env() -> dict[str, str]:
         "CTXLEDGER_EMBEDDING_PROVIDER": "openai",
         "CTXLEDGER_EMBEDDING_MODEL": "text-embedding-3-small",
     }
+    env.update(overrides)
+    return env
 
 
 @pytest.fixture
@@ -118,19 +120,13 @@ def test_get_settings_returns_validated_settings(clean_ctxledger_env: None) -> N
 
 
 def test_missing_database_url_raises_config_error(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_DATABASE_URL"] = ""
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_DATABASE_URL="")):
         with pytest.raises(ConfigError, match="CTXLEDGER_DATABASE_URL is required"):
             load_settings()
 
 
 def test_invalid_boolean_value_raises_config_error(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_ENABLE_DEBUG_ENDPOINTS"] = "maybe"
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_ENABLE_DEBUG_ENDPOINTS="maybe")):
         with pytest.raises(
             ConfigError,
             match="CTXLEDGER_ENABLE_DEBUG_ENDPOINTS must be a boolean value",
@@ -139,28 +135,19 @@ def test_invalid_boolean_value_raises_config_error(clean_ctxledger_env: None) ->
 
 
 def test_invalid_log_level_raises_config_error(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_LOG_LEVEL"] = "verbose"
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_LOG_LEVEL="verbose")):
         with pytest.raises(ConfigError, match="CTXLEDGER_LOG_LEVEL must be one of"):
             load_settings()
 
 
 def test_non_integer_port_raises_config_error(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_PORT"] = "not-a-number"
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_PORT="not-a-number")):
         with pytest.raises(ConfigError, match="CTXLEDGER_PORT must be an integer"):
             load_settings()
 
 
 def test_invalid_port_raises_config_error(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_PORT"] = "70000"
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_PORT="70000")):
         with pytest.raises(
             ConfigError, match="CTXLEDGER_PORT must be between 1 and 65535"
         ):
@@ -177,10 +164,7 @@ def test_debug_endpoints_enabled_by_default(clean_ctxledger_env: None) -> None:
 def test_invalid_debug_endpoints_value_raises_config_error(
     clean_ctxledger_env: None,
 ) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_ENABLE_DEBUG_ENDPOINTS"] = "maybe"
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_ENABLE_DEBUG_ENDPOINTS="maybe")):
         with pytest.raises(
             ConfigError,
             match="CTXLEDGER_ENABLE_DEBUG_ENDPOINTS must be a boolean value",
@@ -189,20 +173,14 @@ def test_invalid_debug_endpoints_value_raises_config_error(
 
 
 def test_debug_endpoints_can_be_disabled(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_ENABLE_DEBUG_ENDPOINTS"] = "false"
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_ENABLE_DEBUG_ENDPOINTS="false")):
         settings = load_settings()
 
     assert settings.debug.enabled is False
 
 
 def test_projection_directory_must_not_be_empty(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env.pop("CTXLEDGER_PROJECTION_DIRECTORY", None)
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_PROJECTION_DIRECTORY=None)):
         os.environ["CTXLEDGER_PROJECTION_DIRECTORY"] = ""
         with pytest.raises(
             ConfigError,
@@ -214,11 +192,12 @@ def test_projection_directory_must_not_be_empty(clean_ctxledger_env: None) -> No
 def test_projection_outputs_must_include_at_least_one_format(
     clean_ctxledger_env: None,
 ) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_PROJECTION_WRITE_JSON"] = "false"
-    env["CTXLEDGER_PROJECTION_WRITE_MARKDOWN"] = "false"
-
-    with patched_env(**env):
+    with patched_env(
+        **minimum_valid_env(
+            CTXLEDGER_PROJECTION_WRITE_JSON="false",
+            CTXLEDGER_PROJECTION_WRITE_MARKDOWN="false",
+        )
+    ):
         with pytest.raises(
             ConfigError,
             match="At least one projection output must be enabled when projections are enabled",
@@ -227,10 +206,7 @@ def test_projection_outputs_must_include_at_least_one_format(
 
 
 def test_db_connect_timeout_must_be_positive(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS"] = "0"
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS="0")):
         with pytest.raises(
             ConfigError,
             match="CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS must be greater than 0",
@@ -241,10 +217,7 @@ def test_db_connect_timeout_must_be_positive(clean_ctxledger_env: None) -> None:
 def test_db_statement_timeout_must_be_positive_when_set(
     clean_ctxledger_env: None,
 ) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"] = "-1"
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_DB_STATEMENT_TIMEOUT_MS="-1")):
         with pytest.raises(
             ConfigError,
             match="CTXLEDGER_DB_STATEMENT_TIMEOUT_MS must be greater than 0",
@@ -253,10 +226,7 @@ def test_db_statement_timeout_must_be_positive_when_set(
 
 
 def test_optional_statement_timeout_can_be_omitted(clean_ctxledger_env: None) -> None:
-    env = minimum_valid_env()
-    env["CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"] = None
-
-    with patched_env(**env):
+    with patched_env(**minimum_valid_env(CTXLEDGER_DB_STATEMENT_TIMEOUT_MS=None)):
         settings = load_settings()
 
     assert settings.database.statement_timeout_ms is None

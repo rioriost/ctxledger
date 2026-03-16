@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from uuid import UUID
@@ -185,6 +186,38 @@ def _print_schema_path(absolute: bool) -> int:
     return 0
 
 
+def _print_missing_database_url(*, include_override_hint: bool = False) -> int:
+    message = "Database URL is required. Set CTXLEDGER_DATABASE_URL"
+    if include_override_hint:
+        message += " or pass --database-url"
+    print(f"{message}.", file=sys.stderr)
+    return 1
+
+
+def _build_postgres_workflow_service() -> tuple[object, object]:
+    from .config import get_settings
+    from .db.postgres import PostgresConfig, build_postgres_uow_factory
+    from .workflow.service import WorkflowService
+
+    settings = get_settings()
+
+    if not settings.database.url:
+        raise RuntimeError("missing_database_url")
+
+    workflow_service = WorkflowService(
+        build_postgres_uow_factory(PostgresConfig.from_settings(settings))
+    )
+    return settings, workflow_service
+
+
+def _print_json_payload(payload: object) -> None:
+    print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _isoformat_or_none(value: object) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
 def _apply_schema(args: argparse.Namespace) -> int:
     try:
         from .config import get_settings
@@ -205,11 +238,7 @@ def _apply_schema(args: argparse.Namespace) -> int:
             database_url = settings.database.url
 
         if not database_url:
-            print(
-                "Database URL is required. Set CTXLEDGER_DATABASE_URL or pass --database-url.",
-                file=sys.stderr,
-            )
-            return 1
+            return _print_missing_database_url(include_override_hint=True)
 
         schema_sql = load_postgres_schema_sql()
 
@@ -227,24 +256,17 @@ def _apply_schema(args: argparse.Namespace) -> int:
 
 def _write_resume_projection(args: argparse.Namespace) -> int:
     try:
-        from .config import get_settings
-        from .db.postgres import PostgresConfig, build_postgres_uow_factory
         from .projection.writer import ResumeProjectionWriter
-        from .workflow.service import ResumeWorkflowInput, WorkflowService
+        from .workflow.service import ResumeWorkflowInput
 
         workflow_instance_id = UUID(args.workflow_instance_id)
-        settings = get_settings()
 
-        if not settings.database.url:
-            print(
-                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
-                file=sys.stderr,
-            )
-            return 1
-
-        workflow_service = WorkflowService(
-            build_postgres_uow_factory(PostgresConfig.from_settings(settings))
-        )
+        try:
+            settings, workflow_service = _build_postgres_workflow_service()
+        except RuntimeError as exc:
+            if str(exc) == "missing_database_url":
+                return _print_missing_database_url()
+            raise
 
         resume = workflow_service.resume_workflow(
             ResumeWorkflowInput(workflow_instance_id=workflow_instance_id)
@@ -328,75 +350,48 @@ def _format_stats_text(stats: object) -> str:
 
 def _stats(args: argparse.Namespace) -> int:
     try:
-        import json
+        try:
+            _, workflow_service = _build_postgres_workflow_service()
+        except RuntimeError as exc:
+            if str(exc) == "missing_database_url":
+                return _print_missing_database_url()
+            raise
 
-        from .config import get_settings
-        from .db.postgres import PostgresConfig, build_postgres_uow_factory
-        from .workflow.service import WorkflowService
-
-        settings = get_settings()
-
-        if not settings.database.url:
-            print(
-                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
-                file=sys.stderr,
-            )
-            return 1
-
-        workflow_service = WorkflowService(
-            build_postgres_uow_factory(PostgresConfig.from_settings(settings))
-        )
         stats = workflow_service.get_stats()
 
         if args.format == "json":
-            print(
-                json.dumps(
-                    {
-                        "workspace_count": stats.workspace_count,
-                        "workflow_status_counts": stats.workflow_status_counts,
-                        "attempt_status_counts": stats.attempt_status_counts,
-                        "verify_status_counts": stats.verify_status_counts,
-                        "checkpoint_count": stats.checkpoint_count,
-                        "episode_count": stats.episode_count,
-                        "memory_item_count": stats.memory_item_count,
-                        "memory_embedding_count": stats.memory_embedding_count,
-                        "open_projection_failure_count": (
-                            stats.open_projection_failure_count
-                        ),
-                        "latest_workflow_updated_at": (
-                            stats.latest_workflow_updated_at.isoformat()
-                            if stats.latest_workflow_updated_at is not None
-                            else None
-                        ),
-                        "latest_checkpoint_created_at": (
-                            stats.latest_checkpoint_created_at.isoformat()
-                            if stats.latest_checkpoint_created_at is not None
-                            else None
-                        ),
-                        "latest_verify_report_created_at": (
-                            stats.latest_verify_report_created_at.isoformat()
-                            if stats.latest_verify_report_created_at is not None
-                            else None
-                        ),
-                        "latest_episode_created_at": (
-                            stats.latest_episode_created_at.isoformat()
-                            if stats.latest_episode_created_at is not None
-                            else None
-                        ),
-                        "latest_memory_item_created_at": (
-                            stats.latest_memory_item_created_at.isoformat()
-                            if stats.latest_memory_item_created_at is not None
-                            else None
-                        ),
-                        "latest_memory_embedding_created_at": (
-                            stats.latest_memory_embedding_created_at.isoformat()
-                            if stats.latest_memory_embedding_created_at is not None
-                            else None
-                        ),
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
+            _print_json_payload(
+                {
+                    "workspace_count": stats.workspace_count,
+                    "workflow_status_counts": stats.workflow_status_counts,
+                    "attempt_status_counts": stats.attempt_status_counts,
+                    "verify_status_counts": stats.verify_status_counts,
+                    "checkpoint_count": stats.checkpoint_count,
+                    "episode_count": stats.episode_count,
+                    "memory_item_count": stats.memory_item_count,
+                    "memory_embedding_count": stats.memory_embedding_count,
+                    "open_projection_failure_count": (
+                        stats.open_projection_failure_count
+                    ),
+                    "latest_workflow_updated_at": _isoformat_or_none(
+                        stats.latest_workflow_updated_at
+                    ),
+                    "latest_checkpoint_created_at": _isoformat_or_none(
+                        stats.latest_checkpoint_created_at
+                    ),
+                    "latest_verify_report_created_at": _isoformat_or_none(
+                        stats.latest_verify_report_created_at
+                    ),
+                    "latest_episode_created_at": _isoformat_or_none(
+                        stats.latest_episode_created_at
+                    ),
+                    "latest_memory_item_created_at": _isoformat_or_none(
+                        stats.latest_memory_item_created_at
+                    ),
+                    "latest_memory_embedding_created_at": _isoformat_or_none(
+                        stats.latest_memory_embedding_created_at
+                    ),
+                }
             )
         else:
             print(_format_stats_text(stats))
@@ -440,23 +435,12 @@ def _format_workflows_text(workflows: list[object] | tuple[object, ...]) -> str:
 
 def _workflows(args: argparse.Namespace) -> int:
     try:
-        import json
-
-        from .config import get_settings
-        from .db.postgres import PostgresConfig, build_postgres_uow_factory
-        from .workflow.service import WorkflowService
-
-        workflow_service = WorkflowService(
-            build_postgres_uow_factory(PostgresConfig.from_settings(get_settings()))
-        )
-        settings = get_settings()
-
-        if not settings.database.url:
-            print(
-                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
-                file=sys.stderr,
-            )
-            return 1
+        try:
+            _, workflow_service = _build_postgres_workflow_service()
+        except RuntimeError as exc:
+            if str(exc) == "missing_database_url":
+                return _print_missing_database_url()
+            raise
 
         workspace_id = UUID(args.workspace_id) if args.workspace_id else None
         workflows = workflow_service.list_workflows(
@@ -467,28 +451,20 @@ def _workflows(args: argparse.Namespace) -> int:
         )
 
         if args.format == "json":
-            print(
-                json.dumps(
-                    [
-                        {
-                            "workflow_instance_id": str(workflow.workflow_instance_id),
-                            "workspace_id": str(workflow.workspace_id),
-                            "canonical_path": workflow.canonical_path,
-                            "ticket_id": workflow.ticket_id,
-                            "workflow_status": workflow.workflow_status,
-                            "latest_step_name": workflow.latest_step_name,
-                            "latest_verify_status": workflow.latest_verify_status,
-                            "updated_at": (
-                                workflow.updated_at.isoformat()
-                                if workflow.updated_at is not None
-                                else None
-                            ),
-                        }
-                        for workflow in workflows
-                    ],
-                    indent=2,
-                    sort_keys=True,
-                )
+            _print_json_payload(
+                [
+                    {
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "workspace_id": str(workflow.workspace_id),
+                        "canonical_path": workflow.canonical_path,
+                        "ticket_id": workflow.ticket_id,
+                        "workflow_status": workflow.workflow_status,
+                        "latest_step_name": workflow.latest_step_name,
+                        "latest_verify_status": workflow.latest_verify_status,
+                        "updated_at": _isoformat_or_none(workflow.updated_at),
+                    }
+                    for workflow in workflows
+                ]
             )
         else:
             print(_format_workflows_text(workflows))
@@ -564,24 +540,13 @@ def _format_failures_text(failures: list[object] | tuple[object, ...]) -> str:
 
 def _failures(args: argparse.Namespace) -> int:
     try:
-        import json
+        try:
+            _, workflow_service = _build_postgres_workflow_service()
+        except RuntimeError as exc:
+            if str(exc) == "missing_database_url":
+                return _print_missing_database_url()
+            raise
 
-        from .config import get_settings
-        from .db.postgres import PostgresConfig, build_postgres_uow_factory
-        from .workflow.service import WorkflowService
-
-        settings = get_settings()
-
-        if not settings.database.url:
-            print(
-                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
-                file=sys.stderr,
-            )
-            return 1
-
-        workflow_service = WorkflowService(
-            build_postgres_uow_factory(PostgresConfig.from_settings(settings))
-        )
         failures = workflow_service.list_failures(
             limit=args.limit,
             status=args.status,
@@ -589,40 +554,28 @@ def _failures(args: argparse.Namespace) -> int:
         )
 
         if args.format == "json":
-            print(
-                json.dumps(
-                    [
-                        {
-                            "failure_scope": failure.failure_scope,
-                            "failure_type": failure.failure_type,
-                            "failure_status": failure.failure_status,
-                            "projection_type": failure.projection_type,
-                            "target_path": failure.target_path,
-                            "error_code": failure.error_code,
-                            "error_message": failure.error_message,
-                            "attempt_id": (
-                                str(failure.attempt_id)
-                                if failure.attempt_id is not None
-                                else None
-                            ),
-                            "occurred_at": (
-                                failure.occurred_at.isoformat()
-                                if failure.occurred_at is not None
-                                else None
-                            ),
-                            "resolved_at": (
-                                failure.resolved_at.isoformat()
-                                if failure.resolved_at is not None
-                                else None
-                            ),
-                            "open_failure_count": failure.open_failure_count,
-                            "retry_count": failure.retry_count,
-                        }
-                        for failure in failures
-                    ],
-                    indent=2,
-                    sort_keys=True,
-                )
+            _print_json_payload(
+                [
+                    {
+                        "failure_scope": failure.failure_scope,
+                        "failure_type": failure.failure_type,
+                        "failure_status": failure.failure_status,
+                        "projection_type": failure.projection_type,
+                        "target_path": failure.target_path,
+                        "error_code": failure.error_code,
+                        "error_message": failure.error_message,
+                        "attempt_id": (
+                            str(failure.attempt_id)
+                            if failure.attempt_id is not None
+                            else None
+                        ),
+                        "occurred_at": _isoformat_or_none(failure.occurred_at),
+                        "resolved_at": _isoformat_or_none(failure.resolved_at),
+                        "open_failure_count": failure.open_failure_count,
+                        "retry_count": failure.retry_count,
+                    }
+                    for failure in failures
+                ]
             )
         else:
             print(_format_failures_text(failures))
@@ -635,61 +588,38 @@ def _failures(args: argparse.Namespace) -> int:
 
 def _memory_stats(args: argparse.Namespace) -> int:
     try:
-        import json
+        try:
+            _, workflow_service = _build_postgres_workflow_service()
+        except RuntimeError as exc:
+            if str(exc) == "missing_database_url":
+                return _print_missing_database_url()
+            raise
 
-        from .config import get_settings
-        from .db.postgres import PostgresConfig, build_postgres_uow_factory
-        from .workflow.service import WorkflowService
-
-        settings = get_settings()
-
-        if not settings.database.url:
-            print(
-                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
-                file=sys.stderr,
-            )
-            return 1
-
-        workflow_service = WorkflowService(
-            build_postgres_uow_factory(PostgresConfig.from_settings(settings))
-        )
         stats = workflow_service.get_memory_stats()
 
         if args.format == "json":
-            print(
-                json.dumps(
-                    {
-                        "episode_count": stats.episode_count,
-                        "memory_item_count": stats.memory_item_count,
-                        "memory_embedding_count": stats.memory_embedding_count,
-                        "memory_relation_count": stats.memory_relation_count,
-                        "memory_item_provenance_counts": (
-                            stats.memory_item_provenance_counts
-                        ),
-                        "latest_episode_created_at": (
-                            stats.latest_episode_created_at.isoformat()
-                            if stats.latest_episode_created_at is not None
-                            else None
-                        ),
-                        "latest_memory_item_created_at": (
-                            stats.latest_memory_item_created_at.isoformat()
-                            if stats.latest_memory_item_created_at is not None
-                            else None
-                        ),
-                        "latest_memory_embedding_created_at": (
-                            stats.latest_memory_embedding_created_at.isoformat()
-                            if stats.latest_memory_embedding_created_at is not None
-                            else None
-                        ),
-                        "latest_memory_relation_created_at": (
-                            stats.latest_memory_relation_created_at.isoformat()
-                            if stats.latest_memory_relation_created_at is not None
-                            else None
-                        ),
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
+            _print_json_payload(
+                {
+                    "episode_count": stats.episode_count,
+                    "memory_item_count": stats.memory_item_count,
+                    "memory_embedding_count": stats.memory_embedding_count,
+                    "memory_relation_count": stats.memory_relation_count,
+                    "memory_item_provenance_counts": (
+                        stats.memory_item_provenance_counts
+                    ),
+                    "latest_episode_created_at": _isoformat_or_none(
+                        stats.latest_episode_created_at
+                    ),
+                    "latest_memory_item_created_at": _isoformat_or_none(
+                        stats.latest_memory_item_created_at
+                    ),
+                    "latest_memory_embedding_created_at": _isoformat_or_none(
+                        stats.latest_memory_embedding_created_at
+                    ),
+                    "latest_memory_relation_created_at": _isoformat_or_none(
+                        stats.latest_memory_relation_created_at
+                    ),
+                }
             )
         else:
             print(_format_memory_stats_text(stats))
@@ -702,26 +632,18 @@ def _memory_stats(args: argparse.Namespace) -> int:
 
 def _resume_workflow(args: argparse.Namespace) -> int:
     try:
-        import json
-
-        from .config import get_settings
-        from .db.postgres import PostgresConfig, build_postgres_uow_factory
         from .runtime.serializers import serialize_workflow_resume
-        from .workflow.service import ResumeWorkflowInput, WorkflowService
+        from .workflow.service import ResumeWorkflowInput
 
         workflow_instance_id = UUID(args.workflow_instance_id)
-        settings = get_settings()
 
-        if not settings.database.url:
-            print(
-                "Database URL is required. Set CTXLEDGER_DATABASE_URL.",
-                file=sys.stderr,
-            )
-            return 1
+        try:
+            _, workflow_service = _build_postgres_workflow_service()
+        except RuntimeError as exc:
+            if str(exc) == "missing_database_url":
+                return _print_missing_database_url()
+            raise
 
-        workflow_service = WorkflowService(
-            build_postgres_uow_factory(PostgresConfig.from_settings(settings))
-        )
         resume = workflow_service.resume_workflow(
             ResumeWorkflowInput(workflow_instance_id=workflow_instance_id)
         )

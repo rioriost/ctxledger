@@ -86,6 +86,56 @@ class FakeWorkflowService:
         return self.resume_result
 
 
+def patch_cli_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    settings: AppSettings,
+) -> None:
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+
+
+def patch_cli_postgres_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresConfig.from_settings",
+        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
+    )
+
+
+def patch_cli_postgres_uow_factory(
+    monkeypatch: pytest.MonkeyPatch,
+    factory: object,
+) -> None:
+    if callable(factory):
+        monkeypatch.setattr(
+            "ctxledger.db.postgres.build_postgres_uow_factory",
+            factory,
+        )
+        return
+
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config: factory,
+    )
+
+
+def patch_cli_workflow_service(
+    monkeypatch: pytest.MonkeyPatch,
+    service: object,
+) -> None:
+    if callable(service):
+        monkeypatch.setattr(
+            "ctxledger.workflow.service.WorkflowService",
+            service,
+        )
+        return
+
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: service,
+    )
+
+
 class FakeWriter:
     instances: list["FakeWriter"] = []
 
@@ -140,29 +190,20 @@ def test_main_write_resume_projection_uses_workflow_lookup_and_writer(
     workflow_service_ctor_args: list[object] = []
 
     monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.PostgresConfig.from_settings",
-        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
-    )
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
 
     def fake_build_postgres_uow_factory(config: object) -> object:
         uow_factory_calls.append(config)
         return "fake-uow-factory"
 
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
-        fake_build_postgres_uow_factory,
-    )
+    patch_cli_postgres_uow_factory(monkeypatch, fake_build_postgres_uow_factory)
 
     def fake_workflow_service_ctor(uow_factory: object) -> FakeWorkflowService:
         workflow_service_ctor_args.append(uow_factory)
         return fake_service
 
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
-        fake_workflow_service_ctor,
-    )
+    patch_cli_workflow_service(monkeypatch, fake_workflow_service_ctor)
     monkeypatch.setattr(
         "ctxledger.projection.writer.ResumeProjectionWriter", FakeWriter
     )
@@ -211,19 +252,13 @@ def test_main_write_resume_projection_returns_error_when_resume_projection_fails
     workflow_instance_id = uuid4()
 
     monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
+    patch_cli_settings(monkeypatch, make_settings())
 
     def fake_build_postgres_uow_factory(config: object) -> object:
         return "fake-uow-factory"
 
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.PostgresConfig.from_settings",
-        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
-    )
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
-        fake_build_postgres_uow_factory,
-    )
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, fake_build_postgres_uow_factory)
 
     class ExplodingWorkflowService:
         def __init__(self, uow_factory: object) -> None:
@@ -232,10 +267,7 @@ def test_main_write_resume_projection_returns_error_when_resume_projection_fails
         def resume_workflow(self, data: object) -> object:
             raise RuntimeError("workflow not found")
 
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
-        ExplodingWorkflowService,
-    )
+    patch_cli_workflow_service(monkeypatch, ExplodingWorkflowService)
     monkeypatch.setattr(
         "ctxledger.projection.writer.ResumeProjectionWriter", FakeWriter
     )
@@ -263,7 +295,7 @@ def test_main_write_resume_projection_reports_missing_database_url(
     settings = make_settings(database_url="")
 
     monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    patch_cli_settings(monkeypatch, settings)
 
     exit_code = cli_module.main(
         [
@@ -318,17 +350,14 @@ def test_main_write_resume_projection_wires_real_command_arguments(
         )
     )
 
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.PostgresConfig.from_settings",
-        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
-    )
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_postgres_uow_factory(
+        monkeypatch,
         lambda config: build_in_memory_uow_factory(store),
     )
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
+    patch_cli_workflow_service(
+        monkeypatch,
         lambda uow_factory: WorkflowService(uow_factory),
     )
     monkeypatch.setattr(
@@ -421,19 +450,10 @@ def test_main_stats_renders_text_output(
     settings = make_settings()
     fake_service = FakeStatsWorkflowService(stats)
 
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.PostgresConfig.from_settings",
-        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
-    )
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
-        lambda config: "fake-uow-factory",
-    )
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
-        lambda uow_factory: fake_service,
-    )
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(monkeypatch, fake_service)
 
     exit_code = cli_module.main(["stats"])
 
@@ -509,17 +529,11 @@ def test_main_stats_renders_json_output(
 
     settings = make_settings()
 
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.PostgresConfig.from_settings",
-        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
-    )
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
-        lambda config: "fake-uow-factory",
-    )
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(
+        monkeypatch,
         lambda uow_factory: FakeStatsWorkflowService(stats),
     )
 
@@ -568,10 +582,7 @@ def test_main_stats_reports_missing_database_url(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(
-        "ctxledger.config.get_settings",
-        lambda: make_settings(database_url=""),
-    )
+    patch_cli_settings(monkeypatch, make_settings(database_url=""))
 
     exit_code = cli_module.main(["stats"])
 
@@ -629,19 +640,10 @@ def test_main_workflows_renders_text_output(
     settings = make_settings()
     fake_service = FakeWorkflowsService(workflows)
 
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.PostgresConfig.from_settings",
-        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
-    )
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
-        lambda config: "fake-uow-factory",
-    )
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
-        lambda uow_factory: fake_service,
-    )
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(monkeypatch, fake_service)
 
     exit_code = cli_module.main(["workflows"])
 
@@ -713,19 +715,10 @@ def test_main_workflows_renders_json_output_and_filters(
     settings = make_settings()
     fake_service = FakeWorkflowsService(workflows)
 
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.PostgresConfig.from_settings",
-        lambda loaded_settings: SimpleNamespace(settings=loaded_settings),
-    )
-    monkeypatch.setattr(
-        "ctxledger.db.postgres.build_postgres_uow_factory",
-        lambda config: "fake-uow-factory",
-    )
-    monkeypatch.setattr(
-        "ctxledger.workflow.service.WorkflowService",
-        lambda uow_factory: fake_service,
-    )
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(monkeypatch, fake_service)
 
     exit_code = cli_module.main(
         [

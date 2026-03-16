@@ -375,11 +375,45 @@ def make_settings(
     )
 
 
+def make_server(
+    *,
+    settings: AppSettings | None = None,
+    db_health_checker: FakeDatabaseHealthChecker | None = None,
+    runtime: FakeRuntime | None = None,
+    workflow_service_factory: object | None = None,
+) -> CtxLedgerServer:
+    kwargs: dict[str, object] = {
+        "settings": settings or make_settings(),
+        "db_health_checker": db_health_checker or FakeDatabaseHealthChecker(),
+        "runtime": runtime or FakeRuntime(),
+    }
+    if workflow_service_factory is not None:
+        kwargs["workflow_service_factory"] = workflow_service_factory
+    return CtxLedgerServer(**kwargs)
+
+
+def make_ready_server(
+    *,
+    settings: AppSettings | None = None,
+    db_health_checker: FakeDatabaseHealthChecker | None = None,
+    runtime: FakeRuntime | None = None,
+    workflow_service_factory: object | None = None,
+) -> CtxLedgerServer:
+    server = make_server(
+        settings=settings,
+        db_health_checker=db_health_checker,
+        runtime=runtime,
+        workflow_service_factory=workflow_service_factory,
+    )
+    server.startup()
+    return server
+
+
 def test_startup_marks_server_started_when_configuration_and_db_are_valid() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker()
     runtime = FakeRuntime()
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
         db_health_checker=db_checker,
         runtime=runtime,
@@ -410,7 +444,7 @@ def test_startup_raises_when_database_check_fails() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker(ping_should_fail=True)
     runtime = FakeRuntime()
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
         db_health_checker=db_checker,
         runtime=runtime,
@@ -429,7 +463,7 @@ def test_startup_raises_when_schema_is_not_ready() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker(schema_ready_value=False)
     runtime = FakeRuntime()
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
         db_health_checker=db_checker,
         runtime=runtime,
@@ -448,7 +482,7 @@ def test_shutdown_stops_runtime_after_successful_startup() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker()
     runtime = FakeRuntime()
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
         db_health_checker=db_checker,
         runtime=runtime,
@@ -466,7 +500,7 @@ def test_readiness_reports_database_unavailable_after_start_if_ping_fails() -> N
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker()
     runtime = FakeRuntime()
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
         db_health_checker=db_checker,
         runtime=runtime,
@@ -487,7 +521,7 @@ def test_readiness_reports_schema_not_ready_after_start() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker()
     runtime = FakeRuntime()
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
         db_health_checker=db_checker,
         runtime=runtime,
@@ -505,10 +539,8 @@ def test_readiness_reports_schema_not_ready_after_start() -> None:
 
 def test_readiness_reports_not_started_before_startup() -> None:
     settings = make_settings()
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
 
     readiness = server.readiness()
@@ -524,10 +556,8 @@ def test_startup_raises_for_invalid_configuration() -> None:
     settings = make_settings(
         host="",
     )
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
 
     with pytest.raises(Exception):
@@ -612,14 +642,10 @@ def test_get_workflow_resume_returns_resume_from_initialized_workflow_service() 
     settings = make_settings()
     resume = make_resume_fixture()
     fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server = make_ready_server(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
         workflow_service_factory=lambda: fake_workflow_service,
     )
-
-    server.startup()
     returned = server.get_workflow_resume(resume.workflow_instance.workflow_instance_id)
 
     assert returned == resume
@@ -633,10 +659,8 @@ def test_get_workflow_resume_returns_resume_from_initialized_workflow_service() 
 
 def test_get_workflow_resume_raises_when_workflow_service_is_not_initialized() -> None:
     settings = make_settings()
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
 
     with pytest.raises(
@@ -740,14 +764,10 @@ def test_build_workflow_resume_response_returns_success_payload() -> None:
     settings = make_settings()
     resume = make_resume_fixture()
     fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    server = make_ready_server(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
         workflow_service_factory=lambda: fake_workflow_service,
     )
-
-    server.startup()
 
     response = server.build_workflow_resume_response(
         resume.workflow_instance.workflow_instance_id
@@ -762,10 +782,8 @@ def test_build_workflow_resume_response_returns_503_when_workflow_service_is_not
     None
 ):
     settings = make_settings()
-    server = CtxLedgerServer(
+    server = make_server(
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
 
     response = server.build_workflow_resume_response(uuid4())
