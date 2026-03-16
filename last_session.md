@@ -11,6 +11,8 @@ The roadmap has been updated so that:
 
 A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC cleanup, two in-memory repository cleanup batches, a PostgreSQL helper cleanup batch, a config helper cleanup batch, an HTTP app helper cleanup batch, and a server response helper cleanup batch.
 
+The current `0.5.0` refactoring wave has now also cleared full-suite validation, which puts the milestone in a strong closeout-ready state.
+
 ## Final 0.4.0 status
 ### Validation
 - focused coverage-target suite passed:
@@ -465,20 +467,25 @@ So far the `0.5.0` work is still tracking the intended plan correctly:
 - configuration parsing helpers have now also received a small dedicated file-local cleanup pass
 - HTTP app request helpers have now also received a small dedicated file-local cleanup pass
 - server response helpers have now also received a small dedicated file-local cleanup pass
+- the full repository suite now passes after the accumulated refactoring wave
 
 A useful lesson from the latest slices:
 - some apparent duplication is partially intentional because it preserves test seams
 - especially in `src/ctxledger/server.py`, monkeypatch-based delegation tests constrained how far import hoisting could safely go
 
+Current closeout judgment:
+- `0.5.0` appears **closeout-ready** from a validation perspective
+- broad cross-file consolidation can remain deferred unless a clearly bounded, high-signal candidate emerges
+
 ## Recommended next action
 The current targets are now showing **diminishing returns** for more micro-cleanups.
 
 Recommended next step:
-1. review remaining `0.5.0` refactoring candidates and choose the next highest-value file rather than continuing very small cleanups in the same files
-2. begin evaluating **safe cross-file consolidation candidates** only where the within-file patterns are now clearly stable
-3. record and commit the current refactoring batch before expanding scope further
+1. treat the current `0.5.0` refactoring wave as operationally ready for closeout
+2. if additional work is desired before formal closeout, prefer only a narrowly scoped, high-confidence follow-up rather than more broad file-by-file cleanup
+3. if continuing beyond closeout readiness, evaluate **safe cross-file consolidation candidates** only where the within-file patterns are now clearly stable and boundaries remain obvious
 
-Good next candidates to inspect:
+Good next candidates to inspect only if more work is intentionally chosen:
 - another `src/` module with repeated local validation/serialization logic
 - a carefully chosen cross-file consolidation around shared parsing/response helpers, if it remains readable and preserves boundaries
 
@@ -501,7 +508,7 @@ Good next candidates to inspect:
 - `tests/test_server.py`
 
 ## Notes on local workspace state
-At the end of this session, the tracked refactoring work described above has been committed in ten follow-up commits:
+At the end of this session, the tracked refactoring work described above has been committed in eleven follow-up commits:
 - `5c2ce31`
   - `Refactor server and runtime helpers`
 - `df03372`
@@ -520,6 +527,24 @@ At the end of this session, the tracked refactoring work described above has bee
   - `Refactor config parsing helpers`
 - `3686082`
   - `Refactor server response helpers`
+- `4716ac5`
+  - `Refactor HTTP app request helpers`
+- `aa6e260`
+  - `Refresh server response refactor notes`
+
+Latest validation results now include:
+- focused config suite:
+  - `python -m pytest tests/test_config.py -q`
+  - `41 passed`
+- focused coverage-target suite:
+  - `python -m pytest tests/test_coverage_targets.py -q`
+  - `237 passed`
+- full suite:
+  - `python -m pytest -q`
+  - `799 passed, 1 skipped`
+
+The single skipped test remains expected:
+- real OpenAI integration requires `OPENAI_API_KEY`
 
 Current remaining untracked/local-generated items still include:
 - coverage output
