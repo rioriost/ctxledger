@@ -440,6 +440,56 @@ def make_ready_server_with_resume(
     return server, resume_result, workflow_service
 
 
+def make_ready_resource_handler(
+    handler_builder: object,
+    *,
+    settings: AppSettings | None = None,
+    resume: WorkflowResume | None = None,
+    fake_workflow_service: FakeWorkflowService | None = None,
+) -> tuple[object, WorkflowResume, FakeWorkflowService]:
+    _, handler, resume_result, workflow_service = make_ready_server_with_handler(
+        handler_builder,
+        settings=settings,
+        resume=resume,
+        fake_workflow_service=fake_workflow_service,
+    )
+    return handler, resume_result, workflow_service
+
+
+def make_tool_handler(
+    handler_builder: object,
+    *,
+    settings: AppSettings | None = None,
+    resume: WorkflowResume | None = None,
+    fake_workflow_service: FakeWorkflowService | None = None,
+) -> tuple[object, WorkflowResume, FakeWorkflowService]:
+    resume_result = resume or make_resume_fixture()
+    workflow_service = fake_workflow_service or FakeWorkflowService(resume_result)
+    server = make_server(
+        settings=settings,
+        workflow_service_factory=lambda: workflow_service,
+    )
+    handler = handler_builder(server)
+    return handler, resume_result, workflow_service
+
+
+def make_ready_tool_handler(
+    handler_builder: object,
+    *,
+    settings: AppSettings | None = None,
+    resume: WorkflowResume | None = None,
+    fake_workflow_service: FakeWorkflowService | None = None,
+) -> tuple[object, WorkflowResume, FakeWorkflowService]:
+    resume_result = resume or make_resume_fixture()
+    workflow_service = fake_workflow_service or FakeWorkflowService(resume_result)
+    server = make_ready_server(
+        settings=settings,
+        workflow_service_factory=lambda: workflow_service,
+    )
+    handler = handler_builder(server)
+    return handler, resume_result, workflow_service
+
+
 def test_startup_marks_server_started_when_configuration_and_db_are_valid() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker()
@@ -2299,16 +2349,11 @@ def test_create_server_returns_http_runtime_by_default() -> None:
 def test_build_resume_workflow_tool_handler_returns_success_payload() -> None:
     settings = make_settings()
     resume = make_resume_fixture()
-    fake_workflow_service = FakeWorkflowService(resume)
-    server = CtxLedgerServer(
+    handler, resume, _ = make_ready_tool_handler(
+        build_resume_workflow_tool_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
     )
-    handler = build_resume_workflow_tool_handler(server)
-
-    server.startup()
 
     response = handler(
         {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)}
@@ -2325,12 +2370,10 @@ def test_build_resume_workflow_tool_handler_returns_invalid_request_for_missing_
     None
 ):
     settings = make_settings()
-    server = CtxLedgerServer(
+    handler, _, _ = make_tool_handler(
+        build_resume_workflow_tool_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
-    handler = build_resume_workflow_tool_handler(server)
 
     response = handler({})
 
@@ -2349,12 +2392,10 @@ def test_build_resume_workflow_tool_handler_returns_invalid_request_for_bad_uuid
     None
 ):
     settings = make_settings()
-    server = CtxLedgerServer(
+    handler, _, _ = make_tool_handler(
+        build_resume_workflow_tool_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
-    handler = build_resume_workflow_tool_handler(server)
 
     response = handler({"workflow_instance_id": "not-a-uuid"})
 
@@ -2371,12 +2412,10 @@ def test_build_resume_workflow_tool_handler_returns_invalid_request_for_bad_uuid
 
 def test_build_resume_workflow_tool_handler_returns_server_not_ready_error() -> None:
     settings = make_settings()
-    server = CtxLedgerServer(
+    handler, _, _ = make_tool_handler(
+        build_resume_workflow_tool_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
-    handler = build_resume_workflow_tool_handler(server)
 
     response = handler({"workflow_instance_id": str(uuid4())})
 
@@ -2405,15 +2444,12 @@ def test_build_workspace_register_tool_handler_returns_success_payload() -> None
         resume,
         register_workspace_result=registered_workspace,
     )
-    server = CtxLedgerServer(
+    handler, _, fake_workflow_service = make_ready_tool_handler(
+        build_workspace_register_tool_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
-        workflow_service_factory=lambda: fake_workflow_service,
+        resume=resume,
+        fake_workflow_service=fake_workflow_service,
     )
-    handler = build_workspace_register_tool_handler(server)
-
-    server.startup()
 
     response = handler(
         {
@@ -2452,12 +2488,10 @@ def test_build_workspace_register_tool_handler_returns_invalid_request_for_missi
     None
 ):
     settings = make_settings()
-    server = CtxLedgerServer(
+    handler, _, _ = make_tool_handler(
+        build_workspace_register_tool_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
-    handler = build_workspace_register_tool_handler(server)
 
     response = handler(
         {
@@ -2479,12 +2513,10 @@ def test_build_workspace_register_tool_handler_returns_invalid_request_for_missi
 
 def test_build_workspace_register_tool_handler_returns_server_not_ready_error() -> None:
     settings = make_settings()
-    server = CtxLedgerServer(
+    handler, _, _ = make_tool_handler(
+        build_workspace_register_tool_handler,
         settings=settings,
-        db_health_checker=FakeDatabaseHealthChecker(),
-        runtime=FakeRuntime(),
     )
-    handler = build_workspace_register_tool_handler(server)
 
     response = handler(
         {
