@@ -60,47 +60,25 @@ def _parse_int(name: str, default: int) -> int:
     raw = _get_env(name)
     if raw is None:
         return default
-    try:
-        return int(raw)
-    except ValueError as exc:
-        raise ConfigError(f"{name} must be an integer") from exc
+    return _parse_required_int_value(name, raw)
 
 
 def _parse_optional_int(name: str) -> int | None:
     raw = _get_env(name)
     if raw is None:
         return None
-    try:
-        return int(raw)
-    except ValueError as exc:
-        raise ConfigError(f"{name} must be an integer") from exc
+    return _parse_required_int_value(name, raw)
 
 
 def _parse_log_level(name: str, default: LogLevel) -> LogLevel:
-    raw = _get_env(name)
-    if raw is None:
-        return default
-    try:
-        return LogLevel(raw.lower())
-    except ValueError as exc:
-        expected = _format_expected_values(level.value for level in LogLevel)
-        raise ConfigError(f"{name} must be one of {expected}") from exc
+    return _parse_str_enum(name, default, LogLevel)
 
 
 def _parse_embedding_provider(
     name: str,
     default: EmbeddingProvider,
 ) -> EmbeddingProvider:
-    raw = _get_env(name)
-    if raw is None:
-        return default
-    try:
-        return EmbeddingProvider(raw.lower())
-    except ValueError as exc:
-        expected = _format_expected_values(
-            provider.value for provider in EmbeddingProvider
-        )
-        raise ConfigError(f"{name} must be one of {expected}") from exc
+    return _parse_str_enum(name, default, EmbeddingProvider)
 
 
 def _validate_optional_url(
@@ -114,6 +92,25 @@ def _validate_optional_url(
     parsed = urlparse(value)
     if not parsed.scheme or not parsed.netloc:
         raise ConfigError(f"{name} must be a valid absolute URL")
+
+
+def _parse_required_int_value(name: str, raw: str) -> int:
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be an integer") from exc
+
+
+def _parse_str_enum(name: str, default: StrEnum, enum_type: type[StrEnum]) -> StrEnum:
+    raw = _get_env(name)
+    if raw is None:
+        return default
+
+    try:
+        return enum_type(raw.lower())
+    except ValueError as exc:
+        expected = _format_expected_values(member.value for member in enum_type)
+        raise ConfigError(f"{name} must be one of {expected}") from exc
 
 
 def _format_expected_values(
