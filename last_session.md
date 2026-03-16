@@ -9,7 +9,7 @@ The roadmap has been updated so that:
 - `0.5.0` focuses on safe refactoring of existing `src/` and `tests/`
 - hierarchical memory retrieval has been moved from `0.5.0` to `0.6.0`
 
-A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC cleanup, two in-memory repository cleanup batches, a PostgreSQL helper cleanup batch, and a config helper cleanup batch.
+A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC cleanup, two in-memory repository cleanup batches, a PostgreSQL helper cleanup batch, a config helper cleanup batch, and an HTTP app helper cleanup batch.
 
 ## Final 0.4.0 status
 ### Validation
@@ -364,6 +364,33 @@ Validation:
 - `python -m pytest tests/test_config.py -q`
 - `41 passed`
 
+### 12. `src/ctxledger/http_app.py`
+Small file-local cleanup completed.
+
+Refactoring completed:
+- consolidated repeated non-empty string normalization for authorization handling
+- extracted shared GET route forwarding logic
+
+Added helpers:
+- `_normalized_non_empty_string(...)`
+- `_forward_get_request(...)`
+
+Affected HTTP app paths:
+- `_authorization_query_value(...)`
+- `_build_get_route(...)`
+
+Important note:
+- attempted to introduce a shared POST forwarding helper as well
+- reverted that part because it would have complicated the async boundary and reduced clarity relative to the small amount of duplication removed
+
+Result:
+- less repeated request normalization and GET forwarding logic inside the FastAPI adapter layer
+- behavior preserved while keeping the async POST flow explicit and readable
+
+Validation:
+- `python -m pytest tests/test_coverage_targets.py -q`
+- `237 passed`
+
 ## 0.5.0 refactoring commits recorded
 Relevant recent refactoring commits:
 - `07f59d0`
@@ -392,6 +419,8 @@ Relevant recent refactoring commits:
   - `Refactor postgres parsing helpers`
 - `b7b6f93`
   - `Refactor config parsing helpers`
+- `4716ac5`
+  - `Refactor HTTP app request helpers`
 
 ## Current judgment for 0.5.0 work quality
 So far the `0.5.0` work is still tracking the intended plan correctly:
@@ -405,6 +434,7 @@ So far the `0.5.0` work is still tracking the intended plan correctly:
 - in-memory repository query helpers have now received dedicated file-local cleanup passes, including projection failure repository follow-up cleanup
 - PostgreSQL parsing/normalization helpers have now also received a small dedicated file-local cleanup pass
 - configuration parsing helpers have now also received a small dedicated file-local cleanup pass
+- HTTP app request helpers have now also received a small dedicated file-local cleanup pass
 
 A useful lesson from the latest slices:
 - some apparent duplication is partially intentional because it preserves test seams
@@ -434,12 +464,13 @@ Good next candidates to inspect:
 - `src/ctxledger/db/__init__.py`
 - `src/ctxledger/db/postgres.py`
 - `src/ctxledger/config.py`
+- `src/ctxledger/http_app.py`
 - `tests/test_config.py`
 - `tests/test_cli.py`
 - `tests/test_server.py`
 
 ## Notes on local workspace state
-At the end of this session, the tracked refactoring work described above has been committed in eight follow-up commits:
+At the end of this session, the tracked refactoring work described above has been committed in nine follow-up commits:
 - `5c2ce31`
   - `Refactor server and runtime helpers`
 - `df03372`
