@@ -64,14 +64,20 @@ def _json_dumps(value: dict[str, Any]) -> str:
 
 
 def _json_loads(value: Any) -> dict[str, Any]:
+    loaded = _json_object_or_none(value)
+    return loaded if loaded is not None else {}
+
+
+def _json_object_or_none(value: Any) -> dict[str, Any] | None:
     if value is None:
-        return {}
+        return None
     if isinstance(value, dict):
         return dict(value)
     if isinstance(value, str):
         loaded = json.loads(value)
-        return loaded if isinstance(loaded, dict) else {}
-    return dict(value)
+        return loaded if isinstance(loaded, dict) else None
+    loaded = dict(value)
+    return loaded if isinstance(loaded, dict) else None
 
 
 def _to_datetime(value: Any) -> datetime:
@@ -96,6 +102,23 @@ def _optional_str_enum(enum_type: Any, value: Any) -> Any | None:
     if value is None:
         return None
     return enum_type(str(value))
+
+
+def _normalized_schema_name(value: Any) -> str:
+    return (str(value).strip() if value is not None else "public") or "public"
+
+
+def _parse_embedding_values(raw_embedding: Any) -> tuple[float, ...]:
+    if raw_embedding is None:
+        return ()
+    if isinstance(raw_embedding, str):
+        normalized = raw_embedding.strip().strip("[]")
+        if not normalized:
+            return ()
+        return tuple(
+            float(part.strip()) for part in normalized.split(",") if part.strip()
+        )
+    return tuple(float(part) for part in raw_embedding)
 
 
 def _schema_path() -> Path:
@@ -135,20 +158,7 @@ def _memory_item_row_to_record(row: dict[str, Any]) -> MemoryItemRecord:
 
 
 def _memory_embedding_row_to_record(row: dict[str, Any]) -> MemoryEmbeddingRecord:
-    raw_embedding = row.get("embedding")
-    embedding_values: tuple[float, ...]
-    if raw_embedding is None:
-        embedding_values = ()
-    elif isinstance(raw_embedding, str):
-        normalized = raw_embedding.strip().strip("[]")
-        if not normalized:
-            embedding_values = ()
-        else:
-            embedding_values = tuple(
-                float(part.strip()) for part in normalized.split(",") if part.strip()
-            )
-    else:
-        embedding_values = tuple(float(part) for part in raw_embedding)
+    embedding_values = _parse_embedding_values(row.get("embedding"))
 
     return MemoryEmbeddingRecord(
         memory_embedding_id=_to_uuid(row["memory_embedding_id"]),
@@ -179,9 +189,7 @@ class PostgresConfig:
         schema_name = getattr(
             getattr(settings, "database", None), "schema_name", "public"
         )
-        normalized_schema_name = (
-            str(schema_name).strip() if schema_name is not None else "public"
-        ) or "public"
+        normalized_schema_name = _normalized_schema_name(schema_name)
         return cls(
             database_url=settings.database.url,
             connect_timeout_seconds=settings.database.connect_timeout_seconds,
