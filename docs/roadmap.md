@@ -173,6 +173,7 @@ Planned focus:
 - cross-file consolidation of duplicated logic, helper behavior, and reusable patterns
 - reduction of maintenance overhead without changing externally expected behavior
 - safer internal structure to support later feature work
+- close out the refactoring wave with a stable foundation for hierarchical memory work in `0.6.0`
 
 Expected themes:
 
@@ -182,6 +183,7 @@ Expected themes:
 - improve internal boundaries, naming, helper placement, and reuse
 - preserve current behavior through incremental, test-backed refactoring
 - avoid release claims that depend on new product features rather than structural cleanup
+- prepare the codebase and persistence layer for graph-assisted hierarchical retrieval in `0.6.0`
 
 ## 0.6
 
@@ -191,6 +193,8 @@ Planned focus:
 - summary layers
 - relation-aware context assembly
 - more multi-layer `memory_get_context` behavior
+- PostgreSQL + Apache AGE as a foundation for graph-assisted hierarchical memory
+- Cypher-assisted traversal and retrieval support where it improves hierarchical memory implementation
 
 Expected themes:
 
@@ -198,6 +202,8 @@ Expected themes:
 - memory item relations
 - cross-episode recall
 - project-level knowledge compression
+- graph-backed relation modeling while PostgreSQL remains canonical
+- incremental introduction of Apache AGE without turning the milestone into a broad architecture rewrite
 
 ## Cross-version guiding rules
 
@@ -206,14 +212,34 @@ Expected themes:
 - workflow control and memory retrieval stay separate
 - resumability and recoverability are prioritized over thin feature claims
 - version should not be bumped until implementation and docs meaningfully match the claimed scope
+- graph capabilities should be introduced to support memory behavior, not to replace PostgreSQL as the canonical source of truth
 
 ## Immediate next steps
 
-- create and document a `0.5.0` refactoring plan focused on preserving current behavior while improving internal structure
-- start with file-local duplication review across `src/` and `tests/`
-- follow with cross-file duplication review only after file-local cleanup candidates are identified
-- define refactoring sequencing, safety rules, and validation expectations before broad code movement
-- keep the `0.6.0` hierarchical retrieval scope clearly deferred while `0.5.0` is dedicated to refactoring
+- begin `0.6.0` planning and implementation for hierarchical memory retrieval
+- define the minimal hierarchical memory data model needed for `0.6.0`
+- identify where Apache AGE must be introduced:
+  - schema
+  - local and development setup
+  - repository and service boundaries
+  - tests
+- define the first `memory_get_context` hierarchical retrieval slice
+- keep Mnemis-alignment work out of `0.6.0`
+
+## 0.7
+
+Planned focus:
+
+- evaluate whether ctxledger should move closer to a Mnemis-style hierarchical graph memory design
+- compare ctxledger’s `0.6.0` implementation against Mnemis-style dual-route retrieval ideas
+- decide whether any architectural alignment is justified after `0.6.0` is working
+
+Expected themes:
+
+- review Mnemis as a design input, not a `0.6.0` implementation constraint
+- compare relation modeling, hierarchy construction, and retrieval strategy
+- evaluate whether dual-route retrieval concepts should influence later ctxledger versions
+- keep any Mnemis-driven redesign scoped to explicit post-`0.6.0` work
 
 ## 0.0
 

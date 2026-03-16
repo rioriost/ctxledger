@@ -1,24 +1,22 @@
 # ctxledger last session
 
 ## Summary
-`0.4.0` is closed out and tagged as `v0.4.0`.
+`0.5.0` is closed out as a **refactoring milestone** and tagged as `v0.5.0`.
 
-`0.5.0` is now the active milestone, and its scope is **refactoring**, not new product-surface expansion.
+The repository is now ready to begin `0.6.0`.
 
-The roadmap has been updated so that:
-- `0.5.0` focuses on safe refactoring of existing `src/` and `tests/`
-- hierarchical memory retrieval has been moved from `0.5.0` to `0.6.0`
+`0.6.0` is the active milestone, and its scope is:
 
-A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC cleanup, two in-memory repository cleanup batches, a PostgreSQL helper cleanup batch, a config helper cleanup batch, an HTTP app helper cleanup batch, and a server response helper cleanup batch.
+- hierarchical memory retrieval
+- summary layers
+- relation-aware context assembly
+- more multi-layer `memory_get_context` behavior
 
-The current `0.5.0` refactoring wave has now also cleared full-suite validation, which puts the milestone in a strong closeout-ready state.
+## Final 0.5.0 status
 
-## Final 0.4.0 status
 ### Validation
-- focused coverage-target suite passed:
-  - `python -m pytest tests/test_coverage_targets.py -q`
-  - `237 passed`
-- full suite passed:
+- focused validation remained green throughout the refactoring wave
+- final full-suite result:
   - `python -m pytest -q`
   - `799 passed, 1 skipped`
 
@@ -27,527 +25,97 @@ The single skipped test remains expected:
 - real OpenAI integration requires `OPENAI_API_KEY`
 
 ### Release judgment
-- internal `0.4.0` release judgment: **GO**
+- internal `0.5.0` release judgment: **GO**
 - release tag created:
-  - `v0.4.0`
-
-## 0.5.0 planning artifacts now in place
-### Roadmap update
-`docs/roadmap.md` now reflects:
-- `0.5.0` = refactoring milestone
-- `0.6.0` = hierarchical retrieval milestone
-
-### Dedicated refactoring plan
-A new plan document now exists:
-- `docs/plans/refactoring_0_5_0_plan.md`
-
-The plan defines:
-- behavior-preserving refactoring goals
-- within-file cleanup before cross-file cleanup
-- validation expectations after each slice
-- candidate high-value areas across `src/` and `tests/`
-- closeout criteria for `0.5.0`
-
-## 0.5.0 refactoring progress completed so far
-The first implemented slices have all been **file-local** and validated.
-
-### 1. `tests/test_config.py`
-Refactoring completed:
-- reduced repeated environment setup patterns
-- `minimum_valid_env(...)` now supports inline overrides
-- repeated temporary env mutation patterns were simplified
-
-Result:
-- lower boilerplate for validation-path tests
-- same behavior preserved
-
-Validation:
-- `python -m pytest tests/test_config.py -q`
-- `41 passed`
-
-### 2. `tests/test_cli.py`
-Refactoring completed:
-- introduced shared CLI test patch helpers for repeated monkeypatch/setup flows
-
-Added patterns now centralized:
-- settings patching
-- PostgreSQL config patching
-- UOW factory patching
-- workflow service patching
-
-Result:
-- repeated CLI bootstrap setup reduced
-- command tests read more consistently
-
-Validation:
-- `python -m pytest tests/test_cli.py -q`
-- `46 passed`
-
-### 3. `src/ctxledger/__init__.py`
-Refactoring completed:
-- extracted repeated CLI bootstrap and formatting helpers
-
-Key helper consolidation includes:
-- missing-database-url reporting
-- PostgreSQL workflow service construction
-- JSON payload printing
-- `isoformat` / `None` conversion handling
-
-Affected command families:
-- `stats`
-- `workflows`
-- `failures`
-- `memory-stats`
-- `resume-workflow`
-- `write-resume-projection`
-- `apply-schema`
-
-Result:
-- less repeated bootstrap logic inside CLI command implementations
-- behavior preserved while internal structure improved
-
-Validation:
-- `python -m pytest tests/test_cli.py tests/test_coverage_targets.py -q`
-- `283 passed`
-
-### 4. `tests/test_server.py`
-Multiple file-local cleanup slices completed.
-
-Added helper layers:
-- `make_server(...)`
-- `make_ready_server(...)`
-- `make_ready_server_with_resume(...)`
-- `make_ready_server_with_handler(...)`
-- `make_ready_resource_handler(...)`
-- `make_resource_handler(...)`
-- `make_tool_handler(...)`
-- `make_ready_tool_handler(...)`
-
-Refactoring completed across:
-- server startup/readiness setup
-- workflow-resume server setup
-- projection-failure HTTP handler setup
-- resource handler setup
-- tool handler setup
-
-This has reduced repeated patterns involving:
-- `CtxLedgerServer(...)`
-- fake DB/runtime setup
-- fake workflow service setup
-- startup vs not-ready setup
-- handler construction boilerplate
-
-Validation:
-- repeated reruns during cleanup stayed green
-- current focused result:
-  - `python -m pytest tests/test_server.py -q`
-  - `135 passed`
-
-Additional follow-up cleanup completed:
-- added `make_http_runtime(...)` to centralize repeated HTTP runtime adapter setup
-- migrated repeated `build_http_runtime_adapter(server)` + optional `startup()` flows to the shared helper
-- reduced repeated `create_server(...)`-based debug/introspection setup
-- fixed one helper bug during refactoring by ensuring `server.runtime` is rebound to the built `HttpRuntimeAdapter` before optional startup
-
-Focused validation after those follow-up slices:
-- `python -m pytest tests/test_server.py -q`
-- `135 passed`
-
-### 5. `src/ctxledger/mcp/resource_handlers.py`
-Refactoring completed:
-- extracted shared workspace resource URI normalization helpers
-- consolidated repeated `workspace://` prefix stripping and path splitting
-- consolidated repeated UUID parsing
-
-Added helpers:
-- `_parse_workspace_resource_uri(...)`
-- `_parse_uuid(...)`
-
-Result:
-- less duplicated parsing logic between workspace resume and workflow detail resource URI parsers
-- behavior preserved while keeping the module file-local and simple
-
-Validation:
-- `python -m pytest tests/test_mcp_modules.py tests/test_server.py -q`
-- `187 passed`
-
-### 6. `src/ctxledger/runtime/http_handlers.py`
-Multiple file-local cleanup slices completed.
-
-Refactoring completed:
-- extracted route-name constants
-- consolidated repeated request path parsing
-- consolidated repeated debug endpoint path normalization
-- consolidated repeated query argument extraction
-- consolidated repeated UUID parsing for path handlers
-- consolidated repeated HTTP error response construction
-- consolidated repeated projection-failure HTTP validation/error wrapping
-- consolidated repeated projection-failure request parsing between ignore/resolve handlers
-
-Added helpers:
-- `_build_http_error_response(...)`
-- `_build_http_validation_error_response(...)`
-- `_parse_query_arguments(...)`
-- `_parse_request_path_parts(...)`
-- `_normalize_debug_path(...)`
-- `_parse_uuid_value(...)`
-- `_parse_projection_failure_request(...)`
-
-Affected handler families:
-- workflow resume HTTP handler
-- closed projection failures HTTP handler
-- projection failure ignore/resolve HTTP handlers
-- runtime introspection/routes/tools debug HTTP handlers
-
-Result:
-- less repeated response and parsing logic inside HTTP transport handlers
-- behavior preserved with clearer local structure
-
-Validation:
-- `python -m pytest tests/test_coverage_targets.py tests/test_server.py -q`
-- `372 passed`
-
-### 7. `src/ctxledger/server.py`
-Small file-local cleanup completed.
-
-Refactoring completed:
-- extracted startup runtime introspection serialization into a dedicated helper:
-  - `_serialized_runtime_introspection()`
-
-Important note:
-- attempted to hoist resource-response delegate imports to module scope
-- reverted that part because existing monkeypatch-based delegation tests rely on method-local import seams for patchability
-
-Result:
-- startup logging path is slightly cleaner
-- behavior and test seams preserved intentionally
-
-Validation:
-- `python -m pytest tests/test_coverage_targets.py tests/test_server.py -q`
-- `372 passed`
-
-### 8. `src/ctxledger/mcp/rpc.py`
-Small file-local cleanup completed.
- 
-Refactoring completed:
-- consolidated repeated RPC parameter validation/normalization for:
-  - required object `params`
-  - required non-empty string fields
-  - required object fields with defaults
-- replaced the non-lifecycle RPC method `if` chain with a small local dispatch table
-- extracted shared JSON text payload rendering helper:
-  - `_json_text_payload(...)`
- 
-Added helpers:
-- `_require_object_params(...)`
-- `_require_non_empty_string_field(...)`
-- `_require_object_field(...)`
-- `_json_text_payload(...)`
- 
-Affected MCP RPC paths:
-- `tools/call`
-- `resources/read`
-- non-lifecycle method dispatch inside `dispatch_rpc_method(...)`
- 
-Result:
-- less repeated argument validation and payload rendering logic inside the MCP RPC transport layer
-- behavior preserved while staying file-local and test-backed
- 
-Validation:
-- `python -m pytest tests/test_mcp_modules.py tests/test_coverage_targets.py -q`
-- `289 passed`
-
-### 9. `src/ctxledger/db/__init__.py`
-Multiple small file-local cleanup slices completed.
-
-#### First slice
-Refactoring completed:
-- consolidated repeated in-memory repository collection query patterns for:
-  - latest matching item selection
-  - sorted-and-limited result slicing
-- migrated repeated local filtering/sorting blocks to shared helpers while preserving repository-specific ordering keys
-
-Added helpers:
-- `_latest_or_none(...)`
-- `_sorted_limited(...)`
-
-Affected in-memory repositories:
-- `InMemoryWorkflowInstanceRepository`
-- `InMemoryWorkflowAttemptRepository`
-- `InMemoryWorkflowCheckpointRepository`
-- `InMemoryVerifyReportRepository`
-- `InMemoryMemoryEpisodeRepository`
-- `InMemoryMemoryItemRepository`
-- `InMemoryMemoryEmbeddingRepository`
-
-Important note:
-- the first attempt failed with a `NameError` because the new helpers had been referenced before being added to the module
-- after adding the helpers near the top-level helper section, focused validation passed
-
-Result:
-- less repeated latest/sorted/limited query logic across the in-memory repository layer
-- behavior preserved while staying file-local and reviewable
-
-Validation:
-- `python -m pytest tests/test_coverage_targets.py -q`
-- `237 passed`
-
-#### Follow-up slice
-Refactoring completed:
-- consolidated repeated projection failure repository logic for:
-  - workflow failure filtering by status
-  - resolve/ignore closeout loops
-  - projection `open_failure_count` updates
-
-Added helpers:
-- `_workflow_failures_by_status(...)`
-- `_close_resume_projection_failures(...)`
-- `_set_projection_open_failure_count(...)`
-
-Affected in-memory repository:
-- `InMemoryProjectionFailureRepository`
-
-Result:
-- less repeated projection failure closeout and state update logic inside the in-memory repository layer
-- behavior preserved while keeping the cleanup file-local
-
-Validation:
-- `python -m pytest tests/test_coverage_targets.py -q`
-- `237 passed`
-
-### 10. `src/ctxledger/db/postgres.py`
-Small file-local cleanup completed.
-
-Refactoring completed:
-- consolidated repeated JSON object normalization behavior
-- consolidated repeated schema-name normalization logic
-- consolidated repeated embedding vector parsing logic
-
-Added helpers:
-- `_json_object_or_none(...)`
-- `_normalized_schema_name(...)`
-- `_parse_embedding_values(...)`
-
-Affected parsing paths:
-- `_json_loads(...)`
-- `_memory_embedding_row_to_record(...)`
-- `PostgresConfig.from_settings(...)`
-
-Result:
-- less repeated parsing/normalization logic inside the PostgreSQL persistence layer
-- behavior preserved while keeping the cleanup file-local and low-risk
-
-Validation:
-- `python -m pytest tests/test_coverage_targets.py -q`
-- `237 passed`
- 
-### 11. `src/ctxledger/config.py`
-Small file-local cleanup completed.
-
-Refactoring completed:
-- consolidated repeated integer parsing logic
-- consolidated repeated string-enum parsing logic
-
-Added helpers:
-- `_parse_required_int_value(...)`
-- `_parse_str_enum(...)`
-
-Affected parsing paths:
-- `_parse_int(...)`
-- `_parse_optional_int(...)`
-- `_parse_log_level(...)`
-- `_parse_embedding_provider(...)`
-
-Result:
-- less repeated parsing logic inside the configuration module
-- behavior preserved while keeping the cleanup file-local and low-risk
-
-Validation:
-- `python -m pytest tests/test_config.py -q`
-- `41 passed`
-
-### 12. `src/ctxledger/http_app.py`
-Small file-local cleanup completed.
-
-Refactoring completed:
-- consolidated repeated non-empty string normalization for authorization handling
-- extracted shared GET route forwarding logic
-
-Added helpers:
-- `_normalized_non_empty_string(...)`
-- `_forward_get_request(...)`
-
-Affected HTTP app paths:
-- `_authorization_query_value(...)`
-- `_build_get_route(...)`
-
-Important note:
-- attempted to introduce a shared POST forwarding helper as well
-- reverted that part because it would have complicated the async boundary and reduced clarity relative to the small amount of duplication removed
-
-Result:
-- less repeated request normalization and GET forwarding logic inside the FastAPI adapter layer
-- behavior preserved while keeping the async POST flow explicit and readable
-
-Validation:
-- `python -m pytest tests/test_coverage_targets.py -q`
-- `237 passed`
-
-### 13. `src/ctxledger/runtime/server_responses.py`
-Small file-local cleanup completed.
-
-Refactoring completed:
-- consolidated repeated projection failure action response construction for ignore/resolve flows
-- consolidated repeated projection failure error classification logic
-
-Added helpers:
-- `_build_projection_failure_action_response(...)`
-- `_projection_failure_error_status(...)`
-
-Affected response builders:
-- `build_projection_failures_ignore_response(...)`
-- `build_projection_failures_resolve_response(...)`
-
-Important note:
-- attempted to normalize the non-UOW workflow-detail branch more aggressively
-- reverted that part because existing minimal-stub tests rely on the original compatibility behavior in that branch
-
-Result:
-- less repeated projection failure response/error mapping logic inside the runtime response layer
-- behavior preserved while keeping existing test seams intact
-
-Validation:
-- `python -m pytest tests/test_coverage_targets.py -q`
-- `237 passed`
-
-## 0.5.0 refactoring commits recorded
-Relevant recent refactoring commits:
-- `07f59d0`
-  - `Plan 0.5.0 refactoring milestone`
-- `3e9116f`
-  - `Refactor CLI and test setup helpers`
-- `844122c`
-  - `Refactor server test handler setup`
-- `388a28f`
-  - `Extract reusable server test handler builders`
-- `9157a57`
-  - `Refactor server resource and tool handler tests`
-- `5c2ce31`
-  - `Refactor server and runtime helpers`
-- `df03372`
-  - `Refactor MCP RPC parameter handling`
-- `9ad8b55`
-  - `Update refactoring continuation notes`
-- `ed2df4c`
-  - `Refactor in-memory repository query helpers`
-- `93c71f9`
-  - `Refactor projection failure repository helpers`
-- `45317c1`
-  - `Refresh last session notes`
-- `b751944`
-  - `Refactor postgres parsing helpers`
-- `b7b6f93`
-  - `Refactor config parsing helpers`
-- `4716ac5`
-  - `Refactor HTTP app request helpers`
-- `3686082`
-  - `Refactor server response helpers`
-
-## Current judgment for 0.5.0 work quality
-So far the `0.5.0` work is still tracking the intended plan correctly:
-- file-local first
-- behavior-preserving
-- test-backed after each slice
-- no opportunistic feature redesign
-- internal duplication is meaningfully decreasing
-- several high-value parsing/response/setup hot spots have now been cleaned up
-- MCP RPC request handling has now also received a first dedicated file-local cleanup pass
-- in-memory repository query helpers have now received dedicated file-local cleanup passes, including projection failure repository follow-up cleanup
-- PostgreSQL parsing/normalization helpers have now also received a small dedicated file-local cleanup pass
-- configuration parsing helpers have now also received a small dedicated file-local cleanup pass
-- HTTP app request helpers have now also received a small dedicated file-local cleanup pass
-- server response helpers have now also received a small dedicated file-local cleanup pass
-- the full repository suite now passes after the accumulated refactoring wave
-
-A useful lesson from the latest slices:
-- some apparent duplication is partially intentional because it preserves test seams
-- especially in `src/ctxledger/server.py`, monkeypatch-based delegation tests constrained how far import hoisting could safely go
-
-Current closeout judgment:
-- `0.5.0` appears **closeout-ready** from a validation perspective
-- broad cross-file consolidation can remain deferred unless a clearly bounded, high-signal candidate emerges
-
-## Recommended next action
-The current targets are now showing **diminishing returns** for more micro-cleanups.
-
-Recommended next step:
-1. treat the current `0.5.0` refactoring wave as operationally ready for closeout
-2. if additional work is desired before formal closeout, prefer only a narrowly scoped, high-confidence follow-up rather than more broad file-by-file cleanup
-3. if continuing beyond closeout readiness, evaluate **safe cross-file consolidation candidates** only where the within-file patterns are now clearly stable and boundaries remain obvious
-
-Good next candidates to inspect only if more work is intentionally chosen:
-- another `src/` module with repeated local validation/serialization logic
-- a carefully chosen cross-file consolidation around shared parsing/response helpers, if it remains readable and preserves boundaries
+  - `v0.5.0`
+
+## What 0.5.0 completed
+`0.5.0` delivered meaningful duplication reduction and internal cleanup across both `src/` and `tests/` without intentionally changing the supported product surface.
+
+High-value areas cleaned up included:
+- CLI bootstrap and formatting helpers
+- server test setup and handler builders
+- MCP resource parsing helpers
+- HTTP handler request/error helpers
+- server runtime introspection helper paths
+- MCP RPC parsing helpers
+- in-memory repository query helpers
+- PostgreSQL parsing helpers
+- configuration parsing helpers
+- HTTP app request helpers
+- runtime server response helpers
+
+Net effect:
+- cleaner local structure
+- reduced repeated logic
+- preserved behavior
+- strong test-backed confidence for future work
+
+## 0.6.0 starting direction
+
+### Core implementation direction
+For `0.6.0`, hierarchical memory should be implemented with PostgreSQL still remaining the canonical system of record.
+
+As part of the implementation foundation, `0.6.0` should add **Apache AGE** to PostgreSQL and use **Cypher** as a supporting mechanism for hierarchical memory and relation-aware traversal.
+
+Current intent:
+- keep PostgreSQL canonical
+- add Apache AGE as an extension layer for graph-oriented memory relationships
+- use Cypher to assist hierarchical and relation-aware retrieval flows
+- avoid turning `0.6.0` into a broad architecture rewrite beyond what hierarchical memory requires
+
+### Why AGE is included in 0.6.0
+The current judgment is that AGE should be added in `0.6.0` as a forward-looking foundation for:
+- graph-structured memory relations
+- top-down or relation-aware traversal
+- future expansion beyond plain similarity retrieval
+- cleaner support for hierarchical retrieval than forcing all such behavior into ad hoc relational assembly
+
+This does **not** change the rule that PostgreSQL remains canonical.
+
+## Mnemis direction
+Do **not** try to align implementation with Mnemis during `0.6.0`.
+
+Instead:
+- `0.6.0` should focus on getting ctxledger’s own hierarchical memory implementation working first
+- `0.7.0` should explicitly evaluate whether ctxledger should move closer to Mnemis-style design
+
+Reference repository for later review:
+- `https://github.com/microsoft/Mnemis`
+
+Useful Mnemis note for later:
+- Mnemis emphasizes dual-route retrieval on hierarchical graphs
+- that makes it relevant to `0.7.0` design evaluation
+- but it should not distort the execution scope of `0.6.0`
+
+## Recommended immediate next steps for 0.6.0
+1. define the minimal hierarchical memory data model needed for `0.6.0`
+2. identify where Apache AGE must be introduced:
+   - schema
+   - local/dev setup
+   - repository/service boundaries
+   - tests
+3. decide which memory relations belong in graph form first
+4. define the first `memory_get_context` hierarchical retrieval slice
+5. add focused tests before broad expansion
+6. keep `0.7.0` Mnemis comparison as a separate future evaluation step
 
 ## Important files for next session
 - `docs/roadmap.md`
 - `docs/plans/refactoring_0_5_0_plan.md`
 - `last_session.md`
-- `src/ctxledger/__init__.py`
-- `src/ctxledger/mcp/resource_handlers.py`
-- `src/ctxledger/runtime/http_handlers.py`
-- `src/ctxledger/server.py`
-- `src/ctxledger/mcp/rpc.py`
-- `src/ctxledger/db/__init__.py`
+- `src/ctxledger/memory/service.py`
+- `src/ctxledger/workflow/service.py`
+- `src/ctxledger/workflow/memory_bridge.py`
 - `src/ctxledger/db/postgres.py`
-- `src/ctxledger/config.py`
-- `src/ctxledger/http_app.py`
-- `src/ctxledger/runtime/server_responses.py`
-- `tests/test_config.py`
-- `tests/test_cli.py`
-- `tests/test_server.py`
+- `src/ctxledger/db/__init__.py`
+- `README.md`
 
 ## Notes on local workspace state
-At the end of this session, the tracked refactoring work described above has been committed in eleven follow-up commits:
-- `5c2ce31`
-  - `Refactor server and runtime helpers`
-- `df03372`
-  - `Refactor MCP RPC parameter handling`
-- `9ad8b55`
-  - `Update refactoring continuation notes`
-- `ed2df4c`
-  - `Refactor in-memory repository query helpers`
-- `93c71f9`
-  - `Refactor projection failure repository helpers`
-- `45317c1`
-  - `Refresh last session notes`
-- `b751944`
-  - `Refactor postgres parsing helpers`
-- `b7b6f93`
-  - `Refactor config parsing helpers`
-- `3686082`
-  - `Refactor server response helpers`
-- `4716ac5`
-  - `Refactor HTTP app request helpers`
-- `aa6e260`
-  - `Refresh server response refactor notes`
+Tracked refactoring work has been committed.
 
-Latest validation results now include:
-- focused config suite:
-  - `python -m pytest tests/test_config.py -q`
-  - `41 passed`
-- focused coverage-target suite:
-  - `python -m pytest tests/test_coverage_targets.py -q`
-  - `237 passed`
-- full suite:
-  - `python -m pytest -q`
-  - `799 passed, 1 skipped`
-
-The single skipped test remains expected:
-- real OpenAI integration requires `OPENAI_API_KEY`
-
-Current remaining untracked/local-generated items still include:
+Known remaining local/generated artifacts may still exist, such as:
 - coverage output
 - local certificate material
 
-These are not part of the intended refactoring record unless explicitly needed later.
+These are not part of the intended milestone record unless explicitly needed later.
