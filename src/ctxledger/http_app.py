@@ -23,15 +23,7 @@ from .server import CtxLedgerServer, create_server
 
 
 def _authorization_query_value(request: Request) -> str | None:
-    authorization = request.headers.get("authorization")
-    if authorization is None:
-        return None
-
-    normalized = authorization.strip()
-    if not normalized:
-        return None
-
-    return normalized
+    return _normalized_non_empty_string(request.headers.get("authorization"))
 
 
 def _query_items_with_authorization(request: Request) -> list[tuple[str, str]]:
@@ -97,6 +89,30 @@ def _server_not_ready_response() -> Response:
     )
 
 
+def _normalized_non_empty_string(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        return None
+
+    return normalized
+
+
+def _forward_get_request(
+    request: Request,
+    *,
+    server: CtxLedgerServer,
+    handler: Callable[[str], Any],
+) -> Response:
+    if server.runtime is None:
+        return _server_not_ready_response()
+    path = _full_path_with_query(request)
+    result = handler(path)
+    return _response_from_runtime_result(result)
+
+
 def _build_get_route(
     server: CtxLedgerServer,
     handler_factory: Callable[[CtxLedgerServer], Callable[[str], Any]],
@@ -104,11 +120,11 @@ def _build_get_route(
     handler = handler_factory(server)
 
     async def _handler(request: Request) -> Response:
-        if server.runtime is None:
-            return _server_not_ready_response()
-        path = _full_path_with_query(request)
-        result = handler(path)
-        return _response_from_runtime_result(result)
+        return _forward_get_request(
+            request,
+            server=server,
+            handler=handler,
+        )
 
     return _handler
 
@@ -124,9 +140,8 @@ def _build_post_route(
         if handler is None:
             return _server_not_ready_response()
         body = await request.body()
-        path = _full_path_with_query(request)
         result = handler(
-            path,
+            _full_path_with_query(request),
             _request_body_text(body),
         )
         return _response_from_runtime_result(result)
