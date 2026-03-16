@@ -10,6 +10,7 @@ import types
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from uuid import UUID, uuid4
@@ -27,6 +28,18 @@ from ctxledger.config import (
     LoggingSettings,
     LogLevel,
     ProjectionSettings,
+)
+from ctxledger.db.postgres import (
+    PostgresMemoryEmbeddingRepository,
+    PostgresMemoryEpisodeRepository,
+    PostgresMemoryItemRepository,
+    PostgresMemoryRelationRepository,
+    PostgresProjectionFailureRepository,
+    PostgresVerifyReportRepository,
+    PostgresWorkflowAttemptRepository,
+    PostgresWorkflowCheckpointRepository,
+    PostgresWorkflowInstanceRepository,
+    PostgresWorkspaceRepository,
 )
 from ctxledger.memory.embeddings import (
     DisabledEmbeddingGenerator,
@@ -108,13 +121,19 @@ from ctxledger.runtime.status import build_health_status, build_readiness_status
 from ctxledger.runtime.types import RuntimeIntrospectionResponse
 from ctxledger.server import CtxLedgerServer
 from ctxledger.workflow.service import (
+    CompleteWorkflowInput,
+    PersistenceError,
     ProjectionArtifactType,
     ProjectionFailureInfo,
     ProjectionInfo,
     ProjectionStatus,
     RecordProjectionFailureInput,
     RecordProjectionStateInput,
+    RegisterWorkspaceInput,
     ResumableStatus,
+    ResumeIssue,
+    StartWorkflowInput,
+    ValidationError,
     VerifyReport,
     VerifyStatus,
     WorkflowAttempt,
@@ -123,6 +142,7 @@ from ctxledger.workflow.service import (
     WorkflowInstance,
     WorkflowInstanceStatus,
     WorkflowResume,
+    WorkflowService,
     Workspace,
 )
 
@@ -955,7 +975,601 @@ def test_cli_helpers_cover_schema_path_and_version_fallback(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.4.0"
+    assert captured.out.strip() == "0.5.1"
+
+
+def test_workflow_service_stats_helper_error_branches() -> None:
+    class UnsupportedCountRepository:
+        pass
+
+    class UnsupportedStatusRepository:
+        pass
+
+    class UnsupportedDatetimeRepository:
+        pass
+
+    class UnsupportedProvenanceRepository:
+        pass
+
+    class UnsupportedFailureRepository:
+        pass
+
+    service = WorkflowService(lambda: None)
+
+    with pytest.raises(
+        Exception,
+        match="stats counting is not supported for repository 'workspaces'",
+    ):
+        service._count_rows(
+            SimpleNamespace(workspaces=UnsupportedCountRepository()),
+            "workspaces",
+        )
+
+    with pytest.raises(
+        Exception,
+        match="stats status aggregation is not supported for repository 'workflow_instances'",
+    ):
+        service._count_grouped_statuses(
+            SimpleNamespace(workflow_instances=UnsupportedStatusRepository()),
+            repository_name="workflow_instances",
+            allowed_statuses=("running",),
+        )
+
+    with pytest.raises(
+        Exception,
+        match="stats datetime aggregation is not supported for repository 'workflow_instances'",
+    ):
+        service._max_datetime_field(
+            SimpleNamespace(workflow_instances=UnsupportedDatetimeRepository()),
+            repository_name="workflow_instances",
+            field_name="updated_at",
+        )
+
+    with pytest.raises(
+        Exception,
+        match="stats failure aggregation is not supported for projection failures",
+    ):
+        service._count_open_projection_failures(
+            SimpleNamespace(projection_failures=UnsupportedFailureRepository())
+        )
+
+    with pytest.raises(
+        Exception,
+        match="memory stats provenance aggregation is not supported for memory items",
+    ):
+        service._count_memory_item_provenance(
+            SimpleNamespace(memory_items=UnsupportedProvenanceRepository())
+        )
+
+
+def test_workflow_service_validation_error_branches() -> None:
+    service = WorkflowService(lambda: None)
+
+    with pytest.raises(
+        Exception,
+        match="workflow cannot be completed into a non-terminal state",
+    ):
+        service._map_workflow_status_to_attempt_status(WorkflowInstanceStatus.RUNNING)
+
+    with pytest.raises(
+        Exception,
+        match="status must be one of running, completed, failed, or cancelled",
+    ):
+        service.list_workflows(limit=1, status="paused")
+
+    with pytest.raises(
+        Exception,
+        match="status must be one of open, resolved, or ignored",
+    ):
+        service.list_failures(limit=1, status="paused")
+
+
+def test_workflow_service_stats_and_listing_helpers_cover_repository_branches() -> None:
+    class CountRepository:
+        def __init__(self, count: int) -> None:
+            self.count = count
+
+        def count_all(self) -> int:
+            return self.count
+
+    now = datetime(2024, 10, 2, tzinfo=UTC)
+
+    class StatsUow:
+        def __init__(self) -> None:
+            self.workspaces = CountRepository(2)
+            self.workflow_checkpoints = SimpleNamespace(
+                count_all=lambda: 5,
+                max_datetime=lambda field_name: now,
+                get_latest_by_workflow_id=lambda workflow_instance_id: None,
+            )
+            self.memory_episodes = SimpleNamespace(
+                count_all=lambda: 7,
+                max_datetime=lambda field_name: now,
+            )
+            self.memory_items = SimpleNamespace(
+                count_all=lambda: 11,
+                max_datetime=lambda field_name: now,
+                count_by_provenance=lambda: {
+                    "episode": 3,
+                    "workflow_complete_auto": 2,
+                },
+            )
+            self.memory_embeddings = SimpleNamespace(
+                count_all=lambda: 13,
+                max_datetime=lambda field_name: now,
+            )
+            self.memory_relations = SimpleNamespace(
+                count_all=lambda: 17,
+                max_datetime=lambda field_name: now,
+            )
+            self.workflow_instances = SimpleNamespace(
+                count_by_status=lambda: {
+                    "running": 2,
+                    "completed": 1,
+                    "unexpected": 99,
+                },
+                max_datetime=lambda field_name: now,
+            )
+            self.workflow_attempts = SimpleNamespace(
+                count_by_status=lambda: {
+                    "running": 1,
+                    "succeeded": 4,
+                    "ignored": 99,
+                }
+            )
+            self.verify_reports = SimpleNamespace(
+                count_by_status=lambda: {
+                    "pending": 2,
+                    "passed": 6,
+                    "mystery": 5,
+                },
+                max_datetime=lambda field_name: now,
+            )
+            self.projection_failures = SimpleNamespace(count_open_failures=lambda: 4)
+
+        def __enter__(self) -> "StatsUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service = WorkflowService(lambda: StatsUow())
+
+    stats = service.get_stats()
+    assert stats.workspace_count == 2
+    assert stats.checkpoint_count == 5
+    assert stats.episode_count == 7
+    assert stats.memory_item_count == 11
+    assert stats.memory_embedding_count == 13
+    assert stats.open_projection_failure_count == 4
+    assert stats.workflow_status_counts == {
+        "running": 2,
+        "completed": 1,
+        "failed": 0,
+        "cancelled": 0,
+    }
+    assert stats.attempt_status_counts == {
+        "running": 1,
+        "succeeded": 4,
+        "failed": 0,
+        "cancelled": 0,
+    }
+    assert stats.verify_status_counts == {
+        "pending": 2,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0,
+    }
+    assert stats.latest_workflow_updated_at == now
+    assert stats.latest_checkpoint_created_at == now
+    assert stats.latest_verify_report_created_at == now
+    assert stats.latest_episode_created_at == now
+    assert stats.latest_memory_item_created_at == now
+    assert stats.latest_memory_embedding_created_at == now
+
+    memory_stats = service.get_memory_stats()
+    assert memory_stats.episode_count == 7
+    assert memory_stats.memory_item_count == 11
+    assert memory_stats.memory_embedding_count == 13
+    assert memory_stats.memory_relation_count == 17
+    assert memory_stats.memory_item_provenance_counts == {
+        "episode": 3,
+        "workflow_complete_auto": 2,
+    }
+    assert memory_stats.latest_memory_relation_created_at == now
+
+    workspace_id = uuid4()
+    workflow_id = uuid4()
+    attempt_id = uuid4()
+    checkpoint_id = uuid4()
+    verify_id = uuid4()
+
+    class ListedUow:
+        def __init__(self) -> None:
+            self.workspaces = SimpleNamespace(
+                get_by_id=lambda value: Workspace(
+                    workspace_id=value,
+                    repo_url="https://example.com/repo.git",
+                    canonical_path="/tmp/repo",
+                    default_branch="main",
+                    metadata={},
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            self.workflow_instances = SimpleNamespace(
+                list_recent=lambda **kwargs: (
+                    WorkflowInstance(
+                        workflow_instance_id=workflow_id,
+                        workspace_id=workspace_id,
+                        ticket_id="T-123",
+                        status=WorkflowInstanceStatus.RUNNING,
+                        metadata={},
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                )
+            )
+            self.workflow_attempts = SimpleNamespace(
+                get_latest_by_workflow_id=lambda value: WorkflowAttempt(
+                    attempt_id=attempt_id,
+                    workflow_instance_id=value,
+                    attempt_number=2,
+                    status=WorkflowAttemptStatus.RUNNING,
+                    failure_reason=None,
+                    verify_status=VerifyStatus.PASSED,
+                    started_at=now,
+                    finished_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            self.workflow_checkpoints = SimpleNamespace(
+                get_latest_by_workflow_id=lambda value: WorkflowCheckpoint(
+                    checkpoint_id=checkpoint_id,
+                    workflow_instance_id=value,
+                    attempt_id=attempt_id,
+                    step_name="implement-tests",
+                    summary="Added targeted tests",
+                    checkpoint_json={},
+                    created_at=now,
+                )
+            )
+            self.verify_reports = SimpleNamespace(
+                get_latest_by_attempt_id=lambda value: VerifyReport(
+                    verify_id=verify_id,
+                    attempt_id=value,
+                    status=VerifyStatus.FAILED,
+                    report_json={},
+                    created_at=now,
+                )
+            )
+
+        def __enter__(self) -> "ListedUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service = WorkflowService(lambda: ListedUow())
+    entries = service.list_workflows(
+        limit=2,
+        status=" running ",
+        ticket_id=" T-123 ",
+    )
+    assert len(entries) == 1
+    assert entries[0].canonical_path == "/tmp/repo"
+    assert entries[0].latest_step_name == "implement-tests"
+    assert entries[0].latest_verify_status == VerifyStatus.FAILED.value
+
+    class FallbackUow:
+        def __init__(self) -> None:
+            self.workspaces = SimpleNamespace(get_by_id=lambda value: None)
+            self.workflow_instances = SimpleNamespace(
+                list_recent=lambda **kwargs: (
+                    WorkflowInstance(
+                        workflow_instance_id=workflow_id,
+                        workspace_id=workspace_id,
+                        ticket_id="T-456",
+                        status=WorkflowInstanceStatus.COMPLETED,
+                        metadata={},
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                )
+            )
+            self.workflow_attempts = SimpleNamespace(
+                get_latest_by_workflow_id=lambda value: WorkflowAttempt(
+                    attempt_id=attempt_id,
+                    workflow_instance_id=value,
+                    attempt_number=1,
+                    status=WorkflowAttemptStatus.SUCCEEDED,
+                    failure_reason=None,
+                    verify_status=VerifyStatus.SKIPPED,
+                    started_at=now,
+                    finished_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            self.workflow_checkpoints = SimpleNamespace(
+                get_latest_by_workflow_id=lambda value: None
+            )
+            self.verify_reports = SimpleNamespace(
+                get_latest_by_attempt_id=lambda value: None
+            )
+
+        def __enter__(self) -> "FallbackUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service = WorkflowService(lambda: FallbackUow())
+    fallback_entries = service.list_workflows(limit=1, status="   ", ticket_id="   ")
+    assert len(fallback_entries) == 1
+    assert fallback_entries[0].canonical_path is None
+    assert fallback_entries[0].latest_step_name is None
+    assert fallback_entries[0].latest_verify_status == VerifyStatus.SKIPPED.value
+
+    class FailureUow:
+        def __init__(self) -> None:
+            self.projection_failures = SimpleNamespace(
+                list_failures=lambda **kwargs: (
+                    ProjectionFailureInfo(
+                        projection_type=ProjectionArtifactType.RESUME_JSON,
+                        error_code="projection_error",
+                        error_message="boom",
+                        target_path=".ctx/resume.json",
+                        attempt_id=None,
+                        occurred_at=now,
+                        resolved_at=None,
+                        open_failure_count=2,
+                        retry_count=0,
+                        status="open",
+                    ),
+                )
+            )
+
+        def __enter__(self) -> "FailureUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service = WorkflowService(lambda: FailureUow())
+    failures = service.list_failures(limit=3, status=" resolved ", open_only=True)
+    assert len(failures) == 1
+    assert failures[0].failure_status == "open"
+
+    class EmptyFailureUow:
+        def __init__(self) -> None:
+            self.projection_failures = None
+
+        def __enter__(self) -> "EmptyFailureUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service = WorkflowService(lambda: EmptyFailureUow())
+    assert service.list_failures(limit=1) == ()
+
+
+# Coverage verification command (from the repository root):
+# pytest -q tests/test_coverage_targets.py tests/test_workflow_service.py tests/test_postgres_db.py \
+#   --cov=ctxledger.db.postgres --cov=ctxledger.workflow.service --cov-report=term-missing
+def test_postgres_repository_count_and_max_helpers_cover_success_and_errors() -> None:
+    class FakeCursor:
+        def __init__(self) -> None:
+            self._fetchone_result = None
+            self._fetchall_result = []
+
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            return None
+
+        def fetchone(self):
+            return self._fetchone_result
+
+        def fetchall(self):
+            return self._fetchall_result
+
+    class FakeConnection:
+        def __init__(self, cursor: FakeCursor) -> None:
+            self._cursor = cursor
+
+        def cursor(self) -> FakeCursor:
+            return self._cursor
+
+    connection = FakeConnection(FakeCursor())
+    attempt_repo = PostgresWorkflowAttemptRepository(connection)
+    memory_item_repo = PostgresMemoryItemRepository(connection)
+
+    connection._cursor._fetchone_result = {"count": 7}
+    assert attempt_repo.count_all() == 7
+
+    connection._cursor._fetchall_result = [
+        {"status": "running", "count": 2},
+        {"status": "succeeded", "count": 3},
+    ]
+    assert attempt_repo.count_by_status() == {
+        "running": 2,
+        "succeeded": 3,
+    }
+
+    now = datetime(2024, 10, 1, tzinfo=UTC)
+    connection._cursor._fetchone_result = {"value": now}
+    assert attempt_repo.max_datetime("started_at") == now
+
+    connection._cursor._fetchall_result = [
+        {"provenance": "episode", "count": 5},
+        {"provenance": "workflow_complete_auto", "count": 2},
+    ]
+    assert memory_item_repo.count_by_provenance() == {
+        "episode": 5,
+        "workflow_complete_auto": 2,
+    }
+
+    workspace_repo = PostgresWorkspaceRepository(connection)
+    workflow_repo = PostgresWorkflowInstanceRepository(connection)
+    checkpoint_repo = PostgresWorkflowCheckpointRepository(connection)
+    verify_repo = PostgresVerifyReportRepository(connection)
+    episode_repo = PostgresMemoryEpisodeRepository(connection)
+    embedding_repo = PostgresMemoryEmbeddingRepository(connection)
+    relation_repo = PostgresMemoryRelationRepository(connection)
+    projection_failure_repo = PostgresProjectionFailureRepository(connection)
+
+    connection._cursor._fetchone_result = {"count": 9}
+    assert workspace_repo.count_all() == 9
+    connection._cursor._fetchone_result = {"value": now}
+    assert workspace_repo.max_datetime("updated_at") == now
+
+    connection._cursor._fetchone_result = {"count": 12}
+    assert workflow_repo.count_all() == 12
+    connection._cursor._fetchall_result = [
+        {"status": "running", "count": 4},
+        {"status": "completed", "count": 8},
+    ]
+    assert workflow_repo.count_by_status() == {
+        "running": 4,
+        "completed": 8,
+    }
+    connection._cursor._fetchone_result = {"value": now}
+    assert workflow_repo.max_datetime("created_at") == now
+
+    connection._cursor._fetchall_result = [
+        {
+            "workflow_instance_id": uuid4(),
+            "workspace_id": uuid4(),
+            "ticket_id": "ticket-1",
+            "status": "running",
+            "metadata_json": {"kind": "recent"},
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "workflow_instance_id": uuid4(),
+            "workspace_id": uuid4(),
+            "ticket_id": "ticket-2",
+            "status": "completed",
+            "metadata_json": {},
+            "created_at": now,
+            "updated_at": now,
+        },
+    ]
+    recent = workflow_repo.list_recent(limit=5)
+    assert len(recent) == 2
+    assert recent[0].ticket_id == "ticket-1"
+    assert recent[1].status == WorkflowInstanceStatus.COMPLETED
+
+    connection._cursor._fetchone_result = {"count": 3}
+    assert checkpoint_repo.count_all() == 3
+    connection._cursor._fetchone_result = {"value": now}
+    assert checkpoint_repo.max_datetime("created_at") == now
+
+    connection._cursor._fetchone_result = {"count": 6}
+    assert verify_repo.count_all() == 6
+    connection._cursor._fetchall_result = [
+        {"status": "pending", "count": 1},
+        {"status": "passed", "count": 5},
+    ]
+    assert verify_repo.count_by_status() == {
+        "pending": 1,
+        "passed": 5,
+    }
+    connection._cursor._fetchone_result = {"value": now}
+    assert verify_repo.max_datetime("created_at") == now
+
+    connection._cursor._fetchone_result = {"count": 8}
+    assert episode_repo.count_all() == 8
+    connection._cursor._fetchone_result = {"value": now}
+    assert episode_repo.max_datetime("created_at") == now
+
+    connection._cursor._fetchone_result = {"count": 10}
+    assert embedding_repo.count_all() == 10
+    connection._cursor._fetchone_result = {"value": now}
+    assert embedding_repo.max_datetime("created_at") == now
+
+    connection._cursor._fetchone_result = {"count": 2}
+    assert relation_repo.count_all() == 2
+    connection._cursor._fetchone_result = {"value": now}
+    assert relation_repo.max_datetime("created_at") == now
+
+    connection._cursor._fetchone_result = {"count": 4}
+    assert projection_failure_repo.count_open_failures() == 4
+
+    connection._cursor._fetchall_result = [
+        {
+            "workflow_instance_id": uuid4(),
+            "projection_type": "resume_json",
+            "target_path": ".ctx/resume.json",
+            "error_message": "broken",
+            "first_failed_at": now,
+            "last_failed_at": now,
+            "failure_count": 2,
+            "status": "open",
+            "resolved_at": None,
+            "resolved_reason": None,
+        },
+        {
+            "workflow_instance_id": uuid4(),
+            "projection_type": "resume_md",
+            "target_path": ".ctx/resume.md",
+            "error_message": "ignored",
+            "first_failed_at": now,
+            "last_failed_at": now,
+            "failure_count": 1,
+            "status": "ignored",
+            "resolved_at": now,
+            "resolved_reason": "accepted",
+        },
+    ]
+    connection._cursor._fetchall_result = [
+        {
+            "projection_type": "resume_json",
+            "attempt_id": None,
+            "error_code": "projection_error",
+            "error_message": "broken",
+            "target_path": ".ctx/resume.json",
+            "retry_count": 0,
+            "occurred_at": now,
+            "resolved_at": None,
+            "status": "open",
+        },
+        {
+            "projection_type": "resume_md",
+            "attempt_id": None,
+            "error_code": None,
+            "error_message": "ignored",
+            "target_path": ".ctx/resume.md",
+            "retry_count": 1,
+            "occurred_at": now,
+            "resolved_at": now,
+            "status": "ignored",
+        },
+    ]
+    failures = projection_failure_repo.list_failures(limit=10, status=None)
+    assert len(failures) == 2
+    assert failures[0].projection_type == ProjectionArtifactType.RESUME_JSON
+    assert failures[1].status == "ignored"
+
+    with pytest.raises(
+        Exception,
+        match="Unsupported datetime field 'bad_field' for workflow_attempts",
+    ):
+        attempt_repo.max_datetime("bad_field")
+
+    with pytest.raises(
+        Exception,
+        match="Unsupported datetime field 'bad_field' for memory_items",
+    ):
+        memory_item_repo.max_datetime("bad_field")
 
 
 def test_cli_apply_schema_covers_missing_url_and_driver_paths(
@@ -1059,6 +1673,419 @@ def test_cli_serve_and_main_dispatch_paths(
 
     with pytest.raises(RuntimeError, match="Unknown command: mystery"):
         cli_module.main(["mystery"])
+
+
+def test_workflow_service_stats_and_listing_cover_none_and_validation_paths() -> None:
+    now = datetime(2024, 10, 3, tzinfo=UTC)
+
+    class NoneStatsUow:
+        def __init__(self) -> None:
+            self.workspaces = None
+            self.workflow_checkpoints = None
+            self.memory_episodes = None
+            self.memory_items = None
+            self.memory_embeddings = None
+            self.memory_relations = None
+            self.workflow_instances = None
+            self.workflow_attempts = None
+            self.verify_reports = None
+            self.projection_failures = None
+
+        def __enter__(self) -> "NoneStatsUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service = WorkflowService(lambda: NoneStatsUow())
+    stats = service.get_stats()
+    assert stats.workspace_count == 0
+    assert stats.checkpoint_count == 0
+    assert stats.episode_count == 0
+    assert stats.memory_item_count == 0
+    assert stats.memory_embedding_count == 0
+    assert stats.open_projection_failure_count == 0
+    assert stats.workflow_status_counts == {
+        "running": 0,
+        "completed": 0,
+        "failed": 0,
+        "cancelled": 0,
+    }
+    assert stats.attempt_status_counts == {
+        "running": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "cancelled": 0,
+    }
+    assert stats.verify_status_counts == {
+        "pending": 0,
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+    }
+    assert stats.latest_workflow_updated_at is None
+    assert stats.latest_checkpoint_created_at is None
+    assert stats.latest_verify_report_created_at is None
+    assert stats.latest_episode_created_at is None
+    assert stats.latest_memory_item_created_at is None
+    assert stats.latest_memory_embedding_created_at is None
+
+    memory_stats = service.get_memory_stats()
+    assert memory_stats.episode_count == 0
+    assert memory_stats.memory_item_count == 0
+    assert memory_stats.memory_embedding_count == 0
+    assert memory_stats.memory_relation_count == 0
+    assert memory_stats.memory_item_provenance_counts == {}
+    assert memory_stats.latest_episode_created_at is None
+    assert memory_stats.latest_memory_item_created_at is None
+    assert memory_stats.latest_memory_embedding_created_at is None
+    assert memory_stats.latest_memory_relation_created_at is None
+
+    class RichFailureUow:
+        def __init__(self) -> None:
+            self.projection_failures = SimpleNamespace(
+                list_failures=lambda **kwargs: (
+                    ProjectionFailureInfo(
+                        projection_type=ProjectionArtifactType.RESUME_JSON,
+                        error_code="projection_error",
+                        error_message="open failure",
+                        target_path=".ctx/resume.json",
+                        attempt_id=None,
+                        occurred_at=now,
+                        resolved_at=None,
+                        open_failure_count=3,
+                        retry_count=1,
+                        status="open",
+                    ),
+                    ProjectionFailureInfo(
+                        projection_type=ProjectionArtifactType.RESUME_MD,
+                        error_code="projection_ignored",
+                        error_message="ignored failure",
+                        target_path=".ctx/resume.md",
+                        attempt_id=None,
+                        occurred_at=now,
+                        resolved_at=now,
+                        open_failure_count=0,
+                        retry_count=2,
+                        status="ignored",
+                    ),
+                )
+            )
+
+        def __enter__(self) -> "RichFailureUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service = WorkflowService(lambda: RichFailureUow())
+    failures = service.list_failures(limit=5)
+    assert len(failures) == 2
+    assert failures[0].failure_scope == "projection"
+    assert failures[0].failure_type == ProjectionArtifactType.RESUME_JSON.value
+    assert failures[0].failure_status == "open"
+    assert failures[1].failure_status == "ignored"
+
+    with pytest.raises(ValidationError, match="limit must be greater than zero"):
+        service.list_workflows(limit=0)
+
+    with pytest.raises(ValidationError, match="limit must be greater than zero"):
+        service.list_failures(limit=0)
+
+
+def test_workflow_service_resume_and_completion_warning_branches() -> None:
+    service = WorkflowService(lambda: None)
+
+    running_workspace = Workspace(
+        workspace_id=uuid4(),
+        repo_url="https://example.com/repo.git",
+        canonical_path="/tmp/repo",
+        default_branch="main",
+        metadata={},
+        created_at=datetime(2024, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 10, 1, tzinfo=UTC),
+    )
+    running_workflow = WorkflowInstance(
+        workflow_instance_id=uuid4(),
+        workspace_id=running_workspace.workspace_id,
+        ticket_id="resume-1",
+        status=WorkflowInstanceStatus.RUNNING,
+        metadata={},
+        created_at=datetime(2024, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 10, 1, tzinfo=UTC),
+    )
+    running_attempt = WorkflowAttempt(
+        attempt_id=uuid4(),
+        workflow_instance_id=running_workflow.workflow_instance_id,
+        attempt_number=1,
+        status=WorkflowAttemptStatus.RUNNING,
+        failure_reason=None,
+        verify_status=VerifyStatus.PASSED,
+        started_at=datetime(2024, 10, 1, tzinfo=UTC),
+        finished_at=None,
+        created_at=datetime(2024, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 10, 1, tzinfo=UTC),
+    )
+
+    assert (
+        service._classify_resumable_status(
+            running_workflow,
+            None,
+            None,
+            [ResumeIssue(code="running_workflow_without_attempt", message="missing")],
+        )
+        == ResumableStatus.INCONSISTENT
+    )
+    assert (
+        service._classify_resumable_status(
+            running_workflow,
+            None,
+            None,
+            [],
+        )
+        == ResumableStatus.BLOCKED
+    )
+    assert (
+        service._classify_resumable_status(
+            running_workflow,
+            WorkflowAttempt(
+                attempt_id=running_attempt.attempt_id,
+                workflow_instance_id=running_attempt.workflow_instance_id,
+                attempt_number=running_attempt.attempt_number,
+                status=WorkflowAttemptStatus.SUCCEEDED,
+                failure_reason=None,
+                verify_status=running_attempt.verify_status,
+                started_at=running_attempt.started_at,
+                finished_at=datetime(2024, 10, 2, tzinfo=UTC),
+                created_at=running_attempt.created_at,
+                updated_at=datetime(2024, 10, 2, tzinfo=UTC),
+            ),
+            None,
+            [],
+        )
+        == ResumableStatus.BLOCKED
+    )
+    assert (
+        service._classify_resumable_status(
+            running_workflow,
+            running_attempt,
+            None,
+            [],
+        )
+        == ResumableStatus.BLOCKED
+    )
+
+    terminal_workflow = WorkflowInstance(
+        workflow_instance_id=uuid4(),
+        workspace_id=running_workspace.workspace_id,
+        ticket_id="resume-2",
+        status=WorkflowInstanceStatus.COMPLETED,
+        metadata={},
+        created_at=datetime(2024, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 10, 2, tzinfo=UTC),
+    )
+    assert (
+        service._classify_resumable_status(
+            terminal_workflow,
+            running_attempt,
+            None,
+            [],
+        )
+        == ResumableStatus.TERMINAL
+    )
+
+    checkpoint_without_summary = WorkflowCheckpoint(
+        checkpoint_id=uuid4(),
+        workflow_instance_id=running_workflow.workflow_instance_id,
+        attempt_id=running_attempt.attempt_id,
+        step_name="investigate",
+        summary=None,
+        checkpoint_json={},
+        created_at=datetime(2024, 10, 2, tzinfo=UTC),
+    )
+    assert (
+        service._derive_next_hint(
+            terminal_workflow,
+            running_attempt,
+            checkpoint_without_summary,
+            ResumableStatus.TERMINAL,
+        )
+        == "Workflow is terminal. Inspect the final state instead of resuming execution."
+    )
+    assert (
+        service._derive_next_hint(
+            running_workflow,
+            None,
+            None,
+            ResumableStatus.BLOCKED,
+        )
+        == "No attempt is available. Inspect workflow consistency before continuing."
+    )
+    assert (
+        service._derive_next_hint(
+            running_workflow,
+            running_attempt,
+            None,
+            ResumableStatus.BLOCKED,
+        )
+        == "Create an initial checkpoint to establish resumable state."
+    )
+    assert (
+        service._derive_next_hint(
+            running_workflow,
+            running_attempt,
+            checkpoint_without_summary,
+            ResumableStatus.RESUMABLE,
+        )
+        == "Resume from step 'investigate'."
+    )
+    checkpoint_with_summary = WorkflowCheckpoint(
+        checkpoint_id=uuid4(),
+        workflow_instance_id=running_workflow.workflow_instance_id,
+        attempt_id=running_attempt.attempt_id,
+        step_name="implement",
+        summary="Added the missing branch",
+        checkpoint_json={},
+        created_at=datetime(2024, 10, 2, tzinfo=UTC),
+    )
+    assert (
+        service._derive_next_hint(
+            running_workflow,
+            running_attempt,
+            checkpoint_with_summary,
+            ResumableStatus.RESUMABLE,
+        )
+        == "Resume from step 'implement' using the latest checkpoint summary."
+    )
+
+    failed_projection = ProjectionInfo(
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        status=ProjectionStatus.FAILED,
+        target_path=".ctx/resume.json",
+        last_successful_write_at=None,
+        last_canonical_update_at=None,
+        open_failure_count=0,
+    )
+    missing_projection = ProjectionInfo(
+        projection_type=ProjectionArtifactType.RESUME_MD,
+        status=ProjectionStatus.MISSING,
+        target_path=".ctx/resume.md",
+        last_successful_write_at=None,
+        last_canonical_update_at=None,
+        open_failure_count=0,
+    )
+    resolved_failure = ProjectionFailureInfo(
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        error_code="resolved_error",
+        error_message="resolved once",
+        target_path=".ctx/resume.json",
+        attempt_id=running_attempt.attempt_id,
+        occurred_at=datetime(2024, 10, 2, tzinfo=UTC),
+        resolved_at=datetime(2024, 10, 3, tzinfo=UTC),
+        open_failure_count=0,
+        retry_count=1,
+        status="resolved",
+    )
+    warnings = service._build_resume_warnings(
+        running_workflow,
+        running_attempt,
+        checkpoint_with_summary,
+        None,
+        (failed_projection, missing_projection),
+        [],
+        [resolved_failure],
+    )
+    warning_codes = {warning.code for warning in warnings}
+    assert "missing_verify_report" in warning_codes
+    assert "resolved_projection_failure" in warning_codes
+    assert "missing_projection" in warning_codes
+
+    class ExplodingBridge:
+        embedding_generator = None
+
+        def record_workflow_completion_memory(self, **kwargs: object) -> object:
+            raise RuntimeError("bridge exploded")
+
+    from ctxledger.db import InMemoryStore, build_in_memory_uow_factory
+
+    store = InMemoryStore.create()
+    complete_service = WorkflowService(
+        build_in_memory_uow_factory(store),
+        workflow_memory_bridge=ExplodingBridge(),
+    )
+    workspace = complete_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/repo.git",
+            canonical_path="/tmp/repo",
+            default_branch="main",
+        )
+    )
+    started = complete_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="completion-warning",
+        )
+    )
+    result = complete_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+        )
+    )
+    assert result.auto_memory_details is None
+    assert len(result.warnings) == 1
+    assert result.warnings[0].code == "auto_memory_recording_failed"
+
+
+def test_postgres_low_level_helpers_cover_additional_branches() -> None:
+    from ctxledger.db.postgres import (
+        _json_object_or_none,
+        _normalized_schema_name,
+        _optional_datetime,
+        _optional_str_enum,
+        _parse_embedding_values,
+        _require_connection_pool,
+        _to_datetime,
+        _to_uuid,
+    )
+
+    assert _parse_embedding_values(None) == ()
+    assert _parse_embedding_values("  ") == ()
+    assert _parse_embedding_values("[1.5, 2.5]") == (1.5, 2.5)
+    assert _parse_embedding_values((1, "2.5")) == (1.0, 2.5)
+
+    assert _normalized_schema_name(None) == "public"
+    assert _normalized_schema_name("  ") == "public"
+    assert _normalized_schema_name(" custom ") == "custom"
+
+    assert _json_object_or_none(None) is None
+    assert _json_object_or_none('{"alpha": 1}') == {"alpha": 1}
+    assert _json_object_or_none("[1, 2, 3]") is None
+    assert _json_object_or_none([("key", "value")]) == {"key": "value"}
+
+    aware = datetime(2024, 10, 4, tzinfo=UTC)
+    naive = datetime(2024, 10, 4)
+    assert _to_datetime(aware) == aware
+    assert _to_datetime(naive).tzinfo == UTC
+
+    sample_uuid = uuid4()
+    assert _to_uuid(str(sample_uuid)) == sample_uuid
+    assert _optional_datetime(None) is None
+    assert _optional_datetime(aware) == aware
+    assert _optional_str_enum(VerifyStatus, None) is None
+    assert _optional_str_enum(VerifyStatus, "passed") == VerifyStatus.PASSED
+
+    with pytest.raises(PersistenceError, match="Expected datetime, got str"):
+        _to_datetime("bad-datetime")
+
+    if (
+        importlib.import_module("ctxledger.db.postgres").psycopg is None
+        or importlib.import_module("ctxledger.db.postgres").dict_row is None
+        or importlib.import_module("ctxledger.db.postgres").ConnectionPool is Any
+    ):
+        with pytest.raises(RuntimeError, match="psycopg-pool is required"):
+            _require_connection_pool()
 
 
 def test_run_server_returns_zero_on_success(

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -47,6 +49,7 @@ from ctxledger.workflow.service import (
     Workspace,
     WorkspaceNotFoundError,
     WorkspaceRegistrationConflictError,
+    utc_now,
 )
 
 
@@ -1670,13 +1673,13 @@ def test_resume_workflow_returns_blocked_when_running_attempt_has_no_checkpoint(
     started = service.start_workflow(
         StartWorkflowInput(
             workspace_id=workspace.workspace_id,
-            ticket_id="TICKET-NO-CHECKPOINT",
+            ticket_id="TICKET-RESUME-2",
         )
     )
 
     resume = service.resume_workflow(
         ResumeWorkflowInput(
-            workflow_instance_id=started.workflow_instance.workflow_instance_id
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
         )
     )
 
@@ -1689,6 +1692,216 @@ def test_resume_workflow_returns_blocked_when_running_attempt_has_no_checkpoint(
     assert (
         resume.next_hint == "Create an initial checkpoint to establish resumable state."
     )
+
+
+def test_resume_helper_branches_cover_terminal_and_warning_paths() -> None:
+    service = WorkflowService(lambda: None)
+
+    running_workspace = Workspace(
+        workspace_id=uuid4(),
+        repo_url="https://example.com/repo.git",
+        canonical_path="/tmp/repo",
+        default_branch="main",
+        metadata={},
+        created_at=datetime(2024, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 10, 1, tzinfo=UTC),
+    )
+    running_workflow = WorkflowInstance(
+        workflow_instance_id=uuid4(),
+        workspace_id=running_workspace.workspace_id,
+        ticket_id="resume-helpers-running",
+        status=WorkflowInstanceStatus.RUNNING,
+        metadata={},
+        created_at=datetime(2024, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 10, 1, tzinfo=UTC),
+    )
+    running_attempt = WorkflowAttempt(
+        attempt_id=uuid4(),
+        workflow_instance_id=running_workflow.workflow_instance_id,
+        attempt_number=1,
+        status=WorkflowAttemptStatus.RUNNING,
+        failure_reason=None,
+        verify_status=VerifyStatus.PASSED,
+        started_at=datetime(2024, 10, 1, tzinfo=UTC),
+        finished_at=None,
+        created_at=datetime(2024, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 10, 1, tzinfo=UTC),
+    )
+
+    assert (
+        service._classify_resumable_status(
+            running_workflow,
+            None,
+            None,
+            [ResumeIssue(code="running_workflow_without_attempt", message="missing")],
+        )
+        == ResumableStatus.INCONSISTENT
+    )
+    assert (
+        service._classify_resumable_status(
+            running_workflow,
+            None,
+            None,
+            [],
+        )
+        == ResumableStatus.BLOCKED
+    )
+    assert (
+        service._classify_resumable_status(
+            running_workflow,
+            WorkflowAttempt(
+                attempt_id=running_attempt.attempt_id,
+                workflow_instance_id=running_attempt.workflow_instance_id,
+                attempt_number=running_attempt.attempt_number,
+                status=WorkflowAttemptStatus.SUCCEEDED,
+                failure_reason=None,
+                verify_status=running_attempt.verify_status,
+                started_at=running_attempt.started_at,
+                finished_at=datetime(2024, 10, 2, tzinfo=UTC),
+                created_at=running_attempt.created_at,
+                updated_at=datetime(2024, 10, 2, tzinfo=UTC),
+            ),
+            None,
+            [],
+        )
+        == ResumableStatus.BLOCKED
+    )
+    assert (
+        service._classify_resumable_status(
+            running_workflow,
+            running_attempt,
+            None,
+            [],
+        )
+        == ResumableStatus.BLOCKED
+    )
+
+    terminal_workflow = WorkflowInstance(
+        workflow_instance_id=uuid4(),
+        workspace_id=running_workspace.workspace_id,
+        ticket_id="resume-helpers-terminal",
+        status=WorkflowInstanceStatus.COMPLETED,
+        metadata={},
+        created_at=datetime(2024, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 10, 2, tzinfo=UTC),
+    )
+    assert (
+        service._classify_resumable_status(
+            terminal_workflow,
+            running_attempt,
+            None,
+            [],
+        )
+        == ResumableStatus.TERMINAL
+    )
+
+    checkpoint_without_summary = WorkflowCheckpoint(
+        checkpoint_id=uuid4(),
+        workflow_instance_id=running_workflow.workflow_instance_id,
+        attempt_id=running_attempt.attempt_id,
+        step_name="investigate",
+        summary=None,
+        checkpoint_json={},
+        created_at=datetime(2024, 10, 2, tzinfo=UTC),
+    )
+    assert (
+        service._derive_next_hint(
+            terminal_workflow,
+            running_attempt,
+            checkpoint_without_summary,
+            ResumableStatus.TERMINAL,
+        )
+        == "Workflow is terminal. Inspect the final state instead of resuming execution."
+    )
+    assert (
+        service._derive_next_hint(
+            running_workflow,
+            None,
+            None,
+            ResumableStatus.BLOCKED,
+        )
+        == "No attempt is available. Inspect workflow consistency before continuing."
+    )
+    assert (
+        service._derive_next_hint(
+            running_workflow,
+            running_attempt,
+            None,
+            ResumableStatus.BLOCKED,
+        )
+        == "Create an initial checkpoint to establish resumable state."
+    )
+    assert (
+        service._derive_next_hint(
+            running_workflow,
+            running_attempt,
+            checkpoint_without_summary,
+            ResumableStatus.RESUMABLE,
+        )
+        == "Resume from step 'investigate'."
+    )
+
+    checkpoint_with_summary = WorkflowCheckpoint(
+        checkpoint_id=uuid4(),
+        workflow_instance_id=running_workflow.workflow_instance_id,
+        attempt_id=running_attempt.attempt_id,
+        step_name="implement",
+        summary="Added the missing branch",
+        checkpoint_json={},
+        created_at=datetime(2024, 10, 2, tzinfo=UTC),
+    )
+    assert (
+        service._derive_next_hint(
+            running_workflow,
+            running_attempt,
+            checkpoint_with_summary,
+            ResumableStatus.RESUMABLE,
+        )
+        == "Resume from step 'implement' using the latest checkpoint summary."
+    )
+
+    failed_projection = ProjectionInfo(
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        status=ProjectionStatus.FAILED,
+        target_path=".ctx/resume.json",
+        last_successful_write_at=None,
+        last_canonical_update_at=None,
+        open_failure_count=0,
+    )
+    missing_projection = ProjectionInfo(
+        projection_type=ProjectionArtifactType.RESUME_MD,
+        status=ProjectionStatus.MISSING,
+        target_path=".ctx/resume.md",
+        last_successful_write_at=None,
+        last_canonical_update_at=None,
+        open_failure_count=0,
+    )
+    resolved_failure = ProjectionFailureInfo(
+        projection_type=ProjectionArtifactType.RESUME_JSON,
+        error_code="resolved_error",
+        error_message="resolved once",
+        target_path=".ctx/resume.json",
+        attempt_id=running_attempt.attempt_id,
+        occurred_at=datetime(2024, 10, 2, tzinfo=UTC),
+        resolved_at=datetime(2024, 10, 3, tzinfo=UTC),
+        open_failure_count=0,
+        retry_count=1,
+        status="resolved",
+    )
+
+    warnings = service._build_resume_warnings(
+        running_workflow,
+        running_attempt,
+        checkpoint_with_summary,
+        None,
+        (failed_projection, missing_projection),
+        [],
+        [resolved_failure],
+    )
+    warning_codes = {warning.code for warning in warnings}
+    assert "missing_verify_report" in warning_codes
+    assert "resolved_projection_failure" in warning_codes
+    assert "missing_projection" in warning_codes
 
 
 def test_resume_workflow_returns_terminal_for_completed_workflow() -> None:
