@@ -9,7 +9,7 @@ The roadmap has been updated so that:
 - `0.5.0` focuses on safe refactoring of existing `src/` and `tests/`
 - hierarchical memory retrieval has been moved from `0.5.0` to `0.6.0`
 
-A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC and in-memory repository cleanup batches.
+A dedicated `0.5.0` refactoring plan has been created and multiple behavior-preserving refactor slices have now been completed across both `tests/` and `src/`, including additional MCP RPC cleanup and two in-memory repository cleanup batches.
 
 ## Final 0.4.0 status
 ### Validation
@@ -256,8 +256,9 @@ Validation:
 - `289 passed`
 
 ### 9. `src/ctxledger/db/__init__.py`
-Small file-local cleanup completed.
+Multiple small file-local cleanup slices completed.
 
+#### First slice
 Refactoring completed:
 - consolidated repeated in-memory repository collection query patterns for:
   - latest matching item selection
@@ -288,6 +289,29 @@ Result:
 Validation:
 - `python -m pytest tests/test_coverage_targets.py -q`
 - `237 passed`
+
+#### Follow-up slice
+Refactoring completed:
+- consolidated repeated projection failure repository logic for:
+  - workflow failure filtering by status
+  - resolve/ignore closeout loops
+  - projection `open_failure_count` updates
+
+Added helpers:
+- `_workflow_failures_by_status(...)`
+- `_close_resume_projection_failures(...)`
+- `_set_projection_open_failure_count(...)`
+
+Affected in-memory repository:
+- `InMemoryProjectionFailureRepository`
+
+Result:
+- less repeated projection failure closeout and state update logic inside the in-memory repository layer
+- behavior preserved while keeping the cleanup file-local
+
+Validation:
+- `python -m pytest tests/test_coverage_targets.py -q`
+- `237 passed`
  
 ## 0.5.0 refactoring commits recorded
 Relevant recent refactoring commits:
@@ -309,6 +333,10 @@ Relevant recent refactoring commits:
   - `Update refactoring continuation notes`
 - `ed2df4c`
   - `Refactor in-memory repository query helpers`
+- `93c71f9`
+  - `Refactor projection failure repository helpers`
+- `45317c1`
+  - `Refresh last session notes`
 
 ## Current judgment for 0.5.0 work quality
 So far the `0.5.0` work is still tracking the intended plan correctly:
@@ -319,7 +347,7 @@ So far the `0.5.0` work is still tracking the intended plan correctly:
 - internal duplication is meaningfully decreasing
 - several high-value parsing/response/setup hot spots have now been cleaned up
 - MCP RPC request handling has now also received a first dedicated file-local cleanup pass
-- in-memory repository query helpers have now received a first dedicated file-local cleanup pass
+- in-memory repository query helpers have now received dedicated file-local cleanup passes, including projection failure repository follow-up cleanup
 
 A useful lesson from the latest slices:
 - some apparent duplication is partially intentional because it preserves test seams
@@ -352,7 +380,7 @@ Good next candidates to inspect:
 - `tests/test_server.py`
 
 ## Notes on local workspace state
-At the end of this session, the tracked refactoring work described above has been committed in four follow-up commits:
+At the end of this session, the tracked refactoring work described above has been committed in six follow-up commits:
 - `5c2ce31`
   - `Refactor server and runtime helpers`
 - `df03372`
@@ -361,6 +389,10 @@ At the end of this session, the tracked refactoring work described above has bee
   - `Update refactoring continuation notes`
 - `ed2df4c`
   - `Refactor in-memory repository query helpers`
+- `93c71f9`
+  - `Refactor projection failure repository helpers`
+- `45317c1`
+  - `Refresh last session notes`
 
 Current remaining untracked/local-generated items still include:
 - coverage output
