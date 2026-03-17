@@ -1580,7 +1580,16 @@ class MemoryService:
                     filtered_memory_item_details.append(memory_item_detail)
 
             episodes = tuple(filtered_episodes)
-            episode_explanations = tuple(filtered_episode_explanations)
+            if filtered_episode_explanations:
+                episode_explanations = tuple(filtered_episode_explanations)
+            else:
+                episode_explanations = tuple(
+                    {
+                        **explanation,
+                        "explanation_basis": "query_filtered_out",
+                    }
+                    for explanation in episode_explanations_before_query_filter
+                )
             memory_item_details = tuple(filtered_memory_item_details)
         else:
             episode_explanations = tuple(episode_explanations_before_query_filter)

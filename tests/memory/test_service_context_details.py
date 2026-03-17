@@ -1174,7 +1174,16 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
     assert (
         response.details["inherited_context_returned_without_episode_matches"] is True
     )
-    assert response.details["episode_explanations"] == []
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": False,
+            "explanation_basis": "query_filtered_out",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        }
+    ]
     # Inherited workspace items are an intentional auxiliary surface and do not
     # participate in episode-oriented query matching.
     assert response.details["memory_context_groups"] == [
