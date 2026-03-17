@@ -136,6 +136,10 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
             "updated_at": supports_target_item.updated_at.isoformat(),
         }
     ]
+    assert response.details["inherited_context_is_auxiliary"] is True
+    assert response.details["inherited_context_returned_without_episode_matches"] is (
+        False
+    )
 
 
 def test_memory_get_context_ignores_non_supports_relations_in_related_memory_items() -> (
@@ -224,3 +228,7 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
         "Episode without supports-related context"
     ]
     assert response.details["related_memory_items"] == []
+    assert response.details["inherited_context_is_auxiliary"] is True
+    assert response.details["inherited_context_returned_without_episode_matches"] is (
+        False
+    )

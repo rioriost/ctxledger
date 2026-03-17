@@ -1511,6 +1511,9 @@ class MemoryService:
                     "hierarchy_applied": bool(inherited_workspace_items),
                     "inherited_context_is_auxiliary": bool(inherited_workspace_items),
                     "inherited_context_returned_without_episode_matches": False,
+                    "related_context_is_auxiliary": False,
+                    "related_context_relation_types": [],
+                    "related_context_returned_without_episode_matches": False,
                     "memory_context_groups": (
                         [
                             {
@@ -1654,6 +1657,11 @@ class MemoryService:
                 "inherited_context_returned_without_episode_matches": bool(
                     inherited_memory_items and matched_episode_count == 0
                 ),
+                "related_context_is_auxiliary": bool(related_memory_items),
+                "related_context_relation_types": (
+                    ["supports"] if related_memory_items else []
+                ),
+                "related_context_returned_without_episode_matches": False,
                 "memory_context_groups": memory_context_groups,
                 "inherited_memory_items": [
                     self._serialize_memory_item(memory_item)

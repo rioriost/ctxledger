@@ -1185,6 +1185,8 @@ Representative current response details may include:
 - `memory_context_groups`
 - `inherited_memory_items`
 - `related_memory_items`
+- `related_context_is_auxiliary`
+- `related_context_relation_type`
 
 ### Minimal Hierarchy-Aware Contract
 The current `0.6.0` slice introduces a small but explicit hierarchy-aware contract.
@@ -1221,10 +1223,23 @@ When `include_memory_items=true`, the response may now distinguish:
 `hierarchy_applied` is currently `true` when inherited workspace-scoped items are
 present in the returned context details, and `false` otherwise.
 
-The details payload now also makes that auxiliary-context behavior explicit through:
+The details payload now also makes current auxiliary-context behavior explicit through:
 
 - `inherited_context_is_auxiliary`
 - `inherited_context_returned_without_episode_matches`
+- `related_context_is_auxiliary`
+- `related_context_relation_type`
+
+At the current implementation stage, relation-aware context is also treated as
+auxiliary support context rather than as part of episode selection or group-local
+hierarchical output.
+
+That means:
+
+- `related_context_is_auxiliary = true` when `related_memory_items` are returned
+- `related_context_relation_type = "supports"` for the current constrained relation-aware slice
+- `related_context_is_auxiliary = false` when no related memory items are returned
+- `related_context_relation_type = null` when no related memory items are returned
 
 At the current implementation stage, inherited workspace-scoped memory is treated
 as auxiliary support context rather than as part of the episode-selection filter.
@@ -1273,6 +1288,8 @@ That means:
   - it follows one outgoing hop only
   - it includes only `supports` relations
   - it ignores other relation types in this slice
+- `related_context_is_auxiliary` makes the current support-role of related context explicit
+- `related_context_relation_type` makes the currently constrained relation contract explicit without widening traversal behavior
 
 This is still not a full semantic, relation-aware, or graph-backed hierarchical
 retriever.  

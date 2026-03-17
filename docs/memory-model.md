@@ -241,6 +241,9 @@ At present, episodic behavior includes:
   - `hierarchy_applied`
   - `inherited_context_is_auxiliary`
   - `inherited_context_returned_without_episode_matches`
+  - `related_context_is_auxiliary`
+  - `related_context_relation_types`
+  - `related_context_returned_without_episode_matches`
   - `memory_context_groups`
   - `inherited_memory_items`
 - exposing explicit selection metadata inside `memory_context_groups`, including:
@@ -488,6 +491,9 @@ More specifically, the current details payload is intended to explain:
 - whether inherited workspace-scoped memory is being surfaced as auxiliary context outside episode-match filtering
 - whether inherited workspace-scoped memory is explicitly marked as auxiliary via `inherited_context_is_auxiliary`
 - whether inherited workspace-scoped memory was returned even though no episodes survived filtering via `inherited_context_returned_without_episode_matches`
+- whether relation-aware context is explicitly marked as auxiliary via `related_context_is_auxiliary`
+- which relation types are currently exposed through the constrained relation-aware slice via `related_context_relation_types`
+- whether relation-aware context can be returned without episode matches via `related_context_returned_without_episode_matches`
 
 That means it has started to become useful, but it is not the final design target.
 
@@ -507,6 +513,9 @@ At the current implementation stage, groups may carry explicit selection metadat
 The current details payload also includes a first constrained relation-aware surface:
 
 - `related_memory_items`
+- `related_context_is_auxiliary`
+- `related_context_relation_types`
+- `related_context_returned_without_episode_matches`
 
 At the current implementation stage, `related_memory_items` should be understood narrowly:
 
@@ -514,6 +523,12 @@ At the current implementation stage, `related_memory_items` should be understood
 - follow one outgoing relation hop only
 - include only `relation_type = "supports"`
 - exclude other relation types from this slice
+
+The current details payload now also makes that constrained relation contract more explicit:
+
+- `related_context_is_auxiliary = true` when related context is returned
+- `related_context_relation_types = ["supports"]` for the current constrained relation-aware slice
+- `related_context_returned_without_episode_matches = false` in the current implementation, because related context is derived only from returned episode memory items
 
 This keeps the current minimal hierarchy-aware contract explainable while adding
 one explicit relation-aware behavior without yet introducing broader traversal logic.
