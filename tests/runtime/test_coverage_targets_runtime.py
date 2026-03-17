@@ -602,7 +602,7 @@ def test_cli_helpers_cover_schema_path_and_version_fallback(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.5.4"
+    assert captured.out.strip() == "0.5.5"
 
 
 def test_build_health_status_handles_missing_runtime() -> None:

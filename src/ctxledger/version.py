@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 APP_NAME = "ctxledger"
-APP_VERSION = "0.5.4"
+APP_VERSION = "0.5.5"
 
 
 def get_app_name() -> str:

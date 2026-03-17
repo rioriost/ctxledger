@@ -43,7 +43,7 @@ def test_print_version_falls_back_when_metadata_lookup_fails(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.5.4"
+    assert captured.out.strip() == "0.5.5"
     assert captured.err == ""
 
 
