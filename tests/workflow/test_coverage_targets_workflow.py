@@ -1214,3 +1214,170 @@ def test_unit_of_work_workspace_lookup_returns_none_for_missing_workflow() -> No
     repo = UnitOfWorkWorkspaceLookupRepository(lambda: LookupUow())
 
     assert repo.workspace_id_by_workflow_id(uuid4()) is None
+
+
+def test_unit_of_work_memory_item_repository_happy_path_operations() -> None:
+    workspace_id = uuid4()
+    episode_id = uuid4()
+    memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="stored memory item",
+        metadata={"kind": "checkpoint"},
+    )
+
+    class MemoryItemsRepo:
+        def __init__(self) -> None:
+            self.created: list[MemoryItemRecord] = []
+            self.workspace_calls: list[tuple[UUID, int]] = []
+            self.episode_calls: list[tuple[UUID, int]] = []
+
+        def create(self, item: MemoryItemRecord) -> MemoryItemRecord:
+            self.created.append(item)
+            return item
+
+        def list_by_workspace_id(
+            self,
+            workspace_id_value: UUID,
+            *,
+            limit: int,
+        ) -> tuple[MemoryItemRecord, ...]:
+            self.workspace_calls.append((workspace_id_value, limit))
+            return (memory_item,)
+
+        def list_by_episode_id(
+            self,
+            episode_id_value: UUID,
+            *,
+            limit: int,
+        ) -> tuple[MemoryItemRecord, ...]:
+            self.episode_calls.append((episode_id_value, limit))
+            return (memory_item,)
+
+    class MemoryItemUow:
+        def __init__(self) -> None:
+            self.memory_items = MemoryItemsRepo()
+            self.commit_calls = 0
+
+        def commit(self) -> None:
+            self.commit_calls += 1
+
+        def __enter__(self) -> "MemoryItemUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    uow = MemoryItemUow()
+    repo = UnitOfWorkMemoryItemRepository(lambda: uow)
+
+    created = repo.create(memory_item)
+    by_workspace = repo.list_by_workspace_id(workspace_id, limit=3)
+    by_episode = repo.list_by_episode_id(episode_id, limit=4)
+
+    assert created == memory_item
+    assert by_workspace == (memory_item,)
+    assert by_episode == (memory_item,)
+    assert uow.memory_items.created == [memory_item]
+    assert uow.memory_items.workspace_calls == [(workspace_id, 3)]
+    assert uow.memory_items.episode_calls == [(episode_id, 4)]
+    assert uow.commit_calls == 1
+
+
+def test_unit_of_work_memory_embedding_repository_happy_path_operations() -> None:
+    memory_id = uuid4()
+    workspace_id = uuid4()
+    embedding_record = MemoryEmbeddingRecord(
+        memory_embedding_id=uuid4(),
+        memory_id=memory_id,
+        embedding_model="test-model",
+        embedding=(0.1, 0.2, 0.3),
+        content_hash="hash-1",
+    )
+
+    class MemoryEmbeddingsRepo:
+        def __init__(self) -> None:
+            self.created: list[MemoryEmbeddingRecord] = []
+            self.list_calls: list[tuple[UUID, int]] = []
+            self.similar_calls: list[tuple[tuple[float, ...], int, UUID | None]] = []
+
+        def create(self, record: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
+            self.created.append(record)
+            return record
+
+        def list_by_memory_id(
+            self,
+            memory_id_value: UUID,
+            *,
+            limit: int,
+        ) -> tuple[MemoryEmbeddingRecord, ...]:
+            self.list_calls.append((memory_id_value, limit))
+            return (embedding_record,)
+
+        def find_similar(
+            self,
+            query_embedding: tuple[float, ...],
+            *,
+            limit: int,
+            workspace_id: UUID | None = None,
+        ) -> tuple[MemoryEmbeddingRecord, ...]:
+            self.similar_calls.append((query_embedding, limit, workspace_id))
+            return (embedding_record,)
+
+    class MemoryEmbeddingUow:
+        def __init__(self) -> None:
+            self.memory_embeddings = MemoryEmbeddingsRepo()
+            self.commit_calls = 0
+
+        def commit(self) -> None:
+            self.commit_calls += 1
+
+        def __enter__(self) -> "MemoryEmbeddingUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    uow = MemoryEmbeddingUow()
+    repo = UnitOfWorkMemoryEmbeddingRepository(lambda: uow)
+
+    created = repo.create(embedding_record)
+    listed = repo.list_by_memory_id(memory_id, limit=2)
+    similar = repo.find_similar((1.0, 0.0, 0.0), limit=5, workspace_id=workspace_id)
+
+    assert created == embedding_record
+    assert listed == (embedding_record,)
+    assert similar == (embedding_record,)
+    assert uow.memory_embeddings.created == [embedding_record]
+    assert uow.memory_embeddings.list_calls == [(memory_id, 2)]
+    assert uow.memory_embeddings.similar_calls == [((1.0, 0.0, 0.0), 5, workspace_id)]
+    assert uow.commit_calls == 1
+
+
+def test_unit_of_work_workspace_lookup_returns_workspace_id_for_existing_workflow() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+
+    class LookupUow:
+        workflow_instances = SimpleNamespace(
+            get_by_id=lambda workflow_id_value: (
+                SimpleNamespace(workspace_id=workspace_id)
+                if workflow_id_value == workflow_id
+                else None
+            )
+        )
+
+        def __enter__(self) -> "LookupUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    repo = UnitOfWorkWorkspaceLookupRepository(lambda: LookupUow())
+
+    assert repo.workspace_id_by_workflow_id(workflow_id) == workspace_id

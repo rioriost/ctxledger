@@ -38,6 +38,7 @@ from ctxledger.memory.service import (
     SearchResultRecord,
     StubResponse,
 )
+from ctxledger.memory.types import MemoryRelationRecord
 from ctxledger.runtime.introspection import RuntimeIntrospection
 from ctxledger.runtime.serializers import (
     serialize_runtime_introspection,
@@ -799,6 +800,87 @@ def test_compute_content_hash_uses_text_and_metadata() -> None:
     assert first == second
     assert first != different_text
     assert first != different_metadata
+
+
+def test_in_memory_workflow_lookup_repository_workspace_id_by_workflow_id() -> None:
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+
+    repository = InMemoryWorkflowLookupRepository(
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": str(workspace_id),
+                "ticket_id": "TICKET-REPO-1",
+            }
+        }
+    )
+
+    assert repository.workspace_id_by_workflow_id(workflow_id) == workspace_id
+    assert repository.workspace_id_by_workflow_id(uuid4()) is None
+
+
+def test_in_memory_workflow_lookup_repository_workspace_id_by_workflow_id_without_workspace() -> (
+    None
+):
+    workflow_id = uuid4()
+    repository = InMemoryWorkflowLookupRepository(
+        workflows_by_id={workflow_id: {"ticket_id": "TICKET-REPO-2"}}
+    )
+
+    assert repository.workspace_id_by_workflow_id(workflow_id) is None
+
+
+def test_in_memory_memory_item_repository_get_by_memory_id_returns_none_for_unknown_id() -> (
+    None
+):
+    repository = InMemoryMemoryItemRepository()
+
+    assert repository.get_by_memory_id(uuid4()) is None
+
+
+def test_in_memory_memory_relation_repository_lists_source_and_target_matches_in_recency_order() -> (
+    None
+):
+    repository = MemoryService()._memory_relation_repository
+    source_memory_id = uuid4()
+    target_memory_id = uuid4()
+    other_source_memory_id = uuid4()
+    other_target_memory_id = uuid4()
+
+    older_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=other_target_memory_id,
+        relation_type="supports",
+        created_at=datetime(2024, 2, 1, tzinfo=UTC),
+    )
+    newer_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=target_memory_id,
+        relation_type="supports",
+        created_at=datetime(2024, 2, 2, tzinfo=UTC),
+    )
+    target_match_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=other_source_memory_id,
+        target_memory_id=target_memory_id,
+        relation_type="supports",
+        created_at=datetime(2024, 2, 3, tzinfo=UTC),
+    )
+
+    repository.create(older_relation)
+    repository.create(newer_relation)
+    repository.create(target_match_relation)
+
+    assert repository.list_by_source_memory_id(source_memory_id, limit=5) == (
+        newer_relation,
+        older_relation,
+    )
+    assert repository.list_by_target_memory_id(target_memory_id, limit=5) == (
+        target_match_relation,
+        newer_relation,
+    )
 
 
 def test_memory_service_records_episodes_and_returns_search_results() -> None:

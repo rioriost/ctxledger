@@ -15,13 +15,11 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from ..config import get_settings
 from . import service as service_module
 from .embeddings import (
     EmbeddingGenerationError,
     EmbeddingGenerator,
     EmbeddingRequest,
-    build_embedding_generator,
 )
 from .helpers import (
     embedding_dot_product,
