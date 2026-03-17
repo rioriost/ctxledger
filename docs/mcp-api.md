@@ -1190,6 +1190,8 @@ Representative current response details may include:
 - `related_context_relation_types`
 - `related_context_primary_structured_output`
 - `related_context_flat_field_is_compatibility_output`
+- `summary_selection_applied`
+- `summary_selection_kind`
 
 ### Minimal Hierarchy-Aware Contract
 The current `0.6.0` slice introduces a small but explicit hierarchy-aware contract.
@@ -1303,6 +1305,12 @@ selection rather than full multi-layer reasoning.
 That means:
 
 - direct episode selection is query-aware
+- when summaries are enabled and returned, the response may explicitly mark summary-first assembly through:
+  - `summary_selection_applied = true`
+  - `summary_selection_kind = "episode_summary_first"`
+- when summaries are disabled or no summaries are returned:
+  - `summary_selection_applied = false`
+  - `summary_selection_kind = null`
 - inherited workspace-scoped memory may still be returned as auxiliary context when memory items are enabled
 - inherited workspace-scoped memory may also be returned even when no episode survives query filtering
 - `all_episodes_filtered_out_by_query` explicitly marks the all-filtered case

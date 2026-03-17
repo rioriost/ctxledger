@@ -455,6 +455,8 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "memory_item_provenance": ["episode"],
         },
     ]
+    assert response.details["summary_selection_applied"] is True
+    assert response.details["summary_selection_kind"] == "episode_summary_first"
 
 
 def test_memory_get_context_omits_memory_items_and_summaries_when_disabled() -> None:
@@ -519,6 +521,8 @@ def test_memory_get_context_omits_memory_items_and_summaries_when_disabled() -> 
         str(episode.episode_id): 1
     }
     assert response.details["summaries"] == []
+    assert response.details["summary_selection_applied"] is False
+    assert response.details["summary_selection_kind"] is None
 
 
 def test_memory_get_context_includes_only_summaries_when_memory_items_disabled() -> (
@@ -605,6 +609,8 @@ def test_memory_get_context_includes_only_summaries_when_memory_items_disabled()
             "memory_item_provenance": ["checkpoint", "episode"],
         }
     ]
+    assert response.details["summary_selection_applied"] is True
+    assert response.details["summary_selection_kind"] == "episode_summary_first"
 
 
 def test_memory_get_context_includes_only_memory_items_when_summaries_disabled() -> (
@@ -708,6 +714,8 @@ def test_memory_get_context_includes_only_memory_items_when_summaries_disabled()
         str(episode.episode_id): 2
     }
     assert response.details["summaries"] == []
+    assert response.details["summary_selection_applied"] is False
+    assert response.details["summary_selection_kind"] is None
 
 
 def test_memory_get_context_includes_inherited_workspace_items_in_details_shape() -> (

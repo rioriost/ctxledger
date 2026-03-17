@@ -208,6 +208,7 @@ In the current repository state:
 - `attempt_id` is now canonically persisted on the base `episodes` record when provided
 - `memory_get_context` has an initial episode-oriented retrieval path
 - `memory_get_context` now also has a first minimal hierarchy-aware details layer
+- `memory_get_context` now begins to expose a minimal summary-first selection contract when summaries are returned
 - PostgreSQL-backed episode persistence exists
 - PostgreSQL-backed retrieval for the initial context path exists
 
@@ -265,6 +266,11 @@ At present, episodic behavior includes:
   - `all_episodes_filtered_out_by_query` now makes that all-filtered diagnostic case explicit in the response details
   - `inherited_context_returned_as_auxiliary_without_episode_matches` now makes the auxiliary inherited-without-matches case explicit in the response details
   - `inherited_context_is_auxiliary` and `inherited_context_returned_without_episode_matches` make that contract explicit in the response details
+- beginning a minimal summary-first selection contract when summaries are returned:
+  - `summary_selection_applied = true` indicates that summaries are not only present, but are being surfaced as the first selection layer for the current response shape
+  - `summary_selection_kind = "episode_summary_first"` identifies the current summary-first assembly mode
+  - when summaries are disabled or none are returned, `summary_selection_applied = false` and `summary_selection_kind = null`
+  - this should be understood as an early hierarchical retrieval signal rather than as a full summary-layer planner or ranking system
 - exposing a first minimal relation-aware detail surface through:
   - `related_memory_items`
   - current behavior limited to one outgoing `supports` hop from returned episode memory items
@@ -490,6 +496,8 @@ In its current form, it:
   - `memory_context_groups`
   - `inherited_memory_items`
   - `related_memory_items`
+  - `summary_selection_applied`
+  - `summary_selection_kind`
 
 More specifically, the current details payload is intended to explain:
 
@@ -503,6 +511,7 @@ More specifically, the current details payload is intended to explain:
 - whether `episode_explanations` preserves matched-only output or filtered-out diagnostics in the current query-filtering case
 - whether the current response is in the explicit all-filtered diagnostic case via `all_episodes_filtered_out_by_query`
 - whether the current response is explicitly surfacing inherited auxiliary context without episode matches via `inherited_context_returned_as_auxiliary_without_episode_matches`
+- whether summary-first selection metadata is being surfaced through `summary_selection_applied` and `summary_selection_kind`
 - whether inherited workspace-scoped memory is being surfaced as auxiliary context outside episode-match filtering
 - whether inherited workspace-scoped memory is explicitly marked as auxiliary via `inherited_context_is_auxiliary`
 - whether inherited workspace-scoped memory was returned even though no episodes survived filtering via `inherited_context_returned_without_episode_matches`
@@ -531,6 +540,14 @@ non-matching entries marked by `explanation_basis = "query_filtered_out"`,
 auxiliary inherited-without-matches case explicit. That behavior should currently be
 interpreted as intentional auxiliary-context behavior rather than as evidence that
 inherited workspace items are part of the lightweight query filter.
+
+At the current implementation stage, when summaries are enabled and returned,
+`summary_selection_applied = true` and
+`summary_selection_kind = "episode_summary_first"` should be read as a minimal
+hierarchical assembly signal: summary material is being surfaced as the first
+selection layer for the response before consumers drill down into the more detailed
+episode-scoped context. This is still intentionally narrow and does not yet imply a
+full summary-ranking, cross-scope planning, or multi-layer traversal system.
 
 At the current implementation stage, groups may carry explicit selection metadata such as:
 

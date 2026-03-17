@@ -1508,6 +1508,8 @@ class MemoryService:
                     "memory_items": [],
                     "memory_item_counts_by_episode": {},
                     "summaries": [],
+                    "summary_selection_applied": False,
+                    "summary_selection_kind": None,
                     "hierarchy_applied": bool(inherited_workspace_items),
                     "inherited_context_is_auxiliary": bool(inherited_workspace_items),
                     "inherited_context_returned_without_episode_matches": False,
@@ -1608,6 +1610,10 @@ class MemoryService:
             for detail in memory_item_details
             if isinstance(detail.get("summary"), dict)
         )
+        summary_selection_applied = bool(summaries)
+        summary_selection_kind = (
+            "episode_summary_first" if summary_selection_applied else None
+        )
         inherited_memory_items = tuple(
             memory_item
             for memory_item in inherited_workspace_items
@@ -1678,6 +1684,8 @@ class MemoryService:
                     for detail in memory_item_details
                 },
                 "summaries": list(summaries),
+                "summary_selection_applied": summary_selection_applied,
+                "summary_selection_kind": summary_selection_kind,
                 "hierarchy_applied": bool(inherited_memory_items),
                 "inherited_context_is_auxiliary": bool(inherited_memory_items),
                 "inherited_context_returned_without_episode_matches": bool(
