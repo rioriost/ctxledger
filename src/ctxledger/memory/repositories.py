@@ -13,14 +13,6 @@ from typing import Any, Callable
 from uuid import UUID
 
 from ..workflow.service import UnitOfWork
-from .protocols import (
-    EpisodeRepository,
-    MemoryEmbeddingRepository,
-    MemoryItemRepository,
-    MemoryRelationRepository,
-    WorkflowLookupRepository,
-    WorkspaceLookupRepository,
-)
 from .types import (
     EpisodeRecord,
     MemoryEmbeddingRecord,
