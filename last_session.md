@@ -2,148 +2,101 @@
 
 ## Summary
 
-Reorganized the large PostgreSQL integration test module by extracting its shared Docker / schema / pooled-UoW fixtures into a dedicated `conftest.py`, then splitting the former monolithic `tests/postgres_integration/test_integration.py` into responsibility-owned integration files for memory context, memory search and embeddings, workflow auto-memory behavior, repository round-trips, and workflow resume / settings paths, while preserving a top-level compatibility shim and re-validating the full test suite.
+Split the previously large `tests/memory/test_service_context.py` unit test module into responsibility-focused memory context test files for query behavior, scope/ordering behavior, detail-output behavior, and serialization behavior, while keeping the original path as a thin compatibility shim and re-validating the split test surface.
 
 ## What changed in this session
 
-- Re-inventoried the current `tests/postgres_integration/test_integration.py` structure and confirmed it contained several distinct responsibility clusters:
-  - shared Docker / PostgreSQL schema lifecycle helpers and fixtures
-  - memory `get_context` integration scenarios
-  - memory search / remember / embedding integration scenarios
-  - workflow auto-memory and duplicate-suppression scenarios
-  - repository round-trip integration
-  - workflow terminal resume and settings/UoW wiring
-- Extracted the shared PostgreSQL integration environment setup from the large module into:
-  - `tests/postgres_integration/conftest.py`
-- Moved the following shared setup into `conftest.py`:
-  - Docker compose command helpers
-  - PostgreSQL readiness and schema readiness helpers
-  - schema create/drop helpers
-  - integration fixtures for:
-    - postgres environment
-    - per-test schema lifecycle
-    - database URL
-    - OpenAI integration settings
-    - pooled Postgres unit-of-work factory
-    - workflow service
-- Created a dedicated memory context integration module:
-  - `tests/postgres_integration/test_memory_context_integration.py`
-- Moved the Postgres-backed memory context tests into that file:
-  - workflow-scoped `get_context`
-  - workspace-scoped `get_context`
-  - ticket-scoped `get_context`
-  - initial query filtering for `get_context`
-- Created a dedicated workflow auto-memory integration module:
-  - `tests/postgres_integration/test_workflow_auto_memory_integration.py`
-- Moved the workflow completion auto-memory tests into that file, including:
-  - completion memory persistence
-  - searchability of auto-recorded closeout memory
-  - low-signal skip behavior
-  - exact duplicate suppression
-  - near-duplicate suppression
-  - summary-similarity variants
-  - age-based near-duplicate acceptance
-  - extracted-field / metadata-aware duplicate matching
-  - attempt-status, failure-reason, and verify-status differentiation paths
-- Added small local helper constructors inside the auto-memory integration file to reduce repeated local-stub setup:
-  - `_build_local_stub_workflow_service`
-  - `_build_local_stub_memory_service`
-- Created a dedicated memory search and embedding integration module:
-  - `tests/postgres_integration/test_memory_search_integration.py`
-- Moved the following scenarios into that file:
-  - lexical memory-item search
-  - remember-episode local-stub embedding persistence
-  - remember-episode custom-HTTP embedding persistence
-  - real OpenAI embedding remember/search integration
-  - hybrid search ranking-details coverage
-  - hybrid/lexical/semantic-only result-mode composition coverage
-  - embedding-repository similarity query ordering
-- Created a dedicated repository round-trip integration module:
-  - `tests/postgres_integration/test_repository_roundtrip_integration.py`
-- Moved the Postgres memory item / embedding repository round-trip test into that file.
-- Created a dedicated workflow resume integration module:
-  - `tests/postgres_integration/test_workflow_resume_integration.py`
-- Moved the remaining workflow-specific scenarios into that file:
-  - terminal resume is for inspection, not continuation
-  - loaded settings can build a Postgres UoW factory
-- Reduced the original large module all the way down to a compatibility shim:
-  - `tests/postgres_integration/test_integration.py`
-- Updated that shim to re-export the split ownership destinations instead of carrying the original large body directly.
+- Re-inventoried `tests/memory/test_service_context.py` and grouped its coverage into distinct responsibility clusters:
+  - base episode-oriented context retrieval behavior
+  - query filtering and explanation behavior
+  - workflow/workspace/ticket scope resolution and freshness ordering
+  - memory item / summary detail emission
+  - `get_context` serialization coverage
+- Created a dedicated query-focused test module:
+  - `tests/memory/test_service_context_query.py`
+- Moved the query-oriented coverage into that file, including:
+  - initial query filtering
+  - metadata-key matching
+  - metadata-value matching
+  - multi-token summary matching
+  - multi-token metadata matching
+  - query-match episode explanations
+- Created a dedicated scope/ordering-focused test module:
+  - `tests/memory/test_service_context_scope.py`
+- Moved the scope and candidate-ordering coverage into that file, including:
+  - workflow-instance scoped retrieval contract assertions
+  - workspace-and-ticket scope intersection
+  - scope intersection before query filtering
+  - checkpoint freshness precedence
+  - verify-report freshness tie-break behavior
+  - episode-recency fallback after verify ties
+  - episode-recency fallback without checkpoint signals
+- Created a dedicated detail-output test module:
+  - `tests/memory/test_service_context_details.py`
+- Moved the detail-oriented coverage into that file, including:
+  - episode-oriented response basics
+  - limit and `include_episodes` handling
+  - unfiltered episode explanations
+  - memory item and summary detail inclusion
+  - memory item / summary omission and one-sided inclusion variants
+- Created a dedicated serialization test module:
+  - `tests/memory/test_service_context_serialization.py`
+- Moved the serializer-focused coverage into that file, including:
+  - serialized episode payload coverage
+  - serialized memory-item and summary detail preservation
+- Reduced the original large module to a compatibility shim:
+  - `tests/memory/test_service_context.py`
+- Updated that shim to re-export the split ownership destinations so the old test path still works.
 
 ## Files updated in this session
 
-- `tests/postgres_integration/conftest.py`
-- `tests/postgres_integration/test_memory_context_integration.py`
-- `tests/postgres_integration/test_workflow_auto_memory_integration.py`
-- `tests/postgres_integration/test_memory_search_integration.py`
-- `tests/postgres_integration/test_repository_roundtrip_integration.py`
-- `tests/postgres_integration/test_workflow_resume_integration.py`
-- `tests/postgres_integration/test_integration.py`
+- `tests/memory/test_service_context.py`
+- `tests/memory/test_service_context_details.py`
+- `tests/memory/test_service_context_query.py`
+- `tests/memory/test_service_context_scope.py`
+- `tests/memory/test_service_context_serialization.py`
 
 ## Current structure status
 
-For PostgreSQL integration tests specifically, the ownership layout is now:
+For memory-context unit tests specifically, the ownership layout is now:
 
-- `tests/postgres_integration/conftest.py`
-  - shared Docker / schema / fixture setup
-- `tests/postgres_integration/test_memory_context_integration.py`
-  - `get_context` integration coverage
-- `tests/postgres_integration/test_memory_search_integration.py`
-  - search / remember / embedding integration coverage
-- `tests/postgres_integration/test_repository_roundtrip_integration.py`
-  - repository round-trip integration coverage
-- `tests/postgres_integration/test_workflow_auto_memory_integration.py`
-  - workflow auto-memory and duplicate-suppression integration coverage
-- `tests/postgres_integration/test_workflow_resume_integration.py`
-  - terminal resume and settings/UoW wiring integration coverage
-- `tests/postgres_integration/test_integration.py`
+- `tests/memory/test_service_context.py`
   - compatibility shim that re-exports the split modules
+- `tests/memory/test_service_context_details.py`
+  - base retrieval behavior and detail-output toggles
+- `tests/memory/test_service_context_query.py`
+  - query filtering and query explanation coverage
+- `tests/memory/test_service_context_scope.py`
+  - scope resolution and workflow candidate ordering coverage
+- `tests/memory/test_service_context_serialization.py`
+  - `serialize_get_context_response` coverage
 
-The previous monolithic `tests/postgres_integration/test_integration.py` is no longer the implementation home for those scenarios.
+The previous monolithic `tests/memory/test_service_context.py` is no longer the implementation home for those scenarios.
 
 ## Verification completed
 
-- After extracting `conftest.py` and splitting out memory context tests:
-  - `pytest tests/postgres_integration/test_integration.py tests/postgres_integration/test_memory_context_integration.py`
-  - result: `26 passed, 1 skipped`
-- After splitting out workflow auto-memory tests:
-  - `pytest tests/postgres_integration/test_integration.py tests/postgres_integration/test_workflow_auto_memory_integration.py`
-  - result: `22 passed, 1 skipped`
-- After splitting out memory search / embedding tests:
-  - `pytest tests/postgres_integration/test_integration.py tests/postgres_integration/test_memory_search_integration.py`
-  - result: `9 passed, 1 skipped`
-- After splitting out repository round-trip and workflow resume tests and converting the original module into a compatibility shim:
-  - `pytest tests/postgres_integration/test_integration.py tests/postgres_integration/test_repository_roundtrip_integration.py tests/postgres_integration/test_workflow_resume_integration.py`
-  - result: `29 passed, 1 skipped`
-- Re-ran the repository-wide test suite using the new Makefile target:
-  - `make test`
-  - result: `702 passed, 2 skipped`
+- Re-ran the split memory-context test surface:
+  - `pytest tests/memory/test_service_context.py tests/memory/test_service_context_*.py`
+  - result: `44 passed`
 
 ## What was learned
 
-- The PostgreSQL integration suite had already reached the point where fixture extraction into `conftest.py` materially improved maintainability before any further per-feature splitting.
-- The former large integration module divided cleanly along responsibility lines:
-  - context retrieval
-  - memory search / embeddings
-  - workflow auto-memory
-  - repository round-trips
-  - workflow resume / configuration wiring
-- Using a compatibility shim for `tests/postgres_integration/test_integration.py` preserved the existing top-level contract while allowing responsibility-owned integration files underneath.
-- Small local helper constructors in the auto-memory module reduced repeated local-stub setup without needing to push those helpers into the global shared fixture layer.
-- The new `Makefile` convention is now in use operationally:
-  - `make test` for repository tests
-  - `make test-cov` for full-suite coverage runs
+- The memory-context unit suite divided cleanly into four ownership areas:
+  - details
+  - query behavior
+  - scope/ordering behavior
+  - serialization
+- Keeping the original test file as a shim preserved path compatibility while still making the implementation layout easier to navigate.
+- The responsibility split reduced the cognitive load of editing `get_context` tests without changing test behavior.
 
 ## Workflow / operational notes
 
-- This work completed a substantial reorganization of the PostgreSQL integration test surface without requiring repository-wide behavioral changes.
-- The repository-level full test run remained green after the split.
-- Canonical workflow recording reliability issues mentioned in earlier sessions still remain unresolved separately from this testing work.
+- This work continued the ongoing A-rank test modularization effort.
+- `tests/memory/test_service_context.py` is now in a good state for further targeted edits because new coverage can be added in the module that owns the behavior instead of reopening a large mixed-responsibility file.
 
 ## Next suggested work
 
-1. If you want to continue shrinking compatibility shims, review whether the top-level shim pattern for split test modules should be kept indefinitely or eventually removed once callers no longer rely on the old paths.
-2. Re-run the full coverage command when you want an updated post-split coverage baseline:
-   - `make test-cov`
-3. Consider applying the same fixture-extraction-first pattern to any other still-large integration or mixed-responsibility test modules.
-4. Keep the repository history tidy with a commit focused on PostgreSQL integration test modularization.
+1. Continue the same responsibility-first split on:
+   - `tests/postgres/test_db.py`
+2. After more modularization work, consider whether older compatibility shims should remain indefinitely or be retired later.
+3. Keep repository history tidy with a commit focused on memory context test modularization.
