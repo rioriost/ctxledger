@@ -22,30 +22,24 @@ from ctxledger.memory.embeddings import (
     compute_content_hash,
 )
 from ctxledger.memory.service import (
-    EpisodeRecord,
-    GetContextResponse,
     GetMemoryContextRequest,
     InMemoryEpisodeRepository,
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
     InMemoryWorkflowLookupRepository,
     MemoryEmbeddingRecord,
-    MemoryErrorCode,
     MemoryFeature,
     MemoryItemRecord,
     MemoryService,
-    MemoryServiceError,
     RememberEpisodeRequest,
     RememberEpisodeResponse,
     SearchMemoryRequest,
     SearchMemoryResponse,
     SearchResultRecord,
     StubResponse,
-    _embedding_dot_product,
 )
 from ctxledger.runtime.introspection import RuntimeIntrospection
 from ctxledger.runtime.serializers import (
-    serialize_get_context_response,
     serialize_runtime_introspection,
     serialize_runtime_introspection_collection,
     serialize_search_memory_response,
