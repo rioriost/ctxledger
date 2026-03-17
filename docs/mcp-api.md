@@ -1251,20 +1251,33 @@ That means:
 - `related_context_relation_type = null` when no related memory items are returned
 
 At the current implementation stage, inherited workspace-scoped memory is treated
-as auxiliary support context rather than as part of the episode-selection filter.
+as intentional auxiliary support context rather than as part of the
+episode-selection filter.
+
+Lightweight query filtering still applies to episode summary and metadata text.
+Inherited workspace-scoped memory does not participate in that episode-matching
+step.
 
 That means inherited workspace-scoped memory may still appear in
 `inherited_memory_items` and workspace-scoped entries in `memory_context_groups`
 even when the lightweight query filter removes all episodes from the returned
 `episodes` list.
 
-When that happens:
+When inherited workspace-scoped memory is present but no episodes survive
+query filtering, representative details currently include:
 
+- `matched_episode_count = 0`
+- `episodes_returned = 0`
+- `episode_explanations` entries marked with `explanation_basis = "query_filtered_out"`
 - `inherited_context_is_auxiliary = true`
 - `inherited_context_returned_without_episode_matches = true`
 
+This should currently be interpreted as intentional auxiliary-context behavior,
+not as evidence that inherited workspace items participate in episode matching.
+
 When inherited workspace-scoped memory is present alongside matching episodes:
 
+- `matched_episode_count > 0`
 - `inherited_context_is_auxiliary = true`
 - `inherited_context_returned_without_episode_matches = false`
 

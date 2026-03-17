@@ -257,9 +257,11 @@ At present, episodic behavior includes:
   - `selection_kind = direct_episode` for episode-scoped direct context
   - `selection_kind = inherited_workspace` for workspace-scoped inherited context
 - keeping inherited workspace-scoped memory as auxiliary context rather than part of episode query matching:
-  - lightweight query filtering still applies to episode summary and metadata text first
+  - lightweight query filtering applies only to episode summary and metadata text
+  - inherited workspace-scoped memory does not participate in episode selection
   - inherited workspace-scoped memory may still remain visible when memory items are enabled
   - this can remain true even when no episode survives query filtering
+  - `inherited_context_is_auxiliary` and `inherited_context_returned_without_episode_matches` make that contract explicit in the response details
 - exposing a first minimal relation-aware detail surface through:
   - `related_memory_items`
   - current behavior limited to one outgoing `supports` hop from returned episode memory items
@@ -509,8 +511,15 @@ an explicit grouping surface rather than only an incidental formatting choice.
 
 At the current implementation stage, that grouping surface also reflects a deliberate
 boundary between episode-oriented query matching and inherited auxiliary context:
-episode selection is query-aware, while inherited workspace-scoped memory can still be
-returned as supporting context when memory items are enabled.
+episode selection is query-aware, while inherited workspace-scoped memory does not
+participate in that selection and can still be returned as supporting context when
+memory items are enabled.
+
+This means a query may filter all episodes out of the returned `episodes` list while
+still returning workspace-scoped inherited memory in `inherited_memory_items` and the
+workspace entry of `memory_context_groups`. That behavior should currently be
+interpreted as intentional auxiliary-context behavior rather than as evidence that
+inherited workspace items are part of the lightweight query filter.
 
 At the current implementation stage, groups may carry explicit selection metadata such as:
 

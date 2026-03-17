@@ -2,39 +2,29 @@
 
 ## Summary
 
-Committed the current relation-aware `memory_get_context` follow-up as `7a52631` (`Extend related memory context support`) and resumed the existing running workflow for the same memory-retrieval workstream. The repository is now clean, the focused relation-aware memory tests are passing, and the next slice should stay semantically small within the ongoing `0.6.0` hierarchical memory effort.
+Resumed the existing running workflow for the ongoing `memory_get_context` workstream, confirmed the repository was clean at `137c7b2` (`Clarify structured related memory output`), and completed one more semantically small slice around inherited workspace context query filtering. The current contract is now clearer across tests and docs: lightweight query filtering applies to episode summary and metadata text, while inherited workspace-scoped memory remains intentional auxiliary context that can still be returned even when no episodes survive filtering.
 
 ## What changed in this session
 
-- resumed the existing running workflow instead of creating a duplicate workflow for the same repository work
-- validated the current in-progress relation-aware slice with focused memory tests
-- committed the working tree as:
-  - `7a52631` — `Extend related memory context support`
-- preserved and committed the current relation-aware retrieval behavior in `memory_get_context`, including:
-  - hierarchy-aware `memory_context_groups`
-  - explicit `selection_kind` metadata
-  - inherited workspace-level memory item details
-  - flat `related_memory_items` support for one-hop outgoing `supports` relations from returned episode memory items
-- kept repository and contract coverage aligned through:
+- resumed the existing running workflow instead of creating a duplicate workflow
+- confirmed the newer relation-aware contract had already advanced beyond the older session note, including:
+  - `c68c9b7` — `Add per-group related memory context`
+  - `001206d` — `Clarify related memory compatibility output`
+  - `137c7b2` — `Clarify structured related memory output`
+- inspected the current `memory_get_context` implementation, focused tests, and docs to identify the next smallest open slice
+- chose the inherited-context query-filtering question as the next small contract-clarification slice
+- updated focused test coverage in:
   - `tests/memory/test_service_context_details.py`
-  - `tests/memory/test_memory_context_related_items.py`
-  - `tests/memory/test_relation_contract.py`
-- kept documentation aligned with the current constrained relation-aware behavior in:
+- tightened documentation in:
   - `docs/mcp-api.md`
   - `docs/memory-model.md`
 
 ## Files updated in this session
 
-- `.rules`
 - `docs/mcp-api.md`
 - `docs/memory-model.md`
 - `last_session.md`
-- `src/ctxledger/db/postgres.py`
-- `src/ctxledger/memory/service.py`
-- `src/ctxledger/workflow/service.py`
 - `tests/memory/test_service_context_details.py`
-- `tests/memory/test_memory_context_related_items.py`
-- `tests/memory/test_relation_contract.py`
 
 ## Validation
 
@@ -43,32 +33,30 @@ Committed the current relation-aware `memory_get_context` follow-up as `7a52631`
 
 ## What was learned
 
-- when only workspace context is known, attempting to open a new workflow can surface the canonical running workflow id through the active-workflow conflict path; that id can then be resumed safely instead of creating duplicate active workflows
-- the current relation-aware extension remains intentionally narrow and understandable:
-  - one outgoing hop
-  - only from returned episode memory items
-  - only `supports` relations
-  - flat auxiliary output through `details["related_memory_items"]`
-- the repository now has a clearer minimal contract for memory relations across:
-  - in-memory relation repository behavior
-  - PostgreSQL relation repository support
-  - `memory_get_context` relation-aware output details
-- the query-filter behavior is still an open design point:
-  - inherited workspace items can remain visible even when no episodes match
-  - this is useful as auxiliary context, but it should now be treated as an explicit decision area for the next slice rather than accidental behavior
+- the relation-aware output contract is now more explicit than the older note reflected:
+  - `details["related_memory_items_by_episode"]` is the primary structured mapping
+  - episode-group-local `related_memory_items` in `memory_context_groups` is a convenience projection
+  - flat `details["related_memory_items"]` remains a compatibility field
+- inherited workspace-scoped memory is now explicitly documented as intentional auxiliary context:
+  - lightweight query filtering applies only to episode summary and metadata text
+  - inherited workspace-scoped memory does not participate in episode selection
+  - inherited workspace-scoped memory may still be returned when `matched_episode_count = 0` and `episodes_returned = 0`
+- the current implementation detail for filtered-out episodes is narrower than one possible future contract:
+  - once query filtering removes all episodes, `details["episode_explanations"]` currently becomes `[]`
+  - this behavior was observed during validation and the focused test was aligned to current implementation rather than widening scope further in the same slice
 
 ## Next suggested work
 
-- choose one small next slice and keep it narrow; the best candidates are:
-  - decide and document whether inherited workspace items should participate in query filtering or remain auxiliary context outside episode-match filtering
-  - or decide whether `related_memory_items` should remain flat or move into per-group relation-aware output
-- if taking the query-filtering slice next:
-  - first make the intended behavior explicit
-  - then add focused tests for both matching and non-matching inherited workspace context
-  - then update docs to describe the contract clearly
-- if taking the relation-grouping slice next:
-  - keep it to one explicit behavior only
-  - avoid broad graph traversal or multi-hop expansion
-  - prefer adding relation-aware output to the existing group structure rather than redesigning the whole response
-- do not widen scope into full semantic retrieval, ranking, or graph search yet
-- keep future changes semantically small and checkpointed inside the already resumed running workflow
+- keep the next slice semantically small within the same running workflow
+- the best next candidates are:
+  - decide whether the current `episode_explanations == []` behavior after full query filtering should remain the contract or change to preserve filtered-out episode explanations
+  - or commit the current docs-and-tests slice if the working tree should be closed out first
+- if taking the `episode_explanations` slice next:
+  - first decide whether the response should preserve filtered-out episode explanations as explicit diagnostics
+  - then update only the focused implementation and tests for that behavior
+  - avoid mixing that change with broader retrieval redesign
+- do not widen scope into semantic retrieval, ranking, graph traversal, or multi-hop relation expansion yet
+- preserve the current small, explicit contract around:
+  - auxiliary inherited workspace context
+  - constrained `supports`-only related context
+  - structured relation-aware details with compatibility fields still present

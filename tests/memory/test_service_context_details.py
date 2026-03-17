@@ -1174,8 +1174,9 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
     assert (
         response.details["inherited_context_returned_without_episode_matches"] is True
     )
-    # Inherited workspace items currently remain visible as auxiliary context
-    # even when episode-oriented query filtering removes all episodes.
+    assert response.details["episode_explanations"] == []
+    # Inherited workspace items are an intentional auxiliary surface and do not
+    # participate in episode-oriented query matching.
     assert response.details["memory_context_groups"] == [
         {
             "scope": "workspace",
