@@ -109,7 +109,7 @@ def test_get_settings_returns_validated_settings(clean_ctxledger_env: None) -> N
 
     assert isinstance(settings, AppSettings)
     assert settings.app_name == "ctxledger"
-    assert settings.app_version == "0.5.5"
+    assert settings.app_version == "0.6.0"
 
 
 def test_missing_database_url_raises_config_error(clean_ctxledger_env: None) -> None:
@@ -563,7 +563,7 @@ def test_load_settings_uses_defaults_for_optional_values(
         settings = load_settings()
 
     assert settings.app_name == "ctxledger"
-    assert settings.app_version == "0.5.5"
+    assert settings.app_version == "0.6.0"
     assert settings.environment == "development"
     assert settings.http.host == "0.0.0.0"
     assert settings.http.port == 8080
