@@ -2,101 +2,124 @@
 
 ## Summary
 
-Split the previously large `tests/memory/test_service_context.py` unit test module into responsibility-focused memory context test files for query behavior, scope/ordering behavior, detail-output behavior, and serialization behavior, while keeping the original path as a thin compatibility shim and re-validating the split test surface.
+Split the previously large `tests/postgres/test_db.py` test module into responsibility-focused PostgreSQL test files for contracts, helpers, repository behavior, and unit-of-work behavior, while extracting shared fake connection and stub fixtures into `tests/postgres/conftest.py`, keeping the original path as a thin compatibility shim, and re-validating the split test surface.
 
 ## What changed in this session
 
-- Re-inventoried `tests/memory/test_service_context.py` and grouped its coverage into distinct responsibility clusters:
-  - base episode-oriented context retrieval behavior
-  - query filtering and explanation behavior
-  - workflow/workspace/ticket scope resolution and freshness ordering
-  - memory item / summary detail emission
-  - `get_context` serialization coverage
-- Created a dedicated query-focused test module:
-  - `tests/memory/test_service_context_query.py`
-- Moved the query-oriented coverage into that file, including:
-  - initial query filtering
-  - metadata-key matching
-  - metadata-value matching
-  - multi-token summary matching
-  - multi-token metadata matching
-  - query-match episode explanations
-- Created a dedicated scope/ordering-focused test module:
-  - `tests/memory/test_service_context_scope.py`
-- Moved the scope and candidate-ordering coverage into that file, including:
-  - workflow-instance scoped retrieval contract assertions
-  - workspace-and-ticket scope intersection
-  - scope intersection before query filtering
-  - checkpoint freshness precedence
-  - verify-report freshness tie-break behavior
-  - episode-recency fallback after verify ties
-  - episode-recency fallback without checkpoint signals
-- Created a dedicated detail-output test module:
-  - `tests/memory/test_service_context_details.py`
-- Moved the detail-oriented coverage into that file, including:
-  - episode-oriented response basics
-  - limit and `include_episodes` handling
-  - unfiltered episode explanations
-  - memory item and summary detail inclusion
-  - memory item / summary omission and one-sided inclusion variants
-- Created a dedicated serialization test module:
-  - `tests/memory/test_service_context_serialization.py`
-- Moved the serializer-focused coverage into that file, including:
-  - serialized episode payload coverage
-  - serialized memory-item and summary detail preservation
+- Re-inventoried `tests/postgres/test_db.py` and grouped its coverage into distinct responsibility clusters:
+  - fake connection / pool helpers and shared sample entities
+  - repository and unit-of-work contract coverage
+  - PostgreSQL helper / config / schema / row-mapping coverage
+  - concrete repository implementation coverage
+  - unit-of-work lifecycle and timing/logging coverage
+- Extracted the shared PostgreSQL testing support into:
+  - `tests/postgres/conftest.py`
+- Moved the following shared support into `conftest.py`:
+  - `FakeCursor`
+  - `FakeConnection`
+  - `FakeConnectionFactory`
+  - `FakePoolConnectionContext`
+  - `FakeConnectionPool`
+  - sample entity builders for workspace / workflow / attempt / checkpoint / verify report
+  - in-memory repository stubs for:
+    - workspaces
+    - workflow instances
+    - workflow attempts
+    - workflow checkpoints
+    - verify reports
+    - memory items
+    - memory embeddings
+- Created a dedicated contract-focused PostgreSQL test module:
+  - `tests/postgres/test_db_contracts.py`
+- Moved the contract-oriented coverage into that file, including:
+  - unit-of-work contract shape
+  - repository contract round-trips
+  - memory item / embedding contract behavior
+  - fake connection query recording and fetch helpers
+  - fake connection factory behavior
+- Created a dedicated helper-focused PostgreSQL test module:
+  - `tests/postgres/test_db_helpers.py`
+- Moved the helper-oriented coverage into that file, including:
+  - schema file existence
+  - schema core-table assertions
+  - low-level JSON / datetime / UUID / enum / schema / pgvector helpers
+  - connection pool builder behavior
+  - config loading from settings
+  - schema SQL loader behavior
+  - row-mapping helpers for memory records
+  - driver requirement and connection row-factory wiring
+- Created a dedicated repository implementation PostgreSQL test module:
+  - `tests/postgres/test_db_repositories.py`
+- Moved the repository implementation coverage into that file, including:
+  - workspace repository create / update / lookup behavior
+  - workflow instance repository create / update / recent listing behavior
+  - workflow attempt repository create / update / next-number behavior
+  - checkpoint / verify report / episode repository behavior
+  - memory item / memory embedding repository create / list / similarity behavior
+- Created a dedicated unit-of-work PostgreSQL test module:
+  - `tests/postgres/test_db_uow.py`
+- Moved the unit-of-work and logging coverage into that file, including:
+  - contract-shape compatibility checks
+  - enter timing / checkout timing assertions
+  - resume-workflow debug logging timing metadata
+  - commit / rollback / exception-path lifecycle behavior
+  - factory construction guardrails
 - Reduced the original large module to a compatibility shim:
-  - `tests/memory/test_service_context.py`
+  - `tests/postgres/test_db.py`
 - Updated that shim to re-export the split ownership destinations so the old test path still works.
 
 ## Files updated in this session
 
-- `tests/memory/test_service_context.py`
-- `tests/memory/test_service_context_details.py`
-- `tests/memory/test_service_context_query.py`
-- `tests/memory/test_service_context_scope.py`
-- `tests/memory/test_service_context_serialization.py`
+- `tests/postgres/conftest.py`
+- `tests/postgres/test_db.py`
+- `tests/postgres/test_db_contracts.py`
+- `tests/postgres/test_db_helpers.py`
+- `tests/postgres/test_db_repositories.py`
+- `tests/postgres/test_db_uow.py`
 
 ## Current structure status
 
-For memory-context unit tests specifically, the ownership layout is now:
+For PostgreSQL unit tests around the DB layer specifically, the ownership layout is now:
 
-- `tests/memory/test_service_context.py`
+- `tests/postgres/conftest.py`
+  - shared fake connection/pool support, sample entities, and repo stubs
+- `tests/postgres/test_db.py`
   - compatibility shim that re-exports the split modules
-- `tests/memory/test_service_context_details.py`
-  - base retrieval behavior and detail-output toggles
-- `tests/memory/test_service_context_query.py`
-  - query filtering and query explanation coverage
-- `tests/memory/test_service_context_scope.py`
-  - scope resolution and workflow candidate ordering coverage
-- `tests/memory/test_service_context_serialization.py`
-  - `serialize_get_context_response` coverage
+- `tests/postgres/test_db_contracts.py`
+  - repository and unit-of-work contract coverage
+- `tests/postgres/test_db_helpers.py`
+  - helper, config, schema, and row-mapping coverage
+- `tests/postgres/test_db_repositories.py`
+  - concrete repository implementation coverage
+- `tests/postgres/test_db_uow.py`
+  - unit-of-work lifecycle and timing/logging coverage
 
-The previous monolithic `tests/memory/test_service_context.py` is no longer the implementation home for those scenarios.
+The previous monolithic `tests/postgres/test_db.py` is no longer the implementation home for those scenarios.
 
 ## Verification completed
 
-- Re-ran the split memory-context test surface:
-  - `pytest tests/memory/test_service_context.py tests/memory/test_service_context_*.py`
-  - result: `44 passed`
+- Re-ran the split PostgreSQL DB test surface:
+  - `pytest tests/postgres/test_db.py tests/postgres/test_db_*.py`
+  - result: `59 passed`
 
 ## What was learned
 
-- The memory-context unit suite divided cleanly into four ownership areas:
-  - details
-  - query behavior
-  - scope/ordering behavior
-  - serialization
-- Keeping the original test file as a shim preserved path compatibility while still making the implementation layout easier to navigate.
-- The responsibility split reduced the cognitive load of editing `get_context` tests without changing test behavior.
+- The PostgreSQL DB-layer tests split cleanly into four ownership areas:
+  - contracts
+  - helpers
+  - repositories
+  - unit-of-work behavior
+- Extracting shared fake connection / sample entity / repo stub support into `tests/postgres/conftest.py` materially reduced duplication before feature-based splitting.
+- Keeping the original `tests/postgres/test_db.py` as a compatibility shim preserved path stability while making the real implementation layout much easier to navigate.
 
 ## Workflow / operational notes
 
-- This work continued the ongoing A-rank test modularization effort.
-- `tests/memory/test_service_context.py` is now in a good state for further targeted edits because new coverage can be added in the module that owns the behavior instead of reopening a large mixed-responsibility file.
+- This work continued and completed the remaining A-rank test modularization target noted in the previous session.
+- The PostgreSQL DB-layer test surface is now easier to extend because new tests can be added to the file that owns the behavior instead of reopening a large mixed-responsibility module.
 
 ## Next suggested work
 
-1. Continue the same responsibility-first split on:
-   - `tests/postgres/test_db.py`
-2. After more modularization work, consider whether older compatibility shims should remain indefinitely or be retired later.
-3. Keep repository history tidy with a commit focused on memory context test modularization.
+1. Review whether the compatibility shim pattern for split test modules should remain indefinitely or eventually be retired.
+2. Re-run broader repository validation when you want a fresh post-split baseline:
+   - `make test`
+3. Keep repository history tidy with a commit focused on PostgreSQL DB test modularization.
