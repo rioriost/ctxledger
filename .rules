@@ -125,6 +125,16 @@ user_notes: JA allowed
 - Do not confuse `ignore` with successful recovery.
 - If you ignore or resolve projection failures, report that decision clearly in status updates and, when appropriate, in checkpoints.
 
+## Change sizing and semantic decomposition
+
+- Keep generated code, tests, and documentation semantically small.
+- Prefer one clear behavior change, one narrow refactor, or one focused documentation update per slice.
+- Split large work into small semantic slices that can be reviewed, tested, and resumed independently.
+- Avoid mixing unrelated concerns in the same change, even if they are close together in the codebase.
+- For tests, prefer focused scenarios with a single assertion theme over large multi-purpose test cases.
+- For documentation, prefer short topic-focused sections over broad mixed updates.
+- If a task is too large to keep semantically small, first define the sub-slices, then implement them incrementally.
+
 ## Agent behavior expectations
 
 - Prefer explicit state transitions over implicit assumptions.

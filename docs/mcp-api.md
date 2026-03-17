@@ -1143,15 +1143,23 @@ Tool with read semantics
 Partially implemented in the current repository state.
 
 ### Current Behavior
-The current implementation is episode-oriented and currently supports:
+The current implementation is still primarily episode-oriented, but it now includes
+a first minimal hierarchy-aware response shape for `0.6.0`.
+
+It currently supports:
 
 - canonical workflow-linked retrieval by `workflow_instance_id`
 - canonical workflow expansion by `workspace_id`
 - canonical workflow expansion by `ticket_id`
 - `limit`
 - `include_episodes`
+- `include_memory_items`
+- `include_summaries`
 - initial query-aware filtering against episode summary and lightweight field-based metadata text
 - richer `details` describing how the context was assembled
+- a minimal hierarchy-aware grouping that distinguishes:
+  - direct episode-scoped memory items
+  - inherited workspace-scoped memory items
 
 Representative current response details may include:
 
@@ -1171,19 +1179,77 @@ Representative current response details may include:
 - `episodes_before_query_filter`
 - `matched_episode_count`
 - `episodes_returned`
+- `hierarchy_applied`
+- `memory_context_groups`
+- `inherited_memory_items`
+- `related_memory_items`
+
+### Minimal Hierarchy-Aware Contract
+The current `0.6.0` slice introduces a small but explicit hierarchy-aware contract.
+
+When `include_memory_items=true`, the response may now distinguish:
+
+1. **direct episode memory**
+   - memory items attached to a returned episode
+   - exposed through the existing per-episode `memory_items` structure
+   - also exposed in `memory_context_groups` with:
+     - `scope = "episode"`
+     - `scope_id = {episode_id}`
+     - `parent_scope = "workflow_instance"`
+     - `parent_scope_id = {workflow_instance_id}`
+     - `selection_kind = "direct_episode"`
+
+2. **inherited workspace memory**
+   - memory items in the resolved workspace whose `episode_id` is `null`
+   - exposed through `inherited_memory_items`
+   - also exposed in `memory_context_groups` with:
+     - `scope = "workspace"`
+     - `scope_id = {workspace_id}`
+     - `parent_scope = null`
+     - `parent_scope_id = null`
+     - `selection_kind = "inherited_workspace"`
+
+3. **supports-related memory**
+   - target memory items reached from returned episode memory items
+   - traversed through one outgoing relation hop only
+   - currently limited to `relation_type = "supports"`
+   - exposed through `related_memory_items`
+   - does not currently modify `memory_context_groups`
+
+`hierarchy_applied` is currently `true` when inherited workspace-scoped items are
+present in the returned context details, and `false` otherwise.
 
 ### Current Retrieval Semantics
-The current path is intentionally conservative:
+The current path remains intentionally conservative:
 
 1. resolve the relevant workflow set from canonical workflow state
 2. collect related episodes
 3. optionally apply a lightweight case-insensitive query filter over:
    - episode `summary`
    - lightweight field-based metadata text derived from metadata keys and values
-4. return auxiliary support context
+4. collect direct episode-scoped memory items for returned episodes
+5. if memory items are enabled, collect inherited workspace-scoped memory items as auxiliary context
+6. if memory items are enabled, traverse one outgoing `supports` relation hop from returned episode memory items and collect matching target memory items
+7. return auxiliary support context with explicit grouping details
 
-This means the operation is not yet a full semantic or hierarchical retriever.  
-It is still fundamentally a workflow-linked episodic context assembler.
+At the current implementation stage, query filtering is still centered on episode
+selection rather than full multi-layer reasoning.
+
+That means:
+
+- direct episode selection is query-aware
+- inherited workspace-scoped memory may still be returned as auxiliary context when memory items are enabled
+- inherited workspace-scoped memory may also be returned even when no episode survives query filtering
+- `related_memory_items` is currently narrower than general relation-aware retrieval:
+  - it starts from returned episode memory items only
+  - it follows one outgoing hop only
+  - it includes only `supports` relations
+  - it ignores other relation types in this slice
+
+This is still not a full semantic, relation-aware, or graph-backed hierarchical
+retriever.  
+It remains a workflow-linked episodic context assembler with a first explicit
+hierarchy-aware details layer and a very small constrained relation-aware extension.
 
 ### Intended Future Behavior
 Return support context such as:

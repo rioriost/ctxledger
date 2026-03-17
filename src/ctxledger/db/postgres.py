@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from ctxledger.memory.service import MemoryRelationRecord
 from ctxledger.workflow.service import (
     EpisodeRecord,
     MemoryEmbeddingRecord,
@@ -1539,6 +1540,124 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
 class PostgresMemoryRelationRepository:
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
+
+    def create(self, relation: MemoryRelationRecord) -> MemoryRelationRecord:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO memory_relations (
+                    memory_relation_id,
+                    source_memory_id,
+                    target_memory_id,
+                    relation_type,
+                    metadata_json,
+                    created_at
+                )
+                VALUES (%s, %s, %s, %s, %s::jsonb, %s)
+                RETURNING
+                    memory_relation_id,
+                    source_memory_id,
+                    target_memory_id,
+                    relation_type,
+                    metadata_json,
+                    created_at
+                """,
+                (
+                    relation.memory_relation_id,
+                    relation.source_memory_id,
+                    relation.target_memory_id,
+                    relation.relation_type,
+                    _json_dumps(relation.metadata),
+                    relation.created_at,
+                ),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            raise PersistenceError("Failed to create memory relation")
+
+        return MemoryRelationRecord(
+            memory_relation_id=_to_uuid(row["memory_relation_id"]),
+            source_memory_id=_to_uuid(row["source_memory_id"]),
+            target_memory_id=_to_uuid(row["target_memory_id"]),
+            relation_type=str(row["relation_type"]),
+            metadata=_json_loads(row["metadata_json"]),
+            created_at=_to_datetime(row["created_at"]),
+        )
+
+    def list_by_source_memory_id(
+        self,
+        source_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_relation_id,
+                    source_memory_id,
+                    target_memory_id,
+                    relation_type,
+                    metadata_json,
+                    created_at
+                FROM memory_relations
+                WHERE source_memory_id = %s
+                ORDER BY created_at DESC, memory_relation_id DESC
+                LIMIT %s
+                """,
+                (source_memory_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(
+            MemoryRelationRecord(
+                memory_relation_id=_to_uuid(row["memory_relation_id"]),
+                source_memory_id=_to_uuid(row["source_memory_id"]),
+                target_memory_id=_to_uuid(row["target_memory_id"]),
+                relation_type=str(row["relation_type"]),
+                metadata=_json_loads(row["metadata_json"]),
+                created_at=_to_datetime(row["created_at"]),
+            )
+            for row in rows
+        )
+
+    def list_by_target_memory_id(
+        self,
+        target_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_relation_id,
+                    source_memory_id,
+                    target_memory_id,
+                    relation_type,
+                    metadata_json,
+                    created_at
+                FROM memory_relations
+                WHERE target_memory_id = %s
+                ORDER BY created_at DESC, memory_relation_id DESC
+                LIMIT %s
+                """,
+                (target_memory_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(
+            MemoryRelationRecord(
+                memory_relation_id=_to_uuid(row["memory_relation_id"]),
+                source_memory_id=_to_uuid(row["source_memory_id"]),
+                target_memory_id=_to_uuid(row["target_memory_id"]),
+                relation_type=str(row["relation_type"]),
+                metadata=_json_loads(row["metadata_json"]),
+                created_at=_to_datetime(row["created_at"]),
+            )
+            for row in rows
+        )
 
     def count_all(self) -> int:
         with self._conn.cursor() as cur:

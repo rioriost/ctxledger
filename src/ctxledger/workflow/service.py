@@ -210,6 +210,16 @@ class MemoryEmbeddingRecord:
 
 
 @dataclass(slots=True, frozen=True)
+class MemoryRelationRecord:
+    memory_relation_id: UUID
+    source_memory_id: UUID
+    target_memory_id: UUID
+    relation_type: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=utc_now)
+
+
+@dataclass(slots=True, frozen=True)
 class ResumeIssue:
     code: str
     message: str
@@ -509,6 +519,27 @@ class MemoryEmbeddingRepository:
         raise NotImplementedError
 
 
+class MemoryRelationRepository:
+    def create(self, relation: MemoryRelationRecord) -> MemoryRelationRecord:
+        raise NotImplementedError
+
+    def list_by_source_memory_id(
+        self,
+        source_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        raise NotImplementedError
+
+    def list_by_target_memory_id(
+        self,
+        target_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        raise NotImplementedError
+
+
 class UnitOfWork:
     workspaces: WorkspaceRepository
     workflow_instances: WorkflowInstanceRepository
@@ -518,6 +549,7 @@ class UnitOfWork:
     memory_episodes: MemoryEpisodeRepository | None
     memory_items: MemoryItemRepository | None
     memory_embeddings: MemoryEmbeddingRepository | None
+    memory_relations: MemoryRelationRepository | None
 
     def __enter__(self) -> UnitOfWork:
         return self

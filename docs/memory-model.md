@@ -46,8 +46,8 @@ In the current repository state:
 
 - Layer 1 is the most mature and is the primary `v0.1.0` implementation focus
 - Layer 2 has begun to become real
-- Layer 3 is still planned
-- Layer 4 is still planned
+- Layer 3 is still largely planned
+- Layer 4 is still largely planned, but `memory_get_context` now exposes a small hierarchy-aware response shape as an early bridge toward later hierarchical retrieval
 
 ---
 
@@ -81,6 +81,9 @@ That is why:
 Embeddings, summaries, relations, and other accelerators are useful, but they must not become the primary truth source.
 
 If derived structures are stale or missing, the system should still retain correct canonical history.
+
+This also applies to the current minimal hierarchy-aware retrieval slice:
+grouped or inherited context presentation in `memory_get_context` is a derived read model layered over canonical workflow, episode, and memory-item records.
 
 ## 3.5 Resumability is different from recall
 
@@ -180,6 +183,9 @@ Layer 2 should preserve memory that is:
 - more concrete than a semantic embedding
 - closer to source reality than a hierarchical summary
 
+The current `memory_get_context` implementation still lives mostly in this Layer 2 space:
+it assembles support context from workflow-linked episodes first, then adds a small hierarchy-aware presentation layer over direct and inherited memory-item context.
+
 ## 5.3 Typical records
 
 Representative records in the schema/model include:
@@ -201,6 +207,7 @@ In the current repository state:
 - multiple episodes per workflow are supported
 - `attempt_id` is now canonically persisted on the base `episodes` record when provided
 - `memory_get_context` has an initial episode-oriented retrieval path
+- `memory_get_context` now also has a first minimal hierarchy-aware details layer
 - PostgreSQL-backed episode persistence exists
 - PostgreSQL-backed retrieval for the initial context path exists
 
@@ -218,14 +225,30 @@ At present, episodic behavior includes:
 - retrieving episodes by `workflow_instance_id`
 - applying `limit`
 - honoring `include_episodes`
+- honoring `include_memory_items`
+- honoring `include_summaries`
 - applying an initial query-aware filter against episode summary and metadata text
   - the current lightweight behavior is field-based first:
     - episode `summary`
     - metadata keys
     - metadata values
   - this should be understood as a simple case-insensitive text match layer rather than semantic retrieval
+- returning direct episode-scoped memory items for returned episodes
+- returning a first minimal hierarchy-aware details shape that distinguishes:
+  - direct episode-scoped memory
+  - inherited workspace-scoped memory whose `episode_id` is `null`
+- exposing explicit retrieval details for this minimal hierarchy slice, including:
+  - `hierarchy_applied`
+  - `memory_context_groups`
+  - `inherited_memory_items`
+- exposing explicit selection metadata inside `memory_context_groups`, including:
+  - `selection_kind = direct_episode` for episode-scoped direct context
+  - `selection_kind = inherited_workspace` for workspace-scoped inherited context
+- exposing a first minimal relation-aware detail surface through:
+  - `related_memory_items`
+  - current behavior limited to one outgoing `supports` hop from returned episode memory items
 
-This is still an early version of episodic memory, but it is a real working path.
+This is still an early version of episodic memory, but it is a real working path and now includes a first minimal hierarchy-aware retrieval slice plus a constrained relation-aware extension.
 
 ## 5.6 Workflow / checkpoint / episode relationship
 
@@ -442,6 +465,10 @@ In its current form, it:
   - `episodes_before_query_filter`
   - `matched_episode_count`
   - `episodes_returned`
+  - `hierarchy_applied`
+  - `memory_context_groups`
+  - `inherited_memory_items`
+  - `related_memory_items`
 
 More specifically, the current details payload is intended to explain:
 
@@ -454,6 +481,28 @@ More specifically, the current details payload is intended to explain:
 - how many episodes were ultimately returned
 
 That means it has started to become useful, but it is not the final design target.
+
+Within that current details payload, `memory_context_groups` should now be understood as
+an explicit grouping surface rather than only an incidental formatting choice.
+
+At the current implementation stage, groups may carry explicit selection metadata such as:
+
+- `selection_kind = direct_episode`
+- `selection_kind = inherited_workspace`
+
+The current details payload also includes a first constrained relation-aware surface:
+
+- `related_memory_items`
+
+At the current implementation stage, `related_memory_items` should be understood narrowly:
+
+- start from returned episode memory items only
+- follow one outgoing relation hop only
+- include only `relation_type = "supports"`
+- exclude other relation types from this slice
+
+This keeps the current minimal hierarchy-aware contract explainable while adding
+one explicit relation-aware behavior without yet introducing broader traversal logic.
 
 ---
 
@@ -533,11 +582,13 @@ The current repository state can be summarized as follows:
 - append-only episodic recording
 - initial episode-oriented context retrieval
 - multiple episodes per workflow
+- minimal hierarchy-aware context grouping
+- minimal supports-only relation-aware related context retrieval
 
 ### Not yet implemented
 - semantic memory search
 - embedding-backed retrieval
-- relation-aware memory retrieval
+- broader relation-aware memory retrieval
 - hierarchical summaries
 - fully realized multi-layer context assembly
 
@@ -556,6 +607,7 @@ Important near-term questions include:
 - how should workspace-scoped episode retrieval be ranked or limited?
 - how should ticket-scoped retrieval behave when multiple workflows match?
 - how should the current lightweight field-based query-aware filter evolve into stronger retrieval behavior?
+- how should `related_memory_items` remain flat versus moving into group-local relation-aware output?
 - how should episode records evolve into semantic memory items?
 - what summary boundaries should exist for hierarchical memory?
 
@@ -594,4 +646,4 @@ That is already enough to establish the direction:
 - durable workflows are the execution backbone
 - episodic memory is the first reusable knowledge layer
 - semantic and hierarchical retrieval should build on canonical records rather than replace them
-- `memory_get_context` is evolving toward a multi-layer retrieval surface, but is currently still in its initial episode-oriented form
+- `memory_get_context` is evolving toward a multi-layer retrieval surface, but is currently still in an early episode-oriented form with only small hierarchy-aware and supports-only relation-aware extensions

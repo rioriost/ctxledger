@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, runtime_checkable
 from uuid import UUID, uuid4
 
 from ..config import get_settings
@@ -107,6 +107,18 @@ class MemoryEmbeddingRecord:
     embedding_model: str
     embedding: tuple[float, ...] = ()
     content_hash: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True, frozen=True)
+class MemoryRelationRecord:
+    """Canonical relation record between memory items."""
+
+    memory_relation_id: UUID
+    source_memory_id: UUID
+    target_memory_id: UUID
+    relation_type: str
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -290,6 +302,33 @@ class MemoryEmbeddingRepository(Protocol):
         limit: int,
         workspace_id: UUID | None = None,
     ) -> tuple[MemoryEmbeddingRecord, ...]: ...
+
+
+class MemoryRelationRepository(Protocol):
+    """Persistence contract for directional relations between memory items."""
+
+    def create(self, relation: MemoryRelationRecord) -> MemoryRelationRecord: ...
+
+    def list_by_source_memory_id(
+        self,
+        source_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]: ...
+
+    def list_by_target_memory_id(
+        self,
+        target_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]: ...
+
+
+@runtime_checkable
+class MemoryRelationMemoryItemLookupRepository(Protocol):
+    """Read-only lookup contract for resolving related memory item targets."""
+
+    def get_by_memory_id(self, memory_id: UUID) -> MemoryItemRecord | None: ...
 
 
 class WorkspaceLookupRepository(Protocol):
@@ -632,6 +671,12 @@ class InMemoryMemoryItemRepository:
         self._memory_items.append(memory_item)
         return memory_item
 
+    def get_by_memory_id(self, memory_id: UUID) -> MemoryItemRecord | None:
+        for memory_item in self._memory_items:
+            if memory_item.memory_id == memory_id:
+                return memory_item
+        return None
+
     def list_by_workspace_id(
         self,
         workspace_id: UUID,
@@ -850,6 +895,49 @@ class UnitOfWorkMemoryEmbeddingRepository:
             )
 
 
+class InMemoryMemoryRelationRepository:
+    """Simple append-only in-memory relation repository."""
+
+    def __init__(self) -> None:
+        self._relations: list[MemoryRelationRecord] = []
+
+    @property
+    def relations(self) -> tuple[MemoryRelationRecord, ...]:
+        return tuple(self._relations)
+
+    def create(self, relation: MemoryRelationRecord) -> MemoryRelationRecord:
+        self._relations.append(relation)
+        return relation
+
+    def list_by_source_memory_id(
+        self,
+        source_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        matches = [
+            relation
+            for relation in self._relations
+            if relation.source_memory_id == source_memory_id
+        ]
+        matches.sort(key=lambda relation: relation.created_at, reverse=True)
+        return tuple(matches[:limit])
+
+    def list_by_target_memory_id(
+        self,
+        target_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        matches = [
+            relation
+            for relation in self._relations
+            if relation.target_memory_id == target_memory_id
+        ]
+        matches.sort(key=lambda relation: relation.created_at, reverse=True)
+        return tuple(matches[:limit])
+
+
 class MemoryService:
     """Memory subsystem service.
 
@@ -863,6 +951,7 @@ class MemoryService:
         episode_repository: EpisodeRepository | None = None,
         memory_item_repository: MemoryItemRepository | None = None,
         memory_embedding_repository: MemoryEmbeddingRepository | None = None,
+        memory_relation_repository: MemoryRelationRepository | None = None,
         embedding_generator: EmbeddingGenerator | None = None,
         workflow_lookup: WorkflowLookupRepository | None = None,
         workspace_lookup: WorkspaceLookupRepository | None = None,
@@ -872,6 +961,9 @@ class MemoryService:
             memory_item_repository or InMemoryMemoryItemRepository()
         )
         self._memory_embedding_repository = memory_embedding_repository
+        self._memory_relation_repository = (
+            memory_relation_repository or InMemoryMemoryRelationRepository()
+        )
         if embedding_generator is None:
             try:
                 embedding_generator = build_embedding_generator(
@@ -1326,12 +1418,31 @@ class MemoryService:
                 workflow_ids=resolved_workflow_ids
             )
 
+        inherited_workspace_items: tuple[MemoryItemRecord, ...] = ()
+        resolved_workspace_id = request.workspace_id
+        if (
+            self._has_text(resolved_workflow_instance_id)
+            and self._workflow_lookup is not None
+            and request.include_memory_items
+        ):
+            raw_workspace_id = self._workflow_lookup.workspace_id_by_workflow_id(
+                UUID(resolved_workflow_instance_id or "")
+            )
+            if raw_workspace_id is not None:
+                resolved_workspace_id = str(raw_workspace_id)
+                inherited_workspace_items = (
+                    self._memory_item_repository.list_by_workspace_id(
+                        raw_workspace_id,
+                        limit=request.limit,
+                    )
+                )
+
         details = {
             "query": request.query,
             "normalized_query": normalized_query,
             "query_tokens": list(query_tokens),
             "lookup_scope": lookup_scope,
-            "workspace_id": request.workspace_id,
+            "workspace_id": resolved_workspace_id,
             "workflow_instance_id": resolved_workflow_instance_id,
             "ticket_id": request.ticket_id,
             "limit": request.limit,
@@ -1397,6 +1508,31 @@ class MemoryService:
                     "memory_items": [],
                     "memory_item_counts_by_episode": {},
                     "summaries": [],
+                    "hierarchy_applied": bool(inherited_workspace_items),
+                    "memory_context_groups": (
+                        [
+                            {
+                                "scope": "workspace",
+                                "scope_id": resolved_workspace_id,
+                                "parent_scope": None,
+                                "parent_scope_id": None,
+                                "selection_kind": "inherited_workspace",
+                                "memory_items": [
+                                    self._serialize_memory_item(memory_item)
+                                    for memory_item in inherited_workspace_items
+                                    if memory_item.episode_id is None
+                                ],
+                            }
+                        ]
+                        if inherited_workspace_items
+                        and resolved_workspace_id is not None
+                        else []
+                    ),
+                    "inherited_memory_items": [
+                        self._serialize_memory_item(memory_item)
+                        for memory_item in inherited_workspace_items
+                        if memory_item.episode_id is None
+                    ],
                 },
             )
 
@@ -1447,6 +1583,45 @@ class MemoryService:
             for detail in memory_item_details
             if isinstance(detail.get("summary"), dict)
         )
+        inherited_memory_items = tuple(
+            memory_item
+            for memory_item in inherited_workspace_items
+            if memory_item.episode_id is None
+        )
+
+        memory_context_groups: list[dict[str, Any]] = []
+        if request.include_memory_items:
+            for episode, detail in zip(episodes, memory_item_details, strict=False):
+                memory_context_groups.append(
+                    {
+                        "scope": "episode",
+                        "scope_id": str(episode.episode_id),
+                        "parent_scope": "workflow_instance",
+                        "parent_scope_id": str(episode.workflow_instance_id),
+                        "selection_kind": "direct_episode",
+                        "memory_items": detail.get("memory_items", []),
+                    }
+                )
+
+            if inherited_memory_items and resolved_workspace_id is not None:
+                memory_context_groups.append(
+                    {
+                        "scope": "workspace",
+                        "scope_id": resolved_workspace_id,
+                        "parent_scope": None,
+                        "parent_scope_id": None,
+                        "selection_kind": "inherited_workspace",
+                        "memory_items": [
+                            self._serialize_memory_item(memory_item)
+                            for memory_item in inherited_memory_items
+                        ],
+                    }
+                )
+
+        related_memory_items = self._collect_supports_related_memory_items(
+            memory_item_details=memory_item_details,
+            limit=request.limit,
+        )
 
         return GetContextResponse(
             feature=MemoryFeature.GET_CONTEXT,
@@ -1472,6 +1647,16 @@ class MemoryService:
                     for detail in memory_item_details
                 },
                 "summaries": list(summaries),
+                "hierarchy_applied": bool(inherited_memory_items),
+                "memory_context_groups": memory_context_groups,
+                "inherited_memory_items": [
+                    self._serialize_memory_item(memory_item)
+                    for memory_item in inherited_memory_items
+                ],
+                "related_memory_items": [
+                    self._serialize_memory_item(memory_item)
+                    for memory_item in related_memory_items
+                ],
             },
         )
 
@@ -1793,25 +1978,7 @@ class MemoryService:
 
             if include_memory_items:
                 detail["memory_items"] = [
-                    {
-                        "memory_id": str(memory_item.memory_id),
-                        "workspace_id": (
-                            str(memory_item.workspace_id)
-                            if memory_item.workspace_id is not None
-                            else None
-                        ),
-                        "episode_id": (
-                            str(memory_item.episode_id)
-                            if memory_item.episode_id is not None
-                            else None
-                        ),
-                        "type": memory_item.type,
-                        "provenance": memory_item.provenance,
-                        "content": memory_item.content,
-                        "metadata": dict(memory_item.metadata),
-                        "created_at": memory_item.created_at.isoformat(),
-                        "updated_at": memory_item.updated_at.isoformat(),
-                    }
+                    self._serialize_memory_item(memory_item)
                     for memory_item in memory_items
                 ]
 
@@ -1831,6 +1998,87 @@ class MemoryService:
             details.append(detail)
 
         return tuple(details)
+
+    def _collect_supports_related_memory_items(
+        self,
+        *,
+        memory_item_details: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        if limit <= 0:
+            return ()
+
+        if not isinstance(
+            self._memory_item_repository, MemoryRelationMemoryItemLookupRepository
+        ):
+            return ()
+
+        related_memory_items: list[MemoryItemRecord] = []
+        seen_memory_ids: set[UUID] = set()
+
+        for detail in memory_item_details:
+            raw_memory_items = detail.get("memory_items")
+            if not isinstance(raw_memory_items, list):
+                continue
+
+            for raw_memory_item in raw_memory_items:
+                if not isinstance(raw_memory_item, dict):
+                    continue
+
+                raw_memory_id = raw_memory_item.get("memory_id")
+                if not isinstance(raw_memory_id, str):
+                    continue
+
+                try:
+                    source_memory_id = UUID(raw_memory_id)
+                except ValueError:
+                    continue
+
+                relations = self._memory_relation_repository.list_by_source_memory_id(
+                    source_memory_id,
+                    limit=limit,
+                )
+
+                for relation in relations:
+                    if relation.relation_type != "supports":
+                        continue
+                    if relation.target_memory_id in seen_memory_ids:
+                        continue
+
+                    target_memory_item = self._memory_item_repository.get_by_memory_id(
+                        relation.target_memory_id
+                    )
+                    if target_memory_item is None:
+                        continue
+
+                    seen_memory_ids.add(target_memory_item.memory_id)
+                    related_memory_items.append(target_memory_item)
+
+                    if len(related_memory_items) >= limit:
+                        return tuple(related_memory_items)
+
+        return tuple(related_memory_items)
+
+    def _serialize_memory_item(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
+        return {
+            "memory_id": str(memory_item.memory_id),
+            "workspace_id": (
+                str(memory_item.workspace_id)
+                if memory_item.workspace_id is not None
+                else None
+            ),
+            "episode_id": (
+                str(memory_item.episode_id)
+                if memory_item.episode_id is not None
+                else None
+            ),
+            "type": memory_item.type,
+            "provenance": memory_item.provenance,
+            "content": memory_item.content,
+            "metadata": dict(memory_item.metadata),
+            "created_at": memory_item.created_at.isoformat(),
+            "updated_at": memory_item.updated_at.isoformat(),
+        }
 
     def _score_memory_item_for_query(
         self,
