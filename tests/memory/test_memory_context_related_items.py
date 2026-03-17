@@ -140,6 +140,20 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
     assert response.details["inherited_context_returned_without_episode_matches"] is (
         False
     )
+    assert response.details["memory_context_groups"][0]["related_memory_items"] == [
+        {
+            "memory_id": str(supports_target_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Supporting workspace memory item",
+            "metadata": {"kind": "support"},
+            "created_at": supports_target_item.created_at.isoformat(),
+            "updated_at": supports_target_item.updated_at.isoformat(),
+        }
+    ]
+    assert "related_memory_items" not in response.details["memory_context_groups"][1]
 
 
 def test_memory_get_context_ignores_non_supports_relations_in_related_memory_items() -> (
@@ -232,3 +246,5 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
     assert response.details["inherited_context_returned_without_episode_matches"] is (
         False
     )
+    assert response.details["memory_context_groups"][0]["related_memory_items"] == []
+    assert "related_memory_items" not in response.details["memory_context_groups"][1]

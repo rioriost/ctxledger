@@ -1217,8 +1217,9 @@ When `include_memory_items=true`, the response may now distinguish:
    - target memory items reached from returned episode memory items
    - traversed through one outgoing relation hop only
    - currently limited to `relation_type = "supports"`
-   - exposed through `related_memory_items`
-   - does not currently modify `memory_context_groups`
+   - exposed through the flat compatibility field `related_memory_items`
+   - may also be exposed in episode-scoped `memory_context_groups` entries as group-local related context
+   - workspace-scoped groups are not widened by this slice
 
 `hierarchy_applied` is currently `true` when inherited workspace-scoped items are
 present in the returned context details, and `false` otherwise.
@@ -1288,6 +1289,8 @@ That means:
   - it follows one outgoing hop only
   - it includes only `supports` relations
   - it ignores other relation types in this slice
+- when per-group related context is present, it should be understood as a compatibility-preserving refinement of the same constrained `supports`-only behavior rather than as broader graph traversal
+- the flat `related_memory_items` field remains the compatibility surface during this stage
 - `related_context_is_auxiliary` makes the current support-role of related context explicit
 - `related_context_relation_type` makes the currently constrained relation contract explicit without widening traversal behavior
 

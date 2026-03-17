@@ -246,6 +246,10 @@ At present, episodic behavior includes:
   - `related_context_returned_without_episode_matches`
   - `memory_context_groups`
   - `inherited_memory_items`
+- keeping related context flat at the top-level details surface for now rather than moving it into per-group output:
+  - `related_memory_items` is still the canonical relation-aware detail field in the current slice
+  - episode groups do not yet carry their own nested related-context payloads
+  - this keeps the first relation-aware contract small while leaving room for later per-group output
 - exposing explicit selection metadata inside `memory_context_groups`, including:
   - `selection_kind = direct_episode` for episode-scoped direct context
   - `selection_kind = inherited_workspace` for workspace-scoped inherited context
@@ -530,6 +534,13 @@ The current details payload now also makes that constrained relation contract mo
 - `related_context_relation_types = ["supports"]` for the current constrained relation-aware slice
 - `related_context_returned_without_episode_matches = false` in the current implementation, because related context is derived only from returned episode memory items
 
+The current grouping boundary should also be understood explicitly:
+
+- `memory_context_groups` still organize direct episode-scoped context and inherited workspace-scoped context
+- related context is still returned as a flat top-level auxiliary detail surface
+- per-group related-context output is not yet part of the current contract
+- if per-group relation-aware output is introduced later, it should be treated as a new incremental slice rather than assumed from the current grouping shape
+
 This keeps the current minimal hierarchy-aware contract explainable while adding
 one explicit relation-aware behavior without yet introducing broader traversal logic.
 
@@ -636,7 +647,7 @@ Important near-term questions include:
 - how should workspace-scoped episode retrieval be ranked or limited?
 - how should ticket-scoped retrieval behave when multiple workflows match?
 - how should the current lightweight field-based query-aware filter evolve into stronger retrieval behavior?
-- how should `related_memory_items` remain flat versus moving into group-local relation-aware output?
+- how should `related_memory_items` remain flat versus moving into group-local relation-aware output for episode groups?
 - how should episode records evolve into semantic memory items?
 - what summary boundaries should exist for hierarchical memory?
 

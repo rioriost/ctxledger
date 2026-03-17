@@ -1605,6 +1605,7 @@ class MemoryService:
                         "parent_scope_id": str(episode.workflow_instance_id),
                         "selection_kind": "direct_episode",
                         "memory_items": detail.get("memory_items", []),
+                        "related_memory_items": detail.get("related_memory_items", []),
                     }
                 )
 
@@ -1647,6 +1648,11 @@ class MemoryService:
                     for detail in memory_item_details
                     if isinstance(detail.get("memory_items"), list)
                 ],
+                "related_memory_items_by_episode": {
+                    detail["episode_id"]: detail.get("related_memory_items", [])
+                    for detail in memory_item_details
+                    if isinstance(detail.get("related_memory_items"), list)
+                },
                 "memory_item_counts_by_episode": {
                     detail["episode_id"]: detail["memory_item_count"]
                     for detail in memory_item_details
@@ -1994,6 +2000,13 @@ class MemoryService:
                 detail["memory_items"] = [
                     self._serialize_memory_item(memory_item)
                     for memory_item in memory_items
+                ]
+                detail["related_memory_items"] = [
+                    self._serialize_memory_item(memory_item)
+                    for memory_item in self._collect_supports_related_memory_items(
+                        memory_item_details=(detail,),
+                        limit=100,
+                    )
                 ]
 
             if include_summaries:

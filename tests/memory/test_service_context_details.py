@@ -829,6 +829,7 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
                     "updated_at": direct_memory_item.updated_at.isoformat(),
                 }
             ],
+            "related_memory_items": [],
         },
         {
             "scope": "workspace",
@@ -1054,6 +1055,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
                     "updated_at": direct_memory_item.updated_at.isoformat(),
                 }
             ],
+            "related_memory_items": [],
         },
         {
             "scope": "workspace",
@@ -1300,6 +1302,7 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
                     "updated_at": direct_memory_item.updated_at.isoformat(),
                 }
             ],
+            "related_memory_items": [],
         },
         {
             "scope": "workspace",
@@ -1503,6 +1506,7 @@ def test_memory_get_context_supports_relation_grouping_metadata_survives_episode
                     "updated_at": matching_memory_item.updated_at.isoformat(),
                 }
             ],
+            "related_memory_items": [],
         },
         {
             "scope": "workspace",
