@@ -22,12 +22,14 @@ from ctxledger.memory.embeddings import (
     compute_content_hash,
 )
 from ctxledger.memory.service import (
-    GetContextRequest,
+    EpisodeRecord,
     GetContextResponse,
+    GetMemoryContextRequest,
     InMemoryEpisodeRepository,
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
     InMemoryWorkflowLookupRepository,
+    MemoryEmbeddingRecord,
     MemoryErrorCode,
     MemoryFeature,
     MemoryItemRecord,
@@ -50,8 +52,6 @@ from ctxledger.runtime.serializers import (
     serialize_stub_response,
 )
 from ctxledger.workflow.service import (
-    EpisodeRecord,
-    MemoryEmbeddingRecord,
     VerifyReport,
     VerifyStatus,
     WorkflowAttempt,
@@ -844,7 +844,7 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
         )
     )
     context_response = service.get_context(
-        GetContextRequest(
+        GetMemoryContextRequest(
             query="relevant context",
             workspace_id="ws-1",
             workflow_instance_id=str(workflow_id),

@@ -2,60 +2,35 @@
 
 ## Summary
 
-Continued the `v0.5.5` test-suite reorganization by shrinking several remaining top-level duplicate test modules into compatibility shims, then attempted the next real dissolution step for `tests/test_coverage_targets.py` by splitting memory-owned coverage into `tests/memory/`, but confirmed again that the memory area is blocked by drift between the old coverage-target assumptions and the current `ctxledger.memory` implementation surface.
+Resumed the `v0.5.5` test-suite reorganization by first re-inventoring the current memory implementation surface, then aligning the split memory coverage file to the actual `ctxledger.memory` / `ctxledger.workflow.memory_bridge` API, validating it successfully, and finally shrinking `tests/test_coverage_targets.py` further by removing a migrated memory-owned slice while keeping the remaining top-level coverage-target tests green.
 
 ## What changed in this session
 
-- Continued from the prior reorganization work where responsibility-owned test destinations were already established and multiple top-level files had become candidates for shrink-only compatibility shims.
-- Verified and shrank the remaining straightforward duplicate top-level test modules into compatibility re-export shims:
-  - `tests/test_cli.py`
-  - `tests/test_config.py`
-  - `tests/test_mcp_modules.py`
-  - `tests/test_mcp_tool_handlers.py`
-  - `tests/test_postgres_db.py`
-  - `tests/test_postgres_helpers.py`
-  - `tests/test_workflow_service.py`
-  - `tests/test_postgres_integration.py`
-- Preserved backward compatibility for existing pytest entrypoints while making the responsibility-owned locations the effective source of truth for those areas.
-- Re-inventoried `tests/test_coverage_targets.py` at a coarse-grained level to identify the next unsplit responsibility cluster.
-- Chose the memory / embedding / workflow-memory-bridge cluster as the next real extraction candidate under:
-  - `tests/memory/`
-- Added a new target file for that extraction attempt:
-  - `tests/memory/test_coverage_targets_memory.py`
-- Began moving the memory-owned portion out of `tests/test_coverage_targets.py` into that file, including tests around:
-  - memory serializers
-  - embedding generator selection and error handling
-  - local stub embedding behavior
-  - external embedding generator HTTP behavior
-  - in-memory memory embedding similarity behavior
-  - memory service episode/search/context behavior
-  - workflow memory bridge auto-memory behavior
-- Reduced `tests/test_coverage_targets.py` by removing the migrated memory-owned section during the first pass of the split attempt.
-- Validation of the new memory file exposed the same underlying issue previously hinted in earlier sessions:
-  - the migrated tests still assume API names and constructor/request shapes that do not match the current implementation surface
-- The first concrete blocker observed in this pass:
-  - importing `GetContextRequest` from `ctxledger.memory.service` failed because the current module does not export that symbol
-- This confirmed that the memory area is not yet safe for a mechanical “move and verify” split and instead requires a fresh implementation-surface inventory before more edits.
+- Started from the prior blocker state where `tests/memory/test_coverage_targets_memory.py` existed but still reflected stale request / record names from older memory coverage assumptions.
+- Re-inventoried the current implementation surface for:
+  - `ctxledger.memory.service`
+  - `ctxledger.memory.embeddings`
+  - `ctxledger.workflow.memory_bridge`
+- Confirmed the key drift that had caused the previous import-time failure:
+  - the current request type is `GetMemoryContextRequest`, not `GetContextRequest`
+  - `EpisodeRecord` and `MemoryEmbeddingRecord` used by the memory split tests are defined in `ctxledger.memory.service`
+- Updated `tests/memory/test_coverage_targets_memory.py` to match the current implementation surface rather than the older assumptions.
+- Adjusted the split memory test file imports and references so they use the current memory-owned request / response / record types.
+- Verified that the split memory file is now runnable and green against the present codebase.
+- Re-checked `tests/test_coverage_targets.py` for remaining memory-related coverage after the split file became valid.
+- Confirmed that the top-level file still contained a mixed set of memory-related coverage, but no longer had the original fully broken migrated state.
+- Removed an additional migrated memory-owned block from `tests/test_coverage_targets.py`, reducing the top-level file further now that the split file had been validated.
+- During that reduction pass, temporarily removed too many imports from the top-level file, then restored only the imports still required by the memory-related tests that intentionally remain there for now.
+- Re-validated the top-level file together with the split memory file after the reduction.
 
 ## Files updated in this session
 
-- `tests/test_cli.py`
-- `tests/test_config.py`
-- `tests/test_mcp_modules.py`
-- `tests/test_mcp_tool_handlers.py`
-- `tests/test_postgres_db.py`
-- `tests/test_postgres_helpers.py`
-- `tests/test_workflow_service.py`
-- `tests/test_postgres_integration.py`
-- `tests/test_coverage_targets.py`
-
-## Files added in this session
-
 - `tests/memory/test_coverage_targets_memory.py`
+- `tests/test_coverage_targets.py`
 
 ## Current structure status
 
-These top-level files are now compatibility shims that re-export the reorganized ownership destinations:
+These top-level files remain compatibility shims that re-export the reorganized ownership destinations:
 
 - `tests/test_server.py`
 - `tests/test_cli.py`
@@ -67,46 +42,35 @@ These top-level files are now compatibility shims that re-export the reorganized
 - `tests/test_workflow_service.py`
 - `tests/test_postgres_integration.py`
 
-The remaining major unsplit top-level mixed-responsibility file is still:
+For `tests/test_coverage_targets.py` specifically:
 
-- `tests/test_coverage_targets.py`
-
-Current note for that file:
-
-- multiple non-memory slices have already been rehomed in prior work
-- the new memory-owned split attempt has not been successfully validated
-- the memory split should currently be treated as blocked / incomplete until the current `ctxledger.memory` API is re-inventoried
+- the memory split is no longer blocked by stale API assumptions for the already-moved slice
+- `tests/memory/test_coverage_targets_memory.py` is now a validated responsibility-owned destination for part of the memory / embeddings / workflow-memory-bridge coverage
+- `tests/test_coverage_targets.py` still contains remaining mixed-responsibility coverage, including some memory-related tests that were not moved in this pass
+- the top-level file is now smaller than before this session’s reduction pass
 
 ## Verification completed
 
-- Verified the new top-level shim set directly:
-  - `pytest tests/test_cli.py tests/test_config.py tests/test_mcp_modules.py tests/test_mcp_tool_handlers.py tests/test_postgres_db.py tests/test_postgres_helpers.py tests/test_workflow_service.py tests/test_postgres_integration.py`
-  - result: `331 passed, 27 skipped`
-- Verified that the new memory split file is not currently runnable against the present implementation surface:
+- Verified the split memory file directly after aligning it to the current API:
   - `pytest tests/memory/test_coverage_targets_memory.py`
-  - result: import-time failure
-  - first concrete mismatch observed:
-    - `cannot import name 'GetContextRequest' from 'ctxledger.memory.service'`
+  - result: `34 passed`
+- Verified the top-level coverage-target file together with the split memory file before the reduction step:
+  - `pytest tests/test_coverage_targets.py tests/memory/test_coverage_targets_memory.py`
+  - result: `215 passed`
+- Verified the top-level coverage-target file together with the split memory file after removing an additional migrated memory-owned slice and restoring only required imports:
+  - `pytest tests/test_coverage_targets.py tests/memory/test_coverage_targets_memory.py`
+  - result: `193 passed`
 
-## Memory split blocker details
+## What was learned
 
-The attempted memory extraction should be considered blocked for now because the old coverage-target assumptions do not cleanly match the current memory implementation surface.
-
-Confirmed signals from this pass:
-
-- at least one request/model name expected by the migrated tests is not present:
-  - `GetContextRequest`
-- prior sessions had already suggested broader drift in this area
-- this pass reconfirmed that the memory area needs a true inventory and redesign pass rather than another mechanical movement attempt
-
-Recommended interpretation:
-
-- do not keep moving memory-owned tests blindly out of `tests/test_coverage_targets.py`
-- first compare the actual current public surface of:
-  - `ctxledger.memory.service`
-  - `ctxledger.memory.embeddings`
-  - `ctxledger.workflow.memory_bridge`
-- then rewrite or redesign the split tests to fit the current implementation
+- The earlier blocker was real, but narrower than it first appeared:
+  - the main issue was stale test assumptions about the current memory API surface
+  - once the split file was aligned to the present implementation, it validated cleanly
+- The current memory surface should be treated as:
+  - `GetMemoryContextRequest` for context retrieval requests
+  - `EpisodeRecord` / `MemoryEmbeddingRecord` from `ctxledger.memory.service` for the split memory coverage file
+- The memory split can proceed incrementally now that at least one substantial split destination has been validated.
+- `tests/test_coverage_targets.py` still needs more dissolution work, but it is no longer blocked from all memory-related progress.
 
 ## Workflow / operational notes
 
@@ -117,12 +81,14 @@ Recommended interpretation:
 
 ## Next suggested work
 
-1. Re-inventory the current memory implementation surface before continuing any `tests/memory/` split work:
-   - inspect current exported request / response / record types
-   - inspect current `MemoryService` method signatures
-   - inspect current embedding and workflow-memory-bridge helper APIs
-2. Decide whether to:
-   - rewrite the new `tests/memory/test_coverage_targets_memory.py` around the current implementation
-   - or revert / defer the partial memory extraction until a better-designed move can be made
-3. Continue dissolving `tests/test_coverage_targets.py` only in ownership areas that still validate cleanly under the current codebase.
-4. After the memory surface is reconciled, return to the responsibility-based split with smaller validated slices instead of one large mechanical transfer.
+1. Continue dissolving `tests/test_coverage_targets.py` by re-inventorying the remaining memory-related tests still left there:
+   - identify which ones already belong with `tests/memory/test_coverage_targets_memory.py`
+   - decide whether the rest should move into additional responsibility-owned files under `tests/memory/`
+2. Keep split moves small and validated:
+   - move a coherent remaining slice
+   - run targeted pytest immediately
+   - repeat
+3. Once the next stable reduction point is reached:
+   - update `last_session.md` again
+   - commit the reduction with a message focused on continued `test_coverage_targets` dissolution
+4. Separately, when practical, recover canonical workflow recording by resolving the existing resume / active-attempt reliability issue.
