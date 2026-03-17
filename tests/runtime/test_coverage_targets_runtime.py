@@ -35,8 +35,8 @@ from ctxledger.runtime.server_responses import (
 )
 from ctxledger.runtime.status import build_health_status, build_readiness_status
 from ctxledger.runtime.types import RuntimeIntrospectionResponse
-from ctxledger.server import CtxLedgerServer
-from ctxledger.version import get_app_version
+from ctxledger.server import CtxLedgerServer, create_server
+from ctxledger.version import get_app_name, get_app_version
 
 from ..support.coverage_targets_support import (
     FailingDbChecker,
@@ -908,3 +908,395 @@ def test_build_workflow_service_factory_builds_workflow_service(
     assert isinstance(service, FakeWorkflowService)
     assert callable(service.uow_factory)
     assert service.uow_factory() == "uow"
+
+
+def test_build_workflow_service_factory_builds_connection_pool_when_not_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakePostgresConfig:
+        @classmethod
+        def from_settings(cls, settings):
+            captured["settings"] = settings
+            return "postgres-config"
+
+    def fake_build_connection_pool(config: object) -> object:
+        captured["connection_pool_config"] = config
+        return "BUILT-POOL"
+
+    def fake_build_postgres_uow_factory(
+        config: object,
+        *,
+        pool: object | None = None,
+    ):
+        captured["config"] = config
+        captured["pool"] = pool
+
+        def _uow_factory():
+            return "uow"
+
+        return _uow_factory
+
+    class FakeWorkflowService:
+        def __init__(self, uow_factory, **kwargs: object) -> None:
+            self.uow_factory = uow_factory
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.PostgresConfig",
+        FakePostgresConfig,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.build_connection_pool",
+        fake_build_connection_pool,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.build_postgres_uow_factory",
+        fake_build_postgres_uow_factory,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.WorkflowService",
+        FakeWorkflowService,
+    )
+
+    settings = make_settings()
+    factory = build_workflow_service_factory(settings, connection_pool=None)
+
+    assert factory is not None
+    service = factory()
+
+    assert captured["settings"] is settings
+    assert captured["connection_pool_config"] == "postgres-config"
+    assert captured["config"] == "postgres-config"
+    assert captured["pool"] == "BUILT-POOL"
+    assert isinstance(service, FakeWorkflowService)
+    assert callable(service.uow_factory)
+    assert service.uow_factory() == "uow"
+
+
+def test_build_workflow_service_factory_prefers_factory_connection_pool_over_built_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakePostgresConfig:
+        @classmethod
+        def from_settings(cls, settings):
+            captured["settings"] = settings
+            return "postgres-config"
+
+    def fake_build_connection_pool(config: object) -> object:
+        captured["built_pool_config"] = config
+        return "BUILT-POOL"
+
+    def fake_build_postgres_uow_factory(
+        config: object,
+        *,
+        pool: object | None = None,
+    ):
+        captured["config"] = config
+        captured["pool"] = pool
+
+        def _uow_factory():
+            return "uow"
+
+        return _uow_factory
+
+    class FakeWorkflowService:
+        def __init__(self, uow_factory, **kwargs: object) -> None:
+            self.uow_factory = uow_factory
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.PostgresConfig",
+        FakePostgresConfig,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.build_connection_pool",
+        fake_build_connection_pool,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.build_postgres_uow_factory",
+        fake_build_postgres_uow_factory,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.WorkflowService",
+        FakeWorkflowService,
+    )
+
+    settings = make_settings()
+    factory = build_workflow_service_factory(settings, connection_pool="FACTORY-POOL")
+
+    assert factory is not None
+    service = factory()
+
+    assert captured["settings"] is settings
+    assert "built_pool_config" not in captured
+    assert captured["config"] == "postgres-config"
+    assert captured["pool"] == "FACTORY-POOL"
+    assert isinstance(service, FakeWorkflowService)
+    assert callable(service.uow_factory)
+    assert service.uow_factory() == "uow"
+
+
+def test_build_workflow_service_factory_prefers_call_time_connection_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakePostgresConfig:
+        @classmethod
+        def from_settings(cls, settings):
+            captured["settings"] = settings
+            return "postgres-config"
+
+    def fake_build_connection_pool(config: object) -> object:
+        captured["built_pool_config"] = config
+        return "BUILT-POOL"
+
+    def fake_build_postgres_uow_factory(
+        config: object,
+        *,
+        pool: object | None = None,
+    ):
+        captured["config"] = config
+        captured["pool"] = pool
+
+        def _uow_factory():
+            return "uow"
+
+        return _uow_factory
+
+    class FakeWorkflowService:
+        def __init__(self, uow_factory, **kwargs: object) -> None:
+            self.uow_factory = uow_factory
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.PostgresConfig",
+        FakePostgresConfig,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.build_connection_pool",
+        fake_build_connection_pool,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.build_postgres_uow_factory",
+        fake_build_postgres_uow_factory,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.WorkflowService",
+        FakeWorkflowService,
+    )
+
+    settings = make_settings()
+    factory = build_workflow_service_factory(settings, connection_pool="FACTORY-POOL")
+
+    assert factory is not None
+    service = factory(connection_pool="CALL-POOL")
+
+    assert captured["settings"] is settings
+    assert "built_pool_config" not in captured
+    assert captured["config"] == "postgres-config"
+    assert captured["pool"] == "CALL-POOL"
+    assert isinstance(service, FakeWorkflowService)
+    assert callable(service.uow_factory)
+    assert service.uow_factory() == "uow"
+
+
+def test_build_workflow_service_factory_uses_uow_memory_backing_when_uow_is_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakePostgresConfig:
+        @classmethod
+        def from_settings(cls, settings):
+            captured["settings"] = settings
+            return "postgres-config"
+
+    def fake_build_postgres_uow_factory(
+        config: object,
+        *,
+        pool: object | None = None,
+    ):
+        captured["config"] = config
+        captured["pool"] = pool
+
+        def _uow_factory():
+            return "uow"
+
+        return _uow_factory
+
+    class FakeWorkflowMemoryBridge:
+        def __init__(
+            self,
+            *,
+            episode_repository: object,
+            memory_item_repository: object,
+            memory_embedding_repository: object,
+        ) -> None:
+            self.episode_repository = episode_repository
+            self.memory_item_repository = memory_item_repository
+            self.memory_embedding_repository = memory_embedding_repository
+
+    class FakeWorkflowService:
+        def __init__(self, uow_factory, **kwargs: object) -> None:
+            self.uow_factory = uow_factory
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.PostgresConfig",
+        FakePostgresConfig,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.build_postgres_uow_factory",
+        fake_build_postgres_uow_factory,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.WorkflowMemoryBridge",
+        FakeWorkflowMemoryBridge,
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.server_factory.WorkflowService",
+        FakeWorkflowService,
+    )
+
+    fake_uow = SimpleNamespace(
+        memory_episodes="EPISODES",
+        memory_items="ITEMS",
+        memory_embeddings="EMBEDDINGS",
+    )
+
+    settings = make_settings()
+    factory = build_workflow_service_factory(settings, connection_pool="POOL")
+
+    assert factory is not None
+    service = factory(uow=fake_uow)
+
+    bridge = service.kwargs["workflow_memory_bridge"]
+    assert bridge.episode_repository == "EPISODES"
+    assert bridge.memory_item_repository == "ITEMS"
+    assert bridge.memory_embedding_repository == "EMBEDDINGS"
+    assert captured["settings"] is settings
+    assert captured["config"] == "postgres-config"
+    assert captured["pool"] == "POOL"
+
+
+def test_create_server_uses_provided_runtime_and_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings()
+    sentinel_factory = object()
+    sentinel_runtime = object()
+
+    build_factory_calls: list[object] = []
+    build_runtime_calls: list[object] = []
+
+    monkeypatch.setattr(
+        "ctxledger.server.build_workflow_service_factory",
+        lambda received_settings: (
+            build_factory_calls.append(received_settings) or "BUILT-FACTORY"
+        ),
+    )
+    monkeypatch.setattr(
+        "ctxledger.server.build_http_runtime_adapter",
+        lambda server: build_runtime_calls.append(server) or "BUILT-RUNTIME",
+    )
+
+    server = create_server(
+        settings,
+        workflow_service_factory=sentinel_factory,
+        runtime=sentinel_runtime,
+    )
+
+    assert isinstance(server, CtxLedgerServer)
+    assert server.workflow_service_factory is sentinel_factory
+    assert server.runtime is sentinel_runtime
+    assert build_factory_calls == []
+    assert build_runtime_calls == []
+
+
+def test_create_server_builds_defaults_when_runtime_and_factory_are_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings()
+
+    build_factory_calls: list[object] = []
+    build_runtime_calls: list[object] = []
+
+    monkeypatch.setattr(
+        "ctxledger.server.build_workflow_service_factory",
+        lambda received_settings: (
+            build_factory_calls.append(received_settings) or "BUILT-FACTORY"
+        ),
+    )
+    monkeypatch.setattr(
+        "ctxledger.server.build_http_runtime_adapter",
+        lambda server: build_runtime_calls.append(server) or "BUILT-RUNTIME",
+    )
+
+    server = create_server(settings)
+
+    assert isinstance(server, CtxLedgerServer)
+    assert server.workflow_service_factory == "BUILT-FACTORY"
+    assert server.runtime == "BUILT-RUNTIME"
+    assert build_factory_calls == [settings]
+    assert build_runtime_calls == [server]
+
+
+def test_version_helpers_read_name_and_raise_for_missing_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pyproject_text = """
+[build-system]
+requires = ["setuptools"]
+
+[project]
+name = "ctxledger"
+version = "0.1.0"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+""".strip()
+
+    class FakePath:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def resolve(self) -> "FakePath":
+            return self
+
+        @property
+        def parents(self) -> list["FakePath"]:
+            return [self, self, self]
+
+        def __truediv__(self, other: object) -> "FakePath":
+            return self
+
+        def read_text(self, encoding: str = "utf-8") -> str:
+            assert encoding == "utf-8"
+            return self._text
+
+    monkeypatch.setattr(
+        "ctxledger.version.Path", lambda *_args, **_kwargs: FakePath(pyproject_text)
+    )
+
+    assert get_app_name() == "ctxledger"
+    assert get_app_version() == "0.1.0"
+
+    missing_version_text = """
+[project]
+name = "ctxledger"
+""".strip()
+    monkeypatch.setattr(
+        "ctxledger.version.Path",
+        lambda *_args, **_kwargs: FakePath(missing_version_text),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Could not determine ctxledger version from pyproject.toml",
+    ):
+        get_app_version()

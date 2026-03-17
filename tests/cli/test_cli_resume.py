@@ -204,6 +204,193 @@ def test_main_resume_workflow_renders_json_output(
     assert captured.err == ""
 
 
+def test_main_resume_workflow_renders_text_output_without_attempt_checkpoint_or_warnings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    workflow_instance_id = uuid4()
+
+    fake_resume = SimpleNamespace(
+        workspace=SimpleNamespace(
+            workspace_id=uuid4(),
+            repo_url="https://example.com/org/repo.git",
+            canonical_path=str(tmp_path),
+            default_branch="main",
+            metadata={"team": "platform"},
+        ),
+        workflow_instance=SimpleNamespace(
+            workflow_instance_id=workflow_instance_id,
+            workspace_id=uuid4(),
+            ticket_id="CLI-RESUME-2",
+            status=SimpleNamespace(value="completed"),
+            metadata={"priority": "normal"},
+        ),
+        attempt=None,
+        latest_checkpoint=None,
+        latest_verify_report=None,
+        resumable_status=SimpleNamespace(value="not_resumable"),
+        warnings=(),
+        next_hint=None,
+    )
+
+    monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config, pool=None: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: FakeWorkflowService(fake_resume),
+    )
+
+    exit_code = cli_module.main(
+        [
+            "resume-workflow",
+            "--workflow-instance-id",
+            str(workflow_instance_id),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0, captured.err
+    assert "Attempt: none" in captured.out
+    assert "Latest checkpoint: none" in captured.out
+    assert "Warnings:" in captured.out
+    assert "- none" in captured.out
+    assert "Next hint: none" in captured.out
+    assert captured.err == ""
+
+
+def test_main_resume_workflow_renders_text_output_without_verify_status_summary_and_with_warnings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    workflow_instance_id = uuid4()
+
+    fake_resume = SimpleNamespace(
+        workspace=SimpleNamespace(
+            workspace_id=uuid4(),
+            repo_url="https://example.com/org/repo.git",
+            canonical_path=str(tmp_path),
+            default_branch="main",
+            metadata={"team": "platform"},
+        ),
+        workflow_instance=SimpleNamespace(
+            workflow_instance_id=workflow_instance_id,
+            workspace_id=uuid4(),
+            ticket_id="CLI-RESUME-3",
+            status=SimpleNamespace(value="running"),
+            metadata={"priority": "high"},
+        ),
+        attempt=SimpleNamespace(
+            attempt_id=uuid4(),
+            workflow_instance_id=workflow_instance_id,
+            attempt_number=3,
+            status=SimpleNamespace(value="running"),
+            failure_reason=None,
+            verify_status=None,
+            started_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:00:00+00:00"),
+            finished_at=None,
+        ),
+        latest_checkpoint=SimpleNamespace(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=workflow_instance_id,
+            attempt_id=uuid4(),
+            step_name="implement_cli",
+            summary="",
+            checkpoint_json={"next_intended_action": "Review warnings"},
+            created_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:01:00+00:00"),
+        ),
+        latest_verify_report=None,
+        resumable_status=SimpleNamespace(value="resumable"),
+        warnings=(
+            SimpleNamespace(code="stale_context", message="Context may be stale"),
+            SimpleNamespace(code="needs_verify", message="Verification is pending"),
+        ),
+        next_hint="Review warnings",
+    )
+
+    monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config, pool=None: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        lambda uow_factory: FakeWorkflowService(fake_resume),
+    )
+
+    exit_code = cli_module.main(
+        [
+            "resume-workflow",
+            "--workflow-instance-id",
+            str(workflow_instance_id),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0, captured.err
+    assert "Attempt: " in captured.out
+    assert "Verify status:" not in captured.out
+    assert "Latest checkpoint step: implement_cli" in captured.out
+    assert "Latest checkpoint summary:" not in captured.out
+    assert "- stale_context: Context may be stale" in captured.out
+    assert "- needs_verify: Verification is pending" in captured.out
+    assert "Next hint: Review warnings" in captured.out
+    assert captured.err == ""
+
+
+def test_main_resume_workflow_returns_error_when_resume_loading_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workflow_instance_id = uuid4()
+
+    class ExplodingWorkflowService:
+        def __init__(self, uow_factory: object) -> None:
+            self.uow_factory = uow_factory
+
+        def resume_workflow(self, data: object) -> object:
+            raise RuntimeError("resume exploded")
+
+    monkeypatch.setattr(cli_module, "UUID", lambda value: workflow_instance_id)
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config, pool=None: "fake-uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService",
+        ExplodingWorkflowService,
+    )
+
+    exit_code = cli_module.main(
+        [
+            "resume-workflow",
+            "--workflow-instance-id",
+            str(workflow_instance_id),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to resume workflow: resume exploded" in captured.err
+
+
 def test_main_resume_workflow_reports_missing_database_url(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

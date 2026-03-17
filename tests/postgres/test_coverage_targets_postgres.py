@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import importlib
 from datetime import UTC, datetime
-from typing import Any
 from uuid import uuid4
 
 import pytest
 
 from ctxledger.db.postgres import (
+    PostgresDatabaseHealthChecker,
     PostgresMemoryEmbeddingRepository,
     PostgresMemoryEpisodeRepository,
     PostgresMemoryItemRepository,
@@ -18,6 +18,7 @@ from ctxledger.db.postgres import (
     PostgresWorkflowInstanceRepository,
     PostgresWorkspaceRepository,
 )
+from ctxledger.memory.types import MemoryRelationRecord
 from ctxledger.workflow.service import (
     PersistenceError,
     VerifyStatus,
@@ -221,10 +222,6 @@ def test_postgres_low_level_helpers_cover_additional_branches() -> None:
         _to_datetime("bad-datetime")
 
     postgres_module = importlib.import_module("ctxledger.db.postgres")
-    if (
-        postgres_module.psycopg is None
-        or postgres_module.dict_row is None
-        or postgres_module.ConnectionPool is Any
-    ):
+    if postgres_module.psycopg is None or postgres_module.dict_row is None:
         with pytest.raises(RuntimeError, match="psycopg-pool is required"):
             _require_connection_pool()

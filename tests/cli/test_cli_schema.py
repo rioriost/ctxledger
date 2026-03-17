@@ -48,6 +48,18 @@ def test_print_version_falls_back_when_metadata_lookup_fails(
     assert captured.err == ""
 
 
+def test_print_missing_database_url_omits_override_hint_by_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli_module._print_missing_database_url()
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err == "Database URL is required. Set CTXLEDGER_DATABASE_URL.\n"
+
+
 def test_print_schema_path_outputs_relative_and_absolute_variants(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -64,6 +76,18 @@ def test_print_schema_path_outputs_relative_and_absolute_variants(
     assert exit_code == 0
     assert Path(captured.out.strip()).is_absolute()
     assert captured.err == ""
+
+
+def test_isoformat_or_none_returns_isoformat_for_datetime() -> None:
+    class FakeDatetime:
+        def isoformat(self) -> str:
+            return "2026-03-17T11:00:00+00:00"
+
+    assert cli_module._isoformat_or_none(FakeDatetime()) == "2026-03-17T11:00:00+00:00"
+
+
+def test_isoformat_or_none_returns_none_for_none() -> None:
+    assert cli_module._isoformat_or_none(None) is None
 
 
 def test_apply_schema_reports_missing_database_url(

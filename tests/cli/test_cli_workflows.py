@@ -242,6 +242,58 @@ def test_main_workflows_returns_error_when_loading_fails(
     assert "Failed to load workflows: workflows exploded" in captured.err
 
 
+def test_main_workflows_renders_text_output_for_empty_result(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakeWorkflowsService:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def list_workflows(
+            self,
+            *,
+            limit: int,
+            status: str | None = None,
+            workspace_id: object | None = None,
+            ticket_id: str | None = None,
+        ) -> tuple[WorkflowListEntry, ...]:
+            self.calls.append(
+                {
+                    "limit": limit,
+                    "status": status,
+                    "workspace_id": workspace_id,
+                    "ticket_id": ticket_id,
+                }
+            )
+            return ()
+
+    settings = make_settings()
+    fake_service = FakeWorkflowsService()
+
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(monkeypatch, fake_service)
+
+    exit_code = cli_module.main(["workflows", "--limit", "0"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.out == "ctxledger workflows\n\n- none\n"
+    assert captured.err == ""
+    assert fake_service.calls == [
+        {
+            "limit": 1,
+            "status": None,
+            "workspace_id": None,
+            "ticket_id": None,
+        }
+    ]
+
+
 def test_main_failures_renders_text_output(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -456,6 +508,55 @@ def test_main_failures_returns_error_when_loading_fails(
     assert exit_code == 1
     assert captured.out == ""
     assert "Failed to load failures: failures exploded" in captured.err
+
+
+def test_main_failures_renders_text_output_for_empty_result(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakeFailuresWorkflowService:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def list_failures(
+            self,
+            *,
+            limit: int,
+            status: str | None = None,
+            open_only: bool = False,
+        ) -> tuple[FailureListEntry, ...]:
+            self.calls.append(
+                {
+                    "limit": limit,
+                    "status": status,
+                    "open_only": open_only,
+                }
+            )
+            return ()
+
+    settings = make_settings()
+    fake_service = FakeFailuresWorkflowService()
+
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(monkeypatch, fake_service)
+
+    exit_code = cli_module.main(["failures"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.out == "ctxledger failures\n\n- none\n"
+    assert captured.err == ""
+    assert fake_service.calls == [
+        {
+            "limit": 20,
+            "status": None,
+            "open_only": False,
+        }
+    ]
 
 
 def test_main_memory_stats_renders_text_output(

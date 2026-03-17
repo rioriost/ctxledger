@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -20,22 +21,35 @@ from ctxledger.memory.service import (
     UnitOfWorkWorkflowLookupRepository,
     UnitOfWorkWorkspaceLookupRepository,
 )
+from ctxledger.memory.types import MemoryRelationRecord
 from ctxledger.workflow.service import (
+    AttemptNotFoundError,
     CompleteWorkflowInput,
+    MemoryEmbeddingRepository,
+    MemoryEpisodeRepository,
+    MemoryItemRepository,
+    MemoryRelationRepository,
     RegisterWorkspaceInput,
     ResumableStatus,
     ResumeIssue,
     StartWorkflowInput,
     ValidationError,
     VerifyReport,
+    VerifyReportRepository,
     VerifyStatus,
     WorkflowAttempt,
+    WorkflowAttemptMismatchError,
+    WorkflowAttemptRepository,
     WorkflowAttemptStatus,
     WorkflowCheckpoint,
+    WorkflowCheckpointRepository,
     WorkflowInstance,
+    WorkflowInstanceRepository,
     WorkflowInstanceStatus,
+    WorkflowNotFoundError,
     WorkflowService,
     Workspace,
+    WorkspaceRepository,
 )
 
 
@@ -108,6 +122,271 @@ def test_workflow_service_validation_error_branches() -> None:
         service.list_workflows(limit=1, status="paused")
 
     assert service.list_failures(limit=1, status="paused") == ()
+
+
+def test_workflow_service_protocol_and_helper_edge_branches() -> None:
+    workspace_repository = WorkspaceRepository()
+    workflow_instance_repository = WorkflowInstanceRepository()
+    workflow_attempt_repository = WorkflowAttemptRepository()
+    workflow_checkpoint_repository = WorkflowCheckpointRepository()
+    verify_report_repository = VerifyReportRepository()
+    memory_episode_repository = MemoryEpisodeRepository()
+    memory_item_repository = MemoryItemRepository()
+    memory_embedding_repository = MemoryEmbeddingRepository()
+    memory_relation_repository = MemoryRelationRepository()
+
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+    attempt_id = uuid4()
+    target_workflow_instance_id = uuid4()
+    now = datetime(2024, 10, 1, tzinfo=UTC)
+
+    with pytest.raises(NotImplementedError):
+        workspace_repository.get_by_id(workspace_id)
+    with pytest.raises(NotImplementedError):
+        workspace_repository.get_by_canonical_path("/tmp/repo")
+    with pytest.raises(NotImplementedError):
+        workspace_repository.get_by_repo_url("https://example.com/repo.git")
+    with pytest.raises(NotImplementedError):
+        workspace_repository.create(
+            Workspace(
+                workspace_id=workspace_id,
+                repo_url="https://example.com/repo.git",
+                canonical_path="/tmp/repo",
+                default_branch="main",
+            )
+        )
+    with pytest.raises(NotImplementedError):
+        workspace_repository.update(
+            Workspace(
+                workspace_id=workspace_id,
+                repo_url="https://example.com/repo.git",
+                canonical_path="/tmp/repo",
+                default_branch="main",
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        workflow_instance_repository.get_by_id(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        workflow_instance_repository.get_running_by_workspace_id(workspace_id)
+    with pytest.raises(NotImplementedError):
+        workflow_instance_repository.get_latest_by_workspace_id(workspace_id)
+    with pytest.raises(NotImplementedError):
+        workflow_instance_repository.list_by_workspace_id(workspace_id, limit=1)
+    with pytest.raises(NotImplementedError):
+        workflow_instance_repository.list_by_ticket_id("ticket-1", limit=1)
+    with pytest.raises(NotImplementedError):
+        workflow_instance_repository.list_recent(limit=1)
+    with pytest.raises(NotImplementedError):
+        workflow_instance_repository.create(
+            WorkflowInstance(
+                workflow_instance_id=workflow_instance_id,
+                workspace_id=workspace_id,
+                ticket_id="ticket-1",
+                status=WorkflowInstanceStatus.RUNNING,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    with pytest.raises(NotImplementedError):
+        workflow_instance_repository.update(
+            WorkflowInstance(
+                workflow_instance_id=workflow_instance_id,
+                workspace_id=workspace_id,
+                ticket_id="ticket-1",
+                status=WorkflowInstanceStatus.RUNNING,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        workflow_attempt_repository.get_by_id(attempt_id)
+    with pytest.raises(NotImplementedError):
+        workflow_attempt_repository.get_running_by_workflow_id(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        workflow_attempt_repository.get_latest_by_workflow_id(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        workflow_attempt_repository.get_next_attempt_number(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        workflow_attempt_repository.create(
+            WorkflowAttempt(
+                attempt_id=attempt_id,
+                workflow_instance_id=workflow_instance_id,
+                attempt_number=1,
+                status=WorkflowAttemptStatus.RUNNING,
+                started_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    with pytest.raises(NotImplementedError):
+        workflow_attempt_repository.update(
+            WorkflowAttempt(
+                attempt_id=attempt_id,
+                workflow_instance_id=workflow_instance_id,
+                attempt_number=1,
+                status=WorkflowAttemptStatus.RUNNING,
+                started_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        workflow_checkpoint_repository.get_latest_by_workflow_id(workflow_instance_id)
+    with pytest.raises(NotImplementedError):
+        workflow_checkpoint_repository.get_latest_by_attempt_id(attempt_id)
+    with pytest.raises(NotImplementedError):
+        workflow_checkpoint_repository.create(
+            WorkflowCheckpoint(
+                checkpoint_id=uuid4(),
+                workflow_instance_id=workflow_instance_id,
+                attempt_id=attempt_id,
+                step_name="implement",
+                summary="checkpoint",
+                checkpoint_json={},
+                created_at=now,
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        verify_report_repository.get_latest_by_attempt_id(attempt_id)
+    with pytest.raises(NotImplementedError):
+        verify_report_repository.create(
+            VerifyReport(
+                verify_id=uuid4(),
+                attempt_id=attempt_id,
+                status=VerifyStatus.PASSED,
+                report_json={},
+                created_at=now,
+            )
+        )
+
+    with pytest.raises(NotImplementedError):
+        memory_episode_repository.create(
+            EpisodeRecord(
+                episode_id=uuid4(),
+                workflow_instance_id=workflow_instance_id,
+                summary="episode",
+                attempt_id=None,
+                metadata={},
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    with pytest.raises(NotImplementedError):
+        memory_episode_repository.list_by_workflow_id(workflow_instance_id, limit=1)
+
+    with pytest.raises(NotImplementedError):
+        memory_item_repository.create(
+            MemoryItemRecord(
+                memory_id=uuid4(),
+                workspace_id=workspace_id,
+                episode_id=uuid4(),
+                type="episode_note",
+                provenance="episode",
+                content="note",
+                metadata={},
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    with pytest.raises(NotImplementedError):
+        memory_item_repository.list_by_workspace_id(workspace_id, limit=1)
+    with pytest.raises(NotImplementedError):
+        memory_item_repository.list_by_episode_id(uuid4(), limit=1)
+    with pytest.raises(NotImplementedError):
+        memory_item_repository.count_by_provenance()
+
+    with pytest.raises(NotImplementedError):
+        memory_embedding_repository.create(
+            MemoryEmbeddingRecord(
+                memory_embedding_id=uuid4(),
+                memory_id=uuid4(),
+                embedding_model="model",
+                embedding=(0.1, 0.2),
+                content_hash="hash",
+                created_at=now,
+            )
+        )
+    with pytest.raises(NotImplementedError):
+        memory_embedding_repository.list_by_memory_id(uuid4(), limit=1)
+
+    relation = cast(
+        MemoryRelationRecord,
+        SimpleNamespace(
+            memory_relation_id=uuid4(),
+            source_memory_id=uuid4(),
+            target_memory_id=uuid4(),
+            relation_type="related_to",
+            metadata={},
+            created_at=now,
+        ),
+    )
+    with pytest.raises(NotImplementedError):
+        memory_relation_repository.create(relation)
+    with pytest.raises(NotImplementedError):
+        memory_relation_repository.list_by_source_memory_id(uuid4(), limit=1)
+    with pytest.raises(NotImplementedError):
+        memory_relation_repository.list_by_target_memory_id(uuid4(), limit=1)
+
+    service = WorkflowService(lambda: None)
+
+    workflow = WorkflowInstance(
+        workflow_instance_id=workflow_instance_id,
+        workspace_id=workspace_id,
+        ticket_id="ticket-1",
+        status=WorkflowInstanceStatus.RUNNING,
+        created_at=now,
+        updated_at=now,
+    )
+    other_workflow_attempt = WorkflowAttempt(
+        attempt_id=attempt_id,
+        workflow_instance_id=target_workflow_instance_id,
+        attempt_number=1,
+        status=WorkflowAttemptStatus.RUNNING,
+        started_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+
+    class MissingWorkflowUow:
+        def __init__(self) -> None:
+            self.workflow_instances = SimpleNamespace(get_by_id=lambda value: None)
+            self.workspaces = SimpleNamespace(get_by_id=lambda value: None)
+            self.workflow_attempts = SimpleNamespace(get_by_id=lambda value: None)
+
+    with pytest.raises(WorkflowNotFoundError, match="workflow not found"):
+        service._require_workflow(MissingWorkflowUow(), workflow_instance_id)
+
+    class MissingAttemptUow:
+        def __init__(self) -> None:
+            self.workflow_attempts = SimpleNamespace(get_by_id=lambda value: None)
+
+    with pytest.raises(AttemptNotFoundError, match="attempt not found"):
+        service._require_attempt(MissingAttemptUow(), attempt_id)
+
+    with pytest.raises(
+        WorkflowAttemptMismatchError,
+        match="attempt does not belong to workflow",
+    ):
+        service._ensure_attempt_matches_workflow(workflow, other_workflow_attempt)
+
+    unit_of_work = service._uow_factory()
+    assert unit_of_work is None
+
+    assert service._resume_latency_warning_threshold_ms() > 0
+
+    service._resume_latency_warning_threshold_ms_override = 250
+    assert service._resume_latency_warning_threshold_ms() == 250
+
+    service._resume_latency_warning_threshold_ms_override = 0
+    assert service._resume_latency_warning_threshold_ms() > 0
+
+    service._resume_latency_warning_threshold_ms_override = "invalid"
+    assert service._resume_latency_warning_threshold_ms() > 0
 
 
 def test_workflow_service_stats_and_listing_helpers_cover_repository_branches() -> None:

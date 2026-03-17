@@ -413,6 +413,53 @@ def test_build_embedding_generator_returns_openai_generator_by_default_shape() -
     assert generator.base_url == "https://api.openai.com/v1/embeddings"
 
 
+def test_build_embedding_generator_returns_default_external_generators_for_other_providers() -> (
+    None
+):
+    voyage = build_embedding_generator(
+        EmbeddingSettings(
+            provider=EmbeddingProvider.VOYAGEAI,
+            model="voyage-3",
+            api_key="secret",
+            base_url=None,
+            dimensions=1024,
+            enabled=True,
+        )
+    )
+    cohere = build_embedding_generator(
+        EmbeddingSettings(
+            provider=EmbeddingProvider.COHERE,
+            model="embed-english-v3.0",
+            api_key="secret",
+            base_url=None,
+            dimensions=1024,
+            enabled=True,
+        )
+    )
+    custom = build_embedding_generator(
+        EmbeddingSettings(
+            provider=EmbeddingProvider.CUSTOM_HTTP,
+            model="custom-model",
+            api_key="secret",
+            base_url=None,
+            dimensions=1024,
+            enabled=True,
+        )
+    )
+
+    assert isinstance(voyage, ExternalAPIEmbeddingGenerator)
+    assert voyage.provider is EmbeddingProvider.VOYAGEAI
+    assert voyage.base_url == "https://api.voyageai.com/v1"
+
+    assert isinstance(cohere, ExternalAPIEmbeddingGenerator)
+    assert cohere.provider is EmbeddingProvider.COHERE
+    assert cohere.base_url == "https://api.cohere.com/v1"
+
+    assert isinstance(custom, ExternalAPIEmbeddingGenerator)
+    assert custom.provider is EmbeddingProvider.CUSTOM_HTTP
+    assert custom.base_url == ""
+
+
 def test_external_embedding_generator_requires_api_key_at_runtime() -> None:
     generator = ExternalAPIEmbeddingGenerator(
         provider=EmbeddingProvider.OPENAI,
@@ -426,6 +473,42 @@ def test_external_embedding_generator_requires_api_key_at_runtime() -> None:
 
     assert exc_info.value.provider == "openai"
     assert exc_info.value.details == {"field": "api_key"}
+
+
+def test_external_embedding_generator_rejects_empty_text_before_api_key_validation() -> (
+    None
+):
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.OPENAI,
+        model="text-embedding-3-small",
+        api_key=None,
+        base_url="https://api.openai.com/v1",
+    )
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="   "))
+
+    assert exc_info.value.provider == "openai"
+    assert exc_info.value.details == {"field": "text"}
+
+
+def test_external_embedding_generator_reports_unimplemented_provider_details() -> None:
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.VOYAGEAI,
+        model="voyage-3",
+        api_key="secret",
+        base_url="https://api.voyageai.com/v1",
+    )
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="hello world", model="voyage-3-lite"))
+
+    assert exc_info.value.provider == "voyageai"
+    assert exc_info.value.details == {
+        "provider": "voyageai",
+        "model": "voyage-3-lite",
+        "base_url": "https://api.voyageai.com/v1",
+    }
 
 
 def test_openai_embedding_generator_posts_expected_request_and_parses_response(
@@ -609,6 +692,13 @@ def test_custom_http_embedding_generator_reports_http_error_details(
         base_url="https://embeddings.example.com/v1",
     )
 
+    class FakeHTTPErrorBody:
+        def read(self) -> bytes:
+            return b'{"error":"temporary outage"}'
+
+        def close(self) -> None:
+            return None
+
     def fake_urlopen(_request: object) -> object:
         from urllib import error as urllib_error
 
@@ -617,7 +707,7 @@ def test_custom_http_embedding_generator_reports_http_error_details(
             code=503,
             msg="Service Unavailable",
             hdrs=None,
-            fp=None,
+            fp=FakeHTTPErrorBody(),
         )
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
@@ -628,6 +718,34 @@ def test_custom_http_embedding_generator_reports_http_error_details(
     assert exc_info.value.provider == "custom_http"
     assert exc_info.value.details["status_code"] == 503
     assert exc_info.value.details["base_url"] == "https://embeddings.example.com/v1"
+    assert exc_info.value.details["response_body"] == '{"error":"temporary outage"}'
+
+
+def test_custom_http_embedding_generator_reports_url_error_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = ExternalAPIEmbeddingGenerator(
+        provider=EmbeddingProvider.CUSTOM_HTTP,
+        model="custom-model",
+        api_key="secret",
+        base_url="https://embeddings.example.com/v1",
+    )
+
+    def fake_urlopen(_request: object) -> object:
+        from urllib import error as urllib_error
+
+        raise urllib_error.URLError("connection reset")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(EmbeddingGenerationError) as exc_info:
+        generator.generate(EmbeddingRequest(text="hello world"))
+
+    assert exc_info.value.provider == "custom_http"
+    assert exc_info.value.details == {
+        "base_url": "https://embeddings.example.com/v1",
+        "reason": "connection reset",
+    }
 
 
 def test_custom_http_embedding_generator_rejects_invalid_json_response(
@@ -785,3 +903,25 @@ def test_compute_content_hash_uses_text_and_metadata() -> None:
     assert first == second
     assert first != different_text
     assert first != different_metadata
+
+
+def test_compute_content_hash_normalizes_text_and_defaults_metadata() -> None:
+    normalized = compute_content_hash("  same text  ", None)
+    explicit = compute_content_hash("same text", {})
+
+    assert normalized == explicit
+
+
+def test_embedding_result_supports_request_model_override_for_local_stub() -> None:
+    generator = LocalStubEmbeddingGenerator(model="local-stub-v1", dimensions=4)
+
+    result = generator.generate(
+        EmbeddingRequest(
+            text="hello world",
+            model="override-model",
+            metadata={"kind": "episode"},
+        )
+    )
+
+    assert result.model == "override-model"
+    assert len(result.vector) == 4

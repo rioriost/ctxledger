@@ -26,9 +26,11 @@ from ctxledger.runtime.server_responses import (
     build_workflow_resume_response,
     build_workspace_resume_resource_response,
 )
-from ctxledger.workflow.service import ValidationError
+from ctxledger.server import CtxLedgerServer, create_server
+from ctxledger.workflow.service import ValidationError, WorkflowError
 
 from ..support.coverage_targets_support import make_server, make_settings
+from ..support.server_test_support import FakeDatabaseHealthChecker
 
 
 def _load_http_app_module(monkeypatch: pytest.MonkeyPatch):
@@ -961,6 +963,201 @@ def test_build_workspace_resume_resource_response_uow_branch_returns_workspace_n
         }
     }
     assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_resume_response_returns_not_found_for_explicit_workflow_not_found_code() -> (
+    None
+):
+    workflow_instance_id = uuid4()
+    server = make_server()
+
+    class WorkflowNotFoundError(WorkflowError):
+        code = "workflow_not_found"
+
+        def __init__(self) -> None:
+            super().__init__("workflow missing", details={})
+
+    def raise_workflow_not_found(
+        _workflow_instance_id: object,
+    ) -> object:
+        raise WorkflowNotFoundError()
+
+    server.get_workflow_resume = raise_workflow_not_found
+
+    response = build_workflow_resume_response(server, workflow_instance_id)
+
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "not_found",
+            "message": "workflow missing",
+            "details": {
+                "workflow_instance_id": str(workflow_instance_id),
+            },
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_resume_response_returns_server_error_for_unknown_workflow_error() -> (
+    None
+):
+    workflow_instance_id = uuid4()
+    server = make_server()
+
+    class UnknownWorkflowError(WorkflowError):
+        code = "unexpected_failure"
+
+        def __init__(self) -> None:
+            super().__init__("failed to resume", details={"reason": "boom"})
+
+    def raise_unknown_workflow_error(
+        _workflow_instance_id: object,
+    ) -> object:
+        raise UnknownWorkflowError()
+
+    server.get_workflow_resume = raise_unknown_workflow_error
+
+    response = build_workflow_resume_response(server, workflow_instance_id)
+
+    assert response.status_code == 500
+    assert response.payload == {
+        "error": {
+            "code": "server_error",
+            "message": "failed to resume",
+            "details": {
+                "reason": "boom",
+            },
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_resume_response_uses_default_server_error_message_when_workflow_error_string_is_empty() -> (
+    None
+):
+    workflow_instance_id = uuid4()
+    server = make_server()
+
+    class SilentWorkflowError(WorkflowError):
+        code = "unexpected_failure"
+
+        def __init__(self) -> None:
+            super().__init__("", details={})
+
+    def raise_silent_workflow_error(
+        _workflow_instance_id: object,
+    ) -> object:
+        raise SilentWorkflowError()
+
+    server.get_workflow_resume = raise_silent_workflow_error
+
+    response = build_workflow_resume_response(server, workflow_instance_id)
+
+    assert response.status_code == 500
+    assert response.payload == {
+        "error": {
+            "code": "server_error",
+            "message": "failed to resume workflow",
+            "details": {},
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_build_workflow_detail_resource_response_propagates_non_success_workflow_response() -> (
+    None
+):
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    resume_result = SimpleNamespace(
+        workflow_instance=SimpleNamespace(
+            workflow_instance_id=workflow_instance_id,
+            workspace_id=workspace_id,
+        ),
+    )
+
+    class ResumeResultWorkflowService:
+        def __init__(self, resume_result: object) -> None:
+            self.resume_result = resume_result
+
+        def resume_workflow(self, data: object) -> dict[str, object]:
+            return {"workflow_instance_id": str(data.workflow_instance_id)}
+
+    server = make_server()
+    server.workflow_service = ResumeResultWorkflowService(resume_result)
+    original_builder = build_workflow_detail_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ]
+
+    def fake_build_workflow_resume_response(
+        _server: object, workflow_id: object
+    ) -> object:
+        assert workflow_id == workflow_instance_id
+        return SimpleNamespace(
+            status_code=503,
+            payload={
+                "error": {
+                    "code": "server_not_ready",
+                    "message": "workflow service is not initialized",
+                }
+            },
+            headers={"content-type": "application/json"},
+        )
+
+    build_workflow_detail_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ] = fake_build_workflow_resume_response
+    try:
+        response = build_workflow_detail_resource_response(
+            server,
+            workspace_id,
+            workflow_instance_id,
+        )
+    finally:
+        build_workflow_detail_resource_response.__globals__[
+            "build_workflow_resume_response"
+        ] = original_builder
+
+    assert response.status_code == 503
+    assert response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
+def test_create_server_uses_provided_runtime_and_workflow_service_factory() -> None:
+    settings = make_settings()
+    sentinel_runtime = object()
+    sentinel_factory = object()
+
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+        runtime=sentinel_runtime,
+        workflow_service_factory=sentinel_factory,
+    )
+
+    assert isinstance(server, CtxLedgerServer)
+    assert server.runtime is sentinel_runtime
+    assert server.workflow_service_factory is sentinel_factory
+
+
+def test_create_server_builds_default_runtime_and_factory_when_omitted() -> None:
+    settings = make_settings()
+
+    server = create_server(
+        settings,
+        db_health_checker=FakeDatabaseHealthChecker(),
+    )
+
+    assert isinstance(server, CtxLedgerServer)
+    assert server.runtime is not None
+    assert server.workflow_service_factory is not None
 
 
 def test_build_workspace_resume_resource_response_uow_branch_returns_no_workflow() -> (

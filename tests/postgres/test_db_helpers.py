@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import importlib
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
+from ctxledger.memory.types import MemoryRelationRecord
 from ctxledger.workflow.service import PersistenceError
+from tests.postgres.conftest import FakeConnection
 
 
 def test_schema_file_exists() -> None:
@@ -127,6 +130,200 @@ def test_postgres_config_from_settings_and_schema_loader() -> None:
 
     schema_sql = postgres.load_postgres_schema_sql()
     assert "-- ctxledger PostgreSQL schema" in schema_sql
+
+
+def test_database_health_checker_covers_schema_ready_and_session_settings() -> None:
+    postgres = importlib.import_module("ctxledger.db.postgres")
+
+    class FakeCursor:
+        def __init__(self, rows: list[object] | None = None) -> None:
+            self.rows = rows or []
+            self.executed: list[tuple[str, object]] = []
+
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            self.executed.append((query, params))
+
+        def fetchone(self) -> dict[str, int]:
+            return {"ok": 1}
+
+        def fetchall(self) -> list[object]:
+            return self.rows
+
+    class FakeConnection:
+        def __init__(self, rows: list[object] | None = None) -> None:
+            self._rows = rows or []
+            self.cursors: list[FakeCursor] = []
+
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            cursor = FakeCursor(self._rows)
+            self.cursors.append(cursor)
+            return cursor
+
+    class FakeConnector:
+        def __init__(self, rows: list[object] | None = None) -> None:
+            self.rows = rows or []
+            self.calls: list[str] = []
+            self.connections: list[FakeConnection] = []
+
+        def __call__(self, database_url: str) -> FakeConnection:
+            self.calls.append(database_url)
+            connection = FakeConnection(self.rows)
+            self.connections.append(connection)
+            return connection
+
+    config = postgres.PostgresConfig(
+        database_url="postgresql://example/db",
+        statement_timeout_ms=None,
+        schema_name="ctxledger",
+    )
+
+    ping_connector = FakeConnector()
+    original_connect = postgres._connect
+    postgres._connect = ping_connector
+    try:
+        checker = postgres.PostgresDatabaseHealthChecker(config)
+        checker.ping()
+    finally:
+        postgres._connect = original_connect
+
+    assert ping_connector.calls == ["postgresql://example/db"]
+    ping_queries = [
+        query
+        for cursor in ping_connector.connections[0].cursors
+        for query, _params in cursor.executed
+    ]
+    assert "SET statement_timeout = 0" in ping_queries
+    assert 'SET search_path TO "ctxledger", public' in ping_queries
+    assert "SELECT 1" in ping_queries
+
+    ready_connector = FakeConnector(
+        rows=[
+            {"table_name": "workspaces"},
+            {"table_name": "workflow_instances"},
+            {"table_name": "workflow_attempts"},
+            {"table_name": "workflow_checkpoints"},
+            {"table_name": "verify_reports"},
+        ]
+    )
+    postgres._connect = ready_connector
+    try:
+        checker = postgres.PostgresDatabaseHealthChecker(config)
+        assert checker.schema_ready() is True
+    finally:
+        postgres._connect = original_connect
+
+    not_ready_connector = FakeConnector(
+        rows=[
+            {"table_name": "workspaces"},
+            {"table_name": "workflow_instances"},
+        ]
+    )
+    postgres._connect = not_ready_connector
+    try:
+        checker = postgres.PostgresDatabaseHealthChecker(config)
+        assert checker.schema_ready() is False
+    finally:
+        postgres._connect = original_connect
+
+
+def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guards() -> (
+    None
+):
+    postgres = importlib.import_module("ctxledger.db.postgres")
+    connection = FakeConnection()
+
+    workflow_repo = postgres.PostgresWorkflowInstanceRepository(connection)
+    relation_repo = postgres.PostgresMemoryRelationRepository(connection)
+    memory_item_repo = postgres.PostgresMemoryItemRepository(connection)
+
+    workspace_id = uuid4()
+    workflow_a = {
+        "workflow_instance_id": uuid4(),
+        "workspace_id": workspace_id,
+        "ticket_id": "TICKET-A",
+        "status": "running",
+        "metadata_json": {"kind": "recent"},
+        "created_at": datetime(2024, 1, 10, tzinfo=UTC),
+        "updated_at": datetime(2024, 1, 11, tzinfo=UTC),
+    }
+    workflow_b = {
+        "workflow_instance_id": uuid4(),
+        "workspace_id": workspace_id,
+        "ticket_id": "TICKET-B",
+        "status": "completed",
+        "metadata_json": {},
+        "created_at": datetime(2024, 1, 8, tzinfo=UTC),
+        "updated_at": datetime(2024, 1, 9, tzinfo=UTC),
+    }
+
+    connection.fetchall_results.append([workflow_a, workflow_b])
+    by_workspace = workflow_repo.list_by_workspace_id(workspace_id, limit=2)
+    assert tuple(item.ticket_id for item in by_workspace) == ("TICKET-A", "TICKET-B")
+
+    connection.fetchall_results.append([workflow_b, workflow_a])
+    by_ticket = workflow_repo.list_by_ticket_id("TICKET", limit=2)
+    assert tuple(item.ticket_id for item in by_ticket) == ("TICKET-B", "TICKET-A")
+
+    source_memory_id = uuid4()
+    target_memory_id = uuid4()
+    relation_row = {
+        "memory_relation_id": uuid4(),
+        "source_memory_id": source_memory_id,
+        "target_memory_id": target_memory_id,
+        "relation_type": "related_to",
+        "metadata_json": {"score": 0.8},
+        "created_at": datetime(2024, 1, 12, tzinfo=UTC),
+    }
+
+    connection.fetchall_results.append([relation_row])
+    by_source = relation_repo.list_by_source_memory_id(source_memory_id, limit=5)
+    assert by_source == (
+        MemoryRelationRecord(
+            memory_relation_id=relation_row["memory_relation_id"],
+            source_memory_id=source_memory_id,
+            target_memory_id=target_memory_id,
+            relation_type="related_to",
+            metadata={"score": 0.8},
+            created_at=relation_row["created_at"],
+        ),
+    )
+
+    connection.fetchall_results.append([relation_row])
+    by_target = relation_repo.list_by_target_memory_id(target_memory_id, limit=5)
+    assert by_target == (
+        MemoryRelationRecord(
+            memory_relation_id=relation_row["memory_relation_id"],
+            source_memory_id=source_memory_id,
+            target_memory_id=target_memory_id,
+            relation_type="related_to",
+            metadata={"score": 0.8},
+            created_at=relation_row["created_at"],
+        ),
+    )
+
+    with pytest.raises(
+        PersistenceError,
+        match="Unsupported datetime field 'bad_field' for workflow_instances",
+    ):
+        workflow_repo.max_datetime("bad_field")
+
+    with pytest.raises(
+        PersistenceError,
+        match="Unsupported datetime field 'bad_field' for memory_items",
+    ):
+        memory_item_repo.max_datetime("bad_field")
 
 
 def test_postgres_row_mapping_helpers_cover_memory_records() -> None:

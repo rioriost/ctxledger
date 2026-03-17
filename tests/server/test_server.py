@@ -11,13 +11,14 @@ from ctxledger.runtime.errors import ServerBootstrapError
 from ctxledger.runtime.http_runtime import HttpRuntimeAdapter
 from ctxledger.runtime.orchestration import create_runtime, print_runtime_summary
 from ctxledger.runtime.types import ReadinessStatus
-from ctxledger.server import create_server
+from ctxledger.server import CtxLedgerServer, create_server, run_server
 from tests.support.server_test_support import (
     FakeDatabaseHealthChecker,
     FakeRuntime,
     build_runtime_summary_payload,
     install_logging_info_capture,
     make_http_runtime,
+    make_resume_fixture,
     make_server,
     make_settings,
 )
@@ -196,6 +197,257 @@ def test_shutdown_stops_runtime_after_successful_startup() -> None:
     assert server.health().details["started"] is False
 
 
+def test_server_response_builder_methods_delegate_to_runtime_response_helpers() -> None:
+    server = make_server(runtime=None)
+    workflow_instance_id = make_resume_fixture().workflow_instance.workflow_instance_id
+
+    resume_response = server.build_workflow_resume_response(workflow_instance_id)
+    introspection_response = server.build_runtime_introspection_response()
+    routes_response = server.build_runtime_routes_response()
+    tools_response = server.build_runtime_tools_response()
+
+    assert resume_response.status_code == 503
+    assert resume_response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+    assert introspection_response.status_code == 200
+    assert introspection_response.payload == {"runtime": []}
+    assert routes_response.status_code == 200
+    assert routes_response.payload == {"routes": []}
+    assert tools_response.status_code == 200
+    assert tools_response.payload == {"tools": []}
+
+
+def test_build_workspace_and_workflow_resource_responses_delegate_to_runtime_helpers() -> (
+    None
+):
+    workspace_id = make_resume_fixture().workspace.workspace_id
+    workflow_instance_id = make_resume_fixture().workflow_instance.workflow_instance_id
+    server = make_server(runtime=None)
+
+    workspace_response = server.build_workspace_resume_resource_response(workspace_id)
+    workflow_response = server.build_workflow_detail_resource_response(
+        workspace_id,
+        workflow_instance_id,
+    )
+
+    assert workspace_response.status_code == 503
+    assert workspace_response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+    assert workflow_response.status_code == 503
+    assert workflow_response.payload == {
+        "error": {
+            "code": "server_not_ready",
+            "message": "workflow service is not initialized",
+        }
+    }
+
+
+def test_run_server_wrapper_delegates_to_runtime_orchestration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_server(
+        *,
+        transport: str | None = None,
+        host: str | None = None,
+        port: int | None = None,
+    ) -> int:
+        captured["transport"] = transport
+        captured["host"] = host
+        captured["port"] = port
+        return 17
+
+    monkeypatch.setattr("ctxledger.runtime.orchestration.run_server", fake_run_server)
+
+    exit_code = run_server(
+        transport="http",
+        host="0.0.0.0",
+        port=9000,
+    )
+
+    assert exit_code == 17
+    assert captured == {
+        "transport": "http",
+        "host": "0.0.0.0",
+        "port": 9000,
+    }
+
+
+def test_startup_builds_owned_connection_pool_and_falls_back_when_factory_rejects_connection_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings()
+    db_checker = FakeDatabaseHealthChecker()
+    runtime = FakeRuntime()
+    built_pools: list[object] = []
+    postgres_configs: list[object] = []
+
+    class FakePool:
+        def close(self) -> None:
+            return None
+
+    fake_pool = FakePool()
+
+    def fake_from_settings(received_settings: object) -> object:
+        postgres_configs.append(received_settings)
+        return "postgres-config"
+
+    def fake_build_connection_pool(config: object) -> object:
+        built_pools.append(config)
+        return fake_pool
+
+    class RejectingFactory:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def __call__(self, **kwargs: object) -> object:
+            self.calls.append(dict(kwargs))
+            if "connection_pool" in kwargs:
+                raise TypeError("connection_pool is not accepted")
+            return "workflow-service"
+
+    rejecting_factory = RejectingFactory()
+    server = make_server(
+        settings=settings,
+        db_health_checker=db_checker,
+        runtime=runtime,
+    )
+    server.connection_pool = None
+    server.workflow_service_factory = rejecting_factory
+    server._owns_connection_pool = True
+
+    monkeypatch.setattr(
+        "ctxledger.server.PostgresConfig.from_settings", fake_from_settings
+    )
+    monkeypatch.setattr(
+        "ctxledger.server.build_connection_pool", fake_build_connection_pool
+    )
+
+    server.startup()
+
+    assert postgres_configs == [settings]
+    assert built_pools == ["postgres-config"]
+    assert rejecting_factory.calls == [
+        {"connection_pool": fake_pool},
+        {},
+    ]
+    assert server.connection_pool is fake_pool
+    assert server.workflow_service == "workflow-service"
+    assert runtime.start_calls == 1
+    assert server.health().details["started"] is True
+
+
+def test_startup_raises_type_error_when_factory_failure_is_not_connection_pool_related(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings()
+    db_checker = FakeDatabaseHealthChecker()
+    runtime = FakeRuntime()
+
+    class FakePool:
+        def close(self) -> None:
+            return None
+
+    def fake_from_settings(received_settings: object) -> object:
+        assert received_settings is settings
+        return "postgres-config"
+
+    def fake_build_connection_pool(config: object) -> object:
+        assert config == "postgres-config"
+        return FakePool()
+
+    def exploding_factory(**kwargs: object) -> object:
+        raise TypeError("unexpected keyword")
+
+    server = make_server(
+        settings=settings,
+        db_health_checker=db_checker,
+        runtime=runtime,
+    )
+    server.connection_pool = None
+    server.workflow_service_factory = exploding_factory
+    server._owns_connection_pool = True
+
+    monkeypatch.setattr(
+        "ctxledger.server.PostgresConfig.from_settings", fake_from_settings
+    )
+    monkeypatch.setattr(
+        "ctxledger.server.build_connection_pool", fake_build_connection_pool
+    )
+
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        server.startup()
+
+    assert runtime.start_calls == 0
+    assert server.health().details["started"] is False
+
+
+def test_shutdown_closes_owned_connection_pool_and_clears_workflow_service() -> None:
+    settings = make_settings()
+    db_checker = FakeDatabaseHealthChecker()
+    runtime = FakeRuntime()
+    close_calls: list[str] = []
+
+    class FakePool:
+        def close(self) -> None:
+            close_calls.append("close")
+
+    server = make_server(
+        settings=settings,
+        db_health_checker=db_checker,
+        runtime=runtime,
+    )
+    server.connection_pool = FakePool()
+    server.workflow_service = object()
+    server._owns_connection_pool = True
+    server._started = True
+
+    server.shutdown()
+
+    assert runtime.stop_calls == 1
+    assert close_calls == ["close"]
+    assert server.connection_pool is None
+    assert server.workflow_service is None
+    assert server.health().details["started"] is False
+
+
+def test_shutdown_keeps_external_connection_pool_open() -> None:
+    settings = make_settings()
+    db_checker = FakeDatabaseHealthChecker()
+    runtime = FakeRuntime()
+    close_calls: list[str] = []
+
+    class FakePool:
+        def close(self) -> None:
+            close_calls.append("close")
+
+    pool = FakePool()
+    server = make_server(
+        settings=settings,
+        db_health_checker=db_checker,
+        runtime=runtime,
+    )
+    server.connection_pool = pool
+    server._owns_connection_pool = False
+    server._started = True
+
+    server.shutdown()
+
+    assert runtime.stop_calls == 1
+    assert close_calls == []
+    assert server.connection_pool is pool
+    assert server.health().details["started"] is False
+
+
 def test_readiness_reports_database_unavailable_after_start_if_ping_fails() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker()
@@ -341,6 +593,7 @@ def test_create_server_wires_http_runtime_with_workflow_resume_route() -> None:
         workflow_service_factory=lambda: None,
     )
 
+    assert isinstance(server, CtxLedgerServer)
     assert isinstance(server.runtime, HttpRuntimeAdapter)
     assert server.runtime.introspection_endpoints() == (
         "mcp_rpc",
@@ -359,6 +612,7 @@ def test_create_server_returns_http_runtime_by_default() -> None:
         workflow_service_factory=lambda: None,
     )
 
+    assert isinstance(server, CtxLedgerServer)
     assert isinstance(server.runtime, HttpRuntimeAdapter)
 
 
