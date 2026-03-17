@@ -1030,6 +1030,10 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
     assert response.details["query_filter_applied"] is True
     assert response.details["matched_episode_count"] == 1
     assert response.details["hierarchy_applied"] is True
+    assert response.details["inherited_context_is_auxiliary"] is True
+    assert (
+        response.details["inherited_context_returned_without_episode_matches"] is False
+    )
     assert response.details["memory_context_groups"] == [
         {
             "scope": "episode",
@@ -1087,7 +1091,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
     ]
 
 
-def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_only_inherited_context() -> (
+def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context_when_query_matches_only_inherited_context() -> (
     None
 ):
     workflow_id = uuid4()
@@ -1164,6 +1168,12 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_o
     assert response.details["memory_item_counts_by_episode"] == {}
     assert response.details["summaries"] == []
     assert response.details["hierarchy_applied"] is True
+    assert response.details["inherited_context_is_auxiliary"] is True
+    assert (
+        response.details["inherited_context_returned_without_episode_matches"] is True
+    )
+    # Inherited workspace items currently remain visible as auxiliary context
+    # even when episode-oriented query filtering removes all episodes.
     assert response.details["memory_context_groups"] == [
         {
             "scope": "workspace",

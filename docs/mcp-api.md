@@ -1180,6 +1180,8 @@ Representative current response details may include:
 - `matched_episode_count`
 - `episodes_returned`
 - `hierarchy_applied`
+- `inherited_context_is_auxiliary`
+- `inherited_context_returned_without_episode_matches`
 - `memory_context_groups`
 - `inherited_memory_items`
 - `related_memory_items`
@@ -1219,6 +1221,29 @@ When `include_memory_items=true`, the response may now distinguish:
 `hierarchy_applied` is currently `true` when inherited workspace-scoped items are
 present in the returned context details, and `false` otherwise.
 
+The details payload now also makes that auxiliary-context behavior explicit through:
+
+- `inherited_context_is_auxiliary`
+- `inherited_context_returned_without_episode_matches`
+
+At the current implementation stage, inherited workspace-scoped memory is treated
+as auxiliary support context rather than as part of the episode-selection filter.
+
+That means inherited workspace-scoped memory may still appear in
+`inherited_memory_items` and workspace-scoped entries in `memory_context_groups`
+even when the lightweight query filter removes all episodes from the returned
+`episodes` list.
+
+When that happens:
+
+- `inherited_context_is_auxiliary = true`
+- `inherited_context_returned_without_episode_matches = true`
+
+When inherited workspace-scoped memory is present alongside matching episodes:
+
+- `inherited_context_is_auxiliary = true`
+- `inherited_context_returned_without_episode_matches = false`
+
 ### Current Retrieval Semantics
 The current path remains intentionally conservative:
 
@@ -1240,6 +1265,9 @@ That means:
 - direct episode selection is query-aware
 - inherited workspace-scoped memory may still be returned as auxiliary context when memory items are enabled
 - inherited workspace-scoped memory may also be returned even when no episode survives query filtering
+- `inherited_context_is_auxiliary` makes that support-role explicit
+- `inherited_context_returned_without_episode_matches` makes the no-matching-episodes case explicit
+- this should currently be interpreted as intentional auxiliary-context behavior rather than as evidence that inherited workspace items participate in episode matching
 - `related_memory_items` is currently narrower than general relation-aware retrieval:
   - it starts from returned episode memory items only
   - it follows one outgoing hop only

@@ -239,11 +239,17 @@ At present, episodic behavior includes:
   - inherited workspace-scoped memory whose `episode_id` is `null`
 - exposing explicit retrieval details for this minimal hierarchy slice, including:
   - `hierarchy_applied`
+  - `inherited_context_is_auxiliary`
+  - `inherited_context_returned_without_episode_matches`
   - `memory_context_groups`
   - `inherited_memory_items`
 - exposing explicit selection metadata inside `memory_context_groups`, including:
   - `selection_kind = direct_episode` for episode-scoped direct context
   - `selection_kind = inherited_workspace` for workspace-scoped inherited context
+- keeping inherited workspace-scoped memory as auxiliary context rather than part of episode query matching:
+  - lightweight query filtering still applies to episode summary and metadata text first
+  - inherited workspace-scoped memory may still remain visible when memory items are enabled
+  - this can remain true even when no episode survives query filtering
 - exposing a first minimal relation-aware detail surface through:
   - `related_memory_items`
   - current behavior limited to one outgoing `supports` hop from returned episode memory items
@@ -479,11 +485,19 @@ More specifically, the current details payload is intended to explain:
 - how many episodes were available before the query filter
 - how many episodes matched the current lightweight filter
 - how many episodes were ultimately returned
+- whether inherited workspace-scoped memory is being surfaced as auxiliary context outside episode-match filtering
+- whether inherited workspace-scoped memory is explicitly marked as auxiliary via `inherited_context_is_auxiliary`
+- whether inherited workspace-scoped memory was returned even though no episodes survived filtering via `inherited_context_returned_without_episode_matches`
 
 That means it has started to become useful, but it is not the final design target.
 
 Within that current details payload, `memory_context_groups` should now be understood as
 an explicit grouping surface rather than only an incidental formatting choice.
+
+At the current implementation stage, that grouping surface also reflects a deliberate
+boundary between episode-oriented query matching and inherited auxiliary context:
+episode selection is query-aware, while inherited workspace-scoped memory can still be
+returned as supporting context when memory items are enabled.
 
 At the current implementation stage, groups may carry explicit selection metadata such as:
 
