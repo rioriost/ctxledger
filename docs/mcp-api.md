@@ -1273,6 +1273,7 @@ query filtering, representative details currently include:
 - non-matching episode explanation entries are marked with `explanation_basis = "query_filtered_out"`
 - `inherited_context_is_auxiliary = true`
 - `inherited_context_returned_without_episode_matches = true`
+- `inherited_context_returned_as_auxiliary_without_episode_matches = true`
 
 This should currently be interpreted as intentional auxiliary-context behavior,
 not as evidence that inherited workspace items participate in episode matching.
@@ -1308,6 +1309,7 @@ That means:
 - `episode_explanations` can still retain filtered-out episode diagnostics even when `episodes` becomes empty after filtering
 - `inherited_context_is_auxiliary` makes that support-role explicit
 - `inherited_context_returned_without_episode_matches` makes the no-matching-episodes case explicit
+- `inherited_context_returned_as_auxiliary_without_episode_matches` explicitly states that the inherited workspace context remained visible in that no-matching-episodes case because it is auxiliary
 - this should currently be interpreted as intentional auxiliary-context behavior rather than as evidence that inherited workspace items participate in episode matching
 - `related_memory_items` is currently narrower than general relation-aware retrieval:
   - it starts from returned episode memory items only

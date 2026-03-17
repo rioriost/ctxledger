@@ -1511,6 +1511,7 @@ class MemoryService:
                     "hierarchy_applied": bool(inherited_workspace_items),
                     "inherited_context_is_auxiliary": bool(inherited_workspace_items),
                     "inherited_context_returned_without_episode_matches": False,
+                    "inherited_context_returned_as_auxiliary_without_episode_matches": False,
                     "related_context_is_auxiliary": False,
                     "related_context_relation_types": [],
                     "related_context_returned_without_episode_matches": False,
@@ -1680,6 +1681,9 @@ class MemoryService:
                 "hierarchy_applied": bool(inherited_memory_items),
                 "inherited_context_is_auxiliary": bool(inherited_memory_items),
                 "inherited_context_returned_without_episode_matches": bool(
+                    inherited_memory_items and matched_episode_count == 0
+                ),
+                "inherited_context_returned_as_auxiliary_without_episode_matches": bool(
                     inherited_memory_items and matched_episode_count == 0
                 ),
                 "related_context_is_auxiliary": bool(related_memory_items),

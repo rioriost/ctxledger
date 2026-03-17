@@ -1174,6 +1174,12 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
     assert (
         response.details["inherited_context_returned_without_episode_matches"] is True
     )
+    assert (
+        response.details[
+            "inherited_context_returned_as_auxiliary_without_episode_matches"
+        ]
+        is True
+    )
     assert response.details["all_episodes_filtered_out_by_query"] is True
     assert response.details["episode_explanations"] == [
         {

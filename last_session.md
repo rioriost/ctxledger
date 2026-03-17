@@ -2,17 +2,17 @@
 
 ## Summary
 
-Resumed the existing running workflow for the ongoing `memory_get_context` workstream and completed another semantically small query-filter diagnostics slice. The current contract is now aligned across implementation, tests, docs, and continuation notes: lightweight query filtering remains episode-oriented, inherited workspace-scoped memory remains intentional auxiliary context, `episode_explanations` preserves filtered-out diagnostics only in the all-filtered case, and `all_episodes_filtered_out_by_query` now marks that case explicitly.
+Resumed the existing running workflow for the ongoing `memory_get_context` workstream and completed another semantically small query-filter diagnostics slice. The current contract is now aligned across implementation, tests, docs, and continuation notes: lightweight query filtering remains episode-oriented, inherited workspace-scoped memory remains intentional auxiliary context, `episode_explanations` preserves filtered-out diagnostics only in the all-filtered case, `all_episodes_filtered_out_by_query` explicitly marks that case, and `inherited_context_returned_as_auxiliary_without_episode_matches` now makes the inherited auxiliary no-match case explicit as well.
 
 ## What changed in this session
 
 - resumed the existing running workflow instead of creating a duplicate workflow
 - continued from the previously committed diagnostic-contract slices:
-  - `c686874` — `Preserve filtered context explanations`
-  - `19d739d` — `Document filtered context diagnostics`
+  - `aa2bca8` — `Add all-filtered context flag`
   - `2fee7bc` — `Update session continuation note`
+  - `19d739d` — `Document filtered context diagnostics`
 - completed one narrow follow-up response-contract slice:
-  - added `details["all_episodes_filtered_out_by_query"]` for the explicit all-filtered query case
+  - added `details["inherited_context_returned_as_auxiliary_without_episode_matches"]`
 - updated implementation in:
   - `src/ctxledger/memory/service.py`
 - updated focused test coverage in:
@@ -40,18 +40,19 @@ Resumed the existing running workflow for the ongoing `memory_get_context` works
   - lightweight query filtering applies to episode summary and metadata text
   - inherited workspace-scoped memory does not participate in episode selection
   - inherited workspace-scoped memory may still be returned when no episodes survive filtering
-- the all-filtered diagnostic behavior now has one explicit response flag:
+- the all-filtered and inherited-no-match diagnostic behavior now has a clearer explicit flag set:
   - `all_episodes_filtered_out_by_query = true` identifies the case where query filtering removed every episode
-  - in that case, `episode_explanations` may still preserve pre-filter diagnostics
+  - `episode_explanations` may still preserve pre-filter diagnostics in that case
   - non-matching entries in that all-filtered case are marked with `explanation_basis = "query_filtered_out"`
+  - `inherited_context_returned_as_auxiliary_without_episode_matches = true` explicitly states that inherited workspace context remained visible in the no-match case because it is auxiliary
 - this keeps the change semantically small without widening scope into broader retrieval redesign, ranking behavior, semantic retrieval, or graph traversal
 
 ## Next suggested work
 
 - keep the next slice semantically small within the same running workflow
 - the best next candidates are:
-  - decide whether the all-filtered diagnostic flag set is now sufficient as-is or whether one more narrowly scoped explanatory detail field is worth adding
-  - or choose another small `memory_get_context` contract clarification without widening retrieval scope
+  - decide whether the current all-filtered and inherited-no-match flag set is now sufficient as-is
+  - or choose one more narrowly scoped `memory_get_context` contract clarification without widening retrieval scope
 - if taking another diagnostic-contract slice next:
   - prefer one explicit response behavior only
   - update focused tests first or alongside the implementation
@@ -63,3 +64,4 @@ Resumed the existing running workflow for the ongoing `memory_get_context` works
   - structured relation-aware details with compatibility fields still present
   - filtered-out episode explanation diagnostics only in the all-filtered case
   - explicit `all_episodes_filtered_out_by_query` signaling for that case
+  - explicit `inherited_context_returned_as_auxiliary_without_episode_matches` signaling for the inherited auxiliary no-match case
