@@ -1514,6 +1514,8 @@ class MemoryService:
                     "related_context_is_auxiliary": False,
                     "related_context_relation_types": [],
                     "related_context_returned_without_episode_matches": False,
+                    "flat_related_memory_items_is_compatibility_field": False,
+                    "flat_related_memory_items_matches_grouped_episode_related_items": False,
                     "memory_context_groups": (
                         [
                             {
@@ -1668,6 +1670,12 @@ class MemoryService:
                     ["supports"] if related_memory_items else []
                 ),
                 "related_context_returned_without_episode_matches": False,
+                "flat_related_memory_items_is_compatibility_field": bool(
+                    related_memory_items
+                ),
+                "flat_related_memory_items_matches_grouped_episode_related_items": bool(
+                    related_memory_items
+                ),
                 "memory_context_groups": memory_context_groups,
                 "inherited_memory_items": [
                     self._serialize_memory_item(memory_item)

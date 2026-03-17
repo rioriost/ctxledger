@@ -140,6 +140,11 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
     assert response.details["inherited_context_returned_without_episode_matches"] is (
         False
     )
+    assert response.details["related_context_is_auxiliary"] is True
+    assert response.details["related_context_relation_types"] == ["supports"]
+    assert response.details["related_context_returned_without_episode_matches"] is (
+        False
+    )
     assert response.details["memory_context_groups"][0]["related_memory_items"] == [
         {
             "memory_id": str(supports_target_item.memory_id),
@@ -244,6 +249,11 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
     assert response.details["related_memory_items"] == []
     assert response.details["inherited_context_is_auxiliary"] is True
     assert response.details["inherited_context_returned_without_episode_matches"] is (
+        False
+    )
+    assert response.details["related_context_is_auxiliary"] is False
+    assert response.details["related_context_relation_types"] == []
+    assert response.details["related_context_returned_without_episode_matches"] is (
         False
     )
     assert response.details["memory_context_groups"][0]["related_memory_items"] == []
