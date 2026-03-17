@@ -262,6 +262,7 @@ At present, episodic behavior includes:
   - inherited workspace-scoped memory may still remain visible when memory items are enabled
   - this can remain true even when no episode survives query filtering
   - when all episodes are filtered out, `episode_explanations` may still preserve pre-filter episode diagnostics with `explanation_basis = "query_filtered_out"`
+  - `all_episodes_filtered_out_by_query` now makes that all-filtered diagnostic case explicit in the response details
   - `inherited_context_is_auxiliary` and `inherited_context_returned_without_episode_matches` make that contract explicit in the response details
 - exposing a first minimal relation-aware detail surface through:
   - `related_memory_items`
@@ -499,6 +500,7 @@ More specifically, the current details payload is intended to explain:
 - how many episodes matched the current lightweight filter
 - how many episodes were ultimately returned
 - whether `episode_explanations` preserves matched-only output or filtered-out diagnostics in the current query-filtering case
+- whether the current response is in the explicit all-filtered diagnostic case via `all_episodes_filtered_out_by_query`
 - whether inherited workspace-scoped memory is being surfaced as auxiliary context outside episode-match filtering
 - whether inherited workspace-scoped memory is explicitly marked as auxiliary via `inherited_context_is_auxiliary`
 - whether inherited workspace-scoped memory was returned even though no episodes survived filtering via `inherited_context_returned_without_episode_matches`
@@ -521,10 +523,10 @@ This means a query may filter all episodes out of the returned `episodes` list w
 still returning workspace-scoped inherited memory in `inherited_memory_items` and the
 workspace entry of `memory_context_groups`. In that all-filtered case,
 `episode_explanations` may still preserve the pre-filter episode diagnostics, with
-non-matching entries marked by `explanation_basis = "query_filtered_out"`. That
-behavior should currently be interpreted as intentional auxiliary-context behavior
-rather than as evidence that inherited workspace items are part of the lightweight
-query filter.
+non-matching entries marked by `explanation_basis = "query_filtered_out"`, and
+`all_episodes_filtered_out_by_query = true` makes that case explicit. That behavior
+should currently be interpreted as intentional auxiliary-context behavior rather than
+as evidence that inherited workspace items are part of the lightweight query filter.
 
 At the current implementation stage, groups may carry explicit selection metadata such as:
 

@@ -1514,6 +1514,7 @@ class MemoryService:
                     "related_context_is_auxiliary": False,
                     "related_context_relation_types": [],
                     "related_context_returned_without_episode_matches": False,
+                    "all_episodes_filtered_out_by_query": False,
                     "flat_related_memory_items_is_compatibility_field": False,
                     "flat_related_memory_items_matches_grouped_episode_related_items": False,
                     "related_memory_items_by_episode_is_primary_structured_output": False,
@@ -1580,6 +1581,10 @@ class MemoryService:
                     filtered_memory_item_details.append(memory_item_detail)
 
             episodes = tuple(filtered_episodes)
+            all_episodes_filtered_out_by_query = (
+                bool(episode_explanations_before_query_filter)
+                and not filtered_episode_explanations
+            )
             if filtered_episode_explanations:
                 episode_explanations = tuple(filtered_episode_explanations)
             else:
@@ -1592,6 +1597,7 @@ class MemoryService:
                 )
             memory_item_details = tuple(filtered_memory_item_details)
         else:
+            all_episodes_filtered_out_by_query = False
             episode_explanations = tuple(episode_explanations_before_query_filter)
             memory_item_details = tuple(memory_item_details_before_query_filter)
 
@@ -1681,6 +1687,9 @@ class MemoryService:
                     ["supports"] if related_memory_items else []
                 ),
                 "related_context_returned_without_episode_matches": False,
+                "all_episodes_filtered_out_by_query": (
+                    all_episodes_filtered_out_by_query
+                ),
                 "flat_related_memory_items_is_compatibility_field": bool(
                     related_memory_items
                 ),

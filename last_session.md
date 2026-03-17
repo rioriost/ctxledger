@@ -2,17 +2,17 @@
 
 ## Summary
 
-Resumed the existing running workflow for the ongoing `memory_get_context` workstream and completed two more semantically small slices around query-filter diagnostics. The current contract is now aligned across implementation, tests, and docs: lightweight query filtering remains episode-oriented, inherited workspace-scoped memory remains intentional auxiliary context, and `episode_explanations` now preserves filtered-out diagnostics only in the all-filtered case.
+Resumed the existing running workflow for the ongoing `memory_get_context` workstream and completed another semantically small query-filter diagnostics slice. The current contract is now aligned across implementation, tests, docs, and continuation notes: lightweight query filtering remains episode-oriented, inherited workspace-scoped memory remains intentional auxiliary context, `episode_explanations` preserves filtered-out diagnostics only in the all-filtered case, and `all_episodes_filtered_out_by_query` now marks that case explicitly.
 
 ## What changed in this session
 
 - resumed the existing running workflow instead of creating a duplicate workflow
-- continued from the previously committed inherited-context filtering clarification:
-  - `1222627` — `Clarify inherited memory context filtering`
-- completed and committed a focused implementation-and-contract slice:
+- continued from the previously committed diagnostic-contract slices:
   - `c686874` — `Preserve filtered context explanations`
-- completed and committed a focused documentation-alignment slice:
   - `19d739d` — `Document filtered context diagnostics`
+  - `2fee7bc` — `Update session continuation note`
+- completed one narrow follow-up response-contract slice:
+  - added `details["all_episodes_filtered_out_by_query"]` for the explicit all-filtered query case
 - updated implementation in:
   - `src/ctxledger/memory/service.py`
 - updated focused test coverage in:
@@ -36,22 +36,22 @@ Resumed the existing running workflow for the ongoing `memory_get_context` works
 
 ## What was learned
 
-- the inherited-context contract is now explicit across implementation, tests, and docs:
+- the inherited-context contract is now explicit across implementation, tests, docs, and handoff notes:
   - lightweight query filtering applies to episode summary and metadata text
   - inherited workspace-scoped memory does not participate in episode selection
   - inherited workspace-scoped memory may still be returned when no episodes survive filtering
-- `episode_explanations` now has a narrow, explicit diagnostic contract:
-  - when some episodes match, it returns only matched episode explanations
-  - when query filtering removes all episodes, it preserves pre-filter episode diagnostics
+- the all-filtered diagnostic behavior now has one explicit response flag:
+  - `all_episodes_filtered_out_by_query = true` identifies the case where query filtering removed every episode
+  - in that case, `episode_explanations` may still preserve pre-filter diagnostics
   - non-matching entries in that all-filtered case are marked with `explanation_basis = "query_filtered_out"`
-- this keeps the change semantically small without widening scope into broader retrieval redesign, ranking behavior, or graph traversal
+- this keeps the change semantically small without widening scope into broader retrieval redesign, ranking behavior, semantic retrieval, or graph traversal
 
 ## Next suggested work
 
 - keep the next slice semantically small within the same running workflow
 - the best next candidates are:
-  - decide whether the all-filtered diagnostic behavior should remain exactly as-is or gain any additional explicit response flag
-  - or choose a similarly small follow-up in the same `memory_get_context` contract area without widening retrieval scope
+  - decide whether the all-filtered diagnostic flag set is now sufficient as-is or whether one more narrowly scoped explanatory detail field is worth adding
+  - or choose another small `memory_get_context` contract clarification without widening retrieval scope
 - if taking another diagnostic-contract slice next:
   - prefer one explicit response behavior only
   - update focused tests first or alongside the implementation
@@ -62,3 +62,4 @@ Resumed the existing running workflow for the ongoing `memory_get_context` works
   - constrained `supports`-only related context
   - structured relation-aware details with compatibility fields still present
   - filtered-out episode explanation diagnostics only in the all-filtered case
+  - explicit `all_episodes_filtered_out_by_query` signaling for that case
