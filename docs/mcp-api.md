@@ -1193,6 +1193,17 @@ Representative current response details may include:
 - `summary_selection_applied`
 - `summary_selection_kind`
 
+When summaries are enabled and returned, grouped consumers may also observe a
+minimal summary-oriented entry in `memory_context_groups`:
+- `scope = "summary"`
+- `scope_id = null`
+- `parent_scope = "workflow_instance"`
+- `parent_scope_id = {workflow_instance_id}` when exactly one workflow instance is resolved for the response
+- `parent_scope_id = null` when the response is not anchored to a single resolved workflow instance
+  - including multi-workflow workspace / ticket resolution cases
+- `selection_kind = "episode_summary_first"`
+- `summaries = [...]`
+
 ### Minimal Hierarchy-Aware Contract
 The current `0.6.0` slice introduces a small but explicit hierarchy-aware contract.
 
@@ -1308,9 +1319,25 @@ That means:
 - when summaries are enabled and returned, the response may explicitly mark summary-first assembly through:
   - `summary_selection_applied = true`
   - `summary_selection_kind = "episode_summary_first"`
+  - a minimal grouped summary marker in `memory_context_groups` with:
+    - `scope = "summary"`
+    - `parent_scope = "workflow_instance"`
+    - `parent_scope_id = {workflow_instance_id}` when exactly one workflow instance is resolved, otherwise `null`
+    - in multi-workflow workspace / ticket resolution cases, that grouped summary `parent_scope_id` remains `null`
+    - `selection_kind = "episode_summary_first"`
+    - `summaries = [...]`
+  - when grouped output is present in this current stage, ordering should be treated as a small compatibility commitment for grouped consumers rather than as incidental formatting:
+    - the summary-oriented group appears first when present
+    - episode-scoped groups follow in the same order as returned `episodes`
+    - the workspace-scoped inherited group appears last when present
+  - when some group classes are absent, this ordering degrades naturally without placeholder groups:
+    - summary-only grouped output returns only the summary-oriented group
+    - workspace-only grouped output returns only the workspace-scoped inherited group
+    - no empty summary, episode, or workspace placeholders are inserted just to preserve positional shape
 - when summaries are disabled or no summaries are returned:
   - `summary_selection_applied = false`
   - `summary_selection_kind = null`
+  - no summary-scoped grouped marker is returned
 - inherited workspace-scoped memory may still be returned as auxiliary context when memory items are enabled
 - inherited workspace-scoped memory may also be returned even when no episode survives query filtering
 - `all_episodes_filtered_out_by_query` explicitly marks the all-filtered case

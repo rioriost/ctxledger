@@ -1621,6 +1621,23 @@ class MemoryService:
         )
 
         memory_context_groups: list[dict[str, Any]] = []
+        if summary_selection_applied:
+            summary_parent_scope_id = (
+                resolved_workflow_instance_id
+                if len(resolved_workflow_ids) == 1
+                else None
+            )
+            memory_context_groups.append(
+                {
+                    "scope": "summary",
+                    "scope_id": None,
+                    "parent_scope": "workflow_instance",
+                    "parent_scope_id": summary_parent_scope_id,
+                    "selection_kind": summary_selection_kind,
+                    "summaries": list(summaries),
+                }
+            )
+
         if request.include_memory_items:
             for episode, detail in zip(episodes, memory_item_details, strict=False):
                 memory_context_groups.append(
@@ -1630,6 +1647,7 @@ class MemoryService:
                         "parent_scope": "workflow_instance",
                         "parent_scope_id": str(episode.workflow_instance_id),
                         "selection_kind": "direct_episode",
+                        "selected_via_summary_first": summary_selection_applied,
                         "memory_items": detail.get("memory_items", []),
                         "related_memory_items": detail.get("related_memory_items", []),
                     }

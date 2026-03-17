@@ -457,6 +457,86 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
     ]
     assert response.details["summary_selection_applied"] is True
     assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "summaries": [
+                {
+                    "episode_id": str(first_episode.episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 2,
+                    "memory_item_types": ["checkpoint_note", "episode_note"],
+                    "memory_item_provenance": ["checkpoint", "episode"],
+                },
+                {
+                    "episode_id": str(second_episode.episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                },
+            ],
+        },
+        {
+            "scope": "episode",
+            "scope_id": str(first_episode.episode_id),
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "direct_episode",
+            "selected_via_summary_first": True,
+            "memory_items": [
+                {
+                    "memory_id": str(second_memory_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": str(first_episode.episode_id),
+                    "type": "checkpoint_note",
+                    "provenance": "checkpoint",
+                    "content": "First episode checkpoint",
+                    "metadata": {"kind": "checkpoint"},
+                    "created_at": second_memory_item.created_at.isoformat(),
+                    "updated_at": second_memory_item.updated_at.isoformat(),
+                },
+                {
+                    "memory_id": str(first_memory_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": str(first_episode.episode_id),
+                    "type": "episode_note",
+                    "provenance": "episode",
+                    "content": "First episode note",
+                    "metadata": {"kind": "note"},
+                    "created_at": first_memory_item.created_at.isoformat(),
+                    "updated_at": first_memory_item.updated_at.isoformat(),
+                },
+            ],
+            "related_memory_items": [],
+        },
+        {
+            "scope": "episode",
+            "scope_id": str(second_episode.episode_id),
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "direct_episode",
+            "selected_via_summary_first": True,
+            "memory_items": [
+                {
+                    "memory_id": str(third_memory_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": str(second_episode.episode_id),
+                    "type": "episode_note",
+                    "provenance": "episode",
+                    "content": "Second episode note",
+                    "metadata": {"kind": "note"},
+                    "created_at": third_memory_item.created_at.isoformat(),
+                    "updated_at": third_memory_item.updated_at.isoformat(),
+                }
+            ],
+            "related_memory_items": [],
+        },
+    ]
 
 
 def test_memory_get_context_omits_memory_items_and_summaries_when_disabled() -> None:
@@ -611,6 +691,24 @@ def test_memory_get_context_includes_only_summaries_when_memory_items_disabled()
     ]
     assert response.details["summary_selection_applied"] is True
     assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "summaries": [
+                {
+                    "episode_id": str(episode.episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 2,
+                    "memory_item_types": ["checkpoint_note", "episode_note"],
+                    "memory_item_provenance": ["checkpoint", "episode"],
+                }
+            ],
+        }
+    ]
 
 
 def test_memory_get_context_includes_only_memory_items_when_summaries_disabled() -> (
@@ -819,11 +917,28 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
     assert response.details["hierarchy_applied"] is True
     assert response.details["memory_context_groups"] == [
         {
+            "scope": "summary",
+            "scope_id": None,
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "summaries": [
+                {
+                    "episode_id": str(episode.episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                }
+            ],
+        },
+        {
             "scope": "episode",
             "scope_id": str(episode.episode_id),
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selected_via_summary_first": True,
             "memory_items": [
                 {
                     "memory_id": str(direct_memory_item.memory_id),
@@ -960,7 +1075,24 @@ def test_memory_get_context_omits_inherited_workspace_items_when_memory_items_di
         }
     ]
     assert response.details["hierarchy_applied"] is False
-    assert response.details["memory_context_groups"] == []
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "summaries": [
+                {
+                    "episode_id": str(episode.episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                }
+            ],
+        }
+    ]
     assert response.details["inherited_memory_items"] == []
 
 
@@ -1045,11 +1177,28 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
     )
     assert response.details["memory_context_groups"] == [
         {
+            "scope": "summary",
+            "scope_id": None,
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "summaries": [
+                {
+                    "episode_id": str(episode.episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                }
+            ],
+        },
+        {
             "scope": "episode",
             "scope_id": str(episode.episode_id),
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selected_via_summary_first": True,
             "memory_items": [
                 {
                     "memory_id": str(direct_memory_item.memory_id),
@@ -1314,6 +1463,7 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selected_via_summary_first": False,
             "memory_items": [
                 {
                     "memory_id": str(direct_memory_item.memory_id),
@@ -1518,6 +1668,7 @@ def test_memory_get_context_supports_relation_grouping_metadata_survives_episode
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selected_via_summary_first": False,
             "memory_items": [
                 {
                     "memory_id": str(matching_memory_item.memory_id),
@@ -1632,3 +1783,578 @@ def test_memory_get_context_supports_relation_grouping_metadata_for_episode_item
     assert response.details["memory_context_groups"][1]["selection_kind"] == (
         "inherited_workspace"
     )
+
+
+def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_workflow_resolution() -> (
+    None
+):
+    first_workflow_id = uuid4()
+    second_workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000043"
+    created_at = datetime(2024, 10, 18, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    first_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=first_workflow_id,
+        summary="First workflow summary group case",
+        metadata={"kind": "multi-workflow-first"},
+        created_at=created_at.replace(day=18),
+        updated_at=created_at.replace(day=18),
+    )
+    second_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=second_workflow_id,
+        summary="Second workflow summary group case",
+        metadata={"kind": "multi-workflow-second"},
+        created_at=created_at.replace(day=17),
+        updated_at=created_at.replace(day=17),
+    )
+    episode_repository.create(first_episode)
+    episode_repository.create(second_episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=first_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="First workflow memory item",
+        metadata={"kind": "first"},
+        created_at=created_at.replace(day=18, hour=2),
+        updated_at=created_at.replace(day=18, hour=2),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=second_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Second workflow memory item",
+        metadata={"kind": "second"},
+        created_at=created_at.replace(day=17, hour=2),
+        updated_at=created_at.replace(day=17, hour=2),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                first_workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-MULTI-WORKFLOW-SUMMARY-GROUP",
+                },
+                second_workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-MULTI-WORKFLOW-SUMMARY-GROUP",
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id=workspace_id,
+            ticket_id="TICKET-CONTEXT-MULTI-WORKFLOW-SUMMARY-GROUP",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=True,
+        )
+    )
+
+    assert response.details["lookup_scope"] == "workspace_and_ticket"
+    assert response.details["resolved_workflow_count"] == 2
+    assert response.details["resolved_workflow_ids"] == [
+        str(first_workflow_id),
+        str(second_workflow_id),
+    ]
+    assert response.details["summary_selection_applied"] is True
+    assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": None,
+            "selection_kind": "episode_summary_first",
+            "summaries": [
+                {
+                    "episode_id": str(first_episode.episode_id),
+                    "workflow_instance_id": str(first_workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                },
+                {
+                    "episode_id": str(second_episode.episode_id),
+                    "workflow_instance_id": str(second_workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                },
+            ],
+        }
+    ]
+
+
+def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspace() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000044"
+    created_at = datetime(2024, 10, 19, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    newer_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Newer episode for grouped ordering",
+        metadata={"kind": "ordering-newer"},
+        created_at=created_at.replace(day=19),
+        updated_at=created_at.replace(day=19),
+    )
+    older_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Older episode for grouped ordering",
+        metadata={"kind": "ordering-older"},
+        created_at=created_at.replace(day=18),
+        updated_at=created_at.replace(day=18),
+    )
+    episode_repository.create(older_episode)
+    episode_repository.create(newer_episode)
+
+    newer_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=newer_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Newer grouped-order memory item",
+        metadata={"kind": "newer"},
+        created_at=created_at.replace(day=19, hour=2),
+        updated_at=created_at.replace(day=19, hour=2),
+    )
+    older_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=older_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Older grouped-order memory item",
+        metadata={"kind": "older"},
+        created_at=created_at.replace(day=18, hour=2),
+        updated_at=created_at.replace(day=18, hour=2),
+    )
+    inherited_workspace_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Workspace grouped-order memory item",
+        metadata={"kind": "workspace"},
+        created_at=created_at.replace(day=19, hour=1),
+        updated_at=created_at.replace(day=19, hour=1),
+    )
+    memory_item_repository.create(newer_memory_item)
+    memory_item_repository.create(older_memory_item)
+    memory_item_repository.create(inherited_workspace_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-GROUP-ORDERING",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=True,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Newer episode for grouped ordering",
+        "Older episode for grouped ordering",
+    ]
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "summary",
+        "episode",
+        "episode",
+        "workspace",
+    ]
+    assert response.details["memory_context_groups"][0] == {
+        "scope": "summary",
+        "scope_id": None,
+        "parent_scope": "workflow_instance",
+        "parent_scope_id": str(workflow_id),
+        "selection_kind": "episode_summary_first",
+        "summaries": [
+            {
+                "episode_id": str(newer_episode.episode_id),
+                "workflow_instance_id": str(workflow_id),
+                "memory_item_count": 1,
+                "memory_item_types": ["episode_note"],
+                "memory_item_provenance": ["episode"],
+            },
+            {
+                "episode_id": str(older_episode.episode_id),
+                "workflow_instance_id": str(workflow_id),
+                "memory_item_count": 1,
+                "memory_item_types": ["episode_note"],
+                "memory_item_provenance": ["episode"],
+            },
+        ],
+    }
+    assert response.details["memory_context_groups"][1] == {
+        "scope": "episode",
+        "scope_id": str(newer_episode.episode_id),
+        "parent_scope": "workflow_instance",
+        "parent_scope_id": str(workflow_id),
+        "selection_kind": "direct_episode",
+        "selected_via_summary_first": True,
+        "memory_items": [
+            {
+                "memory_id": str(newer_memory_item.memory_id),
+                "workspace_id": workspace_id,
+                "episode_id": str(newer_episode.episode_id),
+                "type": "episode_note",
+                "provenance": "episode",
+                "content": "Newer grouped-order memory item",
+                "metadata": {"kind": "newer"},
+                "created_at": newer_memory_item.created_at.isoformat(),
+                "updated_at": newer_memory_item.updated_at.isoformat(),
+            }
+        ],
+        "related_memory_items": [],
+    }
+    assert response.details["memory_context_groups"][2] == {
+        "scope": "episode",
+        "scope_id": str(older_episode.episode_id),
+        "parent_scope": "workflow_instance",
+        "parent_scope_id": str(workflow_id),
+        "selection_kind": "direct_episode",
+        "selected_via_summary_first": True,
+        "memory_items": [
+            {
+                "memory_id": str(older_memory_item.memory_id),
+                "workspace_id": workspace_id,
+                "episode_id": str(older_episode.episode_id),
+                "type": "episode_note",
+                "provenance": "episode",
+                "content": "Older grouped-order memory item",
+                "metadata": {"kind": "older"},
+                "created_at": older_memory_item.created_at.isoformat(),
+                "updated_at": older_memory_item.updated_at.isoformat(),
+            }
+        ],
+        "related_memory_items": [],
+    }
+
+
+def test_memory_get_context_marks_episode_groups_as_selected_via_summary_first() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000045"
+    created_at = datetime(2024, 10, 20, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    first_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="First episode for summary-first grouped selection",
+        metadata={"kind": "selected-first"},
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    second_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Second episode for summary-first grouped selection",
+        metadata={"kind": "selected-second"},
+        created_at=created_at.replace(day=19),
+        updated_at=created_at.replace(day=19),
+    )
+    episode_repository.create(second_episode)
+    episode_repository.create(first_episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=first_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="First selected episode memory item",
+        metadata={"kind": "first"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=second_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Second selected episode memory item",
+        metadata={"kind": "second"},
+        created_at=created_at.replace(day=19, hour=2),
+        updated_at=created_at.replace(day=19, hour=2),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-SUMMARY-FIRST-GROUP-SELECTION",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=True,
+        )
+    )
+
+    assert response.details["summary_selection_applied"] is True
+    assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "summary",
+        "episode",
+        "episode",
+    ]
+    assert (
+        response.details["memory_context_groups"][1]["selected_via_summary_first"]
+        is True
+    )
+    assert (
+        response.details["memory_context_groups"][2]["selected_via_summary_first"]
+        is True
+    )
+    assert response.details["memory_context_groups"][1]["selection_kind"] == (
+        "direct_episode"
+    )
+    assert response.details["memory_context_groups"][2]["selection_kind"] == (
+        "direct_episode"
+    )
+
+
+def test_memory_get_context_group_ordering_summary_only_has_no_placeholder_groups() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000045"
+    created_at = datetime(2024, 10, 20, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode with summary-only ordering coverage",
+        metadata={"kind": "summary-only-ordering"},
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Summary-only ordering note",
+        metadata={"kind": "note"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="checkpoint_note",
+        provenance="checkpoint",
+        content="Summary-only ordering checkpoint",
+        metadata={"kind": "checkpoint"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-SUMMARY-ONLY-ORDERING",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=True,
+        )
+    )
+
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "summary"
+    ]
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "summaries": [
+                {
+                    "episode_id": str(episode.episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 2,
+                    "memory_item_types": ["checkpoint_note", "episode_note"],
+                    "memory_item_provenance": ["checkpoint", "episode"],
+                }
+            ],
+        }
+    ]
+
+
+def test_memory_get_context_group_ordering_workspace_only_has_no_placeholder_groups() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000046"
+    created_at = datetime(2024, 10, 21, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode summary does not match workspace-only ordering query",
+        metadata={"kind": "workspace-only-ordering"},
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+
+    direct_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Direct workspace-only ordering note",
+        metadata={"kind": "direct"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    inherited_workspace_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Workspace-only ordering token",
+        metadata={"kind": "workspace-only"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    memory_item_repository.create(direct_memory_item)
+    memory_item_repository.create(inherited_workspace_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-WORKSPACE-ONLY-ORDERING",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            query="workspace-only ordering token",
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=True,
+        )
+    )
+
+    assert response.episodes == ()
+    assert response.details["summaries"] == []
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "workspace"
+    ]
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "workspace",
+            "scope_id": workspace_id,
+            "parent_scope": None,
+            "parent_scope_id": None,
+            "selection_kind": "inherited_workspace",
+            "memory_items": [
+                {
+                    "memory_id": str(inherited_workspace_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": None,
+                    "type": "workspace_note",
+                    "provenance": "workspace",
+                    "content": "Workspace-only ordering token",
+                    "metadata": {"kind": "workspace-only"},
+                    "created_at": inherited_workspace_item.created_at.isoformat(),
+                    "updated_at": inherited_workspace_item.updated_at.isoformat(),
+                }
+            ],
+        }
+    ]

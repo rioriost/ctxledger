@@ -524,6 +524,12 @@ That means it has started to become useful, but it is not the final design targe
 Within that current details payload, `memory_context_groups` should now be understood as
 an explicit grouping surface rather than only an incidental formatting choice.
 
+At the current implementation stage, when summaries are enabled and returned, that
+grouping surface may also expose a minimal summary-oriented group marker before the
+more detailed episode-scoped and workspace-scoped groups. This keeps the current
+summary-first assembly signal visible in grouped output without redesigning the
+existing group structure.
+
 At the current implementation stage, that grouping surface also reflects a deliberate
 boundary between episode-oriented query matching and inherited auxiliary context:
 episode selection is query-aware, while inherited workspace-scoped memory does not
@@ -549,8 +555,57 @@ selection layer for the response before consumers drill down into the more detai
 episode-scoped context. This is still intentionally narrow and does not yet imply a
 full summary-ranking, cross-scope planning, or multi-layer traversal system.
 
+In grouped output, that same summary-first signal may now also appear through a
+minimal summary-oriented `memory_context_groups` entry with fields such as:
+
+- `scope = "summary"`
+- `scope_id = null`
+- `parent_scope = "workflow_instance"`
+- `parent_scope_id = {workflow_instance_id}` when exactly one workflow instance is resolved for the current response
+- `parent_scope_id = null` when the response is not anchored to exactly one resolved workflow instance, including the multi-workflow workspace/ticket case
+- `selection_kind = "episode_summary_first"`
+- `summaries = [...]`
+
+This grouped summary marker should be understood as a compact projection of the same
+summary-first retrieval state already exposed through `summaries`,
+`summary_selection_applied`, and `summary_selection_kind`, rather than as a broader
+hierarchical redesign.
+
+When the current response is clearly driven by exactly one resolved workflow
+instance, the summary group may also carry that workflow identity through
+`parent_scope_id`. This keeps the grouped summary marker aligned with the
+single-workflow case without implying stronger cross-workflow summary-planning
+behavior for broader workspace- or ticket-scoped retrieval.
+
+In particular, when workspace- or ticket-scoped resolution returns multiple
+workflows, the summary-oriented group should keep `parent_scope_id = null`.
+That makes the grouped summary marker intentionally conservative in the
+multi-workflow case rather than overstating summary ownership by any one
+workflow instance.
+
+At the current implementation stage, grouped output ordering should also be
+understood as intentional rather than incidental when the corresponding groups
+are present:
+
+- the summary-oriented group appears first
+- episode-scoped groups follow in the same order as returned `episodes`
+- the workspace-scoped inherited-context group appears last
+
+When some group classes are absent, this ordering degrades naturally rather than
+introducing placeholder groups:
+
+- summary-only grouped output contains only the summary-oriented group
+- workspace-only grouped output contains only the workspace-scoped inherited group
+- summary + episode grouped output omits the workspace group without inserting a placeholder
+- episode + workspace grouped output omits the summary group without inserting a placeholder
+
+This ordering should be read as a current-stage compatibility commitment for
+grouped consumers in this slice, not as a broader hierarchical planner or a
+claim that future retrieval stages cannot refine grouping behavior.
+
 At the current implementation stage, groups may carry explicit selection metadata such as:
 
+- `selection_kind = episode_summary_first`
 - `selection_kind = direct_episode`
 - `selection_kind = inherited_workspace`
 
