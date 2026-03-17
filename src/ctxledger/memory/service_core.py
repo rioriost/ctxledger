@@ -696,6 +696,7 @@ class MemoryService:
                                 "parent_scope": None,
                                 "parent_scope_id": None,
                                 "selection_kind": "inherited_workspace",
+                                "selection_route": "workspace_inherited_auxiliary",
                                 "memory_items": [
                                     self._serialize_memory_item(memory_item)
                                     for memory_item in inherited_workspace_items
@@ -703,8 +704,7 @@ class MemoryService:
                                 ],
                             }
                         ]
-                        if inherited_workspace_items
-                        and resolved_workspace_id is not None
+                        if resolved_workspace_id is not None
                         else []
                     ),
                     "inherited_memory_items": [
@@ -800,6 +800,10 @@ class MemoryService:
                     "parent_scope": "workflow_instance",
                     "parent_scope_id": summary_parent_scope_id,
                     "selection_kind": summary_selection_kind,
+                    "selection_route": "summary_first",
+                    "child_episode_ids": [
+                        detail["episode_id"] for detail in memory_item_details
+                    ],
                     "summaries": list(summaries),
                 }
             )
@@ -813,6 +817,11 @@ class MemoryService:
                         "parent_scope": "workflow_instance",
                         "parent_scope_id": str(episode.workflow_instance_id),
                         "selection_kind": "direct_episode",
+                        "selection_route": (
+                            "summary_first"
+                            if summary_selection_applied
+                            else "episode_direct"
+                        ),
                         "selected_via_summary_first": summary_selection_applied,
                         "memory_items": detail.get("memory_items", []),
                         "related_memory_items": detail.get("related_memory_items", []),
@@ -827,6 +836,7 @@ class MemoryService:
                         "parent_scope": None,
                         "parent_scope_id": None,
                         "selection_kind": "inherited_workspace",
+                        "selection_route": "workspace_inherited_auxiliary",
                         "memory_items": [
                             self._serialize_memory_item(memory_item)
                             for memory_item in inherited_memory_items
@@ -881,6 +891,9 @@ class MemoryService:
                 "related_context_is_auxiliary": bool(related_memory_items),
                 "related_context_relation_types": (
                     ["supports"] if related_memory_items else []
+                ),
+                "related_context_selection_route": (
+                    "relation_supports_auxiliary" if related_memory_items else None
                 ),
                 "related_context_returned_without_episode_matches": False,
                 "all_episodes_filtered_out_by_query": (

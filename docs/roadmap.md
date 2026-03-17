@@ -324,16 +324,39 @@ Expected themes:
 
 Planned focus:
 
-- evaluate whether ctxledger should move closer to a Mnemis-style hierarchical graph memory design
-- compare ctxledger’s `0.6.0` implementation against Mnemis-style dual-route retrieval ideas
-- decide whether any architectural alignment is justified after `0.6.0` is working
+- strengthen the task-recall and return-to-main-task experience after interruptions or detours
+- make the canonical workflow and memory model surface the current primary objective more reliably
+- improve retrieval and resume behavior so agents can recover “what was I doing before this side task?” from canonical state without relying on auxiliary local notes
 
 Expected themes:
 
-- review Mnemis as a design input, not a `0.6.0` implementation constraint
+- introduce an explicit distinction between:
+  - primary objective / main line of work
+  - temporary detour work
+  - return target after detour completion
+- improve retrieval contracts for questions such as:
+  - what is the current main objective for this workspace?
+  - what was the active task before the most recent detour?
+  - which workflow should be re-foregrounded as the primary continuation target?
+- improve workflow prioritization and recovery rules so recent-but-secondary work does not eclipse the main active objective
+- strengthen summary, checkpoint, and memory selection logic so canonical state is better surfaced through agent-facing recall paths
+- keep PostgreSQL as the canonical source of truth while improving the recall path that sits on top of it
+- treat this as resumability and durable-memory product work, not merely observability or docs cleanup
+
+## 0.8
+
+Planned focus:
+
+- evaluate whether ctxledger should move closer to a Mnemis-style hierarchical graph memory design
+- compare ctxledger’s `0.6.0` and `0.7.0` implementation against Mnemis-style dual-route retrieval ideas
+- decide whether any architectural alignment is justified after the task-recall improvements are working
+
+Expected themes:
+
+- review Mnemis as a design input, not a constraint on the `0.7.0` task-recall work
 - compare relation modeling, hierarchy construction, and retrieval strategy
 - evaluate whether dual-route retrieval concepts should influence later ctxledger versions
-- keep any Mnemis-driven redesign scoped to explicit post-`0.6.0` work
+- keep any Mnemis-driven redesign scoped to explicit post-`0.7.0` work
 
 ## 0.0
 

@@ -464,6 +464,11 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [
+                str(first_episode.episode_id),
+                str(second_episode.episode_id),
+            ],
             "summaries": [
                 {
                     "episode_id": str(first_episode.episode_id),
@@ -487,6 +492,7 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selection_route": "summary_first",
             "selected_via_summary_first": True,
             "memory_items": [
                 {
@@ -520,6 +526,7 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selection_route": "summary_first",
             "selected_via_summary_first": True,
             "memory_items": [
                 {
@@ -698,6 +705,8 @@ def test_memory_get_context_includes_only_summaries_when_memory_items_disabled()
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(episode.episode_id)],
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -922,6 +931,8 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(episode.episode_id)],
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -938,6 +949,7 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selection_route": "summary_first",
             "selected_via_summary_first": True,
             "memory_items": [
                 {
@@ -960,6 +972,7 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
             "parent_scope": None,
             "parent_scope_id": None,
             "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
                 {
                     "memory_id": str(inherited_workspace_item.memory_id),
@@ -1082,6 +1095,8 @@ def test_memory_get_context_omits_inherited_workspace_items_when_memory_items_di
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(episode.episode_id)],
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -1182,6 +1197,8 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(episode.episode_id)],
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -1198,6 +1215,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selection_route": "summary_first",
             "selected_via_summary_first": True,
             "memory_items": [
                 {
@@ -1220,6 +1238,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "parent_scope": None,
             "parent_scope_id": None,
             "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
                 {
                     "memory_id": str(inherited_workspace_item.memory_id),
@@ -1357,6 +1376,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
             "parent_scope": None,
             "parent_scope_id": None,
             "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
                 {
                     "memory_id": str(inherited_workspace_item.memory_id),
@@ -1463,6 +1483,7 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selection_route": "episode_direct",
             "selected_via_summary_first": False,
             "memory_items": [
                 {
@@ -1485,6 +1506,7 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
             "parent_scope": None,
             "parent_scope_id": None,
             "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
                 {
                     "memory_id": str(inherited_workspace_item.memory_id),
@@ -1668,6 +1690,7 @@ def test_memory_get_context_supports_relation_grouping_metadata_survives_episode
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "direct_episode",
+            "selection_route": "episode_direct",
             "selected_via_summary_first": False,
             "memory_items": [
                 {
@@ -1690,6 +1713,7 @@ def test_memory_get_context_supports_relation_grouping_metadata_survives_episode
             "parent_scope": None,
             "parent_scope_id": None,
             "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
                 {
                     "memory_id": str(inherited_workspace_item.memory_id),
@@ -1883,6 +1907,11 @@ def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_work
             "parent_scope": "workflow_instance",
             "parent_scope_id": None,
             "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [
+                str(first_episode.episode_id),
+                str(second_episode.episode_id),
+            ],
             "summaries": [
                 {
                     "episode_id": str(first_episode.episode_id),
@@ -2008,6 +2037,11 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
         "parent_scope": "workflow_instance",
         "parent_scope_id": str(workflow_id),
         "selection_kind": "episode_summary_first",
+        "selection_route": "summary_first",
+        "child_episode_ids": [
+            str(newer_episode.episode_id),
+            str(older_episode.episode_id),
+        ],
         "summaries": [
             {
                 "episode_id": str(newer_episode.episode_id),
@@ -2031,6 +2065,7 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
         "parent_scope": "workflow_instance",
         "parent_scope_id": str(workflow_id),
         "selection_kind": "direct_episode",
+        "selection_route": "summary_first",
         "selected_via_summary_first": True,
         "memory_items": [
             {
@@ -2053,6 +2088,7 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
         "parent_scope": "workflow_instance",
         "parent_scope_id": str(workflow_id),
         "selection_kind": "direct_episode",
+        "selection_route": "summary_first",
         "selected_via_summary_first": True,
         "memory_items": [
             {
@@ -2249,6 +2285,8 @@ def test_memory_get_context_group_ordering_summary_only_has_no_placeholder_group
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(episode.episode_id)],
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -2343,6 +2381,7 @@ def test_memory_get_context_group_ordering_workspace_only_has_no_placeholder_gro
             "parent_scope": None,
             "parent_scope_id": None,
             "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
                 {
                     "memory_id": str(inherited_workspace_item.memory_id),

@@ -2,65 +2,74 @@
 
 ## Summary
 
-Completed the focused coverage-improvement campaign and verified the final project-wide result. The repository now reports `TOTAL 97%` coverage, and all previously identified below-target files are at or above `95%`.
+Returned to the main `0.6.0` hierarchical memory work and advanced the service-layer retrieval assembly in `memory_get_context`. The current slice makes hierarchy and relation selection paths more explicit without changing canonical persistence rules.
 
 ## What changed in this session
 
-- ran the full repository coverage command to verify the cumulative result of all focused coverage slices
-- confirmed that the previously targeted files now meet or exceed the threshold:
-  - `src/ctxledger/memory/embeddings.py` → `96%`
-  - `src/ctxledger/__init__.py` → `98%`
-  - `src/ctxledger/db/__init__.py` → `100%`
-  - `src/ctxledger/db/postgres.py` → `96%`
-  - `src/ctxledger/workflow/service.py` → `97%`
-- confirmed that the earlier focused test additions integrate cleanly at full-suite scope
-- no further code changes were required in this verification step
+- confirmed the memory service facade/core split is now in a healthy state:
+  - `src/ctxledger/memory/service_core.py` is clean
+  - `py_compile` passes
+  - focused and broader memory tests pass
+- treated the split work as effectively complete enough to resume the real `0.6.0` plan
+- implemented a first retrieval-route metadata slice in `src/ctxledger/memory/service_core.py`
+- added `selection_route` to `memory_context_groups` so grouped context now explains how it was selected:
+  - `summary_first`
+  - `episode_direct`
+  - `workspace_inherited_auxiliary`
+- added `child_episode_ids` to summary groups so summary-first groups explicitly point to the episode groups they summarize
+- added `related_context_selection_route` to top-level `details`
+  - currently `relation_supports_auxiliary` when related supporting context is returned
+  - `null` otherwise
+- updated memory tests to assert the new hierarchy/relation retrieval metadata contract
+
+## Files touched in this session
+
+- `src/ctxledger/memory/service_core.py`
+- `tests/memory/test_service_context_details.py`
+- `tests/memory/test_service_context_scope.py`
+- `tests/memory/test_memory_context_related_items.py`
 
 ## Validation
 
 - passed:
-  - `make test-cov`
+  - `python -m py_compile src/ctxledger/memory/service_core.py src/ctxledger/memory/service.py src/ctxledger/memory/repositories.py`
+  - `python -m pytest -q tests/memory/test_service_context_details.py`
+  - `python -m pytest -q tests/memory/test_memory_context_related_items.py tests/memory/test_service_context_details.py`
+  - `python -m pytest -q tests/memory`
 
-## Final project coverage result
+## Current interpretation of the plan
 
-- test outcome:
-  - `763 passed`
-  - `1 skipped`
-- total coverage:
-  - `TOTAL 97%`
+This work fits `docs/plans/hierarchical_memory_0_6_0_plan.md`, especially:
 
-## Current notable file coverage
+- summary-aware assembly
+- hierarchy-aware behavior
+- relation-aware supporting context
+- explicit retrieval details
+- explainable service-layer selection paths
 
-- `src/ctxledger/__init__.py` — `98%`
-- `src/ctxledger/config.py` — `97%`
-- `src/ctxledger/db/__init__.py` — `100%`
-- `src/ctxledger/db/postgres.py` — `96%`
-- `src/ctxledger/http_app.py` — `96%`
-- `src/ctxledger/memory/embeddings.py` — `96%`
-- `src/ctxledger/memory/service_core.py` — `95%`
-- `src/ctxledger/server.py` — `99%`
-- `src/ctxledger/workflow/memory_bridge.py` — `97%`
-- `src/ctxledger/workflow/service.py` — `97%`
+This is still not graph/AGE work yet. It is a small but meaningful service-layer retrieval contract improvement.
 
 ## What was learned
 
-- the fastest path to raising already-mature coverage was consistently:
-  - inspect exact missing lines
-  - map them to narrow helper / edge / protocol branches
-  - add small targeted tests instead of broad new end-to-end flows
-- repository-wide verification matters at the end of a coverage campaign because some files improve further once all focused slices are included together
-- the campaign objective is now achieved for the previously flagged below-target modules
+- the current `memory_get_context` implementation already had more hierarchy structure than it first appeared
+- the cleanest next `0.6.0` slices are not large schema changes, but small retrieval-contract clarifications
+- adding explicit route/provenance metadata is low-risk and aligns well with the plan’s “explainable retrieval” goals
+- summary-first grouping benefits from explicit child linkage, not just implicit ordering
 
 ## Recommended next work
 
-- review the final diff for semantic cleanliness and possible duplication among focused tests
-- create a descriptive commit for the completed coverage-improvement campaign
-- if a later cleanup pass is desired, consider consolidating any duplicated testing patterns only where readability improves and branch clarity is preserved
-- if a new quality target is introduced later, start from the current residual uncovered lines in already-high-coverage modules rather than reopening broad functional areas
+The most natural next semantic slice is:
+
+1. make group-to-group linkage more explicit beyond `child_episode_ids`
+   - consider `parent_group_scope` / `parent_group_id` style linkage for episode groups
+   - or introduce a lightweight group identifier scheme if needed
+2. strengthen relation-aware grouped output
+   - consider relation-edge metadata or grouped relation provenance for `supports`-derived context
+3. only after the service-layer contract is clearer, decide the smallest repository/schema slice for deeper `0.6.0` hierarchy support
 
 ## Commit guidance
 
-- this work loop is commit-ready
+- this slice is commit-ready
 - a good commit message would describe:
-  - completion of the focused coverage campaign
-  - verification of the final `97%` project-wide coverage result
+  - explicit hierarchical retrieval route metadata
+  - summary-to-episode linkage in `memory_get_context`
