@@ -254,16 +254,20 @@ def test_apply_overrides_rejects_non_http_transport() -> None:
         apply_overrides(make_settings(), transport="stdio")
 
 
-def test_apply_overrides_reflects_current_auth_field_regression() -> None:
-    settings = make_settings(host="127.0.0.1", port=8080)
+def test_apply_overrides_applies_http_override_successfully() -> None:
+    settings = make_settings(host="127.0.0.1", port=8443)
 
-    with pytest.raises(AttributeError, match="auth"):
-        apply_overrides(
-            settings,
-            transport="http",
-            host="0.0.0.0",
-            port=9090,
-        )
+    overridden = apply_overrides(
+        settings,
+        transport="http",
+        host="0.0.0.0",
+        port=8443,
+    )
+
+    assert overridden is not settings
+    assert overridden.http.host == "0.0.0.0"
+    assert overridden.http.port == 8443
+    assert overridden.http.path == settings.http.path
 
 
 def test_run_server_passes_override_arguments_through_apply_overrides(
