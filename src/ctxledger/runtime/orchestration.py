@@ -52,10 +52,9 @@ def apply_overrides(
         environment=settings.environment,
         database=settings.database,
         http=http_settings,
-        auth=settings.auth,
         debug=settings.debug,
-        projection=settings.projection,
         logging=settings.logging,
+        embedding=settings.embedding,
     )
     overridden.validate()
     return overridden

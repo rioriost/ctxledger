@@ -1,0 +1,404 @@
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+
+import pytest
+
+import ctxledger.__init__ as cli_module
+from ctxledger.workflow.service import MemoryStats, WorkflowStats
+
+from .conftest import (
+    make_settings,
+    patch_cli_connection_pool,
+    patch_cli_postgres_config,
+    patch_cli_postgres_uow_factory,
+    patch_cli_settings,
+    patch_cli_workflow_service,
+)
+
+
+def test_main_stats_renders_text_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stats = WorkflowStats(
+        workspace_count=40,
+        workflow_status_counts={
+            "running": 28,
+            "completed": 30,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        attempt_status_counts={
+            "running": 28,
+            "succeeded": 30,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        verify_status_counts={
+            "pending": 109,
+            "passed": 239,
+            "failed": 20,
+            "skipped": 1,
+        },
+        checkpoint_count=369,
+        episode_count=34,
+        memory_item_count=24,
+        memory_embedding_count=3,
+        latest_workflow_updated_at=datetime(2026, 3, 15, 9, 45, 52, tzinfo=UTC),
+        latest_checkpoint_created_at=datetime(2026, 3, 15, 10, 55, 8, tzinfo=UTC),
+        latest_verify_report_created_at=datetime(2026, 3, 15, 10, 55, 8, tzinfo=UTC),
+        latest_episode_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_item_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_embedding_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+    )
+
+    class FakeStatsWorkflowService:
+        def __init__(self, stats_result: WorkflowStats) -> None:
+            self.stats_result = stats_result
+            self.get_stats_calls = 0
+
+        def get_stats(self) -> WorkflowStats:
+            self.get_stats_calls += 1
+            return self.stats_result
+
+    settings = make_settings()
+    fake_service = FakeStatsWorkflowService(stats)
+
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(monkeypatch, fake_service)
+
+    exit_code = cli_module.main(["stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "ctxledger stats" in captured.out
+    assert "Workspaces:" in captured.out
+    assert "- total: 40" in captured.out
+    assert "Workflows:" in captured.out
+    assert "- running: 28" in captured.out
+    assert "- completed: 30" in captured.out
+    assert "Attempts:" in captured.out
+    assert "- succeeded: 30" in captured.out
+    assert "Verify reports:" in captured.out
+    assert "- passed: 239" in captured.out
+    assert "Memory:" in captured.out
+    assert "- episodes: 34" in captured.out
+    assert "- memory_items: 24" in captured.out
+    assert "- memory_embeddings: 3" in captured.out
+    assert "Other:" in captured.out
+    assert "- checkpoints: 369" in captured.out
+    assert "Latest activity:" in captured.out
+    assert "2026-03-15 09:45:52+00:00" in captured.out
+    assert captured.err == ""
+    assert fake_service.get_stats_calls == 1
+
+
+def test_main_stats_renders_json_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakeStatsWorkflowService:
+        def __init__(self, stats_result: object) -> None:
+            self.stats_result = stats_result
+
+        def get_stats(self) -> object:
+            return self.stats_result
+
+    stats = type(
+        "StatsStub",
+        (),
+        {
+            "workspace_count": 2,
+            "workflow_status_counts": {
+                "running": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+            },
+            "attempt_status_counts": {
+                "running": 1,
+                "succeeded": 1,
+                "failed": 0,
+                "cancelled": 0,
+            },
+            "verify_status_counts": {
+                "pending": 0,
+                "passed": 2,
+                "failed": 0,
+                "skipped": 0,
+            },
+            "checkpoint_count": 5,
+            "episode_count": 3,
+            "memory_item_count": 4,
+            "memory_embedding_count": 1,
+            "latest_workflow_updated_at": datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
+            "latest_checkpoint_created_at": None,
+            "latest_verify_report_created_at": None,
+            "latest_episode_created_at": None,
+            "latest_memory_item_created_at": None,
+            "latest_memory_embedding_created_at": None,
+        },
+    )()
+
+    settings = make_settings()
+
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(
+        monkeypatch,
+        lambda uow_factory: FakeStatsWorkflowService(stats),
+    )
+
+    exit_code = cli_module.main(["stats", "--format", "json"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload == {
+        "attempt_status_counts": {
+            "cancelled": 0,
+            "failed": 0,
+            "running": 1,
+            "succeeded": 1,
+        },
+        "checkpoint_count": 5,
+        "episode_count": 3,
+        "latest_checkpoint_created_at": None,
+        "latest_episode_created_at": None,
+        "latest_memory_embedding_created_at": None,
+        "latest_memory_item_created_at": None,
+        "latest_verify_report_created_at": None,
+        "latest_workflow_updated_at": "2026-03-15T09:00:00+00:00",
+        "memory_embedding_count": 1,
+        "memory_item_count": 4,
+        "verify_status_counts": {
+            "failed": 0,
+            "passed": 2,
+            "pending": 0,
+            "skipped": 0,
+        },
+        "workflow_status_counts": {
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "running": 1,
+        },
+        "workspace_count": 2,
+    }
+    assert captured.err == ""
+
+
+def test_main_stats_reports_missing_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_cli_settings(monkeypatch, make_settings(database_url=""))
+
+    exit_code = cli_module.main(["stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+
+
+def test_main_memory_stats_renders_text_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stats = MemoryStats(
+        episode_count=34,
+        memory_item_count=24,
+        memory_embedding_count=3,
+        memory_relation_count=7,
+        memory_item_provenance_counts={
+            "derived": 2,
+            "episode": 17,
+            "explicit": 1,
+            "workflow_complete_auto": 4,
+        },
+        latest_episode_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_item_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_embedding_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        latest_memory_relation_created_at=datetime(2026, 3, 15, 9, 5, 0, tzinfo=UTC),
+    )
+
+    class FakeMemoryStatsWorkflowService:
+        def __init__(self, stats_result: MemoryStats) -> None:
+            self.stats_result = stats_result
+            self.get_memory_stats_calls = 0
+
+        def get_memory_stats(self) -> MemoryStats:
+            self.get_memory_stats_calls += 1
+            return self.stats_result
+
+    settings = make_settings()
+    fake_service = FakeMemoryStatsWorkflowService(stats)
+
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(monkeypatch, fake_service)
+
+    exit_code = cli_module.main(["memory-stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "ctxledger memory-stats" in captured.out
+    assert "Counts:" in captured.out
+    assert "- episodes: 34" in captured.out
+    assert "- memory_items: 24" in captured.out
+    assert "- memory_embeddings: 3" in captured.out
+    assert "- memory_relations: 7" in captured.out
+    assert "Memory item provenance:" in captured.out
+    assert "- derived: 2" in captured.out
+    assert "- episode: 17" in captured.out
+    assert "- explicit: 1" in captured.out
+    assert "- workflow_complete_auto: 4" in captured.out
+    assert "Latest activity:" in captured.out
+    assert "2026-03-15 09:05:00+00:00" in captured.out
+    assert captured.err == ""
+    assert fake_service.get_memory_stats_calls == 1
+
+
+def test_main_memory_stats_renders_json_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stats = MemoryStats(
+        episode_count=3,
+        memory_item_count=4,
+        memory_embedding_count=1,
+        memory_relation_count=0,
+        memory_item_provenance_counts={
+            "episode": 2,
+            "workflow_complete_auto": 2,
+        },
+        latest_episode_created_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
+        latest_memory_item_created_at=None,
+        latest_memory_embedding_created_at=None,
+        latest_memory_relation_created_at=None,
+    )
+
+    class FakeMemoryStatsWorkflowService:
+        def __init__(self, stats_result: MemoryStats) -> None:
+            self.stats_result = stats_result
+
+        def get_memory_stats(self) -> MemoryStats:
+            return self.stats_result
+
+    settings = make_settings()
+
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(
+        monkeypatch,
+        lambda uow_factory: FakeMemoryStatsWorkflowService(stats),
+    )
+
+    exit_code = cli_module.main(["memory-stats", "--format", "json"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload == {
+        "episode_count": 3,
+        "latest_episode_created_at": "2026-03-15T09:00:00+00:00",
+        "latest_memory_embedding_created_at": None,
+        "latest_memory_item_created_at": None,
+        "latest_memory_relation_created_at": None,
+        "memory_embedding_count": 1,
+        "memory_item_count": 4,
+        "memory_item_provenance_counts": {
+            "episode": 2,
+            "workflow_complete_auto": 2,
+        },
+        "memory_relation_count": 0,
+    }
+    assert captured.err == ""
+
+
+def test_main_memory_stats_reports_missing_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_cli_settings(monkeypatch, make_settings(database_url=""))
+
+    exit_code = cli_module.main(["memory-stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+
+
+def test_main_stats_returns_error_when_stats_loading_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+
+    class ExplodingWorkflowService:
+        def __init__(self, uow_factory: object) -> None:
+            self.uow_factory = uow_factory
+
+        def get_stats(self) -> WorkflowStats:
+            raise RuntimeError("stats exploded")
+
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(monkeypatch, ExplodingWorkflowService)
+
+    exit_code = cli_module.main(["stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to load stats: stats exploded" in captured.err
+
+
+def test_main_memory_stats_returns_error_when_loading_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+
+    class ExplodingWorkflowService:
+        def __init__(self, uow_factory: object) -> None:
+            self.uow_factory = uow_factory
+
+        def get_memory_stats(self) -> MemoryStats:
+            raise RuntimeError("memory stats exploded")
+
+    patch_cli_settings(monkeypatch, settings)
+    patch_cli_postgres_config(monkeypatch)
+    patch_cli_connection_pool(monkeypatch)
+    patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
+    patch_cli_workflow_service(monkeypatch, ExplodingWorkflowService)
+
+    exit_code = cli_module.main(["memory-stats"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to load memory stats: memory stats exploded" in captured.err
