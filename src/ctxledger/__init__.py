@@ -161,14 +161,9 @@ def _schema_path() -> Path:
 
 
 def _print_version() -> int:
-    try:
-        from importlib.metadata import version
+    from .version import get_app_version
 
-        print(version("ctxledger"))
-    except Exception:
-        from .version import get_app_version
-
-        print(get_app_version())
+    print(get_app_version())
     return 0
 
 

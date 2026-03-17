@@ -36,6 +36,7 @@ from ctxledger.runtime.server_responses import (
 from ctxledger.runtime.status import build_health_status, build_readiness_status
 from ctxledger.runtime.types import RuntimeIntrospectionResponse
 from ctxledger.server import CtxLedgerServer
+from ctxledger.version import get_app_version
 
 from ..support.coverage_targets_support import (
     FailingDbChecker,
@@ -602,7 +603,7 @@ def test_cli_helpers_cover_schema_path_and_version_fallback(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.6.0"
+    assert captured.out.strip() == get_app_version()
 
 
 def test_build_health_status_handles_missing_runtime() -> None:

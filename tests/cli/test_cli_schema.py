@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 import ctxledger.__init__ as cli_module
+from ctxledger.version import get_app_version
 
 from .conftest import make_settings
 
@@ -43,7 +44,7 @@ def test_print_version_falls_back_when_metadata_lookup_fails(
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert captured.out.strip() == "0.6.0"
+    assert captured.out.strip() == get_app_version()
     assert captured.err == ""
 
 
