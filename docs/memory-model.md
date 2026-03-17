@@ -248,9 +248,10 @@ At present, episodic behavior includes:
   - `inherited_memory_items`
   - `related_memory_items`
   - `related_memory_items_by_episode`
-- keeping flat related context as an explicit compatibility surface alongside newer grouping details:
+- keeping flat related context as an explicit compatibility surface alongside newer structured details:
   - `related_memory_items` remains the top-level compatibility field in the current slice
-  - `related_memory_items_by_episode` now makes the episode-local mapping explicit without removing the flat field
+  - `related_memory_items_by_episode` should now be understood as the primary structured relation-aware mapping at the details level
+  - episode-group-local `related_memory_items` should be understood as a convenience projection of that same structured mapping inside `memory_context_groups`
   - later slices may choose to retire the flat field, but that is not part of the current contract
 - exposing explicit selection metadata inside `memory_context_groups`, including:
   - `selection_kind = direct_episode` for episode-scoped direct context
@@ -539,8 +540,8 @@ The current details payload now also makes that constrained relation contract mo
 The current grouping boundary should also be understood explicitly:
 
 - `memory_context_groups` still organize direct episode-scoped context and inherited workspace-scoped context
-- episode-scoped groups may now also include group-local `related_memory_items`
-- `related_memory_items_by_episode` mirrors that same episode-local relation-aware output at the details level
+- `related_memory_items_by_episode` is now the primary structured relation-aware mapping for episode-local related output
+- episode-scoped groups may also include group-local `related_memory_items` as a convenience projection of that same mapping
 - the flat top-level `related_memory_items` field is still retained as a compatibility surface
 - workspace-scoped groups are not widened by this slice
 - if the flat compatibility field is retired later, that should be treated as a separate incremental contract change rather than assumed from the current grouping shape
@@ -651,7 +652,7 @@ Important near-term questions include:
 - how should workspace-scoped episode retrieval be ranked or limited?
 - how should ticket-scoped retrieval behave when multiple workflows match?
 - how should the current lightweight field-based query-aware filter evolve into stronger retrieval behavior?
-- how long should the flat compatibility field `related_memory_items` remain alongside `related_memory_items_by_episode` and episode-group-local related output?
+- how long should the flat compatibility field `related_memory_items` remain alongside the primary structured mapping `related_memory_items_by_episode` and the convenience group-local related output?
 - how should episode records evolve into semantic memory items?
 - what summary boundaries should exist for hierarchical memory?
 

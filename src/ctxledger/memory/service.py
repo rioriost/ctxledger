@@ -1516,6 +1516,8 @@ class MemoryService:
                     "related_context_returned_without_episode_matches": False,
                     "flat_related_memory_items_is_compatibility_field": False,
                     "flat_related_memory_items_matches_grouped_episode_related_items": False,
+                    "related_memory_items_by_episode_is_primary_structured_output": False,
+                    "group_related_memory_items_are_convenience_output": False,
                     "memory_context_groups": (
                         [
                             {
@@ -1674,6 +1676,12 @@ class MemoryService:
                     related_memory_items
                 ),
                 "flat_related_memory_items_matches_grouped_episode_related_items": bool(
+                    related_memory_items
+                ),
+                "related_memory_items_by_episode_is_primary_structured_output": bool(
+                    related_memory_items
+                ),
+                "group_related_memory_items_are_convenience_output": bool(
                     related_memory_items
                 ),
                 "memory_context_groups": memory_context_groups,

@@ -1188,6 +1188,7 @@ Representative current response details may include:
 - `related_memory_items_by_episode`
 - `related_context_is_auxiliary`
 - `related_context_relation_types`
+- `related_context_primary_structured_output`
 - `related_context_flat_field_is_compatibility_output`
 
 ### Minimal Hierarchy-Aware Contract
@@ -1233,6 +1234,7 @@ The details payload now also makes current auxiliary-context behavior explicit t
 - `inherited_context_returned_without_episode_matches`
 - `related_context_is_auxiliary`
 - `related_context_relation_types`
+- `related_context_primary_structured_output`
 - `related_context_flat_field_is_compatibility_output`
 
 At the current implementation stage, relation-aware context is also treated as
@@ -1243,6 +1245,7 @@ That means:
 
 - `related_context_is_auxiliary = true` when `related_memory_items` are returned
 - `related_context_relation_types = ["supports"]` for the current constrained relation-aware slice
+- `related_context_primary_structured_output = "related_memory_items_by_episode"` for the current structured contract
 - `related_context_flat_field_is_compatibility_output = true` while the flat top-level field is retained alongside per-group and per-episode output
 - `related_context_is_auxiliary = false` when no related memory items are returned
 - `related_context_relation_type = null` when no related memory items are returned
@@ -1294,11 +1297,13 @@ That means:
   - it follows one outgoing hop only
   - it includes only `supports` relations
   - it ignores other relation types in this slice
-- `related_memory_items_by_episode` makes the current per-episode mapping explicit without requiring clients to parse group-local output only
+- `related_memory_items_by_episode` is the primary structured related-output contract in the current stage
+- group-local `memory_context_groups[*]["related_memory_items"]` mirrors that same episode-local mapping as a convenience view for grouped consumers
 - when per-group related context is present, it should be understood as a compatibility-preserving refinement of the same constrained `supports`-only behavior rather than as broader graph traversal
 - the flat `related_memory_items` field remains the compatibility surface during this stage
 - `related_context_is_auxiliary` makes the current support-role of related context explicit
 - `related_context_relation_types` makes the currently constrained relation contract explicit without widening traversal behavior
+- `related_context_primary_structured_output` makes the preferred structured field explicit
 - `related_context_flat_field_is_compatibility_output` makes the compatibility status of the flat top-level field explicit
 
 This is still not a full semantic, relation-aware, or graph-backed hierarchical
