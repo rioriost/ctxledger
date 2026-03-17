@@ -392,10 +392,28 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
             }
         ],
         "memory_items": [],
+        "related_memory_items_by_episode": {},
         "memory_item_counts_by_episode": {
             str(response.episodes[0].episode_id): 0,
         },
         "summaries": [],
+        "summary_selection_applied": False,
+        "summary_selection_kind": None,
+        "hierarchy_applied": False,
+        "inherited_context_is_auxiliary": False,
+        "inherited_context_returned_without_episode_matches": False,
+        "inherited_context_returned_as_auxiliary_without_episode_matches": False,
+        "related_context_is_auxiliary": False,
+        "related_context_relation_types": [],
+        "related_context_returned_without_episode_matches": False,
+        "all_episodes_filtered_out_by_query": False,
+        "flat_related_memory_items_is_compatibility_field": False,
+        "flat_related_memory_items_matches_grouped_episode_related_items": False,
+        "related_memory_items_by_episode_is_primary_structured_output": False,
+        "group_related_memory_items_are_convenience_output": False,
+        "memory_context_groups": [],
+        "inherited_memory_items": [],
+        "related_memory_items": [],
     }
 
 
@@ -545,10 +563,28 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
             }
         ],
         "memory_items": [],
+        "related_memory_items_by_episode": {},
         "memory_item_counts_by_episode": {
             str(response.episodes[0].episode_id): 0,
         },
         "summaries": [],
+        "summary_selection_applied": False,
+        "summary_selection_kind": None,
+        "hierarchy_applied": False,
+        "inherited_context_is_auxiliary": False,
+        "inherited_context_returned_without_episode_matches": False,
+        "inherited_context_returned_as_auxiliary_without_episode_matches": False,
+        "related_context_is_auxiliary": False,
+        "related_context_relation_types": [],
+        "related_context_returned_without_episode_matches": False,
+        "all_episodes_filtered_out_by_query": False,
+        "flat_related_memory_items_is_compatibility_field": False,
+        "flat_related_memory_items_matches_grouped_episode_related_items": False,
+        "related_memory_items_by_episode_is_primary_structured_output": False,
+        "group_related_memory_items_are_convenience_output": False,
+        "memory_context_groups": [],
+        "inherited_memory_items": [],
+        "related_memory_items": [],
     }
 
 

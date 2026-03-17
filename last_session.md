@@ -2,51 +2,60 @@
 
 ## Summary
 
-Completed one tiny `memory_get_context` retrieval-assembly-explicit slice by making episode-group selection explicit through the existing summary-first path. Episode groups in `memory_context_groups` now carry a narrow `selected_via_summary_first` marker that reflects whether the current grouped assembly included summary-first selection, without changing ordering, grouping shape, or retrieval scope.
+Completed Phase 3 convergence for the memory service split. The broken `service_core.py` hygiene state was repaired, `MemoryService` implementation ownership now lives in `src/ctxledger/memory/service_core.py`, `src/ctxledger/memory/service.py` now acts as a compatibility facade / re-export surface, and both focused and broader memory validation are green.
 
 ## What changed in this session
 
-- added `selected_via_summary_first` to episode-group entries assembled in `MemoryService.get_context`
-- kept the current grouped contract narrow and compatible:
-  - summary group still appears first when present
-  - episode groups still follow returned `episodes` order
-  - workspace group still remains auxiliary and last when present
-  - no placeholder groups were introduced
-- treated the new field as an explicit grouped-selection marker rather than a broader grouped-contract redesign
-- updated focused tests so existing summary-present and summary-absent cases assert the new marker consistently
-- added one new focused test covering the intended summary-first episode-group marker behavior
+- removed stray tool-payload residue that had corrupted `src/ctxledger/memory/service_core.py`
+- restored `src/ctxledger/memory/service_core.py` to valid Python module state
+- kept `src/ctxledger/memory/service_core.py` as the implementation owner for `MemoryService`
+- reduced `src/ctxledger/memory/service.py` to a compatibility facade that re-exports:
+  - `MemoryService`
+  - request / response and record types
+  - repository protocol contracts
+  - in-memory and UnitOfWork-backed repository implementations
+- preserved compatibility for legacy constructor-related monkeypatch points by re-exporting the old module-surface symbols still referenced by tests
+- updated strict `get_context.details` expectations in `tests/memory/test_service_context_scope.py` so they match the current expanded details contract, including empty compatibility / auxiliary fields where applicable
 
-## Files updated in this session
+## Files touched in this session
 
 - `src/ctxledger/memory/service.py`
-- `tests/memory/test_service_context_details.py`
+- `src/ctxledger/memory/service_core.py`
+- `tests/memory/test_service_context_scope.py`
+
+## Current status by phase
+
+- Phase 1: complete
+- Phase 2: complete
+- Phase 3: complete
 
 ## Validation
 
 - passed:
+  - `python -m py_compile src/ctxledger/memory/service_core.py src/ctxledger/memory/service.py src/ctxledger/memory/repositories.py`
   - `pytest -q tests/memory/test_service_context_details.py`
+  - `pytest -q tests/memory/test_service_core.py -k 'constructor_swallowing_embedding_builder_errors or constructor_uses_built_embedding_generator'`
+  - `pytest -q tests/memory/test_service_context_scope.py -k 'intersects_workspace_and_ticket_scope'`
+  - `pytest -q tests/memory`
 
 ## What was learned
 
-- the current summary-first path was already the right minimal place to make grouped episode selection more explicit
-- a boolean episode-group marker is sufficient for this slice; no broader schema expansion was needed
-- the useful contract is now:
-  - when summary-first selection is active, episode groups carry `selected_via_summary_first: true`
-  - when summaries are absent, episode groups carry `selected_via_summary_first: false`
-  - workspace groups are unaffected by this marker
-- this keeps the grouped contract explicit without implying nested summary ownership or a stronger grouping hierarchy than the implementation actually provides
+- the remaining Phase 3 blocker was not service behavior but a combination of:
+  - file corruption in `service_core.py`
+  - strict test expectations that had not caught up with the newer `get_context.details` surface
+- the compatibility facade approach works cleanly for this split as long as the old import surface remains available
+- constructor-related tests were still coupled to the old module namespace, so re-exporting the legacy patch points was necessary to keep the split behavior-preserving
+- broader memory validation is now consistent with the current grouped-context details contract
 
-## Next suggested work
+## Recommended next work
 
-- next action:
-  - add one focused episode-only symmetry test for `memory_get_context`
-  - assert that when summaries are absent and no inherited workspace group is returned, `memory_context_groups` contains only episode groups
-  - assert those episode groups remain in returned `episodes` order
-  - assert each episode group carries `selected_via_summary_first: false`
-- keep the next slice semantically small within the same grouped-output area
-- after that, consider one narrow documentation / changelog note describing the episode-group marker and its intended compatibility level
-- if continuing here:
-  - preserve the current minimal marker approach
-  - avoid broad `memory_context_groups` redesign
-  - avoid nesting summaries into episode groups
-  - do not widen scope into ranking, semantic retrieval, graph traversal, or multi-hop relation expansion yet
+- review the final diff for semantic cleanliness
+- create a descriptive commit covering the completed memory service Phase 3 split
+- if a later cleanup pass is desired, consider whether some compatibility exports in `src/ctxledger/memory/service.py` can eventually be narrowed after downstream callers and tests no longer depend on the legacy surface
+
+## Commit guidance
+
+- this work loop is now in a commit-ready state
+- the next commit should describe both:
+  - completion of the memory service facade/core split
+  - alignment of strict scope-detail tests with the current details contract
