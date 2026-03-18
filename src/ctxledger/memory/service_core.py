@@ -890,122 +890,28 @@ class MemoryService:
             memory_item_details = tuple(memory_item_details_before_query_filter)
 
         matched_episode_count = len(episodes)
-        summaries = tuple(
-            detail["summary"]
-            for detail in memory_item_details
-            if isinstance(detail.get("summary"), dict)
-        )
-        summary_selection_applied = bool(summaries)
-        summary_selection_kind = (
-            "episode_summary_first" if summary_selection_applied else None
+        summaries, summary_selection_applied, summary_selection_kind = (
+            self._build_summary_selection_details(memory_item_details)
         )
         inherited_memory_items = inherited_workspace_items
-
-        memory_context_groups: list[dict[str, Any]] = []
-        if summary_selection_applied:
-            summary_parent_scope_id = (
-                resolved_workflow_instance_id
-                if len(resolved_workflow_ids) == 1
-                else None
-            )
-            summary_group_id = "summary:episode_summary_first"
-            memory_context_groups.append(
-                {
-                    "scope": "summary",
-                    "scope_id": None,
-                    "group_id": summary_group_id,
-                    "parent_scope": "workflow_instance",
-                    "parent_scope_id": summary_parent_scope_id,
-                    "selection_kind": summary_selection_kind,
-                    "selection_route": "summary_first",
-                    "child_episode_ids": [
-                        detail["episode_id"] for detail in memory_item_details
-                    ],
-                    "summaries": list(summaries),
-                }
-            )
-
-        if request.include_memory_items:
-            for episode, detail in zip(episodes, memory_item_details, strict=False):
-                memory_context_groups.append(
-                    {
-                        "scope": "episode",
-                        "scope_id": str(episode.episode_id),
-                        "parent_scope": "workflow_instance",
-                        "parent_scope_id": str(episode.workflow_instance_id),
-                        "parent_group_scope": (
-                            "summary" if summary_selection_applied else None
-                        ),
-                        "parent_group_id": (
-                            summary_group_id if summary_selection_applied else None
-                        ),
-                        "selection_kind": "direct_episode",
-                        "selection_route": (
-                            "summary_first"
-                            if summary_selection_applied
-                            else "episode_direct"
-                        ),
-                        "selected_via_summary_first": summary_selection_applied,
-                        "memory_items": detail.get("memory_items", []),
-                        "related_memory_items": detail.get("related_memory_items", []),
-                        "related_memory_item_provenance": detail.get(
-                            "related_memory_item_provenance", []
-                        ),
-                        "related_memory_relation_edges": detail.get(
-                            "related_memory_relation_edges", []
-                        ),
-                    }
-                )
-
-            if inherited_memory_items and resolved_workspace_id is not None:
-                memory_context_groups.append(
-                    {
-                        "scope": "workspace",
-                        "scope_id": resolved_workspace_id,
-                        "parent_scope": None,
-                        "parent_scope_id": None,
-                        "parent_group_scope": None,
-                        "parent_group_id": None,
-                        "selection_kind": "inherited_workspace",
-                        "selection_route": "workspace_inherited_auxiliary",
-                        "memory_items": [
-                            self._serialize_memory_item(memory_item)
-                            for memory_item in inherited_memory_items
-                        ],
-                    }
-                )
 
         related_memory_items = self._collect_supports_related_memory_items(
             memory_item_details=memory_item_details,
             limit=request.limit,
         )
-        if related_memory_items:
-            relation_group_parent_scope = (
-                "workflow_instance" if len(resolved_workflow_ids) == 1 else None
-            )
-            relation_group_parent_scope_id = (
-                resolved_workflow_instance_id
-                if relation_group_parent_scope == "workflow_instance"
-                else None
-            )
-            memory_context_groups.append(
-                {
-                    "scope": "relation",
-                    "scope_id": "supports",
-                    "group_id": "relation:supports_auxiliary",
-                    "parent_scope": relation_group_parent_scope,
-                    "parent_scope_id": relation_group_parent_scope_id,
-                    "parent_group_scope": None,
-                    "parent_group_id": None,
-                    "selection_kind": "supports_related_auxiliary",
-                    "selection_route": "relation_supports_auxiliary",
-                    "relation_type": "supports",
-                    "memory_items": [
-                        self._serialize_memory_item(memory_item)
-                        for memory_item in related_memory_items
-                    ],
-                }
-            )
+        memory_context_groups = self._build_memory_context_groups(
+            episodes=episodes,
+            memory_item_details=memory_item_details,
+            summaries=summaries,
+            summary_selection_applied=summary_selection_applied,
+            summary_selection_kind=summary_selection_kind,
+            resolved_workflow_ids=resolved_workflow_ids,
+            resolved_workflow_instance_id=resolved_workflow_instance_id,
+            resolved_workspace_id=resolved_workspace_id,
+            inherited_memory_items=inherited_memory_items,
+            related_memory_items=related_memory_items,
+            include_memory_items=request.include_memory_items,
+        )
 
         return GetContextResponse(
             feature=MemoryFeature.GET_CONTEXT,
@@ -1053,256 +959,15 @@ class MemoryService:
                 "related_context_selection_route": (
                     "relation_supports_auxiliary" if related_memory_items else None
                 ),
-                "retrieval_routes_present": [
-                    route
-                    for route in [
-                        "summary_first" if summary_selection_applied else None,
-                        (
-                            "episode_direct"
-                            if request.include_memory_items
-                            and matched_episode_count > 0
-                            and not summary_selection_applied
-                            else None
-                        ),
-                        (
-                            "workspace_inherited_auxiliary"
-                            if inherited_memory_items
-                            else None
-                        ),
-                        (
-                            "relation_supports_auxiliary"
-                            if related_memory_items
-                            else None
-                        ),
-                    ]
-                    if route is not None
-                ],
-                "primary_retrieval_routes_present": [
-                    route
-                    for route in [
-                        "summary_first" if summary_selection_applied else None,
-                        (
-                            "episode_direct"
-                            if request.include_memory_items
-                            and matched_episode_count > 0
-                            and not summary_selection_applied
-                            else None
-                        ),
-                    ]
-                    if route is not None
-                ],
-                "auxiliary_retrieval_routes_present": [
-                    route
-                    for route in [
-                        (
-                            "workspace_inherited_auxiliary"
-                            if inherited_memory_items
-                            else None
-                        ),
-                        (
-                            "relation_supports_auxiliary"
-                            if related_memory_items
-                            else None
-                        ),
-                    ]
-                    if route is not None
-                ],
-                "retrieval_route_group_counts": {
-                    "summary_first": 1 if summary_selection_applied else 0,
-                    "episode_direct": (
-                        matched_episode_count
-                        if request.include_memory_items
-                        and matched_episode_count > 0
-                        and not summary_selection_applied
-                        else 0
-                    ),
-                    "workspace_inherited_auxiliary": (
-                        1 if inherited_memory_items else 0
-                    ),
-                    "relation_supports_auxiliary": (
-                        matched_episode_count if related_memory_items else 0
-                    ),
-                },
-                "retrieval_route_item_counts": {
-                    "summary_first": (
-                        len(summaries) if summary_selection_applied else 0
-                    ),
-                    "episode_direct": (
-                        sum(
-                            len(detail.get("memory_items", []))
-                            for detail in memory_item_details
-                        )
-                        if request.include_memory_items
-                        and matched_episode_count > 0
-                        and not summary_selection_applied
-                        else 0
-                    ),
-                    "workspace_inherited_auxiliary": (
-                        len(inherited_memory_items) if inherited_memory_items else 0
-                    ),
-                    "relation_supports_auxiliary": (
-                        len(related_memory_items) if related_memory_items else 0
-                    ),
-                },
-                "retrieval_route_presence": {
-                    "summary_first": {
-                        "group_present": summary_selection_applied,
-                        "item_present": bool(summaries),
-                    },
-                    "episode_direct": {
-                        "group_present": bool(
-                            request.include_memory_items
-                            and matched_episode_count > 0
-                            and not summary_selection_applied
-                        ),
-                        "item_present": bool(
-                            request.include_memory_items
-                            and matched_episode_count > 0
-                            and not summary_selection_applied
-                            and any(
-                                detail.get("memory_items", [])
-                                for detail in memory_item_details
-                            )
-                        ),
-                    },
-                    "workspace_inherited_auxiliary": {
-                        "group_present": bool(inherited_memory_items),
-                        "item_present": bool(inherited_memory_items),
-                    },
-                    "relation_supports_auxiliary": {
-                        "group_present": bool(related_memory_items),
-                        "item_present": bool(related_memory_items),
-                    },
-                },
-                "retrieval_route_scope_counts": {
-                    "summary_first": {
-                        "summary": (1 if summary_selection_applied else 0),
-                        "episode": (
-                            matched_episode_count
-                            if request.include_memory_items
-                            and matched_episode_count > 0
-                            and summary_selection_applied
-                            else 0
-                        ),
-                        "workspace": 0,
-                        "relation": 0,
-                    },
-                    "episode_direct": {
-                        "summary": 0,
-                        "episode": (
-                            matched_episode_count
-                            if request.include_memory_items
-                            and matched_episode_count > 0
-                            and not summary_selection_applied
-                            else 0
-                        ),
-                        "workspace": 0,
-                        "relation": 0,
-                    },
-                    "workspace_inherited_auxiliary": {
-                        "summary": 0,
-                        "episode": 0,
-                        "workspace": (1 if inherited_memory_items else 0),
-                        "relation": 0,
-                    },
-                    "relation_supports_auxiliary": {
-                        "summary": 0,
-                        "episode": 0,
-                        "workspace": 0,
-                        "relation": (1 if related_memory_items else 0),
-                    },
-                },
-                "retrieval_route_scope_item_counts": {
-                    "summary_first": {
-                        "summary": (len(summaries) if summary_selection_applied else 0),
-                        "episode": (
-                            sum(
-                                len(detail.get("memory_items", []))
-                                for detail in memory_item_details
-                            )
-                            if request.include_memory_items
-                            and matched_episode_count > 0
-                            and summary_selection_applied
-                            else 0
-                        ),
-                        "workspace": 0,
-                        "relation": 0,
-                    },
-                    "episode_direct": {
-                        "summary": 0,
-                        "episode": (
-                            sum(
-                                len(detail.get("memory_items", []))
-                                for detail in memory_item_details
-                            )
-                            if request.include_memory_items
-                            and matched_episode_count > 0
-                            and not summary_selection_applied
-                            else 0
-                        ),
-                        "workspace": 0,
-                        "relation": 0,
-                    },
-                    "workspace_inherited_auxiliary": {
-                        "summary": 0,
-                        "episode": 0,
-                        "workspace": (
-                            len(inherited_memory_items) if inherited_memory_items else 0
-                        ),
-                        "relation": 0,
-                    },
-                    "relation_supports_auxiliary": {
-                        "summary": 0,
-                        "episode": 0,
-                        "workspace": 0,
-                        "relation": (
-                            len(related_memory_items) if related_memory_items else 0
-                        ),
-                    },
-                },
-                "retrieval_route_scopes_present": {
-                    "summary_first": [
-                        scope
-                        for scope in [
-                            "summary" if summary_selection_applied else None,
-                            (
-                                "episode"
-                                if request.include_memory_items
-                                and matched_episode_count > 0
-                                and summary_selection_applied
-                                else None
-                            ),
-                        ]
-                        if scope is not None
-                    ],
-                    "episode_direct": [
-                        scope
-                        for scope in [
-                            (
-                                "episode"
-                                if request.include_memory_items
-                                and matched_episode_count > 0
-                                and not summary_selection_applied
-                                else None
-                            ),
-                        ]
-                        if scope is not None
-                    ],
-                    "workspace_inherited_auxiliary": [
-                        scope
-                        for scope in [
-                            ("workspace" if inherited_memory_items else None),
-                        ]
-                        if scope is not None
-                    ],
-                    "relation_supports_auxiliary": [
-                        scope
-                        for scope in [
-                            ("relation" if related_memory_items else None),
-                        ]
-                        if scope is not None
-                    ],
-                },
+                **self._build_retrieval_route_details(
+                    memory_item_details=memory_item_details,
+                    summaries=summaries,
+                    summary_selection_applied=summary_selection_applied,
+                    matched_episode_count=matched_episode_count,
+                    include_memory_items=request.include_memory_items,
+                    inherited_memory_items=inherited_memory_items,
+                    related_memory_items=related_memory_items,
+                ),
                 "related_context_returned_without_episode_matches": False,
                 "all_episodes_filtered_out_by_query": (
                     all_episodes_filtered_out_by_query
@@ -1783,7 +1448,8 @@ class MemoryService:
 
                     target_memory_items = (
                         self._memory_item_repository.list_by_memory_ids(
-                            (relation.target_memory_id,)
+                            (relation.target_memory_id,),
+                            limit=limit,
                         )
                     )
                     if not target_memory_items:
@@ -1806,6 +1472,348 @@ class MemoryService:
         if include_relation_metadata:
             return tuple(related_memory_items), tuple(related_relations)
         return tuple(related_memory_items)
+
+    def _build_summary_selection_details(
+        self,
+        memory_item_details: tuple[dict[str, Any], ...],
+    ) -> tuple[tuple[dict[str, Any], ...], bool, str | None]:
+        summaries = tuple(
+            detail["summary"]
+            for detail in memory_item_details
+            if isinstance(detail.get("summary"), dict)
+        )
+        summary_selection_applied = bool(summaries)
+        summary_selection_kind = (
+            "episode_summary_first" if summary_selection_applied else None
+        )
+        return summaries, summary_selection_applied, summary_selection_kind
+
+    def _build_retrieval_route_details(
+        self,
+        *,
+        memory_item_details: tuple[dict[str, Any], ...],
+        summaries: tuple[dict[str, Any], ...],
+        summary_selection_applied: bool,
+        matched_episode_count: int,
+        include_memory_items: bool,
+        inherited_memory_items: tuple[MemoryItemRecord, ...],
+        related_memory_items: tuple[MemoryItemRecord, ...],
+    ) -> dict[str, Any]:
+        episode_direct_group_present = bool(
+            include_memory_items
+            and matched_episode_count > 0
+            and not summary_selection_applied
+        )
+        episode_direct_item_count = (
+            sum(len(detail.get("memory_items", [])) for detail in memory_item_details)
+            if episode_direct_group_present
+            else 0
+        )
+        summary_episode_scope_count = (
+            matched_episode_count
+            if include_memory_items
+            and matched_episode_count > 0
+            and summary_selection_applied
+            else 0
+        )
+        summary_episode_scope_item_count = (
+            sum(len(detail.get("memory_items", [])) for detail in memory_item_details)
+            if include_memory_items
+            and matched_episode_count > 0
+            and summary_selection_applied
+            else 0
+        )
+
+        return {
+            "retrieval_routes_present": [
+                route
+                for route in [
+                    "summary_first" if summary_selection_applied else None,
+                    "episode_direct" if episode_direct_group_present else None,
+                    (
+                        "workspace_inherited_auxiliary"
+                        if inherited_memory_items
+                        else None
+                    ),
+                    ("relation_supports_auxiliary" if related_memory_items else None),
+                ]
+                if route is not None
+            ],
+            "primary_retrieval_routes_present": [
+                route
+                for route in [
+                    "summary_first" if summary_selection_applied else None,
+                    "episode_direct" if episode_direct_group_present else None,
+                ]
+                if route is not None
+            ],
+            "auxiliary_retrieval_routes_present": [
+                route
+                for route in [
+                    (
+                        "workspace_inherited_auxiliary"
+                        if inherited_memory_items
+                        else None
+                    ),
+                    ("relation_supports_auxiliary" if related_memory_items else None),
+                ]
+                if route is not None
+            ],
+            "retrieval_route_group_counts": {
+                "summary_first": 1 if summary_selection_applied else 0,
+                "episode_direct": matched_episode_count
+                if episode_direct_group_present
+                else 0,
+                "workspace_inherited_auxiliary": 1 if inherited_memory_items else 0,
+                "relation_supports_auxiliary": (
+                    matched_episode_count if related_memory_items else 0
+                ),
+            },
+            "retrieval_route_item_counts": {
+                "summary_first": len(summaries) if summary_selection_applied else 0,
+                "episode_direct": episode_direct_item_count,
+                "workspace_inherited_auxiliary": (
+                    len(inherited_memory_items) if inherited_memory_items else 0
+                ),
+                "relation_supports_auxiliary": (
+                    len(related_memory_items) if related_memory_items else 0
+                ),
+            },
+            "retrieval_route_presence": {
+                "summary_first": {
+                    "group_present": summary_selection_applied,
+                    "item_present": bool(summaries),
+                },
+                "episode_direct": {
+                    "group_present": episode_direct_group_present,
+                    "item_present": bool(
+                        episode_direct_group_present
+                        and any(
+                            detail.get("memory_items", [])
+                            for detail in memory_item_details
+                        )
+                    ),
+                },
+                "workspace_inherited_auxiliary": {
+                    "group_present": bool(inherited_memory_items),
+                    "item_present": bool(inherited_memory_items),
+                },
+                "relation_supports_auxiliary": {
+                    "group_present": bool(related_memory_items),
+                    "item_present": bool(related_memory_items),
+                },
+            },
+            "retrieval_route_scope_counts": {
+                "summary_first": {
+                    "summary": (1 if summary_selection_applied else 0),
+                    "episode": summary_episode_scope_count,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "episode_direct": {
+                    "summary": 0,
+                    "episode": (
+                        matched_episode_count if episode_direct_group_present else 0
+                    ),
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "workspace_inherited_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": (1 if inherited_memory_items else 0),
+                    "relation": 0,
+                },
+                "relation_supports_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": (1 if related_memory_items else 0),
+                },
+            },
+            "retrieval_route_scope_item_counts": {
+                "summary_first": {
+                    "summary": (len(summaries) if summary_selection_applied else 0),
+                    "episode": summary_episode_scope_item_count,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "episode_direct": {
+                    "summary": 0,
+                    "episode": episode_direct_item_count,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "workspace_inherited_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": (
+                        len(inherited_memory_items) if inherited_memory_items else 0
+                    ),
+                    "relation": 0,
+                },
+                "relation_supports_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": (
+                        len(related_memory_items) if related_memory_items else 0
+                    ),
+                },
+            },
+            "retrieval_route_scopes_present": {
+                "summary_first": [
+                    scope
+                    for scope in [
+                        "summary" if summary_selection_applied else None,
+                        "episode" if summary_episode_scope_count > 0 else None,
+                    ]
+                    if scope is not None
+                ],
+                "episode_direct": [
+                    scope
+                    for scope in [
+                        "episode" if episode_direct_group_present else None,
+                    ]
+                    if scope is not None
+                ],
+                "workspace_inherited_auxiliary": [
+                    scope
+                    for scope in [
+                        ("workspace" if inherited_memory_items else None),
+                    ]
+                    if scope is not None
+                ],
+                "relation_supports_auxiliary": [
+                    scope
+                    for scope in [
+                        ("relation" if related_memory_items else None),
+                    ]
+                    if scope is not None
+                ],
+            },
+        }
+
+    def _build_memory_context_groups(
+        self,
+        *,
+        episodes: tuple[EpisodeRecord, ...],
+        memory_item_details: tuple[dict[str, Any], ...],
+        summaries: tuple[dict[str, Any], ...],
+        summary_selection_applied: bool,
+        summary_selection_kind: str | None,
+        resolved_workflow_ids: tuple[UUID, ...],
+        resolved_workflow_instance_id: str | None,
+        resolved_workspace_id: str | None,
+        inherited_memory_items: tuple[MemoryItemRecord, ...],
+        related_memory_items: tuple[MemoryItemRecord, ...],
+        include_memory_items: bool,
+    ) -> list[dict[str, Any]]:
+        memory_context_groups: list[dict[str, Any]] = []
+        summary_group_id: str | None = None
+
+        if summary_selection_applied:
+            summary_parent_scope_id = (
+                resolved_workflow_instance_id
+                if len(resolved_workflow_ids) == 1
+                else None
+            )
+            summary_group_id = "summary:episode_summary_first"
+            memory_context_groups.append(
+                {
+                    "scope": "summary",
+                    "scope_id": None,
+                    "group_id": summary_group_id,
+                    "parent_scope": "workflow_instance",
+                    "parent_scope_id": summary_parent_scope_id,
+                    "selection_kind": summary_selection_kind,
+                    "selection_route": "summary_first",
+                    "child_episode_ids": [
+                        detail["episode_id"] for detail in memory_item_details
+                    ],
+                    "summaries": list(summaries),
+                }
+            )
+
+        if include_memory_items:
+            for episode, detail in zip(episodes, memory_item_details, strict=False):
+                memory_context_groups.append(
+                    {
+                        "scope": "episode",
+                        "scope_id": str(episode.episode_id),
+                        "parent_scope": "workflow_instance",
+                        "parent_scope_id": str(episode.workflow_instance_id),
+                        "parent_group_scope": (
+                            "summary" if summary_selection_applied else None
+                        ),
+                        "parent_group_id": (
+                            summary_group_id if summary_selection_applied else None
+                        ),
+                        "selection_kind": "direct_episode",
+                        "selection_route": (
+                            "summary_first"
+                            if summary_selection_applied
+                            else "episode_direct"
+                        ),
+                        "selected_via_summary_first": summary_selection_applied,
+                        "memory_items": detail.get("memory_items", []),
+                        "related_memory_items": detail.get("related_memory_items", []),
+                        "related_memory_item_provenance": detail.get(
+                            "related_memory_item_provenance", []
+                        ),
+                        "related_memory_relation_edges": detail.get(
+                            "related_memory_relation_edges", []
+                        ),
+                    }
+                )
+
+            if inherited_memory_items and resolved_workspace_id is not None:
+                memory_context_groups.append(
+                    {
+                        "scope": "workspace",
+                        "scope_id": resolved_workspace_id,
+                        "parent_scope": None,
+                        "parent_scope_id": None,
+                        "parent_group_scope": None,
+                        "parent_group_id": None,
+                        "selection_kind": "inherited_workspace",
+                        "selection_route": "workspace_inherited_auxiliary",
+                        "memory_items": [
+                            self._serialize_memory_item(memory_item)
+                            for memory_item in inherited_memory_items
+                        ],
+                    }
+                )
+
+        if related_memory_items:
+            relation_group_parent_scope = (
+                "workflow_instance" if len(resolved_workflow_ids) == 1 else None
+            )
+            relation_group_parent_scope_id = (
+                resolved_workflow_instance_id
+                if relation_group_parent_scope == "workflow_instance"
+                else None
+            )
+            memory_context_groups.append(
+                {
+                    "scope": "relation",
+                    "scope_id": "supports",
+                    "group_id": "relation:supports_auxiliary",
+                    "parent_scope": relation_group_parent_scope,
+                    "parent_scope_id": relation_group_parent_scope_id,
+                    "parent_group_scope": None,
+                    "parent_group_id": None,
+                    "selection_kind": "supports_related_auxiliary",
+                    "selection_route": "relation_supports_auxiliary",
+                    "relation_type": "supports",
+                    "memory_items": [
+                        self._serialize_memory_item(memory_item)
+                        for memory_item in related_memory_items
+                    ],
+                }
+            )
+
+        return memory_context_groups
 
     def _serialize_memory_item(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
         return {
