@@ -884,6 +884,86 @@ def test_in_memory_memory_item_repository_lists_items_by_memory_ids_in_request_o
     )
 
 
+def test_in_memory_memory_item_repository_lists_items_by_episode_ids_in_recency_order() -> (
+    None
+):
+    repository = InMemoryMemoryItemRepository()
+    workspace_id = uuid4()
+    first_episode_id = uuid4()
+    second_episode_id = uuid4()
+    missing_episode_id = uuid4()
+
+    older_first_episode_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=first_episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Older first episode item",
+        metadata={"kind": "older-first"},
+        created_at=datetime(2024, 2, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 1, tzinfo=UTC),
+    )
+    newer_second_episode_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=second_episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Newer second episode item",
+        metadata={"kind": "newer-second"},
+        created_at=datetime(2024, 2, 3, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 3, tzinfo=UTC),
+    )
+    newer_first_episode_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=first_episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Newer first episode item",
+        metadata={"kind": "newer-first"},
+        created_at=datetime(2024, 2, 2, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 2, tzinfo=UTC),
+    )
+    workspace_root_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Workspace root item",
+        metadata={"kind": "root"},
+        created_at=datetime(2024, 2, 4, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 4, tzinfo=UTC),
+    )
+
+    repository.create(older_first_episode_item)
+    repository.create(newer_second_episode_item)
+    repository.create(newer_first_episode_item)
+    repository.create(workspace_root_item)
+
+    assert repository.list_by_episode_ids(
+        (
+            first_episode_id,
+            missing_episode_id,
+            second_episode_id,
+        )
+    ) == (
+        newer_second_episode_item,
+        newer_first_episode_item,
+        older_first_episode_item,
+    )
+
+
+def test_in_memory_memory_item_repository_lists_items_by_episode_ids_for_empty_input() -> (
+    None
+):
+    repository = InMemoryMemoryItemRepository()
+
+    assert repository.list_by_episode_ids(()) == ()
+
+
 def test_in_memory_memory_relation_repository_lists_source_and_target_matches_in_recency_order() -> (
     None
 ):

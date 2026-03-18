@@ -732,6 +732,44 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
         memory_item,
     )
 
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_id": relation_target_memory_item.memory_id,
+                "workspace_id": relation_target_memory_item.workspace_id,
+                "episode_id": relation_target_memory_item.episode_id,
+                "type": relation_target_memory_item.type,
+                "provenance": relation_target_memory_item.provenance,
+                "content": relation_target_memory_item.content,
+                "metadata_json": relation_target_memory_item.metadata,
+                "created_at": relation_target_memory_item.created_at,
+                "updated_at": relation_target_memory_item.updated_at,
+            },
+            {
+                "memory_id": memory_item.memory_id,
+                "workspace_id": memory_item.workspace_id,
+                "episode_id": memory_item.episode_id,
+                "type": memory_item.type,
+                "provenance": memory_item.provenance,
+                "content": memory_item.content,
+                "metadata_json": memory_item.metadata,
+                "created_at": memory_item.created_at,
+                "updated_at": memory_item.updated_at,
+            },
+        ]
+    )
+    assert item_repo.list_by_episode_ids(
+        (
+            memory_item.episode_id,
+            relation_target_memory_item.episode_id,
+        ),
+    ) == (
+        relation_target_memory_item,
+        memory_item,
+    )
+
+    assert item_repo.list_by_episode_ids(()) == ()
+
     connection.fetchone_results.append(
         {
             "memory_embedding_id": embedding.memory_embedding_id,

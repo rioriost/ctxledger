@@ -1639,12 +1639,22 @@ class MemoryService:
         include_summaries: bool,
     ) -> tuple[dict[str, Any], ...]:
         details: list[dict[str, Any]] = []
+        memory_items_by_episode_id: dict[UUID, tuple[MemoryItemRecord, ...]] = {}
+
+        episode_ids = tuple(episode.episode_id for episode in episodes)
+        bulk_memory_items = self._memory_item_repository.list_by_episode_ids(
+            episode_ids
+        )
+        for episode in episodes:
+            episode_memory_items = tuple(
+                memory_item
+                for memory_item in bulk_memory_items
+                if memory_item.episode_id == episode.episode_id
+            )
+            memory_items_by_episode_id[episode.episode_id] = episode_memory_items
 
         for episode in episodes:
-            memory_items = self._memory_item_repository.list_by_episode_id(
-                episode.episode_id,
-                limit=100,
-            )
+            memory_items = memory_items_by_episode_id.get(episode.episode_id, ())
             memory_item_count = len(memory_items)
             detail: dict[str, Any] = {
                 "episode_id": str(episode.episode_id),

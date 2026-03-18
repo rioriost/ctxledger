@@ -324,6 +324,22 @@ class InMemoryMemoryItemRepository:
         matches.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
         return tuple(matches[:limit])
 
+    def list_by_episode_ids(
+        self,
+        episode_ids: tuple[UUID, ...],
+    ) -> tuple[MemoryItemRecord, ...]:
+        if not episode_ids:
+            return ()
+
+        episode_id_set = set(episode_ids)
+        matches = [
+            memory_item
+            for memory_item in self._memory_items
+            if memory_item.episode_id in episode_id_set
+        ]
+        matches.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
+        return tuple(matches)
+
     def list_by_workspace_id(
         self,
         workspace_id: UUID,
@@ -481,6 +497,20 @@ class UnitOfWorkMemoryItemRepository:
                 episode_id,
                 limit=limit,
             )
+
+    def list_by_episode_ids(
+        self,
+        episode_ids: tuple[UUID, ...],
+    ) -> tuple[MemoryItemRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_items") or uow.memory_items is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory item repository is not configured.",
+                    details={},
+                )
+            return uow.memory_items.list_by_episode_ids(episode_ids)
 
 
 class UnitOfWorkWorkspaceLookupRepository:
