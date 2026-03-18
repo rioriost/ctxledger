@@ -59,20 +59,32 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
         created_at=created_at.replace(hour=1),
         updated_at=created_at.replace(hour=1),
     )
-    unrelated_target_item = MemoryItemRecord(
+    workspace_root_item = MemoryItemRecord(
         memory_id=uuid4(),
         workspace_id=workspace_id,
         episode_id=None,
         type="workspace_note",
         provenance="workspace",
-        content="Unrelated workspace memory item",
-        metadata={"kind": "unrelated"},
+        content="Workspace root memory item",
+        metadata={"kind": "workspace-root"},
         created_at=created_at.replace(hour=0),
         updated_at=created_at.replace(hour=0),
+    )
+    unrelated_target_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=uuid4(),
+        type="workspace_note",
+        provenance="workspace",
+        content="Unrelated workspace memory item",
+        metadata={"kind": "unrelated"},
+        created_at=created_at.replace(hour=0, minute=30),
+        updated_at=created_at.replace(hour=0, minute=30),
     )
 
     memory_item_repository.create(direct_memory_item)
     memory_item_repository.create(supports_target_item)
+    memory_item_repository.create(workspace_root_item)
     memory_item_repository.create(unrelated_target_item)
 
     memory_relation_repository.create(
@@ -317,7 +329,40 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
             ].created_at.isoformat(),
         }
     ]
-    assert "related_memory_items" not in response.details["memory_context_groups"][1]
+    assert response.details["memory_context_groups"][1] == {
+        "scope": "workspace",
+        "scope_id": str(workspace_id),
+        "parent_scope": None,
+        "parent_scope_id": None,
+        "parent_group_scope": None,
+        "parent_group_id": None,
+        "selection_kind": "inherited_workspace",
+        "selection_route": "workspace_inherited_auxiliary",
+        "memory_items": [
+            {
+                "memory_id": str(supports_target_item.memory_id),
+                "workspace_id": str(workspace_id),
+                "episode_id": None,
+                "type": "workspace_note",
+                "provenance": "workspace",
+                "content": "Supporting workspace memory item",
+                "metadata": {"kind": "support"},
+                "created_at": supports_target_item.created_at.isoformat(),
+                "updated_at": supports_target_item.updated_at.isoformat(),
+            },
+            {
+                "memory_id": str(workspace_root_item.memory_id),
+                "workspace_id": str(workspace_id),
+                "episode_id": None,
+                "type": "workspace_note",
+                "provenance": "workspace",
+                "content": "Workspace root memory item",
+                "metadata": {"kind": "workspace-root"},
+                "created_at": workspace_root_item.created_at.isoformat(),
+                "updated_at": workspace_root_item.updated_at.isoformat(),
+            },
+        ],
+    }
     assert response.details["memory_context_groups"][2] == {
         "scope": "relation",
         "scope_id": "supports",
@@ -377,19 +422,31 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
         created_at=created_at.replace(hour=2),
         updated_at=created_at.replace(hour=2),
     )
-    non_support_target_item = MemoryItemRecord(
+    workspace_root_item = MemoryItemRecord(
         memory_id=uuid4(),
         workspace_id=workspace_id,
         episode_id=None,
         type="workspace_note",
         provenance="workspace",
-        content="Non-support related workspace memory item",
-        metadata={"kind": "non-support"},
+        content="Workspace root memory item",
+        metadata={"kind": "workspace-root"},
         created_at=created_at.replace(hour=1),
         updated_at=created_at.replace(hour=1),
     )
+    non_support_target_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=uuid4(),
+        type="workspace_note",
+        provenance="workspace",
+        content="Non-support related workspace memory item",
+        metadata={"kind": "non-support"},
+        created_at=created_at.replace(hour=1, minute=30),
+        updated_at=created_at.replace(hour=1, minute=30),
+    )
 
     memory_item_repository.create(direct_memory_item)
+    memory_item_repository.create(workspace_root_item)
     memory_item_repository.create(non_support_target_item)
 
     memory_relation_repository.create(
@@ -575,4 +632,26 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
         response.details["memory_context_groups"][0]["related_memory_relation_edges"]
         == []
     )
-    assert "related_memory_items" not in response.details["memory_context_groups"][1]
+    assert response.details["memory_context_groups"][1] == {
+        "scope": "workspace",
+        "scope_id": str(workspace_id),
+        "parent_scope": None,
+        "parent_scope_id": None,
+        "parent_group_scope": None,
+        "parent_group_id": None,
+        "selection_kind": "inherited_workspace",
+        "selection_route": "workspace_inherited_auxiliary",
+        "memory_items": [
+            {
+                "memory_id": str(workspace_root_item.memory_id),
+                "workspace_id": str(workspace_id),
+                "episode_id": None,
+                "type": "workspace_note",
+                "provenance": "workspace",
+                "content": "Workspace root memory item",
+                "metadata": {"kind": "workspace-root"},
+                "created_at": workspace_root_item.created_at.isoformat(),
+                "updated_at": workspace_root_item.updated_at.isoformat(),
+            }
+        ],
+    }

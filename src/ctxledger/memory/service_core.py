@@ -597,7 +597,7 @@ class MemoryService:
             if raw_workspace_id is not None:
                 resolved_workspace_id = str(raw_workspace_id)
                 inherited_workspace_items = (
-                    self._memory_item_repository.list_by_workspace_id(
+                    self._memory_item_repository.list_workspace_root_items(
                         raw_workspace_id,
                         limit=request.limit,
                     )
@@ -717,13 +717,7 @@ class MemoryService:
                     "retrieval_route_item_counts": {
                         "summary_first": 0,
                         "episode_direct": 0,
-                        "workspace_inherited_auxiliary": len(
-                            tuple(
-                                memory_item
-                                for memory_item in inherited_workspace_items
-                                if memory_item.episode_id is None
-                            )
-                        ),
+                        "workspace_inherited_auxiliary": len(inherited_workspace_items),
                         "relation_supports_auxiliary": 0,
                     },
                     "retrieval_route_presence": {
@@ -740,13 +734,7 @@ class MemoryService:
                                 inherited_workspace_items
                                 and resolved_workspace_id is not None
                             ),
-                            "item_present": bool(
-                                tuple(
-                                    memory_item
-                                    for memory_item in inherited_workspace_items
-                                    if memory_item.episode_id is None
-                                )
-                            ),
+                            "item_present": bool(inherited_workspace_items),
                         },
                         "relation_supports_auxiliary": {
                             "group_present": False,
@@ -800,13 +788,7 @@ class MemoryService:
                         "workspace_inherited_auxiliary": {
                             "summary": 0,
                             "episode": 0,
-                            "workspace": len(
-                                tuple(
-                                    memory_item
-                                    for memory_item in inherited_workspace_items
-                                    if memory_item.episode_id is None
-                                )
-                            ),
+                            "workspace": len(inherited_workspace_items),
                             "relation": 0,
                         },
                         "relation_supports_auxiliary": {
@@ -839,7 +821,6 @@ class MemoryService:
                                 "memory_items": [
                                     self._serialize_memory_item(memory_item)
                                     for memory_item in inherited_workspace_items
-                                    if memory_item.episode_id is None
                                 ],
                             }
                         ]
@@ -849,7 +830,6 @@ class MemoryService:
                     "inherited_memory_items": [
                         self._serialize_memory_item(memory_item)
                         for memory_item in inherited_workspace_items
-                        if memory_item.episode_id is None
                     ],
                 },
             )
@@ -919,11 +899,7 @@ class MemoryService:
         summary_selection_kind = (
             "episode_summary_first" if summary_selection_applied else None
         )
-        inherited_memory_items = tuple(
-            memory_item
-            for memory_item in inherited_workspace_items
-            if memory_item.episode_id is None
-        )
+        inherited_memory_items = inherited_workspace_items
 
         memory_context_groups: list[dict[str, Any]] = []
         if summary_selection_applied:
