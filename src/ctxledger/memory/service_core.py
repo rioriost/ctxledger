@@ -1771,11 +1771,15 @@ class MemoryService:
                     if relation.target_memory_id in seen_memory_ids:
                         continue
 
-                    target_memory_item = self._memory_item_repository.get_by_memory_id(
-                        relation.target_memory_id
+                    target_memory_items = (
+                        self._memory_item_repository.list_by_memory_ids(
+                            (relation.target_memory_id,)
+                        )
                     )
-                    if target_memory_item is None:
+                    if not target_memory_items:
                         continue
+
+                    target_memory_item = target_memory_items[0]
 
                     seen_memory_ids.add(target_memory_item.memory_id)
                     related_memory_items.append(target_memory_item)

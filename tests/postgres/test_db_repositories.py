@@ -541,6 +541,17 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
         created_at=datetime(2024, 1, 10, tzinfo=UTC),
         updated_at=datetime(2024, 1, 10, tzinfo=UTC),
     )
+    relation_target_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Relation target memory item",
+        metadata={"kind": "relation-target"},
+        created_at=datetime(2024, 1, 11, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 11, tzinfo=UTC),
+    )
     embedding = MemoryEmbeddingRecord(
         memory_embedding_id=uuid4(),
         memory_id=memory_item.memory_id,
@@ -580,6 +591,21 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
     )
     assert item_repo.create(workspace_root_memory_item) == workspace_root_memory_item
 
+    connection.fetchone_results.append(
+        {
+            "memory_id": relation_target_memory_item.memory_id,
+            "workspace_id": relation_target_memory_item.workspace_id,
+            "episode_id": relation_target_memory_item.episode_id,
+            "type": relation_target_memory_item.type,
+            "provenance": relation_target_memory_item.provenance,
+            "content": relation_target_memory_item.content,
+            "metadata_json": relation_target_memory_item.metadata,
+            "created_at": relation_target_memory_item.created_at,
+            "updated_at": relation_target_memory_item.updated_at,
+        }
+    )
+    assert item_repo.create(relation_target_memory_item) == relation_target_memory_item
+
     connection.fetchall_results.append(
         [
             {
@@ -602,6 +628,17 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
     connection.fetchall_results.append(
         [
             {
+                "memory_id": relation_target_memory_item.memory_id,
+                "workspace_id": relation_target_memory_item.workspace_id,
+                "episode_id": relation_target_memory_item.episode_id,
+                "type": relation_target_memory_item.type,
+                "provenance": relation_target_memory_item.provenance,
+                "content": relation_target_memory_item.content,
+                "metadata_json": relation_target_memory_item.metadata,
+                "created_at": relation_target_memory_item.created_at,
+                "updated_at": relation_target_memory_item.updated_at,
+            },
+            {
                 "memory_id": workspace_root_memory_item.memory_id,
                 "workspace_id": workspace_root_memory_item.workspace_id,
                 "episode_id": workspace_root_memory_item.episode_id,
@@ -611,12 +648,70 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
                 "metadata_json": workspace_root_memory_item.metadata,
                 "created_at": workspace_root_memory_item.created_at,
                 "updated_at": workspace_root_memory_item.updated_at,
-            }
+            },
         ]
     )
     assert item_repo.list_workspace_root_items(workspace_id, limit=5) == (
+        relation_target_memory_item,
         workspace_root_memory_item,
     )
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_id": relation_target_memory_item.memory_id,
+                "workspace_id": relation_target_memory_item.workspace_id,
+                "episode_id": relation_target_memory_item.episode_id,
+                "type": relation_target_memory_item.type,
+                "provenance": relation_target_memory_item.provenance,
+                "content": relation_target_memory_item.content,
+                "metadata_json": relation_target_memory_item.metadata,
+                "created_at": relation_target_memory_item.created_at,
+                "updated_at": relation_target_memory_item.updated_at,
+            }
+        ]
+    )
+    assert item_repo.list_by_memory_ids(
+        (relation_target_memory_item.memory_id,),
+    ) == (relation_target_memory_item,)
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_id": relation_target_memory_item.memory_id,
+                "workspace_id": relation_target_memory_item.workspace_id,
+                "episode_id": relation_target_memory_item.episode_id,
+                "type": relation_target_memory_item.type,
+                "provenance": relation_target_memory_item.provenance,
+                "content": relation_target_memory_item.content,
+                "metadata_json": relation_target_memory_item.metadata,
+                "created_at": relation_target_memory_item.created_at,
+                "updated_at": relation_target_memory_item.updated_at,
+            },
+            {
+                "memory_id": workspace_root_memory_item.memory_id,
+                "workspace_id": workspace_root_memory_item.workspace_id,
+                "episode_id": workspace_root_memory_item.episode_id,
+                "type": workspace_root_memory_item.type,
+                "provenance": workspace_root_memory_item.provenance,
+                "content": workspace_root_memory_item.content,
+                "metadata_json": workspace_root_memory_item.metadata,
+                "created_at": workspace_root_memory_item.created_at,
+                "updated_at": workspace_root_memory_item.updated_at,
+            },
+        ]
+    )
+    assert item_repo.list_by_memory_ids(
+        (
+            workspace_root_memory_item.memory_id,
+            relation_target_memory_item.memory_id,
+        ),
+    ) == (
+        relation_target_memory_item,
+        workspace_root_memory_item,
+    )
+
+    assert item_repo.list_by_memory_ids(()) == ()
 
     connection.fetchall_results.append(
         [

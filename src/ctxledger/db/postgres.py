@@ -1407,6 +1407,37 @@ class PostgresMemoryItemRepository(MemoryItemRepository):
 
         return tuple(_memory_item_row_to_record(row) for row in rows)
 
+    def list_by_memory_ids(
+        self,
+        memory_ids: tuple[UUID, ...],
+    ) -> tuple[MemoryItemRecord, ...]:
+        if not memory_ids:
+            return ()
+
+        placeholders = ", ".join(["%s"] * len(memory_ids))
+        with self._conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    memory_id,
+                    workspace_id,
+                    episode_id,
+                    type,
+                    provenance,
+                    content,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM memory_items
+                WHERE memory_id IN ({placeholders})
+                ORDER BY created_at DESC, memory_id DESC
+                """,
+                memory_ids,
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_item_row_to_record(row) for row in rows)
+
     def list_by_episode_id(
         self,
         episode_id: UUID,

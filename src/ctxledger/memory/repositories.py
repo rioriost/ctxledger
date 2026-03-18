@@ -306,6 +306,24 @@ class InMemoryMemoryItemRepository:
                 return memory_item
         return None
 
+    def list_by_memory_ids(
+        self,
+        memory_ids: tuple[UUID, ...],
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        if limit <= 0 or not memory_ids:
+            return ()
+
+        memory_id_set = set(memory_ids)
+        matches = [
+            memory_item
+            for memory_item in self._memory_items
+            if memory_item.memory_id in memory_id_set
+        ]
+        matches.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
+        return tuple(matches[:limit])
+
     def list_by_workspace_id(
         self,
         workspace_id: UUID,

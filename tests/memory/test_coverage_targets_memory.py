@@ -838,6 +838,52 @@ def test_in_memory_memory_item_repository_get_by_memory_id_returns_none_for_unkn
     assert repository.get_by_memory_id(uuid4()) is None
 
 
+def test_in_memory_memory_item_repository_lists_items_by_memory_ids_in_request_order() -> (
+    None
+):
+    repository = InMemoryMemoryItemRepository()
+    workspace_id = uuid4()
+    missing_memory_id = uuid4()
+
+    first_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="First root item",
+        metadata={"kind": "first"},
+        created_at=datetime(2024, 2, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 1, tzinfo=UTC),
+    )
+    second_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=uuid4(),
+        type="episode_note",
+        provenance="episode",
+        content="Second episode item",
+        metadata={"kind": "second"},
+        created_at=datetime(2024, 2, 2, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 2, tzinfo=UTC),
+    )
+
+    repository.create(first_item)
+    repository.create(second_item)
+
+    assert repository.list_by_memory_ids(
+        (
+            second_item.memory_id,
+            missing_memory_id,
+            first_item.memory_id,
+        ),
+        limit=5,
+    ) == (
+        second_item,
+        first_item,
+    )
+
+
 def test_in_memory_memory_relation_repository_lists_source_and_target_matches_in_recency_order() -> (
     None
 ):

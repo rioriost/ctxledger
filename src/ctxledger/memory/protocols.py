@@ -83,6 +83,11 @@ class MemoryItemRepository(Protocol):
         limit: int,
     ) -> tuple[MemoryItemRecord, ...]: ...
 
+    def list_by_memory_ids(
+        self,
+        memory_ids: tuple[UUID, ...],
+    ) -> tuple[MemoryItemRecord, ...]: ...
+
 
 class MemoryEmbeddingRepository(Protocol):
     """Persistence contract for derived embedding index records."""

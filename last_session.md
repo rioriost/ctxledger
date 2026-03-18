@@ -2,96 +2,118 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed the next small documentation cleanup slice after adding the dedicated service-contract note: tightened cross-doc consistency for `memory_get_context` so older MCP API and memory-model wording better matches the current related-context contract semantics.
+Continued the `0.6.0` hierarchical memory retrieval work and completed the next small implementation-oriented slice after switching inherited workspace context to explicit workspace-root repository reads: added a relation-target repository helper and wired `memory_get_context` to use it for constrained `supports` target resolution.
 
 ## What changed in this session
 
-- kept the work narrowly scoped to documentation consistency cleanup
-- updated `docs/mcp-api.md`
-- updated `docs/memory-model.md`
-- aligned older wording with the current service-contract note around:
-  - relation-scoped groups as the current primary structured grouped relation-aware surface
-  - flat `related_memory_items` as a compatibility surface
-  - per-episode `related_memory_items_by_episode` as a compatibility surface
-  - episode-group embedded `related_memory_items` as a convenience surface
-- replaced older field references and superseded phrasing such as:
-  - `related_context_primary_structured_output`
-  - `related_context_flat_field_is_compatibility_output`
-  - singular `related_context_relation_type`
-- did not change service or repository behavior in this slice
+- kept the work narrowly scoped to one repository-oriented implementation slice
+- updated `src/ctxledger/memory/protocols.py`
+- updated `src/ctxledger/memory/repositories.py`
+- updated `src/ctxledger/db/postgres.py`
+- updated `src/ctxledger/memory/service_core.py`
+- updated focused repository and coverage tests
+- added an explicit repository helper for relation-target memory item lookup:
+  - `list_by_memory_ids(...)`
+- used that helper in the service-layer `supports` relation target resolution path
+- did not widen relation traversal behavior beyond the current constrained one-hop `supports` slice
 
-## Documentation consistency improvements captured in this session
+## Implementation changes captured in this session
 
-The cleanup brought the broader docs into better alignment with the dedicated `memory_get_context` service-contract note.
+This slice pushed one more piece of relation-aware retrieval downward from service logic into repository primitives.
 
-### MCP API alignment
-`docs/mcp-api.md` now better reflects the current related-context contract by using current field names and current output interpretation, including:
+### New repository primitive
+The memory item repository surface now includes:
 
-- `relation_memory_context_groups_are_primary_output`
-- `flat_related_memory_items_is_compatibility_field`
-- `related_memory_items_by_episode_are_compatibility_output`
-- `group_related_memory_items_are_convenience_output`
+- `list_by_memory_ids(...)`
 
-### Memory model alignment
-`docs/memory-model.md` now better reflects that:
+This helper exists so the service layer can resolve selected relation-target memory items through a repository contract instead of relying only on per-item lookup patterns.
 
-- relation-scoped `memory_context_groups` entries are the current primary structured grouped relation-aware surface
-- `related_memory_items_by_episode` remains compatibility-oriented in the current slice
-- episode-group embedded `related_memory_items` remains convenience-oriented
-- grouped output now includes relation-scoped supporting context in addition to episode- and workspace-scoped context
+### In-memory and Postgres implementations
+The new helper was added to both current repository implementations:
+
+- in-memory memory item repository
+- Postgres memory item repository
+
+### Service-layer use
+`memory_get_context` now uses the repository helper when collecting constrained `supports`-related target items.
+
+That means the current relation-target resolution path is now slightly more declarative:
+
+- collect outgoing relations from returned episode memory items
+- keep only `supports`
+- resolve selected target memory items through `list_by_memory_ids(...)`
+
+### Behavior boundary
+This did **not** change the current higher-level retrieval semantics:
+
+- still one outgoing hop only
+- still `supports` only
+- still auxiliary relation-aware context
+- still no broader graph traversal or ranking change
 
 ## Why this mattered
 
-After introducing the dedicated service-contract note, the most obvious remaining drift was no longer in the main reference itself, but in older surrounding docs that still described an earlier interpretation of the related-context output surfaces.
+The service-layer contract had already become much clearer, but the relation-target resolution path still depended on a more ad hoc lookup shape than the inherited workspace context path.
 
-This slice reduced that drift so future contributors can move between the MCP API docs, the memory model, and the dedicated service-contract note without having to mentally translate between old and new semantic descriptions.
+This slice made the repository surface a bit more symmetric:
+
+- workspace-root inherited context now has an explicit repository primitive
+- relation-target item resolution now also has an explicit repository primitive
+
+That makes future hierarchy-aware and relation-aware retrieval work easier to continue without piling more selection details directly into service orchestration.
 
 ## Files touched in this session
 
-- `docs/mcp-api.md`
-- `docs/memory-model.md`
+- `src/ctxledger/memory/protocols.py`
+- `src/ctxledger/memory/repositories.py`
+- `src/ctxledger/db/postgres.py`
+- `src/ctxledger/memory/service_core.py`
+- `tests/memory/test_coverage_targets_memory.py`
+- `tests/postgres/test_db_repositories.py`
 
 ## Validation
 
-- no code-path validation was required for this doc-only slice
-- the goal was consistency of documentation wording and field interpretation across the current retrieval-contract references
+- diagnostics were clean for the touched files
+- focused tests passed after the repository helper and test-sequencing fixes:
+  - `tests/memory/test_coverage_targets_memory.py`
+  - `tests/postgres/test_db_repositories.py`
 
 ## Current interpretation of the work
 
-This remains service-layer retrieval-contract work aligned with `0.6.0`, especially:
+This remains `0.6.0` service/repository groundwork for hierarchical retrieval, especially:
 
-- explainable retrieval routes
-- explicit grouped scopes
-- clearer interpretation of primary vs auxiliary outputs
-- clearer interpretation of compatibility vs convenience surfaces
-- more consistent implementation-near documentation across docs
+- explainable retrieval assembly
+- explicit workspace-root context primitives
+- explicit relation-target context primitives
+- reduced service-layer filtering and lookup duplication
+- semantically small preparatory work before deeper hierarchy support
 
-This is still not repository/schema hierarchy work and not Apache AGE integration yet.
+This is still not repository/schema hierarchy modeling in the larger sense and still not Apache AGE integration yet.
 
 ## What was learned
 
-- once a dedicated contract note exists, surrounding docs quickly become the main source of terminology drift
-- the current related-context contract is now specific enough that even small wording mismatches create avoidable confusion
-- keeping cross-doc terminology aligned is a worthwhile small slice before moving back into deeper implementation work
+- once one retrieval surface gets an explicit repository primitive, adjacent retrieval paths often benefit from the same treatment
+- focused fake-repository and fake-connection tests can drift when call ordering changes, so tiny repository-surface additions often need equally tiny test queue maintenance
+- the current retrieval contract is becoming easier to preserve when selection semantics are pushed downward into repositories in small steps
 
 ## Recommended next work
 
 The most natural next semantic slice is now:
 
-1. decide whether to do one more tiny docs pass for `architecture.md`
-   - only if a stronger explicit pointer to the dedicated service-contract note would be useful
-   - otherwise docs are likely settled enough for now
+1. decide whether to add one more narrow repository primitive for grouped relation-aware retrieval inputs
+   - only if it removes meaningful service orchestration duplication
+   - avoid adding broad abstractions prematurely
 
-2. move back into implementation for the next `0.6.0` slice
-   - begin the next repository/schema primitive for deeper hierarchy support
-   - keep the slice semantically small and resumable
+2. otherwise move to the next deeper hierarchy-support primitive
+   - keep the slice semantically small
+   - prefer repository-backed selection helpers over larger service rewrites
 
-3. preserve the current service-layer contract as the reference point while deeper hierarchy primitives are introduced
-   - avoid changing multiple semantic surfaces at once unless the implementation truly requires it
+3. preserve the current service-layer contract while moving deeper
+   - avoid changing multiple response semantics at once unless the implementation genuinely requires it
 
 ## Commit guidance
 
 - this slice is commit-ready if needed
 - a good commit message would describe:
-  - tightening `memory_get_context` cross-doc consistency
-  - aligning older docs wording with the dedicated service-contract note
+  - adding a relation-target memory item repository helper
+  - wiring `memory_get_context` to use it for constrained `supports` target resolution
