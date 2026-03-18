@@ -2,118 +2,142 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed the next small implementation-oriented slice after switching inherited workspace context to explicit workspace-root repository reads: added a relation-target repository helper and wired `memory_get_context` to use it for constrained `supports` target resolution.
+Continued the `0.6.0` hierarchical memory retrieval work, reviewed the next natural post-`list_by_memory_ids(...)` step, and recorded a short design decision instead of widening implementation immediately: the next minimal hierarchy primitive should be a bulk episode-child memory item retrieval helper rather than a relation-first or summary-first abstraction.
 
 ## What changed in this session
 
-- kept the work narrowly scoped to one repository-oriented implementation slice
-- updated `src/ctxledger/memory/protocols.py`
-- updated `src/ctxledger/memory/repositories.py`
-- updated `src/ctxledger/db/postgres.py`
-- updated `src/ctxledger/memory/service_core.py`
-- updated focused repository and coverage tests
-- added an explicit repository helper for relation-target memory item lookup:
-  - `list_by_memory_ids(...)`
-- used that helper in the service-layer `supports` relation target resolution path
-- did not widen relation traversal behavior beyond the current constrained one-hop `supports` slice
+- kept the work at design-confirmation scope rather than starting another implementation slice immediately
+- reviewed the current `memory_get_context` service/repository shape after the recent workspace-root and relation-target helper work
+- identified the remaining small hierarchy-shaped retrieval gap as episode-level child memory item fanout
+- added a docs note capturing the recommended next primitive:
+  - `docs/memory/next_minimal_hierarchy_primitive_design.md`
+- decided the next preferred repository primitive should be:
+  - `MemoryItemRepository.list_by_episode_ids(...)`
 
-## Implementation changes captured in this session
+## Design decision captured in this session
 
-This slice pushed one more piece of relation-aware retrieval downward from service logic into repository primitives.
+The main design conclusion is:
 
-### New repository primitive
-The memory item repository surface now includes:
+- the next minimal hierarchy primitive should be `list_by_episode_ids(...)`
 
-- `list_by_memory_ids(...)`
+This helper is intended to retrieve memory items for a selected set of episode ids in one repository call.
 
-This helper exists so the service layer can resolve selected relation-target memory items through a repository contract instead of relying only on per-item lookup patterns.
+## Why this was chosen
 
-### In-memory and Postgres implementations
-The new helper was added to both current repository implementations:
+The current `memory_get_context` shape is now already cleaner in two nearby areas:
 
-- in-memory memory item repository
-- Postgres memory item repository
+- inherited workspace context uses an explicit workspace-root repository helper
+- constrained `supports` relation target resolution uses an explicit target-item repository helper
 
-### Service-layer use
-`memory_get_context` now uses the repository helper when collecting constrained `supports`-related target items.
+After those changes, the next smallest remaining hierarchy-oriented concern is not broader relation traversal. It is the episode-child retrieval step that still fans out episode-by-episode in service orchestration.
 
-That means the current relation-target resolution path is now slightly more declarative:
+That makes the next natural repository-backed selection primitive:
 
-- collect outgoing relations from returned episode memory items
-- keep only `supports`
-- resolve selected target memory items through `list_by_memory_ids(...)`
+- episode ids -> child memory items
 
-### Behavior boundary
-This did **not** change the current higher-level retrieval semantics:
+rather than:
 
-- still one outgoing hop only
-- still `supports` only
-- still auxiliary relation-aware context
-- still no broader graph traversal or ranking change
+- source memory ids -> broader relation traversal
+- summary-specific aggregation helpers
+
+## Why relation-first was deferred
+
+A relation-first primitive is still possible later, but it was judged too easy to widen prematurely because it would quickly raise questions about:
+
+- whether the primitive is `supports`-specific or generic
+- whether traversal remains one-hop only
+- whether grouped semantics should be attached to relation selection
+- whether relation-aware ranking or broader graph behavior is being introduced
+
+That is a larger semantic step than the current work needs.
+
+## Why summary-first was deferred
+
+A summary-specific primitive was also judged premature.
+
+At this stage, summary construction still fits better as service-layer retrieval projection than as a persistence-layer concern. Moving summary semantics into repositories now would blur the separation between selection primitives and response assembly.
+
+## Proposed contract shape
+
+The recommended initial contract is:
+
+- `list_by_episode_ids(episode_ids: tuple[UUID, ...]) -> tuple[MemoryItemRecord, ...]`
+
+The intended constraints for the first slice are:
+
+- flat return shape only
+- empty input returns empty output
+- deterministic ordering
+- no grouped return structure
+- no summary semantics
+- no per-episode limit contract
+- no added relation semantics
+
+## Intended service-layer use
+
+The expected small follow-up implementation would be:
+
+1. collect selected episode ids
+2. retrieve all matching child memory items with `list_by_episode_ids(...)`
+3. regroup them by episode in service code
+4. keep current response semantics unchanged
+
+That means the next slice should stay structural rather than behavioral.
 
 ## Why this mattered
 
-The service-layer contract had already become much clearer, but the relation-target resolution path still depended on a more ad hoc lookup shape than the inherited workspace context path.
+This preserves the pattern that has been working well in the recent `0.6.0` groundwork:
 
-This slice made the repository surface a bit more symmetric:
+- push one narrow retrieval input primitive at a time into repositories
+- keep grouping, hierarchy meaning, and output assembly in the service layer
+- avoid broad abstractions before the retrieval contract actually needs them
 
-- workspace-root inherited context now has an explicit repository primitive
-- relation-target item resolution now also has an explicit repository primitive
+It also gives the next deeper hierarchy slice a clearer foundation for:
 
-That makes future hierarchy-aware and relation-aware retrieval work easier to continue without piling more selection details directly into service orchestration.
+- grouped selection cleanup
+- summary-first cleanup
+- reducing service-layer fanout without changing external behavior
 
 ## Files touched in this session
 
-- `src/ctxledger/memory/protocols.py`
-- `src/ctxledger/memory/repositories.py`
-- `src/ctxledger/db/postgres.py`
-- `src/ctxledger/memory/service_core.py`
-- `tests/memory/test_coverage_targets_memory.py`
-- `tests/postgres/test_db_repositories.py`
+- `docs/memory/next_minimal_hierarchy_primitive_design.md`
 
 ## Validation
 
-- diagnostics were clean for the touched files
-- focused tests passed after the repository helper and test-sequencing fixes:
-  - `tests/memory/test_coverage_targets_memory.py`
-  - `tests/postgres/test_db_repositories.py`
+- design note saved under `docs/memory/`
+- no implementation behavior was changed in this session
+- no retrieval semantics were widened in this session
 
 ## Current interpretation of the work
 
-This remains `0.6.0` service/repository groundwork for hierarchical retrieval, especially:
+This remains `0.6.0` hierarchical retrieval groundwork, specifically:
 
-- explainable retrieval assembly
-- explicit workspace-root context primitives
-- explicit relation-target context primitives
-- reduced service-layer filtering and lookup duplication
-- semantically small preparatory work before deeper hierarchy support
+- preserving the current `memory_get_context` contract
+- continuing to lower small retrieval-selection concerns into repository primitives
+- preparing for deeper hierarchy support in semantically small slices
 
-This is still not repository/schema hierarchy modeling in the larger sense and still not Apache AGE integration yet.
+This is still not broader hierarchy/schema modeling and still not Apache AGE integration.
 
 ## What was learned
 
-- once one retrieval surface gets an explicit repository primitive, adjacent retrieval paths often benefit from the same treatment
-- focused fake-repository and fake-connection tests can drift when call ordering changes, so tiny repository-surface additions often need equally tiny test queue maintenance
-- the current retrieval contract is becoming easier to preserve when selection semantics are pushed downward into repositories in small steps
+- after pushing one retrieval concern into repository primitives, the next natural step is often visible as the remaining service-layer fanout point
+- `episode ids -> child memory items` is a cleaner next hierarchy boundary than relation-first expansion
+- summary and grouped outputs become easier to refine once bulk child retrieval is explicit and repository-backed
 
 ## Recommended next work
 
-The most natural next semantic slice is now:
+The next implementation-oriented slice should be:
 
-1. decide whether to add one more narrow repository primitive for grouped relation-aware retrieval inputs
-   - only if it removes meaningful service orchestration duplication
-   - avoid adding broad abstractions prematurely
-
-2. otherwise move to the next deeper hierarchy-support primitive
-   - keep the slice semantically small
-   - prefer repository-backed selection helpers over larger service rewrites
-
-3. preserve the current service-layer contract while moving deeper
-   - avoid changing multiple response semantics at once unless the implementation genuinely requires it
+1. add `list_by_episode_ids(...)` to the memory item repository protocol
+2. implement it in:
+   - in-memory memory item repository
+   - Postgres memory item repository
+3. switch episode child-item collection in `memory_get_context` to use it
+4. keep external response shapes and retrieval semantics unchanged
 
 ## Commit guidance
 
-- this slice is commit-ready if needed
+- this design-only slice is commit-ready if desired
 - a good commit message would describe:
-  - adding a relation-target memory item repository helper
-  - wiring `memory_get_context` to use it for constrained `supports` target resolution
+  - recording the next minimal hierarchy primitive decision
+  - choosing `list_by_episode_ids(...)` as the next repository-backed hierarchy helper
