@@ -187,6 +187,70 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
             "item_present": True,
         },
     }
+    assert response.details["retrieval_route_scope_counts"] == {
+        "summary_first": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "episode_direct": {
+            "summary": 0,
+            "episode": 1,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "workspace_inherited_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 1,
+            "relation": 0,
+        },
+        "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 1,
+        },
+    }
+    assert response.details["retrieval_route_scope_item_counts"] == {
+        "summary_first": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "episode_direct": {
+            "summary": 0,
+            "episode": 1,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "workspace_inherited_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 2,
+            "relation": 0,
+        },
+        "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 1,
+        },
+    }
+    assert response.details["retrieval_route_scopes_present"] == {
+        "summary_first": [],
+        "episode_direct": [
+            "episode",
+        ],
+        "workspace_inherited_auxiliary": [
+            "workspace",
+        ],
+        "relation_supports_auxiliary": [
+            "relation",
+        ],
+    }
     assert response.details["related_context_returned_without_episode_matches"] is (
         False
     )
@@ -198,6 +262,21 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
             "flat_related_memory_items_matches_grouped_episode_related_items"
         ]
         is True
+    )
+    assert (
+        response.details["related_memory_items_by_episode_is_primary_structured_output"]
+        is False
+    )
+    assert (
+        response.details["related_memory_items_by_episode_is_compatibility_output"]
+        is True
+    )
+    assert (
+        response.details["relation_memory_context_groups_are_primary_structured_output"]
+        is True
+    )
+    assert response.details["group_related_memory_items_are_convenience_output"] is (
+        True
     )
     assert response.details["memory_context_groups"][0]["related_memory_items"] == [
         {
@@ -242,6 +321,31 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
         }
     ]
     assert "related_memory_items" not in response.details["memory_context_groups"][1]
+    assert response.details["memory_context_groups"][2] == {
+        "scope": "relation",
+        "scope_id": "supports",
+        "group_id": "relation:supports_auxiliary",
+        "parent_scope": "workflow_instance",
+        "parent_scope_id": str(workflow_id),
+        "parent_group_scope": None,
+        "parent_group_id": None,
+        "selection_kind": "supports_related_auxiliary",
+        "selection_route": "relation_supports_auxiliary",
+        "relation_type": "supports",
+        "memory_items": [
+            {
+                "memory_id": str(supports_target_item.memory_id),
+                "workspace_id": str(workspace_id),
+                "episode_id": None,
+                "type": "workspace_note",
+                "provenance": "workspace",
+                "content": "Supporting workspace memory item",
+                "metadata": {"kind": "support"},
+                "created_at": supports_target_item.created_at.isoformat(),
+                "updated_at": supports_target_item.updated_at.isoformat(),
+            }
+        ],
+    }
 
 
 def test_memory_get_context_ignores_non_supports_relations_in_related_memory_items() -> (
@@ -377,6 +481,68 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
             "item_present": False,
         },
     }
+    assert response.details["retrieval_route_scope_counts"] == {
+        "summary_first": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "episode_direct": {
+            "summary": 0,
+            "episode": 1,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "workspace_inherited_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 1,
+            "relation": 0,
+        },
+        "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+    }
+    assert response.details["retrieval_route_scope_item_counts"] == {
+        "summary_first": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "episode_direct": {
+            "summary": 0,
+            "episode": 1,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "workspace_inherited_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 1,
+            "relation": 0,
+        },
+        "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+    }
+    assert response.details["retrieval_route_scopes_present"] == {
+        "summary_first": [],
+        "episode_direct": [
+            "episode",
+        ],
+        "workspace_inherited_auxiliary": [
+            "workspace",
+        ],
+        "relation_supports_auxiliary": [],
+    }
     assert response.details["related_context_returned_without_episode_matches"] is (
         False
     )
@@ -388,6 +554,21 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
             "flat_related_memory_items_matches_grouped_episode_related_items"
         ]
         is False
+    )
+    assert (
+        response.details["related_memory_items_by_episode_is_primary_structured_output"]
+        is False
+    )
+    assert (
+        response.details["related_memory_items_by_episode_is_compatibility_output"]
+        is False
+    )
+    assert (
+        response.details["relation_memory_context_groups_are_primary_structured_output"]
+        is False
+    )
+    assert response.details["group_related_memory_items_are_convenience_output"] is (
+        False
     )
     assert response.details["memory_context_groups"][0]["related_memory_items"] == []
     assert (

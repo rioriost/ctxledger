@@ -2,80 +2,80 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed the next small service-layer contract slice in `memory_get_context`: per-route boolean presence metadata is now exposed alongside the existing retrieval route lists and group/item counts.
+Continued the `0.6.0` hierarchical memory retrieval work and completed the next small documentation-oriented slice: the `0.6.0` plan now explicitly documents the current `memory_get_context` retrieval contract direction, especially its explainability metadata, grouped scopes, and related-context surface semantics.
 
 ## What changed in this session
 
-- kept the work narrowly scoped to retrieval metadata clarity
-- updated `src/ctxledger/memory/service_core.py` to add:
-  - `details.retrieval_route_presence`
-- preserved the existing aggregate route metadata:
-  - `details.retrieval_routes_present`
-  - `details.primary_retrieval_routes_present`
-  - `details.auxiliary_retrieval_routes_present`
-  - `details.retrieval_route_group_counts`
-  - `details.retrieval_route_item_counts`
-- added per-route boolean presence signals for:
-  - `summary_first`
-  - `episode_direct`
-  - `workspace_inherited_auxiliary`
-  - `relation_supports_auxiliary`
-- each route now reports:
-  - `group_present`
-  - `item_present`
+- kept the work narrowly scoped to contract clarification and documentation
+- updated `docs/plans/hierarchical_memory_0_6_0_plan.md`
+- documented the current retrieval-contract direction around:
+  - route-level explainability metadata
+  - grouped retrieval scopes
+  - primary vs auxiliary route interpretation
+  - compatibility vs convenience related-context surfaces
+- did not introduce new storage-layer or repository-layer behavior in this slice
+- did not change the current grouped output structure in code during this slice
 
-## Current route presence semantics
+## Documentation additions captured in the plan
 
-- `summary_first`
-  - `group_present`: whether the summary group exists
-  - `item_present`: whether summary entries were returned
+The plan now explicitly records the current `0.6.0` service-layer retrieval direction for `memory_get_context`, including:
 
-- `episode_direct`
-  - `group_present`: whether direct episode groups were returned when summary-first is not active
-  - `item_present`: whether those direct episode groups contributed concrete memory items
+### Retrieval contract explainability
+- retrieval should be observable not only through returned context objects
+- additive metadata should explain:
+  - which routes participated
+  - whether grouped structures and/or concrete items were contributed
+  - grouped structure counts
+  - concrete item counts
+  - grouped scopes involved
+  - grouped structure and item distribution by scope
 
-- `workspace_inherited_auxiliary`
-  - `group_present`: whether the inherited workspace auxiliary group exists
-  - `item_present`: whether inherited workspace items were returned
+### Current grouped retrieval scopes
+The documented grouped scopes are now:
 
-- `relation_supports_auxiliary`
-  - `group_present`: whether supports-derived related context is present
-  - `item_present`: whether concrete related `supports` items were returned
+- `summary`
+- `episode`
+- `workspace`
+- `relation`
 
-## Response-shape coverage
+### Current retrieval route metadata direction
+The plan now explicitly recognizes additive retrieval metadata surfaces such as:
 
-Applied the new presence metrics consistently to:
+- retrieval routes present
+- primary vs auxiliary retrieval routes
+- per-route presence booleans
+- per-route grouped-structure counts
+- per-route item counts
+- per-route scope counts
+- per-route scope item counts
+- per-route scopes present
 
-- episode-returning responses
-- no-episode responses
-- inherited-workspace auxiliary-only responses
-- supports-derived related-context responses
+### Current related-context contract direction
+The plan now explicitly documents that, at the current implementation stage:
 
-## Tests updated
+- supports-derived related context has a dedicated relation-scoped auxiliary group
+- per-episode related-context surfaces remain compatibility-oriented
+- flat related-item output remains compatibility-oriented
+- episode-local embedded related-item structures remain convenience-oriented
 
-Updated focused tests to assert `retrieval_route_presence` across:
+## Why this mattered
 
-- no-episode response shapes
-- summary-first grouped output
-- direct episode plus inherited workspace output
-- inherited auxiliary-only output
-- supports-derived related context
-- non-support relation filtering behavior
+The service contract had already become much more self-descriptive through code and tests, but the plan still read as if the retrieval direction were more abstract than it currently is.
+
+This slice closed part of that gap by documenting the current operational shape of the retrieval contract so future work can reason from a shared written model instead of rediscovering it from tests and implementation details alone.
 
 ## Files touched in this session
 
-- `src/ctxledger/memory/service_core.py`
-- `tests/memory/test_service_context_details.py`
-- `tests/memory/test_memory_context_related_items.py`
+- `docs/plans/hierarchical_memory_0_6_0_plan.md`
 
 ## Validation
 
-- passed:
-  - `python -m pytest -q tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
+- no new code-path validation was required for this doc-only slice
+- the intent was alignment of planning/documentation with already-established retrieval-contract behavior
 
 ## Current interpretation of the plan
 
-This remains a small `0.6.0` retrieval-contract clarification aligned with `docs/plans/hierarchical_memory_0_6_0_plan.md`, especially:
+This still remains service-layer retrieval-contract work aligned with `0.6.0`, especially:
 
 - explainable retrieval routes
 - explicit context assembly metadata
@@ -83,32 +83,33 @@ This remains a small `0.6.0` retrieval-contract clarification aligned with `docs
 - relation-aware supporting context
 - operationally understandable retrieval behavior
 
-This is still service-layer retrieval work, not repository/schema hierarchy work and not Apache AGE integration yet.
+This is still not repository/schema hierarchy work and not Apache AGE integration yet.
 
 ## What was learned
 
-- route lists plus group/item counts were clearer than before, but still required downstream consumers to infer simple presence checks
-- explicit per-route `group_present` / `item_present` booleans make the retrieval contract easier to consume and less interpretation-heavy
-- this additional clarity fit cleanly without changing the broader grouped output structure
+- the implementation had reached a point where the retrieval contract itself is a meaningful deliverable, not just an internal detail
+- once additive explainability metadata exists, documenting its intent becomes important to avoid drift between code and planning assumptions
+- the current `memory_get_context` contract is now detailed enough that future work can more confidently decide whether to keep refining the service layer or begin moving downward into storage/repository primitives
 
 ## Recommended next work
 
 The most natural next semantic slice is now:
 
-1. add route metrics scope breakdown
-   - consider explicit scope breakdown per route such as summary / episode / workspace / relation
-   - keep it additive and avoid changing existing route semantics
+1. review naming clarity for current related-context semantic flags
+   - especially:
+     - `related_memory_items_by_episode_is_compatibility_output`
+     - `group_related_memory_items_are_convenience_output`
+     - `relation_memory_context_groups_are_primary_structured_output`
 
-2. decide whether supports-derived context should remain:
-   - episode-local grouped metadata
-   - plus flat compatibility output
-   - or whether a dedicated auxiliary relation group is justified
+2. decide whether to add a short dedicated retrieval-contract note outside the plan
+   - for example a concise service-contract reference in docs
+   - useful if downstream consumers or future contributors need a more implementation-near summary
 
-3. only after the retrieval contract is clearer, decide whether the next smallest `0.6.0` step should touch repository/schema primitives for deeper hierarchy support
+3. after the retrieval contract feels sufficiently settled, decide whether the next smallest `0.6.0` slice should move down into repository/schema primitives for deeper hierarchy support
 
 ## Commit guidance
 
-- this slice is commit-ready
+- this slice is commit-ready if needed
 - a good commit message would describe:
-  - per-route boolean presence metrics in `memory_get_context`
-  - `group_present` / `item_present` retrieval metadata for route explainability
+  - documenting retrieval contract explainability in the `0.6.0` plan
+  - clarifying grouped scopes and related-context contract direction

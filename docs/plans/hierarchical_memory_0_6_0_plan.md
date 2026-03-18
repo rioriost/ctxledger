@@ -158,6 +158,13 @@ Graph-assisted retrieval should remain understandable to operators and future de
 
 Avoid “magic” retrieval behavior that cannot be explained or tested.
 
+In practical terms, this also means retrieval contracts should expose enough metadata that a caller can understand:
+
+- why context was returned
+- which route produced it
+- whether it is primary, auxiliary, compatibility, or convenience-oriented output
+- how grouped structures and concrete items were assembled
+
 ## 6.5 Testability is mandatory
 
 Every new retrieval layer should be testable in isolation and in integrated flows.
@@ -215,6 +222,68 @@ They do not need to be named after any external framework, but they should be se
 - selected summaries
 - selected memory items
 - relation-derived supporting context
+
+## 7.5 Retrieval contract explainability
+
+As hierarchical retrieval is introduced incrementally, `memory_get_context` should become progressively more self-descriptive for downstream consumers and operators.
+
+This means retrieval behavior should be observable not only through returned context objects, but also through additive metadata that explains:
+
+- which retrieval routes participated
+- whether a route contributed grouped structures and/or concrete items
+- how many grouped structures a route contributed
+- how many concrete items a route contributed
+- which grouped scopes were involved
+- how many grouped structures and concrete items appeared within each scope
+
+This explainability layer is especially important while retrieval remains hybrid and transitional, because some outputs are primary structured surfaces while others remain compatibility or convenience surfaces.
+
+## 7.6 Current grouped retrieval scopes
+
+At the current `0.6.0` implementation stage, grouped retrieval output is expected to be understandable in terms of these scopes:
+
+- `summary`
+- `episode`
+- `workspace`
+- `relation`
+
+These scopes do not imply final architecture lock-in, but they are a useful operational model for explaining current grouped output assembly.
+
+## 7.7 Current retrieval route metadata direction
+
+The current `0.6.0` retrieval-contract direction should favor additive metadata surfaces such as:
+
+- retrieval routes present
+- primary versus auxiliary retrieval routes
+- per-route presence booleans
+- per-route grouped-structure counts
+- per-route item counts
+- per-route scope counts
+- per-route scope item counts
+- per-route scopes present
+
+This metadata should remain additive and descriptive. It should clarify behavior without forcing immediate redesign of storage-layer primitives.
+
+## 7.8 Current related-context contract direction
+
+At the current implementation stage, supports-derived related context should be treated as having:
+
+- a dedicated relation-scoped auxiliary group in grouped output
+- preserved compatibility outputs for older consumers
+- preserved convenience outputs embedded in episode-local grouped structures where useful
+
+The current contract direction is therefore:
+
+- relation-scoped grouped output is the preferred primary structured surface for supports-derived related context
+- per-episode related-context surfaces remain compatibility-oriented
+- flat related-item output remains compatibility-oriented
+- episode-local embedded related-item structures remain convenience-oriented
+
+This distinction should help future work avoid ambiguity between:
+
+- primary grouped retrieval structure
+- compatibility response fields
+- convenience projections for consumers that still expect older shapes
 
 ---
 

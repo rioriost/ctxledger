@@ -687,6 +687,8 @@ class MemoryService:
                     "flat_related_memory_items_is_compatibility_field": False,
                     "flat_related_memory_items_matches_grouped_episode_related_items": False,
                     "related_memory_items_by_episode_is_primary_structured_output": False,
+                    "related_memory_items_by_episode_is_compatibility_output": False,
+                    "relation_memory_context_groups_are_primary_structured_output": False,
                     "group_related_memory_items_are_convenience_output": False,
                     "retrieval_routes_present": (
                         ["workspace_inherited_auxiliary"]
@@ -750,6 +752,80 @@ class MemoryService:
                             "group_present": False,
                             "item_present": False,
                         },
+                    },
+                    "retrieval_route_scope_counts": {
+                        "summary_first": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": 0,
+                            "relation": 0,
+                        },
+                        "episode_direct": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": 0,
+                            "relation": 0,
+                        },
+                        "workspace_inherited_auxiliary": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": (
+                                1
+                                if inherited_workspace_items
+                                and resolved_workspace_id is not None
+                                else 0
+                            ),
+                            "relation": 0,
+                        },
+                        "relation_supports_auxiliary": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": 0,
+                            "relation": 0,
+                        },
+                    },
+                    "retrieval_route_scope_item_counts": {
+                        "summary_first": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": 0,
+                            "relation": 0,
+                        },
+                        "episode_direct": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": 0,
+                            "relation": 0,
+                        },
+                        "workspace_inherited_auxiliary": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": len(
+                                tuple(
+                                    memory_item
+                                    for memory_item in inherited_workspace_items
+                                    if memory_item.episode_id is None
+                                )
+                            ),
+                            "relation": 0,
+                        },
+                        "relation_supports_auxiliary": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": 0,
+                            "relation": 0,
+                        },
+                    },
+                    "retrieval_route_scopes_present": {
+                        "summary_first": [],
+                        "episode_direct": [],
+                        "workspace_inherited_auxiliary": (
+                            ["workspace"]
+                            if inherited_workspace_items
+                            and resolved_workspace_id is not None
+                            else []
+                        ),
+                        "relation_supports_auxiliary": [],
                     },
                     "memory_context_groups": (
                         [
@@ -927,6 +1003,33 @@ class MemoryService:
             memory_item_details=memory_item_details,
             limit=request.limit,
         )
+        if related_memory_items:
+            relation_group_parent_scope = (
+                "workflow_instance" if len(resolved_workflow_ids) == 1 else None
+            )
+            relation_group_parent_scope_id = (
+                resolved_workflow_instance_id
+                if relation_group_parent_scope == "workflow_instance"
+                else None
+            )
+            memory_context_groups.append(
+                {
+                    "scope": "relation",
+                    "scope_id": "supports",
+                    "group_id": "relation:supports_auxiliary",
+                    "parent_scope": relation_group_parent_scope,
+                    "parent_scope_id": relation_group_parent_scope_id,
+                    "parent_group_scope": None,
+                    "parent_group_id": None,
+                    "selection_kind": "supports_related_auxiliary",
+                    "selection_route": "relation_supports_auxiliary",
+                    "relation_type": "supports",
+                    "memory_items": [
+                        self._serialize_memory_item(memory_item)
+                        for memory_item in related_memory_items
+                    ],
+                }
+            )
 
         return GetContextResponse(
             feature=MemoryFeature.GET_CONTEXT,
@@ -1095,6 +1198,135 @@ class MemoryService:
                         "item_present": bool(related_memory_items),
                     },
                 },
+                "retrieval_route_scope_counts": {
+                    "summary_first": {
+                        "summary": (1 if summary_selection_applied else 0),
+                        "episode": (
+                            matched_episode_count
+                            if request.include_memory_items
+                            and matched_episode_count > 0
+                            and summary_selection_applied
+                            else 0
+                        ),
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "episode_direct": {
+                        "summary": 0,
+                        "episode": (
+                            matched_episode_count
+                            if request.include_memory_items
+                            and matched_episode_count > 0
+                            and not summary_selection_applied
+                            else 0
+                        ),
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "workspace_inherited_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": (1 if inherited_memory_items else 0),
+                        "relation": 0,
+                    },
+                    "relation_supports_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": (1 if related_memory_items else 0),
+                    },
+                },
+                "retrieval_route_scope_item_counts": {
+                    "summary_first": {
+                        "summary": (len(summaries) if summary_selection_applied else 0),
+                        "episode": (
+                            sum(
+                                len(detail.get("memory_items", []))
+                                for detail in memory_item_details
+                            )
+                            if request.include_memory_items
+                            and matched_episode_count > 0
+                            and summary_selection_applied
+                            else 0
+                        ),
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "episode_direct": {
+                        "summary": 0,
+                        "episode": (
+                            sum(
+                                len(detail.get("memory_items", []))
+                                for detail in memory_item_details
+                            )
+                            if request.include_memory_items
+                            and matched_episode_count > 0
+                            and not summary_selection_applied
+                            else 0
+                        ),
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "workspace_inherited_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": (
+                            len(inherited_memory_items) if inherited_memory_items else 0
+                        ),
+                        "relation": 0,
+                    },
+                    "relation_supports_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": (
+                            len(related_memory_items) if related_memory_items else 0
+                        ),
+                    },
+                },
+                "retrieval_route_scopes_present": {
+                    "summary_first": [
+                        scope
+                        for scope in [
+                            "summary" if summary_selection_applied else None,
+                            (
+                                "episode"
+                                if request.include_memory_items
+                                and matched_episode_count > 0
+                                and summary_selection_applied
+                                else None
+                            ),
+                        ]
+                        if scope is not None
+                    ],
+                    "episode_direct": [
+                        scope
+                        for scope in [
+                            (
+                                "episode"
+                                if request.include_memory_items
+                                and matched_episode_count > 0
+                                and not summary_selection_applied
+                                else None
+                            ),
+                        ]
+                        if scope is not None
+                    ],
+                    "workspace_inherited_auxiliary": [
+                        scope
+                        for scope in [
+                            ("workspace" if inherited_memory_items else None),
+                        ]
+                        if scope is not None
+                    ],
+                    "relation_supports_auxiliary": [
+                        scope
+                        for scope in [
+                            ("relation" if related_memory_items else None),
+                        ]
+                        if scope is not None
+                    ],
+                },
                 "related_context_returned_without_episode_matches": False,
                 "all_episodes_filtered_out_by_query": (
                     all_episodes_filtered_out_by_query
@@ -1105,7 +1337,11 @@ class MemoryService:
                 "flat_related_memory_items_matches_grouped_episode_related_items": bool(
                     related_memory_items
                 ),
-                "related_memory_items_by_episode_is_primary_structured_output": bool(
+                "related_memory_items_by_episode_is_primary_structured_output": False,
+                "related_memory_items_by_episode_is_compatibility_output": bool(
+                    related_memory_items
+                ),
+                "relation_memory_context_groups_are_primary_structured_output": bool(
                     related_memory_items
                 ),
                 "group_related_memory_items_are_convenience_output": bool(
@@ -1467,11 +1703,7 @@ class MemoryService:
                             if memory_item.episode_id is not None
                             else "workspace"
                         ),
-                        "target_group_selection_kind": (
-                            "direct_episode"
-                            if memory_item.episode_id is not None
-                            else "supports_related_auxiliary"
-                        ),
+                        "target_group_selection_kind": "supports_related_auxiliary",
                     }
                     for memory_item, relation in zip(
                         related_memory_items,
