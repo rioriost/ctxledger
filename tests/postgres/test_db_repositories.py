@@ -518,9 +518,10 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
     item_repo = PostgresMemoryItemRepository(connection)
     embedding_repo = PostgresMemoryEmbeddingRepository(connection)
 
+    workspace_id = uuid4()
     memory_item = MemoryItemRecord(
         memory_id=uuid4(),
-        workspace_id=uuid4(),
+        workspace_id=workspace_id,
         episode_id=uuid4(),
         type="episode_note",
         provenance="episode",
@@ -528,6 +529,17 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
         metadata={"kind": "note"},
         created_at=datetime(2024, 1, 8, tzinfo=UTC),
         updated_at=datetime(2024, 1, 8, tzinfo=UTC),
+    )
+    workspace_root_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Workspace root memory item",
+        metadata={"kind": "workspace-root"},
+        created_at=datetime(2024, 1, 10, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 10, tzinfo=UTC),
     )
     embedding = MemoryEmbeddingRecord(
         memory_embedding_id=uuid4(),
@@ -553,6 +565,21 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
     )
     assert item_repo.create(memory_item) == memory_item
 
+    connection.fetchone_results.append(
+        {
+            "memory_id": workspace_root_memory_item.memory_id,
+            "workspace_id": workspace_root_memory_item.workspace_id,
+            "episode_id": workspace_root_memory_item.episode_id,
+            "type": workspace_root_memory_item.type,
+            "provenance": workspace_root_memory_item.provenance,
+            "content": workspace_root_memory_item.content,
+            "metadata_json": workspace_root_memory_item.metadata,
+            "created_at": workspace_root_memory_item.created_at,
+            "updated_at": workspace_root_memory_item.updated_at,
+        }
+    )
+    assert item_repo.create(workspace_root_memory_item) == workspace_root_memory_item
+
     connection.fetchall_results.append(
         [
             {
@@ -570,6 +597,25 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
     )
     assert item_repo.list_by_workspace_id(memory_item.workspace_id, limit=5) == (
         memory_item,
+    )
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_id": workspace_root_memory_item.memory_id,
+                "workspace_id": workspace_root_memory_item.workspace_id,
+                "episode_id": workspace_root_memory_item.episode_id,
+                "type": workspace_root_memory_item.type,
+                "provenance": workspace_root_memory_item.provenance,
+                "content": workspace_root_memory_item.content,
+                "metadata_json": workspace_root_memory_item.metadata,
+                "created_at": workspace_root_memory_item.created_at,
+                "updated_at": workspace_root_memory_item.updated_at,
+            }
+        ]
+    )
+    assert item_repo.list_workspace_root_items(workspace_id, limit=5) == (
+        workspace_root_memory_item,
     )
 
     connection.fetchall_results.append(

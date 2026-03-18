@@ -320,6 +320,21 @@ class InMemoryMemoryItemRepository:
         matches.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
         return tuple(matches[:limit])
 
+    def list_workspace_root_items(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        matches = [
+            memory_item
+            for memory_item in self._memory_items
+            if memory_item.workspace_id == workspace_id
+            and memory_item.episode_id is None
+        ]
+        matches.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
+        return tuple(matches[:limit])
+
     def list_by_episode_id(
         self,
         episode_id: UUID,

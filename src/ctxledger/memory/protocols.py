@@ -69,6 +69,13 @@ class MemoryItemRepository(Protocol):
         limit: int,
     ) -> tuple[MemoryItemRecord, ...]: ...
 
+    def list_workspace_root_items(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]: ...
+
     def list_by_episode_id(
         self,
         episode_id: UUID,

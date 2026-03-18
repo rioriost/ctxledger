@@ -1376,6 +1376,37 @@ class PostgresMemoryItemRepository(MemoryItemRepository):
 
         return tuple(_memory_item_row_to_record(row) for row in rows)
 
+    def list_workspace_root_items(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_id,
+                    workspace_id,
+                    episode_id,
+                    type,
+                    provenance,
+                    content,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM memory_items
+                WHERE workspace_id = %s
+                  AND episode_id IS NULL
+                ORDER BY created_at DESC, memory_id DESC
+                LIMIT %s
+                """,
+                (workspace_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_item_row_to_record(row) for row in rows)
+
     def list_by_episode_id(
         self,
         episode_id: UUID,
