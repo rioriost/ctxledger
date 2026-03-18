@@ -111,6 +111,18 @@ This metadata exists to help consumers and operators understand **what was retur
 
 ## Current grouped output interpretation
 
+`memory_context_groups` should now be treated as the primary grouped hierarchy-aware surface of `memory_get_context`.
+
+Other flat or compatibility-oriented fields remain supported, but they should be interpreted as:
+
+- derived output
+- compatibility output
+- convenience output
+
+rather than the canonical grouped hierarchy model.
+
+This is an interpretation and contract-direction clarification, not an immediate breaking change.
+
 ### 1. Summary-scoped output
 
 When summaries are enabled and returned, the response may include a grouped summary entry with:
@@ -197,7 +209,8 @@ This is reflected by:
 
 In other words:
 
-- relation groups are the primary structured grouped surface
+- `memory_context_groups` is the primary grouped hierarchy-aware surface
+- relation groups inside `memory_context_groups` are the primary structured grouped relation-aware surface
 - flat related-item output is retained for compatibility
 - embedded group-local related items are retained for convenience
 
@@ -257,6 +270,11 @@ This means the response may still include auxiliary context even when:
 - `matched_episode_count = 0`
 - `episodes_returned = 0`
 - `all_episodes_filtered_out_by_query = true`
+
+When interpreting the response in those cases, consumers should still prefer the grouped hierarchy-aware reading first:
+
+- use `memory_context_groups` as the primary grouped surface
+- treat flat compatibility fields as derived or compatibility-oriented views of that grouped result
 
 That behavior is currently intentional.
 

@@ -2,148 +2,146 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a focused service-layer cleanup slice after landing the recent repository primitives: extracted `memory_get_context` projection assembly into dedicated helpers for summary selection, grouped context assembly, and retrieval-route explanation metadata while preserving the existing external response contract.
+Continued the `0.6.0` hierarchical memory retrieval work and completed the next short design-decision slice after the recent repository and projection-helper cleanup: recorded the decision to treat `memory_context_groups` as the primary grouped hierarchy surface for `memory_get_context`, while keeping flat and compatibility-oriented fields as derived or compatibility outputs.
 
 ## What changed in this session
 
-- kept the work narrowly scoped to one service-layer projection cleanup slice
-- updated `src/ctxledger/memory/service_core.py`
-- extracted summary-first selection calculation into:
-  - `_build_summary_selection_details(...)`
-- extracted grouped memory context assembly into:
-  - `_build_memory_context_groups(...)`
-- extracted retrieval-route explanation metadata assembly into:
-  - `_build_retrieval_route_details(...)`
-- fixed the explicit limit handoff needed when resolving related target memory items through `list_by_memory_ids(...)`
-- committed the cleanup slice:
-  - `be51b5b` — `Extract memory context projection helpers`
+- kept the work at design-decision scope rather than starting another implementation slice
+- added a new design note:
+  - `docs/memory/grouped_selection_primary_surface_decision.md`
+- decided that the next hierarchy-aware direction should treat:
+  - `memory_context_groups`
+  as the canonical grouped surface for `memory_get_context`
+- explicitly framed flat and compatibility-oriented fields as:
+  - derived output
+  - compatibility output
+  - convenience output
 
-## Implementation changes captured in this session
+## Design decision captured in this session
 
-This slice did not add a new repository primitive. Instead, it clarified the service-layer projection boundary on top of the repository work that now already exists.
+The main design conclusion is:
 
-### New service-layer helper boundaries
+- `memory_context_groups` should be treated as the primary grouped hierarchy surface for `memory_get_context`
 
-`memory_get_context` now has clearer internal separation between:
+This is an interpretation and direction-setting decision rather than an immediate breaking behavior change.
 
-- retrieval input selection
-- summary-selection derivation
-- grouped context projection
-- retrieval-route explanation metadata
+## Why this was chosen
 
-The new small helpers are:
+The current grouped structure now carries the hierarchy meaning more directly than the flatter response fields.
 
-- `_build_summary_selection_details(...)`
-- `_build_memory_context_groups(...)`
-- `_build_retrieval_route_details(...)`
+It already expresses:
 
-### What each helper now owns
+- scope
+- parent relationships
+- selection route
+- selection kind
+- summary grouping
+- episode grouping
+- workspace inherited auxiliary grouping
+- constrained relation auxiliary grouping
 
-#### Summary selection helper
+By contrast, several existing flat fields are still useful, but they are better understood as compatibility-oriented or derived views of the grouped hierarchy output.
 
-This helper now computes:
+## Interpretation established by this decision
 
-- `summaries`
-- `summary_selection_applied`
-- `summary_selection_kind`
+From this point onward, the intended reading of the response is:
 
-That keeps summary-first detection in one place instead of leaving it inline in `get_context()`.
+- `memory_context_groups` is the primary hierarchy-aware surface
+- flat and compatibility fields remain supported
+- flat and compatibility fields should be interpreted as derived or auxiliary views
+- future hierarchy-aware slices should be designed around grouped selection semantics first
 
-#### Memory context group helper
+## Why summary-first was not elevated above grouped selection
 
-This helper now assembles:
+Summary-first remains important, but it is better modeled as one selection route inside the grouped hierarchy structure rather than as the top-level primary abstraction.
 
-- summary group
-- episode groups
-- workspace inherited auxiliary group
-- relation supports auxiliary group
+In the current response shape:
 
-This keeps grouped projection logic together without changing current group shapes.
+- summary can be represented as a group
+- episode groups can be related to or nested under that summary-oriented selection route
+- workspace and relation auxiliary context can sit alongside that grouped structure
 
-#### Retrieval route details helper
+That makes grouped selection the broader organizing concept, with summary-first as one important behavior within it.
 
-This helper now assembles route explanation metadata, including:
+## Why relation-first remains deferred
 
-- route presence
-- primary vs auxiliary route lists
-- route group counts
-- route item counts
-- route presence flags
-- route scope counts
-- route scope item counts
-- route scopes present
+Relation-aware behavior is still intentionally narrow.
 
-That keeps route explanation logic together instead of spreading it across one long `details` block.
+At the current stage:
 
-## Behavior boundary
+- relation traversal is still constrained
+- only the current `supports` auxiliary behavior is exposed
+- broader graph semantics are still intentionally deferred
 
-This slice did **not** intentionally change the current higher-level retrieval semantics:
-
-- still episode-oriented retrieval
-- still current summary-first behavior
-- still current grouped output structure
-- still current workspace inherited auxiliary behavior
-- still current one-hop constrained `supports` relation behavior
-- still current compatibility fields
-- still no broader graph traversal or ranking change
+Because of that, relation-aware output should not define the primary hierarchy model yet. It remains an auxiliary grouped surface within the broader grouped hierarchy response.
 
 ## Why this mattered
 
-After the recent repository work, the remaining complexity in `memory_get_context` was increasingly about service-layer projection rather than persistence selection.
+Recent work has already cleaned up both sides of the current implementation:
 
-This cleanup makes the current layering more explicit:
+### Repository side
+Explicit retrieval primitives now exist for:
 
-- repositories own retrieval input primitives
-- service helpers own projection and explanation assembly
+- workspace-root inherited context
+- constrained relation-target item lookup
+- bulk episode-child memory item lookup
 
-That should make the next hierarchy-support slice easier to continue without mixing repository concerns back into response assembly logic.
+### Service side
+Projection helpers now exist for:
+
+- summary selection details
+- grouped memory context assembly
+- retrieval-route explanation metadata
+
+Given that groundwork, the next important question was no longer just implementation shape. It was which response surface should be treated as primary.
+
+This decision answers that clearly and should make future hierarchy-support slices easier to evaluate without drifting back toward flat-output-first reasoning.
 
 ## Files touched in this session
 
-- `src/ctxledger/memory/service_core.py`
+- `docs/memory/grouped_selection_primary_surface_decision.md`
 
 ## Validation
 
-- diagnostics were clean for the touched file
-- focused tests passed for context-related behavior:
-  - `tests/memory/test_memory_context_related_items.py`
-  - `tests/memory/test_service_context_details.py`
-  - `tests/memory/test_service_context_scope.py`
+- design decision note saved under `docs/memory/`
+- no implementation behavior was changed in this session
+- no retrieval semantics were widened in this session
 
 ## Current interpretation of the work
 
 This remains `0.6.0` hierarchical retrieval groundwork, especially:
 
 - preserving the current `memory_get_context` contract
+- treating grouped hierarchy output as the primary response direction
 - keeping repository primitives narrow and explicit
-- reducing service-layer projection sprawl
-- making grouped and summary-first behavior easier to reason about in small slices
+- keeping flat and compatibility-oriented fields available without treating them as the canonical hierarchy model
 
 This is still not broader hierarchy/schema modeling and still not Apache AGE integration.
 
 ## What was learned
 
-- once the main retrieval primitives are in place, the next natural cleanup often shifts from persistence to projection assembly
-- summary selection, grouped assembly, and route explanation metadata are distinct enough to deserve separate helper boundaries
-- extracting explanation metadata is a good small slice because it improves readability without forcing contract changes
+- once retrieval primitives and projection helpers are in place, the next useful step is often to clarify which response surface is actually primary
+- grouped hierarchy output is a better canonical direction than summary-first or relation-first in isolation
+- compatibility fields are easier to preserve safely when they are explicitly treated as derived views rather than as the conceptual center of the feature
 
 ## Recommended next work
 
 The most natural next semantic slice is now:
 
-1. decide whether to stop here and keep this as the current service-layer projection shape
-   - this is already a reasonable stopping point for the current cleanup track
+1. decide whether to stop here and keep the current grouped surface interpretation as the stable direction
+   - this is already a reasonable stopping point for the current design loop
 
-2. if continuing, prefer one more small projection-oriented cleanup
-   - likely around compatibility/detail-field assembly
-   - avoid mixing that with new repository primitives unless a clear duplication appears
+2. if continuing, prefer one small grouped-selection behavior slice
+   - make grouped selection semantics more explicit within `memory_context_groups`
+   - improve consistency of grouped fields and interpretation
+   - avoid changing external semantics unless necessary
 
-3. continue deferring broader relation expansion
+3. continue to defer broader relation expansion
    - do not widen traversal behavior unless the retrieval contract truly requires it
 
 ## Commit guidance
 
-- the projection-helper cleanup slice is already committed
-- the next commit should likely describe either:
-  - compatibility/detail assembly cleanup
-  - or the next genuinely new hierarchy-support behavior if one is chosen
+- this design-decision slice is commit-ready if desired
+- a good commit message would describe:
+  - recording the grouped selection primary surface decision
+  - treating `memory_context_groups` as the canonical grouped hierarchy surface

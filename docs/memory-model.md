@@ -48,6 +48,7 @@ In the current repository state:
 - Layer 2 has begun to become real
 - Layer 3 is still largely planned
 - Layer 4 is still largely planned, but `memory_get_context` now exposes a small hierarchy-aware response shape as an early bridge toward later hierarchical retrieval
+- within that early bridge, `memory_context_groups` should be treated as the primary grouped hierarchy-aware surface, while flatter compatibility-oriented fields remain derived or compatibility views
 
 ---
 
@@ -209,6 +210,7 @@ In the current repository state:
 - `memory_get_context` has an initial episode-oriented retrieval path
 - `memory_get_context` now also has a first minimal hierarchy-aware details layer
 - `memory_get_context` now begins to expose a minimal summary-first selection contract when summaries are returned
+- `memory_context_groups` should now be interpreted as the primary grouped hierarchy-aware surface of the current `memory_get_context` response
 - PostgreSQL-backed episode persistence exists
 - PostgreSQL-backed retrieval for the initial context path exists
 
@@ -250,7 +252,8 @@ At present, episodic behavior includes:
   - `related_memory_items`
   - `related_memory_items_by_episode`
 - keeping related context semantics explicit across primary, compatibility, and convenience surfaces:
-  - relation-scoped entries in `memory_context_groups` are the current primary structured grouped relation-aware surface
+  - `memory_context_groups` is the primary grouped hierarchy-aware surface in the current slice
+  - relation-scoped entries inside `memory_context_groups` are the current primary structured grouped relation-aware surface
   - `related_memory_items` remains the top-level compatibility field in the current slice
   - `related_memory_items_by_episode` remains a compatibility-oriented per-episode surface in the current slice
   - episode-group-local `related_memory_items` should be understood as a convenience projection inside `memory_context_groups`

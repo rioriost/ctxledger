@@ -178,6 +178,12 @@ The current episode-oriented retrieval path is also intentionally conservative:
 it is still driven by canonical workflow linkage first, with only a light initial
 query filter layered on top of that canonical lookup path.
 
+Within that current response shape, `memory_context_groups` should be treated as
+the primary grouped hierarchy-aware surface of `memory_get_context`.
+Other flatter fields remain useful and supported, but they should currently be
+interpreted as derived, compatibility-oriented, or convenience views over that
+grouped surface rather than as the canonical hierarchy model.
+
 In its current implemented form, the response `details` are intended to provide
 light observability into how context assembly occurred. That currently includes:
 
@@ -217,6 +223,12 @@ broader ranking, relevance, and relation-aware retrieval remain future work, and
 hierarchical summary assembly is now intended for a later milestone than `0.4.0`
 while `0.4.0` focuses on observability-oriented operator surfaces, with Grafana
 as the named near-term optional dashboard deployment path.
+
+When consumers need the most hierarchy-aware current reading of the response,
+they should prefer `memory_context_groups` first.
+Top-level flat fields remain important for compatibility and convenience, but the
+grouped surface is now the intended primary structured interpretation for
+hierarchy-aware context assembly.
 
 ## 3.3 Special Case: `workflow_resume`
 
