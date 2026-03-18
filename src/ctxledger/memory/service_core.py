@@ -687,8 +687,8 @@ class MemoryService:
                     "flat_related_memory_items_is_compatibility_field": False,
                     "flat_related_memory_items_matches_grouped_episode_related_items": False,
                     "related_memory_items_by_episode_is_primary_structured_output": False,
-                    "related_memory_items_by_episode_is_compatibility_output": False,
-                    "relation_memory_context_groups_are_primary_structured_output": False,
+                    "related_memory_items_by_episode_are_compatibility_output": False,
+                    "relation_memory_context_groups_are_primary_output": False,
                     "group_related_memory_items_are_convenience_output": False,
                     "retrieval_routes_present": (
                         ["workspace_inherited_auxiliary"]
@@ -1338,10 +1338,10 @@ class MemoryService:
                     related_memory_items
                 ),
                 "related_memory_items_by_episode_is_primary_structured_output": False,
-                "related_memory_items_by_episode_is_compatibility_output": bool(
+                "related_memory_items_by_episode_are_compatibility_output": bool(
                     related_memory_items
                 ),
-                "relation_memory_context_groups_are_primary_structured_output": bool(
+                "relation_memory_context_groups_are_primary_output": bool(
                     related_memory_items
                 ),
                 "group_related_memory_items_are_convenience_output": bool(

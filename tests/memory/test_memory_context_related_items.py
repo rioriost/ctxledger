@@ -268,13 +268,10 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
         is False
     )
     assert (
-        response.details["related_memory_items_by_episode_is_compatibility_output"]
+        response.details["related_memory_items_by_episode_are_compatibility_output"]
         is True
     )
-    assert (
-        response.details["relation_memory_context_groups_are_primary_structured_output"]
-        is True
-    )
+    assert response.details["relation_memory_context_groups_are_primary_output"] is True
     assert response.details["group_related_memory_items_are_convenience_output"] is (
         True
     )
@@ -560,12 +557,11 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
         is False
     )
     assert (
-        response.details["related_memory_items_by_episode_is_compatibility_output"]
+        response.details["related_memory_items_by_episode_are_compatibility_output"]
         is False
     )
     assert (
-        response.details["relation_memory_context_groups_are_primary_structured_output"]
-        is False
+        response.details["relation_memory_context_groups_are_primary_output"] is False
     )
     assert response.details["group_related_memory_items_are_convenience_output"] is (
         False

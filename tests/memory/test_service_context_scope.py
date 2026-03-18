@@ -411,8 +411,8 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
         "flat_related_memory_items_is_compatibility_field": False,
         "flat_related_memory_items_matches_grouped_episode_related_items": False,
         "related_memory_items_by_episode_is_primary_structured_output": False,
-        "related_memory_items_by_episode_is_compatibility_output": False,
-        "relation_memory_context_groups_are_primary_structured_output": False,
+        "related_memory_items_by_episode_are_compatibility_output": False,
+        "relation_memory_context_groups_are_primary_output": False,
         "group_related_memory_items_are_convenience_output": False,
         "retrieval_routes_present": [],
         "primary_retrieval_routes_present": [],
@@ -448,6 +448,32 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
             },
         },
         "retrieval_route_scope_counts": {
+            "summary_first": {
+                "summary": 0,
+                "episode": 0,
+                "workspace": 0,
+                "relation": 0,
+            },
+            "episode_direct": {
+                "summary": 0,
+                "episode": 0,
+                "workspace": 0,
+                "relation": 0,
+            },
+            "workspace_inherited_auxiliary": {
+                "summary": 0,
+                "episode": 0,
+                "workspace": 0,
+                "relation": 0,
+            },
+            "relation_supports_auxiliary": {
+                "summary": 0,
+                "episode": 0,
+                "workspace": 0,
+                "relation": 0,
+            },
+        },
+        "retrieval_route_scope_item_counts": {
             "summary_first": {
                 "summary": 0,
                 "episode": 0,
@@ -650,8 +676,8 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
         "flat_related_memory_items_is_compatibility_field": False,
         "flat_related_memory_items_matches_grouped_episode_related_items": False,
         "related_memory_items_by_episode_is_primary_structured_output": False,
-        "related_memory_items_by_episode_is_compatibility_output": False,
-        "relation_memory_context_groups_are_primary_structured_output": False,
+        "related_memory_items_by_episode_are_compatibility_output": False,
+        "relation_memory_context_groups_are_primary_output": False,
         "group_related_memory_items_are_convenience_output": False,
         "retrieval_routes_present": [],
         "primary_retrieval_routes_present": [],
@@ -687,6 +713,32 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
             },
         },
         "retrieval_route_scope_counts": {
+            "summary_first": {
+                "summary": 0,
+                "episode": 0,
+                "workspace": 0,
+                "relation": 0,
+            },
+            "episode_direct": {
+                "summary": 0,
+                "episode": 0,
+                "workspace": 0,
+                "relation": 0,
+            },
+            "workspace_inherited_auxiliary": {
+                "summary": 0,
+                "episode": 0,
+                "workspace": 0,
+                "relation": 0,
+            },
+            "relation_supports_auxiliary": {
+                "summary": 0,
+                "episode": 0,
+                "workspace": 0,
+                "relation": 0,
+            },
+        },
+        "retrieval_route_scope_item_counts": {
             "summary_first": {
                 "summary": 0,
                 "episode": 0,

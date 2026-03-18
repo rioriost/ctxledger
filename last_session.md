@@ -97,9 +97,9 @@ The most natural next semantic slice is now:
 
 1. review naming clarity for current related-context semantic flags
    - especially:
-     - `related_memory_items_by_episode_is_compatibility_output`
+     - `related_memory_items_by_episode_are_compatibility_output`
      - `group_related_memory_items_are_convenience_output`
-     - `relation_memory_context_groups_are_primary_structured_output`
+     - `relation_memory_context_groups_are_primary_output`
 
 2. decide whether to add a short dedicated retrieval-contract note outside the plan
    - for example a concise service-contract reference in docs
