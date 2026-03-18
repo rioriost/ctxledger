@@ -241,6 +241,39 @@ def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
     assert no_episode_response.details["memory_items"] == []
     assert no_episode_response.details["memory_item_counts_by_episode"] == {}
     assert no_episode_response.details["summaries"] == []
+    assert no_episode_response.details["retrieval_routes_present"] == []
+    assert no_episode_response.details["primary_retrieval_routes_present"] == []
+    assert no_episode_response.details["auxiliary_retrieval_routes_present"] == []
+    assert no_episode_response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert no_episode_response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert no_episode_response.details["retrieval_route_presence"] == {
+        "summary_first": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "episode_direct": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "workspace_inherited_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+    }
     assert no_episode_response.details["workflow_instance_id"] == str(workflow_id)
 
 
@@ -457,10 +490,48 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
     ]
     assert response.details["summary_selection_applied"] is True
     assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == []
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 2,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_presence"] == {
+        "summary_first": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "episode_direct": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "workspace_inherited_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+    }
     assert response.details["memory_context_groups"] == [
         {
             "scope": "summary",
             "scope_id": None,
+            "group_id": "summary:episode_summary_first",
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
@@ -491,6 +562,8 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "scope_id": str(first_episode.episode_id),
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
+            "parent_group_scope": "summary",
+            "parent_group_id": "summary:episode_summary_first",
             "selection_kind": "direct_episode",
             "selection_route": "summary_first",
             "selected_via_summary_first": True,
@@ -519,12 +592,16 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
                 },
             ],
             "related_memory_items": [],
+            "related_memory_item_provenance": [],
+            "related_memory_relation_edges": [],
         },
         {
             "scope": "episode",
             "scope_id": str(second_episode.episode_id),
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
+            "parent_group_scope": "summary",
+            "parent_group_id": "summary:episode_summary_first",
             "selection_kind": "direct_episode",
             "selection_route": "summary_first",
             "selected_via_summary_first": True,
@@ -542,6 +619,8 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
                 }
             ],
             "related_memory_items": [],
+            "related_memory_item_provenance": [],
+            "related_memory_relation_edges": [],
         },
     ]
 
@@ -702,6 +781,7 @@ def test_memory_get_context_includes_only_summaries_when_memory_items_disabled()
         {
             "scope": "summary",
             "scope_id": None,
+            "group_id": "summary:episode_summary_first",
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
@@ -924,10 +1004,33 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
         }
     ]
     assert response.details["hierarchy_applied"] is True
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
     assert response.details["memory_context_groups"] == [
         {
             "scope": "summary",
             "scope_id": None,
+            "group_id": "summary:episode_summary_first",
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
@@ -948,6 +1051,8 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
             "scope_id": str(episode.episode_id),
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
+            "parent_group_scope": "summary",
+            "parent_group_id": "summary:episode_summary_first",
             "selection_kind": "direct_episode",
             "selection_route": "summary_first",
             "selected_via_summary_first": True,
@@ -965,12 +1070,16 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
                 }
             ],
             "related_memory_items": [],
+            "related_memory_item_provenance": [],
+            "related_memory_relation_edges": [],
         },
         {
             "scope": "workspace",
             "scope_id": workspace_id,
             "parent_scope": None,
             "parent_scope_id": None,
+            "parent_group_scope": None,
+            "parent_group_id": None,
             "selection_kind": "inherited_workspace",
             "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
@@ -1092,6 +1201,7 @@ def test_memory_get_context_omits_inherited_workspace_items_when_memory_items_di
         {
             "scope": "summary",
             "scope_id": None,
+            "group_id": "summary:episode_summary_first",
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
@@ -1185,6 +1295,28 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
     ]
     assert response.details["query_filter_applied"] is True
     assert response.details["matched_episode_count"] == 1
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
     assert response.details["hierarchy_applied"] is True
     assert response.details["inherited_context_is_auxiliary"] is True
     assert (
@@ -1194,6 +1326,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
         {
             "scope": "summary",
             "scope_id": None,
+            "group_id": "summary:episode_summary_first",
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
@@ -1214,6 +1347,8 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "scope_id": str(episode.episode_id),
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
+            "parent_group_scope": "summary",
+            "parent_group_id": "summary:episode_summary_first",
             "selection_kind": "direct_episode",
             "selection_route": "summary_first",
             "selected_via_summary_first": True,
@@ -1231,12 +1366,16 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
                 }
             ],
             "related_memory_items": [],
+            "related_memory_item_provenance": [],
+            "related_memory_relation_edges": [],
         },
         {
             "scope": "workspace",
             "scope_id": workspace_id,
             "parent_scope": None,
             "parent_scope_id": None,
+            "parent_group_scope": None,
+            "parent_group_id": None,
             "selection_kind": "inherited_workspace",
             "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
@@ -1345,6 +1484,43 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
     assert response.details["memory_items"] == []
     assert response.details["memory_item_counts_by_episode"] == {}
     assert response.details["summaries"] == []
+    assert response.details["retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == []
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_presence"] == {
+        "summary_first": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "episode_direct": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "workspace_inherited_auxiliary": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+    }
     assert response.details["hierarchy_applied"] is True
     assert response.details["inherited_context_is_auxiliary"] is True
     assert (
@@ -1375,6 +1551,8 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
             "scope_id": workspace_id,
             "parent_scope": None,
             "parent_scope_id": None,
+            "parent_group_scope": None,
+            "parent_group_id": None,
             "selection_kind": "inherited_workspace",
             "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
@@ -1476,12 +1654,54 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
     )
 
     assert response.details["hierarchy_applied"] is True
+    assert response.details["retrieval_routes_present"] == [
+        "episode_direct",
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "episode_direct",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_presence"] == {
+        "summary_first": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "episode_direct": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "workspace_inherited_auxiliary": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+    }
     assert response.details["memory_context_groups"] == [
         {
             "scope": "episode",
             "scope_id": str(episode.episode_id),
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
+            "parent_group_scope": None,
+            "parent_group_id": None,
             "selection_kind": "direct_episode",
             "selection_route": "episode_direct",
             "selected_via_summary_first": False,
@@ -1499,12 +1719,16 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
                 }
             ],
             "related_memory_items": [],
+            "related_memory_item_provenance": [],
+            "related_memory_relation_edges": [],
         },
         {
             "scope": "workspace",
             "scope_id": workspace_id,
             "parent_scope": None,
             "parent_scope_id": None,
+            "parent_group_scope": None,
+            "parent_group_id": None,
             "selection_kind": "inherited_workspace",
             "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
@@ -1689,6 +1913,8 @@ def test_memory_get_context_supports_relation_grouping_metadata_survives_episode
             "scope_id": str(matching_episode.episode_id),
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
+            "parent_group_scope": None,
+            "parent_group_id": None,
             "selection_kind": "direct_episode",
             "selection_route": "episode_direct",
             "selected_via_summary_first": False,
@@ -1706,12 +1932,16 @@ def test_memory_get_context_supports_relation_grouping_metadata_survives_episode
                 }
             ],
             "related_memory_items": [],
+            "related_memory_item_provenance": [],
+            "related_memory_relation_edges": [],
         },
         {
             "scope": "workspace",
             "scope_id": workspace_id,
             "parent_scope": None,
             "parent_scope_id": None,
+            "parent_group_scope": None,
+            "parent_group_id": None,
             "selection_kind": "inherited_workspace",
             "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [
@@ -1900,10 +2130,30 @@ def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_work
     ]
     assert response.details["summary_selection_applied"] is True
     assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == []
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 2,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
     assert response.details["memory_context_groups"] == [
         {
             "scope": "summary",
             "scope_id": None,
+            "group_id": "summary:episode_summary_first",
             "parent_scope": "workflow_instance",
             "parent_scope_id": None,
             "selection_kind": "episode_summary_first",
@@ -2031,9 +2281,32 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
         "episode",
         "workspace",
     ]
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 2,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
     assert response.details["memory_context_groups"][0] == {
         "scope": "summary",
         "scope_id": None,
+        "group_id": "summary:episode_summary_first",
         "parent_scope": "workflow_instance",
         "parent_scope_id": str(workflow_id),
         "selection_kind": "episode_summary_first",
@@ -2064,6 +2337,8 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
         "scope_id": str(newer_episode.episode_id),
         "parent_scope": "workflow_instance",
         "parent_scope_id": str(workflow_id),
+        "parent_group_scope": "summary",
+        "parent_group_id": "summary:episode_summary_first",
         "selection_kind": "direct_episode",
         "selection_route": "summary_first",
         "selected_via_summary_first": True,
@@ -2081,12 +2356,16 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
             }
         ],
         "related_memory_items": [],
+        "related_memory_item_provenance": [],
+        "related_memory_relation_edges": [],
     }
     assert response.details["memory_context_groups"][2] == {
         "scope": "episode",
         "scope_id": str(older_episode.episode_id),
         "parent_scope": "workflow_instance",
         "parent_scope_id": str(workflow_id),
+        "parent_group_scope": "summary",
+        "parent_group_id": "summary:episode_summary_first",
         "selection_kind": "direct_episode",
         "selection_route": "summary_first",
         "selected_via_summary_first": True,
@@ -2104,6 +2383,8 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
             }
         ],
         "related_memory_items": [],
+        "related_memory_item_provenance": [],
+        "related_memory_relation_edges": [],
     }
 
 
@@ -2186,6 +2467,25 @@ def test_memory_get_context_marks_episode_groups_as_selected_via_summary_first()
 
     assert response.details["summary_selection_applied"] is True
     assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == []
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 2,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
     assert [group["scope"] for group in response.details["memory_context_groups"]] == [
         "summary",
         "episode",
@@ -2278,10 +2578,30 @@ def test_memory_get_context_group_ordering_summary_only_has_no_placeholder_group
     assert [group["scope"] for group in response.details["memory_context_groups"]] == [
         "summary"
     ]
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == []
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
     assert response.details["memory_context_groups"] == [
         {
             "scope": "summary",
             "scope_id": None,
+            "group_id": "summary:episode_summary_first",
             "parent_scope": "workflow_instance",
             "parent_scope_id": str(workflow_id),
             "selection_kind": "episode_summary_first",
@@ -2371,6 +2691,25 @@ def test_memory_get_context_group_ordering_workspace_only_has_no_placeholder_gro
 
     assert response.episodes == ()
     assert response.details["summaries"] == []
+    assert response.details["retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == []
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
     assert [group["scope"] for group in response.details["memory_context_groups"]] == [
         "workspace"
     ]
@@ -2380,6 +2719,8 @@ def test_memory_get_context_group_ordering_workspace_only_has_no_placeholder_gro
             "scope_id": workspace_id,
             "parent_scope": None,
             "parent_scope_id": None,
+            "parent_group_scope": None,
+            "parent_group_id": None,
             "selection_kind": "inherited_workspace",
             "selection_route": "workspace_inherited_auxiliary",
             "memory_items": [

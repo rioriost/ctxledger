@@ -145,6 +145,48 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
     assert response.details["related_context_selection_route"] == (
         "relation_supports_auxiliary"
     )
+    assert response.details["primary_retrieval_routes_present"] == [
+        "episode_direct",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+        "relation_supports_auxiliary",
+    ]
+    assert response.details["retrieval_routes_present"] == [
+        "episode_direct",
+        "workspace_inherited_auxiliary",
+        "relation_supports_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 1,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 2,
+        "relation_supports_auxiliary": 1,
+    }
+    assert response.details["retrieval_route_presence"] == {
+        "summary_first": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "episode_direct": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "workspace_inherited_auxiliary": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "relation_supports_auxiliary": {
+            "group_present": True,
+            "item_present": True,
+        },
+    }
     assert response.details["related_context_returned_without_episode_matches"] is (
         False
     )
@@ -168,6 +210,35 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
             "metadata": {"kind": "support"},
             "created_at": supports_target_item.created_at.isoformat(),
             "updated_at": supports_target_item.updated_at.isoformat(),
+        }
+    ]
+    assert response.details["memory_context_groups"][0][
+        "related_memory_item_provenance"
+    ] == [
+        {
+            "memory_id": str(supports_target_item.memory_id),
+            "relation_type": "supports",
+            "source_memory_id": str(direct_memory_item.memory_id),
+            "target_memory_id": str(supports_target_item.memory_id),
+            "source_group_scope": "episode",
+            "target_group_scope": "workspace",
+            "target_group_selection_kind": "supports_related_auxiliary",
+        }
+    ]
+    assert response.details["memory_context_groups"][0][
+        "related_memory_relation_edges"
+    ] == [
+        {
+            "memory_relation_id": str(
+                memory_relation_repository.relations[0].memory_relation_id
+            ),
+            "relation_type": "supports",
+            "source_memory_id": str(direct_memory_item.memory_id),
+            "target_memory_id": str(supports_target_item.memory_id),
+            "metadata": {"kind": "supports-edge"},
+            "created_at": memory_relation_repository.relations[
+                0
+            ].created_at.isoformat(),
         }
     ]
     assert "related_memory_items" not in response.details["memory_context_groups"][1]
@@ -266,6 +337,46 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
     assert response.details["related_context_is_auxiliary"] is False
     assert response.details["related_context_relation_types"] == []
     assert response.details["related_context_selection_route"] is None
+    assert response.details["retrieval_routes_present"] == [
+        "episode_direct",
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "episode_direct",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_presence"] == {
+        "summary_first": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "episode_direct": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "workspace_inherited_auxiliary": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+    }
     assert response.details["related_context_returned_without_episode_matches"] is (
         False
     )
@@ -279,4 +390,12 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
         is False
     )
     assert response.details["memory_context_groups"][0]["related_memory_items"] == []
+    assert (
+        response.details["memory_context_groups"][0]["related_memory_item_provenance"]
+        == []
+    )
+    assert (
+        response.details["memory_context_groups"][0]["related_memory_relation_edges"]
+        == []
+    )
     assert "related_memory_items" not in response.details["memory_context_groups"][1]

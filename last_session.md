@@ -2,74 +2,113 @@
 
 ## Summary
 
-Returned to the main `0.6.0` hierarchical memory work and advanced the service-layer retrieval assembly in `memory_get_context`. The current slice makes hierarchy and relation selection paths more explicit without changing canonical persistence rules.
+Continued the `0.6.0` hierarchical memory retrieval work and completed the next small service-layer contract slice in `memory_get_context`: per-route boolean presence metadata is now exposed alongside the existing retrieval route lists and group/item counts.
 
 ## What changed in this session
 
-- confirmed the memory service facade/core split is now in a healthy state:
-  - `src/ctxledger/memory/service_core.py` is clean
-  - `py_compile` passes
-  - focused and broader memory tests pass
-- treated the split work as effectively complete enough to resume the real `0.6.0` plan
-- implemented a first retrieval-route metadata slice in `src/ctxledger/memory/service_core.py`
-- added `selection_route` to `memory_context_groups` so grouped context now explains how it was selected:
+- kept the work narrowly scoped to retrieval metadata clarity
+- updated `src/ctxledger/memory/service_core.py` to add:
+  - `details.retrieval_route_presence`
+- preserved the existing aggregate route metadata:
+  - `details.retrieval_routes_present`
+  - `details.primary_retrieval_routes_present`
+  - `details.auxiliary_retrieval_routes_present`
+  - `details.retrieval_route_group_counts`
+  - `details.retrieval_route_item_counts`
+- added per-route boolean presence signals for:
   - `summary_first`
   - `episode_direct`
   - `workspace_inherited_auxiliary`
-- added `child_episode_ids` to summary groups so summary-first groups explicitly point to the episode groups they summarize
-- added `related_context_selection_route` to top-level `details`
-  - currently `relation_supports_auxiliary` when related supporting context is returned
-  - `null` otherwise
-- updated memory tests to assert the new hierarchy/relation retrieval metadata contract
+  - `relation_supports_auxiliary`
+- each route now reports:
+  - `group_present`
+  - `item_present`
+
+## Current route presence semantics
+
+- `summary_first`
+  - `group_present`: whether the summary group exists
+  - `item_present`: whether summary entries were returned
+
+- `episode_direct`
+  - `group_present`: whether direct episode groups were returned when summary-first is not active
+  - `item_present`: whether those direct episode groups contributed concrete memory items
+
+- `workspace_inherited_auxiliary`
+  - `group_present`: whether the inherited workspace auxiliary group exists
+  - `item_present`: whether inherited workspace items were returned
+
+- `relation_supports_auxiliary`
+  - `group_present`: whether supports-derived related context is present
+  - `item_present`: whether concrete related `supports` items were returned
+
+## Response-shape coverage
+
+Applied the new presence metrics consistently to:
+
+- episode-returning responses
+- no-episode responses
+- inherited-workspace auxiliary-only responses
+- supports-derived related-context responses
+
+## Tests updated
+
+Updated focused tests to assert `retrieval_route_presence` across:
+
+- no-episode response shapes
+- summary-first grouped output
+- direct episode plus inherited workspace output
+- inherited auxiliary-only output
+- supports-derived related context
+- non-support relation filtering behavior
 
 ## Files touched in this session
 
 - `src/ctxledger/memory/service_core.py`
 - `tests/memory/test_service_context_details.py`
-- `tests/memory/test_service_context_scope.py`
 - `tests/memory/test_memory_context_related_items.py`
 
 ## Validation
 
 - passed:
-  - `python -m py_compile src/ctxledger/memory/service_core.py src/ctxledger/memory/service.py src/ctxledger/memory/repositories.py`
-  - `python -m pytest -q tests/memory/test_service_context_details.py`
-  - `python -m pytest -q tests/memory/test_memory_context_related_items.py tests/memory/test_service_context_details.py`
-  - `python -m pytest -q tests/memory`
+  - `python -m pytest -q tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ## Current interpretation of the plan
 
-This work fits `docs/plans/hierarchical_memory_0_6_0_plan.md`, especially:
+This remains a small `0.6.0` retrieval-contract clarification aligned with `docs/plans/hierarchical_memory_0_6_0_plan.md`, especially:
 
-- summary-aware assembly
-- hierarchy-aware behavior
+- explainable retrieval routes
+- explicit context assembly metadata
+- hierarchy-aware grouped context output
 - relation-aware supporting context
-- explicit retrieval details
-- explainable service-layer selection paths
+- operationally understandable retrieval behavior
 
-This is still not graph/AGE work yet. It is a small but meaningful service-layer retrieval contract improvement.
+This is still service-layer retrieval work, not repository/schema hierarchy work and not Apache AGE integration yet.
 
 ## What was learned
 
-- the current `memory_get_context` implementation already had more hierarchy structure than it first appeared
-- the cleanest next `0.6.0` slices are not large schema changes, but small retrieval-contract clarifications
-- adding explicit route/provenance metadata is low-risk and aligns well with the plan’s “explainable retrieval” goals
-- summary-first grouping benefits from explicit child linkage, not just implicit ordering
+- route lists plus group/item counts were clearer than before, but still required downstream consumers to infer simple presence checks
+- explicit per-route `group_present` / `item_present` booleans make the retrieval contract easier to consume and less interpretation-heavy
+- this additional clarity fit cleanly without changing the broader grouped output structure
 
 ## Recommended next work
 
-The most natural next semantic slice is:
+The most natural next semantic slice is now:
 
-1. make group-to-group linkage more explicit beyond `child_episode_ids`
-   - consider `parent_group_scope` / `parent_group_id` style linkage for episode groups
-   - or introduce a lightweight group identifier scheme if needed
-2. strengthen relation-aware grouped output
-   - consider relation-edge metadata or grouped relation provenance for `supports`-derived context
-3. only after the service-layer contract is clearer, decide the smallest repository/schema slice for deeper `0.6.0` hierarchy support
+1. add route metrics scope breakdown
+   - consider explicit scope breakdown per route such as summary / episode / workspace / relation
+   - keep it additive and avoid changing existing route semantics
+
+2. decide whether supports-derived context should remain:
+   - episode-local grouped metadata
+   - plus flat compatibility output
+   - or whether a dedicated auxiliary relation group is justified
+
+3. only after the retrieval contract is clearer, decide whether the next smallest `0.6.0` step should touch repository/schema primitives for deeper hierarchy support
 
 ## Commit guidance
 
 - this slice is commit-ready
 - a good commit message would describe:
-  - explicit hierarchical retrieval route metadata
-  - summary-to-episode linkage in `memory_get_context`
+  - per-route boolean presence metrics in `memory_get_context`
+  - `group_present` / `item_present` retrieval metadata for route explainability
