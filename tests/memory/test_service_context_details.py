@@ -661,6 +661,7 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
                 str(first_episode.episode_id),
                 str(second_episode.episode_id),
             ],
+            "child_episode_count": 2,
             "summaries": [
                 {
                     "episode_id": str(first_episode.episode_id),
@@ -910,6 +911,7 @@ def test_memory_get_context_includes_only_summaries_when_memory_items_disabled()
             "selection_kind": "episode_summary_first",
             "selection_route": "summary_first",
             "child_episode_ids": [str(episode.episode_id)],
+            "child_episode_count": 1,
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -1159,6 +1161,7 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
             "selection_kind": "episode_summary_first",
             "selection_route": "summary_first",
             "child_episode_ids": [str(episode.episode_id)],
+            "child_episode_count": 1,
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -1330,6 +1333,7 @@ def test_memory_get_context_omits_inherited_workspace_items_when_memory_items_di
             "selection_kind": "episode_summary_first",
             "selection_route": "summary_first",
             "child_episode_ids": [str(episode.episode_id)],
+            "child_episode_count": 1,
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -1455,6 +1459,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "selection_kind": "episode_summary_first",
             "selection_route": "summary_first",
             "child_episode_ids": [str(episode.episode_id)],
+            "child_episode_count": 1,
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -2467,6 +2472,7 @@ def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_work
                 str(first_episode.episode_id),
                 str(second_episode.episode_id),
             ],
+            "child_episode_count": 2,
             "summaries": [
                 {
                     "episode_id": str(first_episode.episode_id),
@@ -2683,6 +2689,7 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
             str(newer_episode.episode_id),
             str(older_episode.episode_id),
         ],
+        "child_episode_count": 2,
         "summaries": [
             {
                 "episode_id": str(newer_episode.episode_id),
@@ -3096,6 +3103,7 @@ def test_memory_get_context_group_ordering_summary_only_has_no_placeholder_group
             "selection_kind": "episode_summary_first",
             "selection_route": "summary_first",
             "child_episode_ids": [str(episode.episode_id)],
+            "child_episode_count": 1,
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),

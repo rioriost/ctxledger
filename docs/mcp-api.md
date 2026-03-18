@@ -1349,10 +1349,14 @@ That means:
     - `parent_scope_id = {workflow_instance_id}` when exactly one workflow instance is resolved, otherwise `null`
     - in multi-workflow workspace / ticket resolution cases, that grouped summary `parent_scope_id` remains `null`
     - `selection_kind = "episode_summary_first"`
+    - `child_episode_ids = [...]`
+    - `child_episode_count = {number of child episode ids represented by the summary group}`
     - `summaries = [...]`
+  - `child_episode_count` should currently be read as explicit summary-group child cardinality metadata for grouped consumers, so they do not need to infer child count only by measuring `child_episode_ids`
   - when `summary_first_has_episode_groups = true`, grouped consumers should read the current primary grouped chain as `summary -> episode`
   - when `summary_first_is_summary_only = true`, grouped consumers should read the current primary grouped chain as summary-only for that response shape
   - the summary-only case is expected in narrow shaping scenarios such as `include_memory_items = false`
+  - `child_episode_count` remains meaningful in both summary-only and summary-plus-episode cases because it describes selected child episode cardinality, not whether episode-scoped grouped entries were emitted
   - when grouped output is present in this current stage, ordering should be treated as a small compatibility commitment for grouped consumers rather than as incidental formatting:
     - the summary-oriented group appears first when present
     - episode-scoped groups follow in the same order as returned `episodes`

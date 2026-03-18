@@ -2,65 +2,92 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small, real grouped-selection behavior slice on the primary `memory_get_context` grouped path.
+Continued the `0.6.0` hierarchical memory retrieval work and completed another small, real grouped-selection behavior slice on the primary `memory_get_context` grouped path.
 
-This loop did **not** widen relation traversal or change auxiliary-group positioning.
+This loop still did **not** widen relation traversal or change auxiliary-group positioning.
 
-Instead, it completed a narrow primary-chain refinement:
+Instead, it refined the primary summary/episode grouped chain again by making summary-group child cardinality explicit.
 
-- the current grouped surface now explicitly distinguishes **summary-first with episode groups**
-- from **summary-first summary-only grouped output**
+The current grouped surface now more clearly distinguishes:
 
-This keeps `memory_context_groups` as the primary grouped hierarchy-aware response surface while making the current summary-first primary-chain reading more explicit.
+- summary-first with episode groups
+- summary-first summary-only grouped output
+- and the number of child episodes represented by the summary group
+
+This keeps `memory_context_groups` as the primary grouped hierarchy-aware response surface while making the current summary-first primary-chain reading easier for grouped consumers to interpret directly.
 
 ## What was completed
 
 ### Small primary grouped-selection behavior slice implemented
-The current `memory_get_context` details contract now explicitly exposes two additive summary-first sub-mode explanation fields:
+
+The current `memory_get_context` grouped summary entry now includes:
+
+- `child_episode_count`
+
+This field is emitted on the summary-scoped `memory_context_groups` entry for the current summary-first grouped surface.
+
+### Current intended meaning of the new field
+
+The current intended interpretation is:
+
+- `child_episode_ids`
+  - identifies the child episodes referenced by the summary group
+
+- `child_episode_count`
+  - explicitly states the number of child episodes represented by that summary group
+
+This means grouped consumers no longer need to infer child cardinality only by counting `child_episode_ids`.
+
+### How this interacts with the previous slice
+
+The previous slice established explicit summary-first sub-mode explanation metadata:
 
 - `summary_first_has_episode_groups`
 - `summary_first_is_summary_only`
 
-These fields clarify whether the current summary-first grouped reading is:
+The current slice complements that by making summary-group child cardinality explicit.
 
-- `summary -> episode`
+That means the current grouped reading can now answer three nearby but distinct questions more directly:
 
-or:
+1. is summary-first active?
+2. is the current grouped reading summary-only or summary-plus-episode?
+3. how many child episodes does the summary group represent?
 
-- `summary` only
+### Important interpretation note
 
-This is explanation metadata only.
-It does **not** introduce a new retrieval route.
+`child_episode_count` is **not** the same thing as whether episode-scoped grouped entries are emitted in the current response shape.
 
-### Current intended meaning of the new fields
-The current intended interpretation is:
+At the current stage:
 
-- `summary_first_has_episode_groups = true`
-  - summary-first selection is active
-  - episode-scoped grouped entries are present on the primary grouped chain
+- `child_episode_count = 1` may still appear when:
+  - `summary_first_is_summary_only = true`
+  - because the summary group still represents one child episode even if no episode-scoped grouped entry is emitted for that response shape
 
-- `summary_first_is_summary_only = true`
-  - summary-first selection is active
-  - only the summary-scoped grouped entry is present
-  - no episode-scoped grouped entries are emitted for that response shape
+This is intentional.
 
-At the current stage, the summary-only case is expected in narrow response-shaping situations such as:
+It preserves the distinction between:
 
-- `include_memory_items = false`
+- selection/representation cardinality
+- grouped output shape
 
 ### Tests added/updated
-The grouped-selection test coverage now explicitly checks both:
 
-- summary-first with episode groups
+The grouped-selection test coverage now explicitly checks `child_episode_count` in summary-group assertions across representative cases, including:
+
+- summary-first with multiple episode groups
 - summary-first summary-only grouped output
+- single-episode summary-first cases
+- multi-workflow summary-group cases
 
-This verifies that the current grouped contract distinguishes the two cases without changing the underlying retrieval-route naming.
+### Validation completed
 
-### Docs updated
-The current contract/docs direction now also explicitly records the summary-first sub-mode distinction in:
+Validated the slice with:
 
-- `docs/memory/memory_get_context_service_contract.md`
-- `docs/mcp-api.md`
+- `pytest tests/memory/test_service_context_details.py`
+
+Result at completion time:
+
+- `19 passed`
 
 ## What did not change
 
@@ -71,8 +98,9 @@ This slice intentionally did **not** do any of the following:
 - nest relation auxiliary groups into the summary/episode chain
 - expand relation traversal beyond the current constrained `supports` slice
 - introduce broader graph semantics
-- replace `summary_first` with multiple new route names
-- broadly refactor the grouped projection helpers again
+- add new retrieval routes
+- rename `summary_first`
+- broadly refactor grouped projection helpers
 
 The current auxiliary-group interpretation remains:
 
@@ -93,16 +121,6 @@ The current auxiliary-group interpretation remains:
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
 
-## Validation completed
-
-Validated the slice with:
-
-- `pytest tests/memory/test_service_context_details.py`
-
-Result at completion time:
-
-- `19 passed`
-
 ## Current interpretation
 
 The current `0.6.0` state should now be read as:
@@ -113,22 +131,24 @@ The current `0.6.0` state should now be read as:
 - still not Apache AGE behavior expansion yet
 - clearer that `memory_context_groups` is the primary grouped hierarchy-aware surface
 - clearer that auxiliary workspace/relation groups remain sibling auxiliary surfaces
-- clearer that the current summary-first primary chain has two explicit grouped readings:
+- clearer that the current summary-first primary chain has explicit grouped readings:
   - summary -> episode
   - summary-only
+- clearer that the summary group itself now exposes explicit child cardinality through:
+  - `child_episode_count`
 
 In practice:
 
 - repository primitives are still good enough for the current slice
 - service projection structure is still good enough for the current slice
 - grouped surface interpretation is now better on the primary summary-first path
-- the latest slice was behavior-focused rather than generic cleanup
+- the latest slice again improved behavior/explainability rather than performing generic cleanup
 
 ## Key conclusion
 
-The summary-first sub-mode clarification slice is complete enough.
+The child-episode-count refinement slice is complete enough.
 
-The next step should again be a **small grouped-selection behavior slice**, not another broad cleanup or broad relation expansion.
+The next step should again be a **small grouped-selection behavior slice** on the primary summary/episode chain, not a broad cleanup or relation expansion loop.
 
 ## Explicit next step
 
@@ -147,7 +167,7 @@ Proceed in this order:
 4. no new broad graph semantics yet
 
 ### Concrete next question to answer
-> What is the next smallest behavior improvement on the primary summary/episode grouped chain now that summary-first summary-only vs summary-first with episode groups is explicit?
+> What is the next smallest behavior improvement on the primary summary/episode grouped chain now that summary-first sub-mode and summary-group child cardinality are both explicit?
 
 ## Strong recommendation for the next session
 
@@ -167,7 +187,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before this slice:
+Recent relevant commits before these latest slices:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -176,15 +196,22 @@ Recent relevant commits before this slice:
 - `dd5480c` — `Clarify grouped memory context contract`
 - `c3aa2c0` — `Clarify summary-first group semantics`
 - `623011b` — `Refine next-step session note`
+- `8d65a14` — `Clarify summary-first grouped context modes`
 
-Recent uncommitted/just-completed slice to remember conceptually:
+Recent just-completed slice to remember conceptually:
 
-- summary-first sub-mode metadata added
-- tests updated for summary-only vs summary-plus-episode grouped output
-- API/contract docs updated to match
+- summary-group `child_episode_count` added
+- summary-group tests updated across representative summary-first cases
+- validated with `pytest tests/memory/test_service_context_details.py`
 
 ## Short handoff note
 
 If work resumes from here, do **not** start with more generic cleanup.
 
-Start from the newly explicit summary-first sub-mode behavior and choose the next small primary-chain grouped-selection refinement, while keeping workspace/relation auxiliary groups as top-level sibling auxiliary surfaces for now.
+Start from the now-explicit summary-first grouped interpretation:
+
+- summary-first sub-mode metadata is explicit
+- summary-group child cardinality is explicit
+- auxiliary workspace/relation groups remain top-level sibling auxiliary surfaces
+
+Choose the next small primary-chain grouped-selection refinement from that clearer base.

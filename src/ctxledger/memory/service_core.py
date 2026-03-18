@@ -1737,6 +1737,7 @@ class MemoryService:
                     "child_episode_ids": [
                         detail["episode_id"] for detail in memory_item_details
                     ],
+                    "child_episode_count": len(memory_item_details),
                     "summaries": list(summaries),
                 }
             )
