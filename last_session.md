@@ -2,114 +2,100 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed the next small documentation-oriented slice: the `0.6.0` plan now explicitly documents the current `memory_get_context` retrieval contract direction, especially its explainability metadata, grouped scopes, and related-context surface semantics.
+Continued the `0.6.0` hierarchical memory retrieval work and completed the next small documentation slice after the naming cleanup: added a dedicated `memory_get_context` service-contract note and linked it from the MCP API docs so the current retrieval-contract shape is documented outside the implementation plan.
 
 ## What changed in this session
 
-- kept the work narrowly scoped to contract clarification and documentation
-- updated `docs/plans/hierarchical_memory_0_6_0_plan.md`
-- documented the current retrieval-contract direction around:
-  - route-level explainability metadata
-  - grouped retrieval scopes
-  - primary vs auxiliary route interpretation
+- kept the work narrowly scoped to documentation
+- added `docs/memory/memory_get_context_service_contract.md`
+- linked the new note from `docs/mcp-api.md`
+- documented the current service-layer retrieval contract around:
+  - current grouped scopes
+  - current retrieval routes
+  - primary vs auxiliary outputs
   - compatibility vs convenience related-context surfaces
-- did not introduce new storage-layer or repository-layer behavior in this slice
-- did not change the current grouped output structure in code during this slice
+  - current query-filter and auxiliary-context semantics
+- did not change service or repository behavior in this slice
 
-## Documentation additions captured in the plan
+## Documentation additions captured in this session
 
-The plan now explicitly records the current `0.6.0` service-layer retrieval direction for `memory_get_context`, including:
+The new service-contract note now gives a concise implementation-near summary of the current `memory_get_context` contract, including:
 
-### Retrieval contract explainability
-- retrieval should be observable not only through returned context objects
-- additive metadata should explain:
-  - which routes participated
-  - whether grouped structures and/or concrete items were contributed
-  - grouped structure counts
-  - concrete item counts
-  - grouped scopes involved
-  - grouped structure and item distribution by scope
-
-### Current grouped retrieval scopes
-The documented grouped scopes are now:
-
+### Current grouped scopes
 - `summary`
 - `episode`
 - `workspace`
 - `relation`
 
-### Current retrieval route metadata direction
-The plan now explicitly recognizes additive retrieval metadata surfaces such as:
+### Current retrieval routes
+- `summary_first`
+- `episode_direct`
+- `workspace_inherited_auxiliary`
+- `relation_supports_auxiliary`
 
-- retrieval routes present
-- primary vs auxiliary retrieval routes
-- per-route presence booleans
-- per-route grouped-structure counts
-- per-route item counts
-- per-route scope counts
-- per-route scope item counts
-- per-route scopes present
+### Current output interpretation
+- relation-scoped `memory_context_groups` entries are the current primary structured grouped relation-aware surface
+- top-level `related_memory_items` remains a compatibility-oriented flat surface
+- `related_memory_items_by_episode` remains a compatibility-oriented per-episode surface
+- episode-group embedded `related_memory_items` remains a convenience-oriented grouped surface
 
-### Current related-context contract direction
-The plan now explicitly documents that, at the current implementation stage:
-
-- supports-derived related context has a dedicated relation-scoped auxiliary group
-- per-episode related-context surfaces remain compatibility-oriented
-- flat related-item output remains compatibility-oriented
-- episode-local embedded related-item structures remain convenience-oriented
+### Current auxiliary and query-filter semantics
+- inherited workspace context remains auxiliary rather than part of episode matching
+- relation-derived support context remains auxiliary rather than a primary ranking route
+- lightweight query filtering still centers on episode summary and metadata-derived text
+- auxiliary context may still appear even when no episodes survive query filtering
 
 ## Why this mattered
 
-The service contract had already become much more self-descriptive through code and tests, but the plan still read as if the retrieval direction were more abstract than it currently is.
+The implementation plan now describes the current retrieval-contract direction well, but downstream readers still had to extract a lot of practical meaning from a planning document or from tests.
 
-This slice closed part of that gap by documenting the current operational shape of the retrieval contract so future work can reason from a shared written model instead of rediscovering it from tests and implementation details alone.
+This slice created a shorter service-contract-oriented reference so future contributors can understand the current `memory_get_context` output model without reverse-engineering it from implementation details.
 
 ## Files touched in this session
 
-- `docs/plans/hierarchical_memory_0_6_0_plan.md`
+- `docs/memory/memory_get_context_service_contract.md`
+- `docs/mcp-api.md`
 
 ## Validation
 
-- no new code-path validation was required for this doc-only slice
-- the intent was alignment of planning/documentation with already-established retrieval-contract behavior
+- no code-path validation was required for this doc-only slice
+- the goal was to improve documentation clarity and make the current retrieval contract easier to consume outside the plan
 
-## Current interpretation of the plan
+## Current interpretation of the work
 
-This still remains service-layer retrieval-contract work aligned with `0.6.0`, especially:
+This remains service-layer retrieval-contract work aligned with `0.6.0`, especially:
 
 - explainable retrieval routes
-- explicit context assembly metadata
-- hierarchy-aware grouped context output
-- relation-aware supporting context
-- operationally understandable retrieval behavior
+- explicit grouped scopes
+- primary vs auxiliary output interpretation
+- compatibility and convenience output interpretation
+- operationally understandable current contract behavior
 
 This is still not repository/schema hierarchy work and not Apache AGE integration yet.
 
 ## What was learned
 
-- the implementation had reached a point where the retrieval contract itself is a meaningful deliverable, not just an internal detail
-- once additive explainability metadata exists, documenting its intent becomes important to avoid drift between code and planning assumptions
-- the current `memory_get_context` contract is now detailed enough that future work can more confidently decide whether to keep refining the service layer or begin moving downward into storage/repository primitives
+- the current retrieval contract is now detailed enough to justify a dedicated service-contract note
+- separating the implementation-near contract summary from the milestone plan makes future continuation easier
+- the current `memory_get_context` surface is now best understood as a transitional but already structured contract, not just a partially implemented feature
 
 ## Recommended next work
 
 The most natural next semantic slice is now:
 
-1. review naming clarity for current related-context semantic flags
-   - especially:
-     - `related_memory_items_by_episode_are_compatibility_output`
-     - `group_related_memory_items_are_convenience_output`
-     - `relation_memory_context_groups_are_primary_output`
+1. tighten cross-doc consistency for `memory_get_context` wording
+   - especially older MCP API wording that still references pre-rename or older semantic field names
+   - ensure the dedicated service-contract note is the main implementation-near reference
 
-2. decide whether to add a short dedicated retrieval-contract note outside the plan
-   - for example a concise service-contract reference in docs
-   - useful if downstream consumers or future contributors need a more implementation-near summary
+2. decide whether the next smallest `0.6.0` slice should stay in docs or move back into implementation
+   - if docs: harmonize `mcp-api.md`, `architecture.md`, and the new note
+   - if implementation: begin the next repository/schema primitive for deeper hierarchy support
 
-3. after the retrieval contract feels sufficiently settled, decide whether the next smallest `0.6.0` slice should move down into repository/schema primitives for deeper hierarchy support
+3. once the service-layer contract feels settled enough, move downward into repository/schema hierarchy primitives
 
 ## Commit guidance
 
 - this slice is commit-ready if needed
 - a good commit message would describe:
-  - documenting retrieval contract explainability in the `0.6.0` plan
-  - clarifying grouped scopes and related-context contract direction
+  - adding a dedicated `memory_get_context` service-contract note
+  - linking that note from the MCP API docs
