@@ -1340,6 +1340,9 @@ That means:
 - when summaries are enabled and returned, the response may explicitly mark summary-first assembly through:
   - `summary_selection_applied = true`
   - `summary_selection_kind = "episode_summary_first"`
+  - additive summary-first sub-mode explanation metadata:
+    - `summary_first_has_episode_groups = true` when the primary grouped chain includes episode-scoped groups under the summary-first path
+    - `summary_first_is_summary_only = true` when summary-first selection is active but the grouped output contains only the summary-scoped group and no episode-scoped groups
   - a minimal grouped summary marker in `memory_context_groups` with:
     - `scope = "summary"`
     - `parent_scope = "workflow_instance"`
@@ -1347,6 +1350,9 @@ That means:
     - in multi-workflow workspace / ticket resolution cases, that grouped summary `parent_scope_id` remains `null`
     - `selection_kind = "episode_summary_first"`
     - `summaries = [...]`
+  - when `summary_first_has_episode_groups = true`, grouped consumers should read the current primary grouped chain as `summary -> episode`
+  - when `summary_first_is_summary_only = true`, grouped consumers should read the current primary grouped chain as summary-only for that response shape
+  - the summary-only case is expected in narrow shaping scenarios such as `include_memory_items = false`
   - when grouped output is present in this current stage, ordering should be treated as a small compatibility commitment for grouped consumers rather than as incidental formatting:
     - the summary-oriented group appears first when present
     - episode-scoped groups follow in the same order as returned `episodes`

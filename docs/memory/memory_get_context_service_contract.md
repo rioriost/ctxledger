@@ -104,8 +104,30 @@ Representative route metadata includes:
 - `retrieval_route_scope_counts`
 - `retrieval_route_scope_item_counts`
 - `retrieval_route_scopes_present`
+- `summary_first_has_episode_groups`
+- `summary_first_is_summary_only`
 
 This metadata exists to help consumers and operators understand **what was returned** and **why**.
+
+In particular, the current contract now makes the two current `summary_first`
+sub-modes explicit:
+
+- `summary_first_has_episode_groups = true` when the grouped response includes
+  both the summary-scoped group and episode-scoped groups on the primary
+  summary-first chain
+- `summary_first_is_summary_only = true` when summary-first selection is active
+  but the grouped response contains only the summary-scoped group and no
+  episode-scoped groups
+
+These flags are intentionally additive explanation metadata.
+They do not introduce a new retrieval route.
+They clarify whether the current primary summary-first grouped reading is:
+
+- summary -> episode
+
+or:
+
+- summary only
 
 ---
 
@@ -133,6 +155,21 @@ When summaries are enabled and returned, the response may include a grouped summ
 
 This is a grouped summary-oriented surface, not a replacement for raw memory items.
 
+At the current stage, this summary-first grouped surface has two explicit
+readings:
+
+- **summary -> episode grouped selection**
+  - `summary_first_has_episode_groups = true`
+  - `summary_first_is_summary_only = false`
+
+- **summary-only grouped selection**
+  - `summary_first_has_episode_groups = false`
+  - `summary_first_is_summary_only = true`
+
+The summary-only case is expected when summary selection is active but no
+episode-scoped grouped entries are emitted on the primary chain, such as when
+memory items are disabled for the response shape.
+
 ### 2. Episode-scoped output
 
 When memory items are enabled, returned episodes may produce grouped episode entries with:
@@ -146,6 +183,14 @@ These episode groups may contain:
 - direct episode `memory_items`
 - group-local `related_memory_items`
 - related-item provenance and relation-edge details
+
+When these episode-scoped groups are present under summary-first selection, the
+contract should be read as the fuller primary grouped chain rather than the
+summary-only variant.
+That is the case where:
+
+- `summary_first_has_episode_groups = true`
+- `summary_first_is_summary_only = false`
 
 In summary-first cases, episode-scoped groups should still be read with `selection_kind = "direct_episode"` as the scope-level kind of the group itself.
 

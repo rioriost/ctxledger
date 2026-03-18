@@ -1523,6 +1523,10 @@ class MemoryService:
             and summary_selection_applied
             else 0
         )
+        summary_first_has_episode_groups = summary_episode_scope_count > 0
+        summary_first_is_summary_only = bool(
+            summary_selection_applied and not summary_first_has_episode_groups
+        )
 
         return {
             "retrieval_routes_present": [
@@ -1569,6 +1573,8 @@ class MemoryService:
                     matched_episode_count if related_memory_items else 0
                 ),
             },
+            "summary_first_has_episode_groups": summary_first_has_episode_groups,
+            "summary_first_is_summary_only": summary_first_is_summary_only,
             "retrieval_route_item_counts": {
                 "summary_first": len(summaries) if summary_selection_applied else 0,
                 "episode_direct": episode_direct_item_count,
