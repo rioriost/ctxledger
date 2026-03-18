@@ -147,6 +147,21 @@ These episode groups may contain:
 - group-local `related_memory_items`
 - related-item provenance and relation-edge details
 
+In summary-first cases, episode-scoped groups should still be read with `selection_kind = "direct_episode"` as the scope-level kind of the group itself.
+
+The fact that the episode group was surfaced through summary-first assembly is expressed separately through:
+
+- `selection_route = "summary_first"`
+- the summary parent-group linkage
+- `selected_via_summary_first = true` when present
+
+This means the current contract intentionally separates two ideas:
+
+- `selection_kind` describes what kind of group the entry is at its own scope
+- `selection_route` describes how that group was selected or surfaced in the current retrieval path
+
+Under that interpretation, a summary-first episode group is still an episode-scoped direct memory group, but one surfaced through the summary-first retrieval route.
+
 ### 3. Workspace-scoped output
 
 When inherited workspace items are available, the response may include a workspace group with:
