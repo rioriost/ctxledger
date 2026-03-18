@@ -249,11 +249,12 @@ At present, episodic behavior includes:
   - `inherited_memory_items`
   - `related_memory_items`
   - `related_memory_items_by_episode`
-- keeping flat related context as an explicit compatibility surface alongside newer structured details:
+- keeping related context semantics explicit across primary, compatibility, and convenience surfaces:
+  - relation-scoped entries in `memory_context_groups` are the current primary structured grouped relation-aware surface
   - `related_memory_items` remains the top-level compatibility field in the current slice
-  - `related_memory_items_by_episode` should now be understood as the primary structured relation-aware mapping at the details level
-  - episode-group-local `related_memory_items` should be understood as a convenience projection of that same structured mapping inside `memory_context_groups`
-  - later slices may choose to retire the flat field, but that is not part of the current contract
+  - `related_memory_items_by_episode` remains a compatibility-oriented per-episode surface in the current slice
+  - episode-group-local `related_memory_items` should be understood as a convenience projection inside `memory_context_groups`
+  - later slices may choose to retire some compatibility surfaces, but that is not part of the current contract
 - exposing explicit selection metadata inside `memory_context_groups`, including:
   - `selection_kind = direct_episode` for episode-scoped direct context
   - `selection_kind = inherited_workspace` for workspace-scoped inherited context
@@ -615,6 +616,9 @@ The current details payload also includes a first constrained relation-aware sur
 - `related_context_is_auxiliary`
 - `related_context_relation_types`
 - `related_context_returned_without_episode_matches`
+- `relation_memory_context_groups_are_primary_output`
+- `related_memory_items_by_episode_are_compatibility_output`
+- `group_related_memory_items_are_convenience_output`
 
 At the current implementation stage, `related_memory_items` should be understood narrowly:
 
@@ -631,12 +635,13 @@ The current details payload now also makes that constrained relation contract mo
 
 The current grouping boundary should also be understood explicitly:
 
-- `memory_context_groups` still organize direct episode-scoped context and inherited workspace-scoped context
-- `related_memory_items_by_episode` is now the primary structured relation-aware mapping for episode-local related output
-- episode-scoped groups may also include group-local `related_memory_items` as a convenience projection of that same mapping
+- `memory_context_groups` now organize direct episode-scoped context, inherited workspace-scoped context, and relation-scoped supporting context
+- relation-scoped `memory_context_groups` entries are the current primary structured grouped relation-aware surface
+- `related_memory_items_by_episode` remains a compatibility-oriented per-episode related-context surface
+- episode-scoped groups may also include group-local `related_memory_items` as a convenience projection of that same related context
 - the flat top-level `related_memory_items` field is still retained as a compatibility surface
 - workspace-scoped groups are not widened by this slice
-- if the flat compatibility field is retired later, that should be treated as a separate incremental contract change rather than assumed from the current grouping shape
+- if compatibility surfaces are retired later, that should be treated as a separate incremental contract change rather than assumed from the current grouping shape
 
 This keeps the current minimal hierarchy-aware contract explainable while adding
 one explicit relation-aware behavior without yet introducing broader traversal logic.

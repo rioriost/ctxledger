@@ -2,64 +2,59 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed the next small documentation slice after the naming cleanup: added a dedicated `memory_get_context` service-contract note and linked it from the MCP API docs so the current retrieval-contract shape is documented outside the implementation plan.
+Continued the `0.6.0` hierarchical memory retrieval work and completed the next small documentation cleanup slice after adding the dedicated service-contract note: tightened cross-doc consistency for `memory_get_context` so older MCP API and memory-model wording better matches the current related-context contract semantics.
 
 ## What changed in this session
 
-- kept the work narrowly scoped to documentation
-- added `docs/memory/memory_get_context_service_contract.md`
-- linked the new note from `docs/mcp-api.md`
-- documented the current service-layer retrieval contract around:
-  - current grouped scopes
-  - current retrieval routes
-  - primary vs auxiliary outputs
-  - compatibility vs convenience related-context surfaces
-  - current query-filter and auxiliary-context semantics
+- kept the work narrowly scoped to documentation consistency cleanup
+- updated `docs/mcp-api.md`
+- updated `docs/memory-model.md`
+- aligned older wording with the current service-contract note around:
+  - relation-scoped groups as the current primary structured grouped relation-aware surface
+  - flat `related_memory_items` as a compatibility surface
+  - per-episode `related_memory_items_by_episode` as a compatibility surface
+  - episode-group embedded `related_memory_items` as a convenience surface
+- replaced older field references and superseded phrasing such as:
+  - `related_context_primary_structured_output`
+  - `related_context_flat_field_is_compatibility_output`
+  - singular `related_context_relation_type`
 - did not change service or repository behavior in this slice
 
-## Documentation additions captured in this session
+## Documentation consistency improvements captured in this session
 
-The new service-contract note now gives a concise implementation-near summary of the current `memory_get_context` contract, including:
+The cleanup brought the broader docs into better alignment with the dedicated `memory_get_context` service-contract note.
 
-### Current grouped scopes
-- `summary`
-- `episode`
-- `workspace`
-- `relation`
+### MCP API alignment
+`docs/mcp-api.md` now better reflects the current related-context contract by using current field names and current output interpretation, including:
 
-### Current retrieval routes
-- `summary_first`
-- `episode_direct`
-- `workspace_inherited_auxiliary`
-- `relation_supports_auxiliary`
+- `relation_memory_context_groups_are_primary_output`
+- `flat_related_memory_items_is_compatibility_field`
+- `related_memory_items_by_episode_are_compatibility_output`
+- `group_related_memory_items_are_convenience_output`
 
-### Current output interpretation
+### Memory model alignment
+`docs/memory-model.md` now better reflects that:
+
 - relation-scoped `memory_context_groups` entries are the current primary structured grouped relation-aware surface
-- top-level `related_memory_items` remains a compatibility-oriented flat surface
-- `related_memory_items_by_episode` remains a compatibility-oriented per-episode surface
-- episode-group embedded `related_memory_items` remains a convenience-oriented grouped surface
-
-### Current auxiliary and query-filter semantics
-- inherited workspace context remains auxiliary rather than part of episode matching
-- relation-derived support context remains auxiliary rather than a primary ranking route
-- lightweight query filtering still centers on episode summary and metadata-derived text
-- auxiliary context may still appear even when no episodes survive query filtering
+- `related_memory_items_by_episode` remains compatibility-oriented in the current slice
+- episode-group embedded `related_memory_items` remains convenience-oriented
+- grouped output now includes relation-scoped supporting context in addition to episode- and workspace-scoped context
 
 ## Why this mattered
 
-The implementation plan now describes the current retrieval-contract direction well, but downstream readers still had to extract a lot of practical meaning from a planning document or from tests.
+After introducing the dedicated service-contract note, the most obvious remaining drift was no longer in the main reference itself, but in older surrounding docs that still described an earlier interpretation of the related-context output surfaces.
 
-This slice created a shorter service-contract-oriented reference so future contributors can understand the current `memory_get_context` output model without reverse-engineering it from implementation details.
+This slice reduced that drift so future contributors can move between the MCP API docs, the memory model, and the dedicated service-contract note without having to mentally translate between old and new semantic descriptions.
 
 ## Files touched in this session
 
-- `docs/memory/memory_get_context_service_contract.md`
 - `docs/mcp-api.md`
+- `docs/memory-model.md`
 
 ## Validation
 
 - no code-path validation was required for this doc-only slice
-- the goal was to improve documentation clarity and make the current retrieval contract easier to consume outside the plan
+- the goal was consistency of documentation wording and field interpretation across the current retrieval-contract references
 
 ## Current interpretation of the work
 
@@ -67,35 +62,36 @@ This remains service-layer retrieval-contract work aligned with `0.6.0`, especia
 
 - explainable retrieval routes
 - explicit grouped scopes
-- primary vs auxiliary output interpretation
-- compatibility and convenience output interpretation
-- operationally understandable current contract behavior
+- clearer interpretation of primary vs auxiliary outputs
+- clearer interpretation of compatibility vs convenience surfaces
+- more consistent implementation-near documentation across docs
 
 This is still not repository/schema hierarchy work and not Apache AGE integration yet.
 
 ## What was learned
 
-- the current retrieval contract is now detailed enough to justify a dedicated service-contract note
-- separating the implementation-near contract summary from the milestone plan makes future continuation easier
-- the current `memory_get_context` surface is now best understood as a transitional but already structured contract, not just a partially implemented feature
+- once a dedicated contract note exists, surrounding docs quickly become the main source of terminology drift
+- the current related-context contract is now specific enough that even small wording mismatches create avoidable confusion
+- keeping cross-doc terminology aligned is a worthwhile small slice before moving back into deeper implementation work
 
 ## Recommended next work
 
 The most natural next semantic slice is now:
 
-1. tighten cross-doc consistency for `memory_get_context` wording
-   - especially older MCP API wording that still references pre-rename or older semantic field names
-   - ensure the dedicated service-contract note is the main implementation-near reference
+1. decide whether to do one more tiny docs pass for `architecture.md`
+   - only if a stronger explicit pointer to the dedicated service-contract note would be useful
+   - otherwise docs are likely settled enough for now
 
-2. decide whether the next smallest `0.6.0` slice should stay in docs or move back into implementation
-   - if docs: harmonize `mcp-api.md`, `architecture.md`, and the new note
-   - if implementation: begin the next repository/schema primitive for deeper hierarchy support
+2. move back into implementation for the next `0.6.0` slice
+   - begin the next repository/schema primitive for deeper hierarchy support
+   - keep the slice semantically small and resumable
 
-3. once the service-layer contract feels settled enough, move downward into repository/schema hierarchy primitives
+3. preserve the current service-layer contract as the reference point while deeper hierarchy primitives are introduced
+   - avoid changing multiple semantic surfaces at once unless the implementation truly requires it
 
 ## Commit guidance
 
 - this slice is commit-ready if needed
 - a good commit message would describe:
-  - adding a dedicated `memory_get_context` service-contract note
-  - linking that note from the MCP API docs
+  - tightening `memory_get_context` cross-doc consistency
+  - aligning older docs wording with the dedicated service-contract note
