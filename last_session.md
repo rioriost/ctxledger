@@ -2,7 +2,7 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **workspace-only multi-workflow summary-first reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **workspace-only query-filter summary-first surviving-child-set reading** in `memory_get_context`.
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or redesign the grouped response shape.
 
@@ -11,114 +11,104 @@ Instead, it fixed and validated the current behavior when:
 - multiple workflows are resolved through **workspace-only** lookup
 - summaries are enabled
 - memory items are enabled
-- summary-first grouped reading spans returned episodes from more than one workflow
+- query filtering leaves only a subset of the cross-workflow episode set visible on the primary path
 
 The current response is now clearer that:
 
-- summary-first grouped reading can span multiple workflows in the current constrained model
-- the grouped summary entry remains the primary grouped summary surface for that workspace-only multi-workflow case
-- the grouped summary entry does **not** claim a single workflow parent in that case
-- `parent_scope_id` on the summary group remains `null` for the cross-workflow grouped summary case
-- the grouped summary child set still aligns with:
-  - returned `episodes`
-  - top-level summary-first child identity/cardinality fields
-  - grouped episode-scoped entries
-- grouped episode entries still retain their own workflow-instance parent ids even when the summary-first parent group spans multiple workflows
-- **workspace inherited auxiliary coexistence is not currently observed in this workspace-only multi-workflow summary-first case**
-- that means current workspace-only multi-workflow behavior should **not** be read as automatically co-emitting a sibling workspace auxiliary surface whenever inherited workspace items exist in storage
+- workspace-only summary-first grouped reading can begin from a cross-workflow candidate episode set
+- query filtering narrows that visible primary set before the current summary-first child set is read
+- the top-level summary-first child ids/count follow the **surviving post-filter set**
+- the grouped summary child ids/count follow that same surviving post-filter set
+- grouped episode-scoped output follows that same surviving post-filter set
+- `parent_scope_id` on the summary group remains `null` in this cross-workflow summary-first case
+- workspace inherited auxiliary coexistence is still **not assumed** in this workspace-only multi-workflow summary-first case unless it is actually emitted
 
-This means the current workspace-only multi-workflow summary-first reading is now better fixed by behavior coverage rather than by assumption.
+This means the current workspace-only query-filter summary-first reading is now better fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small workspace-only multi-workflow summary-first coverage slice implemented
+### Small workspace-only query-filter summary-first coverage slice implemented
 
 A focused test slice now covers the case where:
 
 - two workflows resolve through **workspace-only** lookup
 - each workflow contributes an episode
-- each returned episode contributes memory items
-- inherited workspace-scoped items also exist in storage
+- only one of those episode summaries matches the current query
 - summaries are enabled
 - memory items are enabled
 
 The current intended result in that case is:
 
 - `lookup_scope == "workspace"`
-- both workflows are resolved
-- both returned episodes participate in the current summary-first grouped reading
+- both workflows are still resolved
+- `episodes_before_query_filter == 2`
+- `matched_episode_count == 1`
+- `episodes_returned == 1`
 - `summary_selection_applied == true`
 - `summary_selection_kind == "episode_summary_first"`
 - `summary_first_has_episode_groups == true`
 - `summary_first_is_summary_only == false`
-- `summary_first_child_episode_count == 2`
-- `summary_first_child_episode_ids` matches the returned cross-workflow episode set
+- `summary_first_child_episode_count == 1`
+- `summary_first_child_episode_ids == [{surviving_episode_id}]`
 - the grouped summary entry:
   - has `parent_scope = "workflow_instance"`
   - has `parent_scope_id = null`
-  - contains the same cross-workflow child episode ids/count
-- grouped episode-scoped entries:
-  - remain children of the summary group
-  - still retain their own workflow-instance `parent_scope_id`
+  - contains the same surviving child episode id/count
+- grouped episode-scoped output contains only the surviving emitted episode group
 - `inherited_memory_items == []`
-- no `workspace_inherited_auxiliary` route is present
-- no workspace-scoped grouped auxiliary entry is emitted
+- no `workspace_inherited_auxiliary` route is present in the current observed behavior
 
 ### Current intended reading of this behavior
 
 Grouped and details consumers should currently understand this case like this:
 
-1. multiple workflows may contribute returned episodes to the current workspace-scoped response
-2. summary-first grouped reading may span that multi-workflow returned episode set
-3. the grouped summary entry still represents the current summary-first grouped surface
-4. because the grouped summary spans multiple workflows, it should not claim a single workflow parent id
-5. the grouped episode-scoped entries still retain their own workflow-instance parents
-6. the current workspace-only multi-workflow summary-first path should **not** be assumed to co-emit the workspace inherited auxiliary surface
+1. multiple workflows may contribute candidate episodes to the current workspace-scoped response
+2. query filtering narrows that cross-workflow candidate set to a surviving visible subset
+3. summary-first grouped reading is then formed from that surviving visible primary set
+4. top-level summary-first child metadata follows that same surviving set
+5. grouped summary child metadata follows that same surviving set
+6. grouped episode-scoped output follows that same surviving set
+7. workspace inherited auxiliary coexistence should **not** be assumed unless it is actually emitted
 
 This should **not** be read as:
 
-- summary-first becoming a broader graph-backed hierarchy
-- the summary group gaining stronger cross-workflow ownership semantics
-- grouped episode entries losing their own workflow-instance parentage
-- auxiliary surfaces being nested into the primary chain
-- inherited workspace items automatically appearing as a sibling auxiliary surface in this workspace-only multi-workflow summary-first case just because they exist in storage
+- a pre-filter summary snapshot that remains structurally visible after filtering
+- filtered-out cross-workflow child episodes still belonging to the visible summary-first child set
+- hidden workspace auxiliary coexistence that is not actually emitted
+- broader graph-backed hierarchy semantics
 
 It should be read as:
 
-- the current constrained workspace-only multi-workflow summary-first grouped reading
-- with a shared summary group over the returned cross-workflow episode set
-- per-episode workflow-instance parentage still preserved on episode-scoped groups
-- and **no currently observed workspace inherited auxiliary coexistence** in this specific case
+- the current constrained workspace-only summary-first grouped reading
+- with the visible child set taken from the surviving post-query-filter primary path
+- and with conservative cross-workflow summary-group parentage (`parent_scope_id = null`)
 
 ### Why this slice is useful
 
-This slice improves confidence in the current workspace-only multi-workflow summary-first reading without broadening behavior.
+This slice improves confidence in the current workspace-only summary-first reading without broadening behavior.
 
-It verifies that the current system behaves consistently when summary-first grouped reading spans more than one workflow through workspace-only resolution:
+It verifies that the current system behaves consistently when:
 
-- top-level summary-first child metadata remains aligned
-- grouped summary child metadata remains aligned
-- grouped episode entries remain aligned
-- summary-group parentage remains conservative (`parent_scope_id = null`)
-- episode-group parentage remains workflow-specific
-- workspace auxiliary coexistence is not silently assumed where current behavior does not emit it
+- workspace-only resolution yields multiple candidate workflows
+- query filtering removes part of the cross-workflow candidate episode set
+- summary-first grouped reading must then reflect only the visible surviving primary set
 
-This makes the current workspace-only multi-workflow grouped reading explicit rather than leaving it to be reconstructed from assumptions carried over from other resolver paths.
+This makes the current workspace-only query interaction explicit rather than leaving it to be reconstructed from assumptions imported from single-workflow or ticket-only cases.
 
 ### Tests added/updated
 
-The summary-first grouped/details test coverage now explicitly checks the workspace-only multi-workflow, memory-items-enabled case.
+The summary-first grouped/details test coverage now explicitly checks the workspace-only multi-workflow, query-filtered, memory-items-enabled case.
 
 The expected current result is:
 
-- two resolved workflows
-- two returned episodes
-- active summary-first grouped reading
-- top-level summary-first child ids/count aligned with the returned cross-workflow episode set
+- both workflows resolved
+- one surviving returned episode
+- top-level summary-first child ids/count aligned with the surviving emitted episode
+- grouped summary child ids/count aligned with the same surviving emitted episode
+- grouped episode output aligned with the same surviving emitted episode
 - grouped summary `parent_scope_id == null`
-- grouped episode entries retaining their own workflow-instance parent ids
 - no emitted workspace inherited auxiliary route/group in the current observed behavior
 
 ### Validation completed
@@ -129,7 +119,7 @@ Validated this slice with:
 
 Result at completion time:
 
-- `26 passed`
+- `27 passed`
 
 ---
 
@@ -143,8 +133,8 @@ This slice intentionally did **not** do any of the following:
 - change constrained relation auxiliary positioning
 - introduce graph-backed selection semantics
 - add broader response-shape expansion
-- make the grouped summary claim a stronger single-workflow parent in the multi-workflow case
-- force workspace auxiliary coexistence into the workspace-only multi-workflow summary-first case
+- make filtered-out cross-workflow episodes remain in the visible summary-first child set
+- force workspace auxiliary coexistence into the workspace-only query-filter summary-first case
 
 The current grouped interpretation remains:
 
@@ -181,7 +171,7 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `26 passed` in `tests/memory/test_service_context_details.py`
+- `27 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -201,7 +191,8 @@ The current `0.6.0` state should now be read as:
 - multi-workflow summary-first memory-items behavior is explicitly covered by behavior
 - ticket-only multi-workflow summary-first memory-items behavior is explicitly covered by behavior
 - low-limit ticket-only multi-workflow summary-first behavior is explicitly covered by behavior
-- workspace-only multi-workflow summary-first behavior is now explicitly covered by behavior
+- workspace-only multi-workflow summary-first behavior is explicitly covered by behavior
+- workspace-only query-filter summary-first surviving-child-set behavior is now explicitly covered by behavior
 - current workspace-only multi-workflow summary-first reading does not currently show sibling workspace auxiliary coexistence
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
 - workspace inherited auxiliary limit/truncation behavior is explicitly covered by behavior
@@ -221,7 +212,9 @@ In practice:
 - summaries-disabled primary-path behavior is better anchored by behavior coverage
 - multi-workflow summary-first memory-items behavior is better anchored by behavior coverage
 - ticket-only multi-workflow summary-first memory-items behavior is better anchored by behavior coverage
-- low-limit ticket-only multi-workflow summary-first behavior is now also better anchored by behavior coverage
+- low-limit ticket-only multi-workflow summary-first behavior is better anchored by behavior coverage
+- workspace-only multi-workflow summary-first behavior is better anchored by behavior coverage
+- workspace-only query-filter summary-first behavior is now also better anchored by behavior coverage
 - workspace inherited auxiliary emission shaping is better anchored by behavior coverage
 - constrained relation grouped reading is explicit enough
 - constrained relation negative-path behavior is better anchored by behavior coverage
@@ -232,7 +225,7 @@ In practice:
 
 ## Key conclusion
 
-The current workspace-only multi-workflow summary-first coverage slice is complete enough.
+The current workspace-only query-filter summary-first coverage slice is complete enough.
 
 The next step should still avoid:
 
@@ -253,7 +246,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current workspace-only multi-workflow summary-first reading as sufficiently fixed for the current stage.
+Treat the current workspace-only query-filter summary-first reading as sufficiently fixed for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without continuing the pattern of ever-finer details / grouped mirror metadata unless clearly justified.
@@ -271,7 +264,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that workspace-only multi-workflow summary-first behavior is explicitly covered and current non-coexistence with workspace auxiliary in that case is understood?
+> What is the next smallest useful grouped-selection or contract improvement now that workspace-only query-filter summary-first surviving-child-set behavior is explicitly covered?
 
 ---
 
@@ -296,7 +289,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest workspace-only multi-workflow slice:
+Recent relevant commits before the latest workspace-only query-filter slice:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -331,14 +324,15 @@ Recent relevant commits before the latest workspace-only multi-workflow slice:
 - `6f7c8ce` — `Cover ticket-only multi-workflow summary-first`
 - `44c5d32` — `Cover low-limit ticket-only summary-first`
 - `43e5250` — `Polish latest session handoff`
+- `c4ee4d9` — `Cover workspace-only multi-workflow summary-first`
+- `c51b999` — `Document workspace-only multi-workflow behavior`
 
 ### Recent just-completed slice to remember conceptually
 
-- workspace-only multi-workflow summary-first behavior covered by test
-- grouped summary child set aligned with returned cross-workflow episodes
-- grouped summary `parent_scope_id` remains `null` in the workspace-only multi-workflow case
-- grouped episode entries keep their own workflow-instance parent ids
-- workspace auxiliary coexistence is **not currently observed** in this case and should not be assumed
+- workspace-only query-filter summary-first surviving-child-set behavior covered by test
+- top-level summary-first child ids/count aligned with the surviving post-filter visible episode set
+- grouped summary child ids/count aligned with the same surviving post-filter visible episode set
+- no workspace auxiliary coexistence assumed unless it is actually emitted
 - validated with `pytest tests/memory/test_service_context_details.py`
 
 ### Conceptual summary of the completed loops
@@ -354,6 +348,7 @@ The recent coverage work established that the current grouped/details surface no
 - ticket-only multi-workflow summary-first memory-items behavior
 - low-limit ticket-only multi-workflow summary-first behavior
 - workspace-only multi-workflow summary-first behavior
+- workspace-only query-filter summary-first surviving-child-set behavior
 - workspace auxiliary no-episode-match visibility reading
 - workspace inherited auxiliary limit / truncation behavior
 - constrained relation auxiliary linkage back to returned episode-side context
@@ -378,7 +373,11 @@ Start from the current stable reading:
 - top-level summary-first child identity / cardinality are directly readable
 - summary-first query-filter surviving-child-set behavior is fixed by coverage
 - summaries-disabled primary-path behavior is fixed by coverage
+- multi-workflow summary-first memory-items behavior is fixed by coverage
+- ticket-only multi-workflow summary-first memory-items behavior is fixed by coverage
+- low-limit ticket-only multi-workflow summary-first behavior is fixed by coverage
 - workspace-only multi-workflow summary-first behavior is fixed by coverage
+- workspace-only query-filter summary-first behavior is fixed by coverage
 - workspace-only multi-workflow summary-first should not currently be assumed to co-emit workspace inherited auxiliary output
 - workspace auxiliary no-episode-match visibility is intentional support preservation
 - workspace inherited auxiliary limit / truncation behavior is fixed by coverage
