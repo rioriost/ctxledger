@@ -108,6 +108,7 @@ Representative route metadata includes:
 - `summary_first_is_summary_only`
 - `child_episode_count`
 - `child_episode_ordering`
+- `child_episode_groups_emitted`
 
 This metadata exists to help consumers and operators understand **what was returned** and **why**.
 
@@ -157,6 +158,7 @@ When summaries are enabled and returned, the response may include a grouped summ
 - `child_episode_ids = [...]`
 - `child_episode_count = N`
 - `child_episode_ordering = "returned_episode_order"`
+- `child_episode_groups_emitted = true | false`
 
 This is a grouped summary-oriented surface, not a replacement for raw memory items.
 
@@ -195,6 +197,24 @@ At the current stage, this means grouped consumers should read
 current response. This is additive grouped explainability metadata for the
 summary-scoped group. It does not introduce a new retrieval route or broaden
 selection behavior; it only makes the current ordering commitment explicit.
+
+The grouped summary entry should also make it explicit whether child
+episode-scoped groups were emitted in the current response shape through:
+
+- `child_episode_groups_emitted = true | false`
+
+At the current stage, this field should be read as group-local output-shape
+metadata for the summary-scoped group:
+
+- `true` means the summary group's child episodes are also represented by
+  emitted episode-scoped grouped entries in the current response
+- `false` means the summary group still represents child episodes, but those
+  episode-scoped grouped entries were not emitted for the current response shape
+
+This is intentionally distinct from child cardinality and child ordering
+metadata. It does not change selection behavior. It only makes explicit whether
+the summary group's child episode references are accompanied by emitted
+episode-scoped grouped entries.
 
 ### 2. Episode-scoped output
 

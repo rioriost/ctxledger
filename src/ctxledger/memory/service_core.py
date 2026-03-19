@@ -1739,6 +1739,9 @@ class MemoryService:
                     ],
                     "child_episode_count": len(memory_item_details),
                     "child_episode_ordering": "returned_episode_order",
+                    "child_episode_groups_emitted": bool(
+                        include_memory_items and memory_item_details
+                    ),
                     "summaries": list(summaries),
                 }
             )
