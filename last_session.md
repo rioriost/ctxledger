@@ -6,13 +6,14 @@ Continued the `0.6.0` hierarchical memory retrieval work and completed another s
 
 This loop still did **not** widen relation traversal or change auxiliary-group positioning.
 
-Instead, it refined the primary summary/episode grouped chain again by making summary-group child cardinality explicit.
+Instead, it refined the primary summary/episode grouped chain again by making summary-group child ordering semantics explicit.
 
 The current grouped surface now more clearly distinguishes:
 
 - summary-first with episode groups
 - summary-first summary-only grouped output
-- and the number of child episodes represented by the summary group
+- the number of child episodes represented by the summary group
+- the ordering semantics of the summary group's child episode references
 
 This keeps `memory_context_groups` as the primary grouped hierarchy-aware response surface while making the current summary-first primary-chain reading easier for grouped consumers to interpret directly.
 
@@ -22,7 +23,7 @@ This keeps `memory_context_groups` as the primary grouped hierarchy-aware respon
 
 The current `memory_get_context` grouped summary entry now includes:
 
-- `child_episode_count`
+- `child_episode_ordering`
 
 This field is emitted on the summary-scoped `memory_context_groups` entry for the current summary-first grouped surface.
 
@@ -36,48 +37,58 @@ The current intended interpretation is:
 - `child_episode_count`
   - explicitly states the number of child episodes represented by that summary group
 
-This means grouped consumers no longer need to infer child cardinality only by counting `child_episode_ids`.
+- `child_episode_ordering`
+  - explicitly states how grouped consumers should read the ordering of `child_episode_ids`
 
-### How this interacts with the previous slice
+At the current stage:
 
-The previous slice established explicit summary-first sub-mode explanation metadata:
+- `child_episode_ordering = "returned_episode_order"`
+
+This means grouped consumers should read `child_episode_ids` in the same order as the returned `episodes` list for the current response.
+
+### How this interacts with the previous slices
+
+The previous slices established explicit summary-first grouped explainability metadata including:
 
 - `summary_first_has_episode_groups`
 - `summary_first_is_summary_only`
+- `child_episode_count`
 
-The current slice complements that by making summary-group child cardinality explicit.
+The current slice complements that by making summary-group child ordering explicit.
 
-That means the current grouped reading can now answer three nearby but distinct questions more directly:
+That means the current grouped reading can now answer four nearby but distinct questions more directly:
 
 1. is summary-first active?
 2. is the current grouped reading summary-only or summary-plus-episode?
 3. how many child episodes does the summary group represent?
+4. what ordering semantics apply to the summary group's child episode references?
 
 ### Important interpretation note
 
-`child_episode_count` is **not** the same thing as whether episode-scoped grouped entries are emitted in the current response shape.
+`child_episode_ordering` is **not** the same thing as whether episode-scoped grouped entries are emitted in the current response shape.
 
 At the current stage:
 
-- `child_episode_count = 1` may still appear when:
+- `child_episode_ordering = "returned_episode_order"` may still appear when:
   - `summary_first_is_summary_only = true`
-  - because the summary group still represents one child episode even if no episode-scoped grouped entry is emitted for that response shape
+  - because the summary group still represents child episode references even if no episode-scoped grouped entry is emitted for that response shape
 
 This is intentional.
 
 It preserves the distinction between:
 
-- selection/representation cardinality
+- selection/representation ordering semantics
 - grouped output shape
 
 ### Tests added/updated
 
-The grouped-selection test coverage now explicitly checks `child_episode_count` in summary-group assertions across representative cases, including:
+The grouped-selection test coverage now explicitly checks `child_episode_ordering` in summary-group assertions across representative cases, including:
 
 - summary-first with multiple episode groups
 - summary-first summary-only grouped output
 - single-episode summary-first cases
 - multi-workflow summary-group cases
+- grouped ordering cases
 
 ### Validation completed
 
@@ -136,6 +147,8 @@ The current `0.6.0` state should now be read as:
   - summary-only
 - clearer that the summary group itself now exposes explicit child cardinality through:
   - `child_episode_count`
+- clearer that the summary group itself now exposes explicit child ordering semantics through:
+  - `child_episode_ordering = "returned_episode_order"`
 
 In practice:
 
@@ -146,7 +159,7 @@ In practice:
 
 ## Key conclusion
 
-The child-episode-count refinement slice is complete enough.
+The summary-group child-ordering refinement slice is complete enough.
 
 The next step should again be a **small grouped-selection behavior slice** on the primary summary/episode chain, not a broad cleanup or relation expansion loop.
 
@@ -167,7 +180,7 @@ Proceed in this order:
 4. no new broad graph semantics yet
 
 ### Concrete next question to answer
-> What is the next smallest behavior improvement on the primary summary/episode grouped chain now that summary-first sub-mode and summary-group child cardinality are both explicit?
+> What is the next smallest behavior improvement on the primary summary/episode grouped chain now that summary-first sub-mode, summary-group child cardinality, and summary-group child ordering are all explicit?
 
 ## Strong recommendation for the next session
 
@@ -197,11 +210,13 @@ Recent relevant commits before these latest slices:
 - `c3aa2c0` — `Clarify summary-first group semantics`
 - `623011b` — `Refine next-step session note`
 - `8d65a14` — `Clarify summary-first grouped context modes`
+- `d6c66ac` — `Add summary group child episode count`
 
 Recent just-completed slice to remember conceptually:
 
-- summary-group `child_episode_count` added
+- summary-group `child_episode_ordering` added
 - summary-group tests updated across representative summary-first cases
+- service contract and MCP API docs updated to match
 - validated with `pytest tests/memory/test_service_context_details.py`
 
 ## Short handoff note
@@ -212,6 +227,7 @@ Start from the now-explicit summary-first grouped interpretation:
 
 - summary-first sub-mode metadata is explicit
 - summary-group child cardinality is explicit
+- summary-group child ordering is explicit
 - auxiliary workspace/relation groups remain top-level sibling auxiliary surfaces
 
 Choose the next small primary-chain grouped-selection refinement from that clearer base.
