@@ -3,8 +3,9 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-focused **behavior-coverage** slice for the current **summary-first +
-query-filter + memory-items-disabled** reading in `memory_get_context`.
+focused **behavior-coverage** slice for the current **workspace-only +
+summary-first + query-filter + memory-items-disabled** reading in
+`memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
@@ -12,7 +13,8 @@ new response field.
 
 Instead, it fixed and validated the current behavior when:
 
-- summary-first selection is active
+- lookup is `workspace_id` only
+- multiple workflows are resolved from the workspace
 - lightweight query filtering narrows the visible episode set
 - memory items are disabled
 - summaries remain enabled
@@ -29,22 +31,25 @@ The current behavior is now clearer that:
 - episode-scoped grouped entries are **not** emitted in this response shape
 - `child_episode_groups_emitted = false`
 - `child_episode_groups_emission_reason = "memory_items_disabled"`
+- in this multi-workflow workspace-resolved case, grouped summary
+  `parent_scope_id` remains `null`
 - `primary_episode_groups_present_after_query_filter = false` does **not**
   imply auxiliary-only output in this case, because the remaining visible route
   is still the primary summary-first grouped surface
 
-This means the current summary-only query-filter interpretation is now better
-fixed by behavior coverage rather than by inference alone.
+This means the current workspace-only summary-only query-filter interpretation is
+now better fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small summary-only query-filter coverage slice implemented
+### Small workspace-only summary-only query-filter coverage slice implemented
 
 A focused test slice now covers the case where:
 
-- one workflow is resolved
+- `lookup_scope == "workspace"`
+- two workflows are resolved
 - two episodes exist
 - only one episode summary matches the current query
 - `include_summaries = true`
@@ -52,6 +57,7 @@ A focused test slice now covers the case where:
 
 The current intended result in that case is:
 
+- `resolved_workflow_count == 2`
 - `query_filter_applied == true`
 - `episodes_before_query_filter == 2`
 - `matched_episode_count == 1`
@@ -69,12 +75,14 @@ The current intended result in that case is:
 - grouped summary `child_episode_groups_emitted == false`
 - grouped summary
   `child_episode_groups_emission_reason == "memory_items_disabled"`
+- grouped summary `parent_scope_id == null`
 - no episode-scoped grouped output is emitted
 
 ### Test added
 
 Added a new focused regression test covering the combined case:
 
+- workspace-only lookup
 - summary-first selection
 - lightweight query filtering
 - one surviving visible episode
@@ -87,7 +95,7 @@ Added a new focused regression test covering the combined case:
 
 Grouped and details consumers should currently understand this case like this:
 
-1. candidate episodes are collected for the resolved workflow
+1. candidate episodes are collected from the resolved workspace workflow set
 2. query filtering narrows that candidate set to a surviving visible subset
 3. summary-first grouped reading is then formed from that surviving visible
    primary set
@@ -96,6 +104,8 @@ Grouped and details consumers should currently understand this case like this:
 6. because memory items are disabled, no episode-scoped grouped entries are
    emitted
 7. the grouped response remains summary-only for this response shape
+8. because the lookup resolved multiple workflows, grouped summary
+   `parent_scope_id` remains `null`
 
 This should **not** be read as:
 
@@ -104,14 +114,17 @@ This should **not** be read as:
 - summary-only output implying that summary-first selection was not primary
 - `primary_episode_groups_present_after_query_filter = false` implying an
   auxiliary-only response in this case
+- one surviving visible episode implying stronger single-workflow summary
+  parentage in the grouped summary entry
 
 It should be read as:
 
-- the current constrained summary-first grouped reading
+- the current constrained workspace-only summary-first grouped reading
 - with the visible child set taken from the surviving post-query-filter primary
   path
-- and with summary-only grouped shaping caused by
-  `include_memory_items = false`
+- with summary-only grouped shaping caused by `include_memory_items = false`
+- and with conservative cross-workflow grouped summary parentage
+  (`parent_scope_id = null`)
 
 ### Why this slice is useful
 
@@ -120,18 +133,19 @@ without broadening behavior.
 
 It verifies that the current system behaves consistently when:
 
+- workspace-only lookup resolves multiple workflows
 - query filtering narrows the current primary episode set
 - summary-first grouped reading must still follow that surviving visible set
 - the response shape remains summary-only because memory items are disabled
 
-This makes the current query-filter + summary-only interaction explicit rather
-than leaving it to be reconstructed from separate summary-only and
-memory-items-enabled cases.
+This makes the current workspace-only query-filter + summary-only interaction
+explicit rather than leaving it to be reconstructed from separate workspace-only,
+summary-only, and memory-items-enabled cases.
 
 ### Tests added/updated
 
 The summary-first grouped/details test coverage now explicitly checks the
-query-filtered, memory-items-disabled, summaries-enabled case.
+workspace-only, query-filtered, memory-items-disabled, summaries-enabled case.
 
 The expected current result is:
 
@@ -143,6 +157,7 @@ The expected current result is:
 - grouped output remains summary-only
 - grouped summary emittedness metadata reflects
   `memory_items_disabled`
+- grouped summary `parent_scope_id == null`
 
 ### Validation completed
 
@@ -152,7 +167,7 @@ Validated this slice with:
 
 Result at completion time:
 
-- `30 passed`
+- `31 passed`
 
 ---
 
@@ -168,6 +183,8 @@ This slice intentionally did **not** do any of the following:
 - add broader response-shape expansion
 - emit episode-scoped grouped entries when memory items are disabled
 - reclassify summary-only grouped output as auxiliary-only
+- strengthen grouped summary parentage in multi-workflow workspace-resolved
+  cases just because filtering leaves one surviving visible episode
 
 The current grouped interpretation remains:
 
@@ -207,7 +224,7 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `30 passed` in `tests/memory/test_service_context_details.py`
+- `31 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -241,7 +258,7 @@ The current `0.6.0` state should now be read as:
   - no primary episode-scoped grouped output remains visible at all
 - `auxiliary_only_after_query_filter = false` remains the correct reading for
   the current summary-only query-filter case
-- multi-workflow workspace/ticket summary groups still keep
+- workspace-only multi-workflow summary-first grouped summaries still keep
   `parent_scope_id = null`
 - narrowing to one surviving visible episode does not currently imply stronger
   grouped summary parentage
@@ -286,8 +303,8 @@ The current `0.6.0` state should now be read as:
 
 ## Key conclusion
 
-The current summary-only query-filter behavior slice is now covered well enough
-for the current stage.
+The current workspace-only summary-only query-filter behavior slice is now
+covered well enough for the current stage.
 
 The next step should still avoid:
 
@@ -309,8 +326,8 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current summary-only query-filter child-set reading as sufficiently
-fixed for the current stage.
+Treat the current workspace-only summary-only query-filter child-set reading as
+sufficiently fixed for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without returning to another tiny
