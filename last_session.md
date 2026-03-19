@@ -3,7 +3,7 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-**contract-consolidation** slice for the current workspace auxiliary reading in
+**contract-consolidation** slice for the current relation auxiliary reading in
 `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
@@ -11,45 +11,53 @@ change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
 Instead, it consolidated the documented reading for the already-covered
-workspace-scoped auxiliary path, especially where lightweight query filtering
-removes all primary episodes while inherited workspace context remains visible.
+constrained relation auxiliary path, especially where `supports`-derived grouped
+output, source-side linkage, and grouped-vs-compatibility surface roles can be
+misread.
 
 The current docs now more explicitly state that:
 
-- inherited workspace-scoped memory remains **auxiliary**
-- inherited workspace-scoped memory does **not** participate in the lightweight
-  episode query filter
-- inherited workspace-scoped memory does **not** drive primary episode selection
-- inherited workspace-scoped memory may still remain visible after the primary
-  episode path has been emptied by query filtering
-- that visibility should currently be read as **preserved auxiliary workspace
-  context only**
-- it should **not** be read as revived primary matching, widened selection
-  semantics, or inherited workspace items becoming part of episode matching
+- constrained relation-derived context remains **auxiliary**
+- the current relation-aware slice remains limited to one outgoing `supports`
+  hop from returned episode memory items
+- relation-scoped grouped output remains the **primary structured grouped
+  relation-aware surface**
+- shared constrained targets are currently **aggregated once** in the
+  relation-scoped group
+- multi-source contribution should currently be read through
+  `source_episode_ids` and `source_memory_ids`
+- flat and per-episode related outputs remain **compatibility** or
+  **convenience** surfaces over that same constrained slice
+- those flatter surfaces should **not** be read as stronger or more canonical
+  relation-selection surfaces than the relation-scoped grouped output
 
-This means the current workspace auxiliary no-match interpretation is now better
-anchored in the docs rather than only in tests and prior notes.
+This means the current constrained relation auxiliary interpretation is now
+better anchored in the docs rather than only in tests and prior notes.
 
 ---
 
 ## What was completed
 
-### Small workspace auxiliary contract consolidation slice implemented
+### Small relation auxiliary contract consolidation slice implemented
 
 A focused documentation pass was completed to align the current service-contract,
-MCP API, and memory-model wording around inherited workspace auxiliary context.
+MCP API, and memory-model wording around the constrained relation auxiliary
+surface.
 
 The clarified current reading is:
 
-- candidate episodes may first be collected from resolved workflow state
-- lightweight query filtering applies to episode summaries and metadata text only
-- inherited workspace-scoped memory does not participate in that filtering step
-- if query filtering removes all primary episodes, inherited workspace context
-  may still remain visible when memory items are enabled
-- that surviving visibility should currently be read as **auxiliary-only
-  workspace support context**
-- it should not be read as inherited workspace items contributing to the primary
-  episode path
+- returned episode memory items may surface constrained `supports` targets
+- those targets may also appear in the top-level relation-scoped auxiliary group
+- that relation-scoped group should currently be read as a grouped auxiliary
+  aggregation of returned episode-side relation context
+- when multiple returned source episodes or source memory items contribute to the
+  same visible target, that shared target is currently aggregated once in the
+  relation-scoped group
+- the current relation-group `memory_items` ordering should currently be read as
+  first-seen target ordering under the constrained source-side traversal path
+- multi-source contribution should therefore currently be read through
+  `source_episode_ids` and `source_memory_ids`, not by expecting duplicated
+  target entries in relation-group `memory_items`
 
 ### Docs updated
 
@@ -59,15 +67,23 @@ The current interpretation was clarified in:
 - `docs/mcp-api.md`
 - `docs/memory-model.md`
 
-The updates make explicit that the current docs should **not** be read as if
-inherited workspace items:
+The updates make explicit that the current docs should **not** be read as if:
 
-- participate in the lightweight episode query filter
-- revive filtered primary episode selection
-- strengthen primary-path claims after all episodes are filtered out
+- duplicated visible targets are required to show multi-source contribution
+- flat `related_memory_items` is a more canonical relation surface than the
+  relation-scoped grouped output
+- `related_memory_items_by_episode` is a more canonical relation surface than
+  the relation-scoped grouped output
+- group-local embedded related items replace the top-level relation-scoped
+  grouped aggregation
 
-They also make explicit that workspace auxiliary visibility after filtering
-should be read as preserved auxiliary support context only.
+They also make explicit that:
+
+- relation-scoped grouped output is the primary structured grouped
+  relation-aware surface
+- flat and per-episode related outputs are compatibility-oriented mirrors
+- group-local embedded related items are local grouped explainability and
+  inspection surfaces
 
 ### Why this slice is useful
 
@@ -76,12 +92,14 @@ behavior.
 
 It reduces ambiguity around the current meaning of:
 
-- `inherited_context_is_auxiliary`
-- `inherited_context_returned_without_episode_matches`
-- `inherited_context_returned_as_auxiliary_without_episode_matches`
-- `all_episodes_filtered_out_by_query`
-- workspace-scoped `memory_context_groups` entries surfaced through
-  `selection_route = "workspace_inherited_auxiliary"`
+- relation-scoped `memory_context_groups` entries with
+  `selection_route = "relation_supports_auxiliary"`
+- `source_episode_ids`
+- `source_memory_ids`
+- `relation_supports_source_episode_count`
+- `related_memory_items`
+- `related_memory_items_by_episode`
+- group-local embedded `related_memory_items`
 
 That is useful because these fields and grouped outputs are already covered by
 behavior, and the docs should say the same thing the tests already establish.
@@ -96,10 +114,12 @@ This slice intentionally did **not** do any of the following:
 - add new grouped metadata fields
 - add new retrieval routes
 - broaden relation traversal beyond the current constrained shape
+- include relation types beyond `supports`
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
 - redesign grouped response structure
-- reclassify workspace auxiliary output as part of primary episode selection
+- reclassify relation-derived auxiliary output as an independent primary
+  selection path
 
 The current grouped interpretation remains:
 
@@ -182,9 +202,19 @@ The current `0.6.0` state should now be read as:
 - constrained relation `supports` auxiliary grouped output remains explicit
   enough to correlate back to returned episode-side context
 - constrained relation auxiliary aggregation across multiple returned source
-  episodes is explicitly covered by behavior
+  episodes is explicitly covered by behavior and aligned in the docs
 - constrained relation auxiliary `memory_items` ordering is currently best read
   as first-seen distinct target order under the present source-side traversal
+- shared constrained targets are currently aggregated once in the relation group
+- multi-source constrained contribution should currently be read through
+  `source_episode_ids` and `source_memory_ids`
+- relation-scoped grouped output remains the primary structured grouped
+  relation-aware surface
+- flat `related_memory_items` remains a compatibility surface
+- `related_memory_items_by_episode` remains a compatibility-oriented per-episode
+  mirror
+- episode-group embedded `related_memory_items` remains a convenience and local
+  inspection surface
 - constrained relation auxiliary low-limit truncation is currently best read as
   truncation over that first-seen distinct-target sequence
 - constrained relation auxiliary output is currently disabled when
@@ -196,7 +226,7 @@ The current `0.6.0` state should now be read as:
 
 ## Key conclusion
 
-The current workspace auxiliary contract docs are now better aligned with the
+The current relation auxiliary contract docs are now better aligned with the
 existing behavior coverage.
 
 The next step should still avoid:
@@ -219,12 +249,12 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current workspace auxiliary no-match reading as documented well enough
-for the current stage.
+Treat the current constrained relation auxiliary reading as documented well
+enough for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without returning to another tiny
-auxiliary explainability addition unless a clear behavior gap appears.
+relation-group explainability addition unless a clear behavior gap appears.
 
 ### Recommended focus
 Proceed in this order:
@@ -235,7 +265,7 @@ Proceed in this order:
    are currently emitted
 3. preserve the constrained relation-aware scope:
    - one hop
-   - current relation set
+   - `supports` only
    - current auxiliary-group placement
 4. prefer either:
    - one genuinely different grouped-selection behavior slice, or

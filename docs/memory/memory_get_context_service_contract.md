@@ -461,6 +461,12 @@ conservatively as:
   targets, the current relation-group `memory_items` ordering should be read as
   first-seen target ordering under the current source-side traversal path rather
   than as graph ranking, semantic importance, or a broader canonical order
+- shared constrained targets are currently aggregated once in the relation-scoped
+  grouped surface even when multiple returned source episodes or source memory
+  items contribute to that same visible target
+- multi-source contribution should therefore currently be read through
+  `source_episode_ids` and `source_memory_ids`, not by expecting duplicated
+  target entries in relation-group `memory_items`
 
 This linkage is now explicit enough through the current relation-group and
 episode-group surfaces together.
@@ -500,6 +506,7 @@ linkage between:
 - relation-scoped auxiliary grouped output
 - current first-seen target ordering within the constrained relation auxiliary
   aggregation
+- aggregated shared targets and the multiple contributing sources behind them
 
 without needing another narrowly incremental relation-group helper field for the
 current stage.
@@ -568,6 +575,10 @@ These are reflected by metadata such as:
 - `flat_related_memory_items_matches_grouped_episode_related_items`
 - `related_memory_items_by_episode_are_compatibility_output`
 
+These compatibility surfaces should currently be read as flatter mirrors of the
+same constrained relation-aware slice, not as stronger or more canonical
+relation-selection surfaces than the relation-scoped grouped output.
+
 ### Convenience output
 
 The current convenience-oriented related-context surfaces include:
@@ -579,6 +590,10 @@ These convenience-oriented episode-group fields are important to the current
 grouped relation reading because they preserve the source-side linkage that
 explains why relation-scoped auxiliary grouped output was surfaced.
 
+They should currently be read as local grouped explainability and inspection
+surfaces, not as replacements for the top-level relation-scoped grouped
+aggregation.
+
 ### Consolidation note for the current stage
 
 Taken together, the current relation-scoped grouped metadata and the existing
@@ -586,13 +601,16 @@ episode-group provenance/linkage fields should be treated as sufficient
 relation-auxiliary explainability for the current `0.6.0` slice.
 
 That current explainability surface should also be read as sufficient to explain
-the present constrained aggregation ordering behavior:
+the present constrained aggregation behavior:
 
 - relation-group target `memory_items` currently follow first-seen target
   ordering under the source-side traversal path
 - shared targets are aggregated once
 - multiple contributing sources can still remain visible through
   `source_episode_ids` and `source_memory_ids`
+- grouped relation output remains the primary structured relation-aware surface,
+  while flat and per-episode related outputs remain compatibility or convenience
+  surfaces over that same constrained slice
 
 In practical terms, the next work should not default to adding yet another small
 relation-group explanation field unless a clearer behavior gap appears.

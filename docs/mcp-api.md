@@ -1465,10 +1465,14 @@ That means:
   - returned episode-side memory items surface constrained supports-related targets
   - those same targets may appear in the top-level relation-scoped auxiliary group
   - the relation-scoped group is a grouped auxiliary aggregation of that returned episode-side relation context
+  - shared constrained targets are currently aggregated once in the relation-scoped group even when multiple returned source episodes or source memory items contribute to the same visible target
   - when multiple returned source episodes or source memory items surface multiple `supports` targets, the current relation-group `memory_items` ordering should be read as first-seen target order in the current constrained aggregation flow
+  - multi-source contribution should therefore currently be read through `source_episode_ids` and `source_memory_ids`, not by expecting duplicated target entries in relation-group `memory_items`
 - `flat_related_memory_items_is_compatibility_field` makes the compatibility status of the flat top-level field explicit
 - `related_memory_items_by_episode_are_compatibility_output` makes the compatibility status of the per-episode mapping explicit
 - `group_related_memory_items_are_convenience_output` makes the convenience status of group-local embedded related items explicit
+- flat and per-episode related-item outputs should currently be read as compatibility-oriented mirrors of the same constrained relation-aware slice, not as stronger or more canonical relation-selection surfaces than the relation-scoped grouped output
+- group-local embedded related items should currently be read as local grouped explainability and inspection surfaces, not as replacements for the top-level relation-scoped grouped aggregation
 
 This is still not a full semantic, relation-aware, or graph-backed hierarchical
 retriever.  

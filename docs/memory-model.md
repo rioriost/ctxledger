@@ -627,6 +627,13 @@ The current details payload also includes a first constrained relation-aware sur
 - `related_memory_items_by_episode_are_compatibility_output`
 - `group_related_memory_items_are_convenience_output`
 
+At the current implementation stage, these relation-aware surfaces should be read with distinct roles:
+
+- relation-scoped `memory_context_groups` entries are the primary structured grouped relation-aware surface
+- flat `related_memory_items` remains a compatibility surface
+- `related_memory_items_by_episode` remains a compatibility-oriented per-episode mirror
+- episode-group embedded `related_memory_items` remains a convenience and local inspection surface
+
 At the current implementation stage, `related_memory_items` should be understood narrowly:
 
 - start from returned episode memory items only
@@ -644,9 +651,11 @@ The current grouping boundary should also be understood explicitly:
 
 - `memory_context_groups` now organize direct episode-scoped context, inherited workspace-scoped context, and relation-scoped supporting context
 - relation-scoped `memory_context_groups` entries are the current primary structured grouped relation-aware surface
+- the flat top-level `related_memory_items` field is still retained as a compatibility surface
 - `related_memory_items_by_episode` remains a compatibility-oriented per-episode related-context surface
 - episode-scoped groups may also include group-local `related_memory_items` as a convenience projection of that same related context
-- the flat top-level `related_memory_items` field is still retained as a compatibility surface
+- flat and per-episode related-item outputs should currently be read as compatibility-oriented mirrors of the same constrained relation-aware slice, not as stronger or more canonical relation-selection surfaces than the relation-scoped grouped output
+- group-local embedded related items should currently be read as local grouped explainability and inspection surfaces, not as replacements for the top-level relation-scoped grouped aggregation
 - workspace-scoped groups are not widened by this slice
 - if compatibility surfaces are retired later, that should be treated as a separate incremental contract change rather than assumed from the current grouping shape
 
