@@ -264,12 +264,14 @@ At present, episodic behavior includes:
 - keeping inherited workspace-scoped memory as auxiliary context rather than part of episode query matching:
   - lightweight query filtering applies only to episode summary and metadata text
   - inherited workspace-scoped memory does not participate in episode selection
+  - inherited workspace-scoped memory does not participate in the lightweight episode query filter
   - inherited workspace-scoped memory may still remain visible when memory items are enabled
   - this can remain true even when no episode survives query filtering
   - when all episodes are filtered out, `episode_explanations` may still preserve pre-filter episode diagnostics with `explanation_basis = "query_filtered_out"`
   - `all_episodes_filtered_out_by_query` now makes that all-filtered diagnostic case explicit in the response details
   - `inherited_context_returned_as_auxiliary_without_episode_matches` now makes the auxiliary inherited-without-matches case explicit in the response details
   - `inherited_context_is_auxiliary` and `inherited_context_returned_without_episode_matches` make that contract explicit in the response details
+  - this should currently be read as preserved auxiliary workspace visibility after the primary episode path was emptied by query filtering, not as inherited workspace items driving primary episode selection
 - beginning a minimal summary-first selection contract when summaries are returned:
   - `summary_selection_applied = true` indicates that summaries are not only present, but are being surfaced as the first selection layer for the current response shape
   - `summary_selection_kind = "episode_summary_first"` identifies the current summary-first assembly mode
@@ -548,8 +550,10 @@ non-matching entries marked by `explanation_basis = "query_filtered_out"`,
 `all_episodes_filtered_out_by_query = true` makes the all-filtered case explicit, and
 `inherited_context_returned_as_auxiliary_without_episode_matches = true` makes the
 auxiliary inherited-without-matches case explicit. That behavior should currently be
-interpreted as intentional auxiliary-context behavior rather than as evidence that
-inherited workspace items are part of the lightweight query filter.
+interpreted as intentional auxiliary-context behavior: preserved auxiliary workspace
+visibility after the primary episode path was emptied by query filtering, rather than
+evidence that inherited workspace items are part of the lightweight query filter or
+that they drive primary episode selection.
 
 At the current implementation stage, when summaries are enabled and returned,
 `summary_selection_applied = true` and

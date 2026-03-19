@@ -3,55 +3,53 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-**contract-consolidation** slice for the current summary-first grouped reading
-in `memory_get_context`.
+**contract-consolidation** slice for the current workspace auxiliary reading in
+`memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
-Instead, it consolidated the current documented reading for the already-covered
-summary-first behavior, especially where query filtering interacts with grouped
-summary metadata in multi-workflow ticket/workspace resolution cases.
+Instead, it consolidated the documented reading for the already-covered
+workspace-scoped auxiliary path, especially where lightweight query filtering
+removes all primary episodes while inherited workspace context remains visible.
 
 The current docs now more explicitly state that:
 
-- summary-first grouped reading is formed from the **surviving post-filter
-  primary episode set**
-- top-level `summary_first_child_episode_*` metadata follows that surviving
-  post-filter set
-- grouped summary `child_episode_*` metadata follows that same surviving
-  post-filter set
-- grouped episode-scoped output follows that same surviving post-filter set
-- in multi-workflow workspace- or ticket-resolved summary-first cases, grouped
-  summary `parent_scope_id` still remains `null`
-- narrowing to one surviving visible episode does **not** currently imply a
-  stronger grouped summary parentage claim
+- inherited workspace-scoped memory remains **auxiliary**
+- inherited workspace-scoped memory does **not** participate in the lightweight
+  episode query filter
+- inherited workspace-scoped memory does **not** drive primary episode selection
+- inherited workspace-scoped memory may still remain visible after the primary
+  episode path has been emptied by query filtering
+- that visibility should currently be read as **preserved auxiliary workspace
+  context only**
+- it should **not** be read as revived primary matching, widened selection
+  semantics, or inherited workspace items becoming part of episode matching
 
-This means the current summary-first query-filter interpretation is now better
-anchored in the docs rather than only in recent behavior tests.
+This means the current workspace auxiliary no-match interpretation is now better
+anchored in the docs rather than only in tests and prior notes.
 
 ---
 
 ## What was completed
 
-### Small summary-first contract consolidation slice implemented
+### Small workspace auxiliary contract consolidation slice implemented
 
-A focused documentation pass was completed to align the service-contract note and
-MCP API docs with the behavior already fixed by tests.
+A focused documentation pass was completed to align the current service-contract,
+MCP API, and memory-model wording around inherited workspace auxiliary context.
 
 The clarified current reading is:
 
-- candidate episodes may first be collected from one or more resolved workflows
-- lightweight query filtering may narrow that episode set
-- the current visible summary-first child set should then be read from that
-  **surviving post-filter primary episode set**
-- grouped summary child ids/count and top-level summary-first child ids/count
-  should currently align to that same surviving set
-- grouped episode output should currently include only those surviving visible
-  primary episodes
-- in cross-workflow summary-first cases, grouped summary `parent_scope_id`
-  remains conservatively `null`
+- candidate episodes may first be collected from resolved workflow state
+- lightweight query filtering applies to episode summaries and metadata text only
+- inherited workspace-scoped memory does not participate in that filtering step
+- if query filtering removes all primary episodes, inherited workspace context
+  may still remain visible when memory items are enabled
+- that surviving visibility should currently be read as **auxiliary-only
+  workspace support context**
+- it should not be read as inherited workspace items contributing to the primary
+  episode path
 
 ### Docs updated
 
@@ -59,14 +57,17 @@ The current interpretation was clarified in:
 
 - `docs/memory/memory_get_context_service_contract.md`
 - `docs/mcp-api.md`
+- `docs/memory-model.md`
 
-The updates make explicit that the current docs should **not** be read as if the
-summary group preserves a separate pre-filter child snapshot after query
-filtering has already narrowed the visible primary episode set.
+The updates make explicit that the current docs should **not** be read as if
+inherited workspace items:
 
-They also make explicit that grouped consumers should **not** infer stronger
-single-workflow summary parentage merely because a multi-workflow visible set
-narrows to one surviving episode after filtering.
+- participate in the lightweight episode query filter
+- revive filtered primary episode selection
+- strengthen primary-path claims after all episodes are filtered out
+
+They also make explicit that workspace auxiliary visibility after filtering
+should be read as preserved auxiliary support context only.
 
 ### Why this slice is useful
 
@@ -75,14 +76,15 @@ behavior.
 
 It reduces ambiguity around the current meaning of:
 
-- `summary_first_child_episode_count`
-- `summary_first_child_episode_ids`
-- grouped summary `child_episode_count`
-- grouped summary `child_episode_ids`
-- grouped summary `parent_scope_id`
+- `inherited_context_is_auxiliary`
+- `inherited_context_returned_without_episode_matches`
+- `inherited_context_returned_as_auxiliary_without_episode_matches`
+- `all_episodes_filtered_out_by_query`
+- workspace-scoped `memory_context_groups` entries surfaced through
+  `selection_route = "workspace_inherited_auxiliary"`
 
-That is useful because these fields are now covered by behavior, and the docs
-should say the same thing the tests already establish.
+That is useful because these fields and grouped outputs are already covered by
+behavior, and the docs should say the same thing the tests already establish.
 
 ---
 
@@ -97,8 +99,7 @@ This slice intentionally did **not** do any of the following:
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
 - redesign grouped response structure
-- alter the current conservative `parent_scope_id = null` reading for
-  multi-workflow ticket/workspace summary groups
+- reclassify workspace auxiliary output as part of primary episode selection
 
 The current grouped interpretation remains:
 
@@ -135,6 +136,7 @@ Result at completion time:
 ### Design and contract docs
 - `docs/memory/memory_get_context_service_contract.md`
 - `docs/mcp-api.md`
+- `docs/memory-model.md`
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
 
@@ -151,13 +153,8 @@ The current `0.6.0` state should now be read as:
 - `memory_context_groups` remains the primary grouped hierarchy-aware surface
 - primary summary/episode explainability remains explicit enough for the current
   stage
-- top-level summary-first selection identity/cardinality is directly readable
 - summary-first query-filter surviving-child-set behavior is explicitly covered
-  by behavior
-- ticket-only query-filter summary-first surviving-child-set behavior is now
-  also explicitly aligned in the docs
-- workspace-only query-filter summary-first surviving-child-set behavior remains
-  part of the same current interpretation
+  by behavior and aligned in the docs
 - grouped summary child ids/count should currently be read from the surviving
   post-filter primary set rather than from the broader pre-filter candidate set
 - top-level summary-first child ids/count should currently be read from that
@@ -168,17 +165,16 @@ The current `0.6.0` state should now be read as:
   `parent_scope_id = null`
 - narrowing to one surviving visible episode does not currently imply stronger
   grouped summary parentage
-- summaries-disabled primary-path behavior is explicitly covered by behavior
-- multi-workflow summary-first memory-items behavior is explicitly covered by
-  behavior
-- ticket-only multi-workflow summary-first memory-items behavior is explicitly
-  covered by behavior
-- low-limit ticket-only multi-workflow summary-first behavior is explicitly
-  covered by behavior
-- workspace-only multi-workflow summary-first behavior is explicitly covered by
-  behavior
+- inherited workspace-scoped memory remains auxiliary support context
+- inherited workspace-scoped memory does not participate in the lightweight
+  episode query filter
+- inherited workspace-scoped memory does not drive primary episode selection
+- inherited workspace context may remain visible even when no episode survives
+  query filtering
+- that no-match visibility should currently be read as preserved auxiliary
+  workspace support context, not revived primary selection
 - current workspace-only multi-workflow summary-first reading does not currently
-  show sibling workspace auxiliary coexistence
+  show sibling workspace auxiliary coexistence unless actually emitted
 - workspace auxiliary no-episode-match visibility remains intentional support
   preservation
 - workspace inherited auxiliary limit/truncation behavior is explicitly covered
@@ -200,8 +196,8 @@ The current `0.6.0` state should now be read as:
 
 ## Key conclusion
 
-The current summary-first contract docs are now better aligned with the existing
-behavior coverage.
+The current workspace auxiliary contract docs are now better aligned with the
+existing behavior coverage.
 
 The next step should still avoid:
 
@@ -223,12 +219,12 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current summary-first query-filter child-set reading as documented
-well enough for the current stage.
+Treat the current workspace auxiliary no-match reading as documented well enough
+for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without returning to another tiny
-summary-group explainability addition unless a clear behavior gap appears.
+auxiliary explainability addition unless a clear behavior gap appears.
 
 ### Recommended focus
 Proceed in this order:

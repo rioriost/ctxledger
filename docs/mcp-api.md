@@ -1297,6 +1297,10 @@ That means inherited workspace-scoped memory may still appear in
 even when the lightweight query filter removes all episodes from the returned
 `episodes` list.
 
+This should currently be read as preserved auxiliary workspace visibility after
+the primary episode path was emptied by query filtering, not as inherited
+workspace items participating in that lightweight episode query filter.
+
 When inherited workspace-scoped memory is present but no episodes survive
 query filtering, representative details currently include:
 
@@ -1310,7 +1314,9 @@ query filtering, representative details currently include:
 - `inherited_context_returned_as_auxiliary_without_episode_matches = true`
 
 This should currently be interpreted as intentional auxiliary-context behavior,
-not as evidence that inherited workspace items participate in episode matching.
+not as evidence that inherited workspace items participate in episode matching,
+drive primary episode selection, or participate in the lightweight episode query
+filter.
 
 When inherited workspace-scoped memory is present alongside matching episodes:
 
@@ -1396,6 +1402,7 @@ That means:
 - `inherited_context_returned_without_episode_matches` makes the no-matching-episodes case explicit
 - `inherited_context_returned_as_auxiliary_without_episode_matches` explicitly states that the inherited workspace context remained visible in that no-matching-episodes case because it is auxiliary
 - this should currently be interpreted as intentional auxiliary-context behavior rather than as evidence that inherited workspace items participate in episode matching
+- this should also not be read as inherited workspace items driving primary episode selection or participating in the lightweight episode query filter
 - in other words, the current contract should treat the workspace auxiliary path as surviving query-filter loss of episode matches without reclassifying that auxiliary context as newly matched primary episode context
 - top-level details consumers should currently read `primary_episode_groups_present_after_query_filter` as:
   - `false` when no primary episode-scoped grouped output remains after query filtering

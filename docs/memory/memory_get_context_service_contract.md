@@ -411,6 +411,8 @@ In particular:
 - it should not be read as reviving filtered primary episode selection
 - it should not be read as evidence that inherited workspace items themselves
   participated in episode matching
+- it should not be read as inherited workspace items contributing to the
+  lightweight episode query filter at all
 
 The current details-layer fields that make this reading explicit include:
 
@@ -423,10 +425,12 @@ The current details-layer fields that make this reading explicit include:
 
 Taken together, these fields mean the current contract distinguishes between:
 
-- primary episode selection visibility
+- primary episode candidate collection before filtering
+- primary episode selection visibility after filtering
 - primary episode-group visibility after query filtering
 - auxiliary-only survival after query filtering
-- auxiliary workspace-context visibility
+- auxiliary workspace-context visibility that may remain even when the primary
+  episode path is empty
 
 That distinction is intentional for the current `0.6.0` slice.
 
@@ -521,12 +525,15 @@ That means a response may currently have all of the following at once:
 This should currently be interpreted as:
 
 - preserved auxiliary support visibility
+- auxiliary context that remained visible after the primary episode path was
+  emptied by query filtering
 
 not as:
 
 - recovered episode matching
 - widened selection semantics
 - inherited workspace items driving primary episode selection
+- inherited workspace items participating in the lightweight episode query filter
 
 This distinction matters for the current grouped reading because auxiliary
 workspace visibility remains a sibling auxiliary surface, not part of the
