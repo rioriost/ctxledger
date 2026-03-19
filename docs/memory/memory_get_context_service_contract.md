@@ -183,6 +183,15 @@ because episode-scoped grouped output is absent after query filtering if the
 remaining visible grouped route is still the primary summary-first route in its
 summary-only shape.
 
+When `include_episodes = false`, the current episode-less shaping path is
+narrower still:
+the response does not currently surface summary-first grouped output, direct
+episode-scoped grouped output, or summary-selection metadata even when a query is
+present and summaries are enabled.
+In that shape, this field should be read from the currently surfaced grouped
+response only, not from a hypothetical summary-first route that would have been
+visible under episode-oriented shaping.
+
 ---
 
 ## Current grouped output interpretation
@@ -233,6 +242,12 @@ covers:
   primary-path-visible
 - how many child episodes the current summary-first selection represents at the
   top-level details layer
+
+This current primary-chain explainability surface should also be read as
+episode-oriented shaping.
+When `include_episodes = false`, the response currently takes a narrower
+episode-less shaping path instead of surfacing a partially visible summary-first
+primary chain.
 - which child episodes the current summary-first selection represents at the
   top-level details layer
 - which child episodes the summary group references
@@ -268,6 +283,12 @@ readings:
   The summary-only case is expected when summary selection is active but no
   episode-scoped grouped entries are emitted on the primary chain, such as when
   memory items are disabled for the response shape.
+
+  This should not currently be confused with the separate
+  `include_episodes = false` episode-less shaping path.
+  In that narrower shaping path, the response does not currently surface the
+  summary-first route in summary-only form; instead, it suppresses visible
+  episode-oriented primary output altogether.
 
   In the current query-filtered summary-first reading, this summary-only shaping
   does not change the meaning of the visible child set:
@@ -401,6 +422,14 @@ emitted, but that should not be read as a different child-set rule.
 In that summary-only shape, the grouped summary entry and the top-level
 `summary_first_child_episode_*` metadata should still be read from the same
 surviving post-filter primary episode set.
+
+When `include_episodes = false`, this episode-scoped grouped layer is also not
+emitted, but the current meaning is different again:
+the response does not currently preserve a visible summary-first grouped route in
+parallel.
+Instead, the current episode-less shaping path suppresses visible
+episode-oriented primary grouped output and may leave only auxiliary grouped
+visibility where otherwise supported.
 
 In summary-first cases, episode-scoped groups should still be read with `selection_kind = "direct_episode"` as the scope-level kind of the group itself.
 
@@ -769,6 +798,13 @@ Representative fields include:
   - `summary_selection_kind`
   - `hierarchy_applied`
   - `memory_context_groups`
+
+At the current stage, some of these grouped and summary-selection details are
+specific to response shapes where episode-oriented primary output is actually
+surfaced.
+When `include_episodes = false`, the current episode-less shaping path does not
+currently surface summary-first grouped output or summary-selection metadata even
+when a query is present and summaries are enabled.
 
 - direct, inherited, and related outputs
   - `memory_items`

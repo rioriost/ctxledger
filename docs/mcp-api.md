@@ -1394,6 +1394,11 @@ That means:
   - `summary_selection_applied = false`
   - `summary_selection_kind = null`
   - no summary-scoped grouped marker is returned
+- when `include_episodes = false`, the current episode-less shaping path is narrower than both summary-plus-episode and summary-only primary grouped shaping:
+  - the response does not currently surface summary-first grouped output
+  - the response does not currently surface direct episode-scoped grouped output
+  - the response does not currently surface summary-selection metadata even when a query is present and summaries are enabled
+  - in that shape, visible grouped output should currently be read from the actually surfaced response only rather than from a hypothetical summary-first route that would have been visible under episode-oriented shaping
 - inherited workspace-scoped memory may still be returned as auxiliary context when memory items are enabled
 - inherited workspace-scoped memory may also be returned even when no episode survives query filtering
 - in that no-episode-match case, grouped consumers should currently read the remaining workspace-scoped auxiliary visibility as preservation of auxiliary support context rather than as revival of filtered primary episode selection
@@ -1421,6 +1426,11 @@ That means:
     - summary-only primary grouped output remains visible, or
     - neither the primary episode path nor any auxiliary grouped path remained visible
 - in other words, `primary_episode_groups_present_after_query_filter = false` does not currently imply auxiliary-only output by itself, because summary-first primary grouped output may still remain visible as summary-only when memory items are disabled
+- when `include_episodes = false`, the current episode-less shaping path is narrower again:
+  - query-filter activity is not currently surfaced as active
+  - summary-first grouped output is not currently surfaced
+  - direct episode-scoped grouped output is not currently surfaced
+  - the remaining visible grouped route may therefore currently be auxiliary-only even when a query is present and summaries are enabled
 - top-level details consumers should currently read `summary_first_child_episode_count` as:
   - `0` when summary-first selection is not active
   - `{N}` when summary-first selection is active and the current summary-first grouped reading represents `N` child episodes
