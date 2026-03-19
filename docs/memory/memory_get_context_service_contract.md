@@ -59,10 +59,11 @@ At a high level, it works like this:
 1. resolve candidate workflows from canonical workflow state
 2. collect episodes from the resolved workflow set
 3. optionally apply lightweight query filtering over episode summaries and metadata text
-4. optionally collect direct episode memory items
-5. optionally collect inherited workspace memory items as auxiliary context
-6. optionally collect one-hop `supports`-related memory items from returned episode memory items
-7. expose grouped and flat details that make the assembly path observable
+4. form the current primary summary-first or direct-episode visible set from the surviving post-filter episode set
+5. optionally collect direct episode memory items
+6. optionally collect inherited workspace memory items as auxiliary context
+7. optionally collect one-hop `supports`-related memory items from returned episode memory items
+8. expose grouped and flat details that make the assembly path observable
 
 This means the current contract is already multi-route, but still deliberately narrow and explainable.
 
@@ -227,6 +228,15 @@ covers:
 - what ordering semantics apply to those child episode references
 - whether corresponding episode-scoped grouped entries were emitted
 - the current reason for that emittedness or non-emittedness
+- that in query-filtered summary-first cases, the visible child set should
+  currently be read from the surviving post-filter primary episode set rather
+  than from the broader pre-filter candidate set
+- that this surviving-child-set reading applies both to the top-level
+  `summary_first_child_episode_*` details metadata and to the grouped summary
+  entry's `child_episode_*` fields
+- that in multi-workflow ticket- or workspace-resolved summary-first cases, the
+  grouped summary entry may still conservatively keep `parent_scope_id = null`
+  even when the surviving visible child set narrows to a single returned episode
 
 This should currently be read as a good enough stopping point for the current
 primary-chain explainability loop, not as an invitation to keep adding narrowly
@@ -256,6 +266,14 @@ This is additive grouped explainability metadata for the summary-scoped group.
 It allows grouped consumers to read the current number of summary-linked child
 episodes directly, rather than inferring that count only from the length of
 `child_episode_ids`.
+
+In the current query-filtered summary-first reading, both `child_episode_ids`
+and `child_episode_count` should be interpreted from the surviving post-filter
+visible primary episode set.
+
+That means the current grouped summary entry should not be read as preserving a
+separate pre-filter child snapshot when query filtering has already narrowed the
+visible primary episode set.
 
 The grouped summary entry should also make the ordering semantics of those child
 episode ids explicit through:
@@ -348,6 +366,14 @@ That is the case where:
 
 - `summary_first_has_episode_groups = true`
 - `summary_first_is_summary_only = false`
+
+In query-filtered summary-first cases, the emitted episode-scoped groups should
+currently be read as the surviving post-filter primary episode groups only.
+
+This means filtered-out candidate episodes should not currently be assumed to
+remain visible in grouped episode output merely because they participated in the
+broader pre-filter candidate set for the same ticket- or workspace-resolved
+lookup.
 
 In summary-first cases, episode-scoped groups should still be read with `selection_kind = "direct_episode"` as the scope-level kind of the group itself.
 
