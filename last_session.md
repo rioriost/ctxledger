@@ -3,171 +3,111 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-focused **behavior-coverage** slice for the current **ticket-only +
-summary-first + query-filter + memory-items-disabled** reading in
-`memory_get_context`.
+**contract-consolidation** slice for the current **summary-first +
+query-filter + memory-items-disabled** reading in `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
-Instead, it fixed and validated the current behavior when:
+Instead, it consolidated the documented reading for the already-covered
+summary-only query-filter behavior, especially where post-filter child-set
+identity, summary-only grouped shaping, and top-level post-filter flags can be
+misread.
 
-- lookup is `ticket_id` only
-- multiple workflows are resolved from the ticket
-- lightweight query filtering narrows the visible episode set
-- memory items are disabled
-- summaries remain enabled
-
-The current behavior is now clearer that:
+The current docs now more explicitly state that:
 
 - query filtering still narrows the visible summary-first child set to the
   **surviving post-filter primary episode set**
-- top-level `summary_first_child_episode_*` metadata follows that surviving
+- the top-level `summary_first_child_episode_*` metadata follows that surviving
   post-filter set
 - grouped summary `child_episode_*` metadata follows that same surviving
   post-filter set
-- the grouped response remains **summary-only**
-- episode-scoped grouped entries are **not** emitted in this response shape
-- `child_episode_groups_emitted = false`
-- `child_episode_groups_emission_reason = "memory_items_disabled"`
-- in this multi-workflow ticket-resolved case, grouped summary
-  `parent_scope_id` remains `null`
-- `primary_episode_groups_present_after_query_filter = false` does **not**
-  imply auxiliary-only output in this case, because the remaining visible route
-  is still the primary summary-first grouped surface
+- the grouped response may remain **summary-only** when memory items are
+  disabled
+- this summary-only grouped route can still be the surviving **primary**
+  summary-first route after query filtering
+- `primary_episode_groups_present_after_query_filter = false` does **not** by
+  itself imply auxiliary-only output
+- `auxiliary_only_after_query_filter = false` remains the correct reading when
+  the surviving visible route is still the primary summary-first grouped surface
+  in summary-only shape
+- `"memory_items_disabled"` explains response shaping in this case, not a
+  different child-set rule and not an auxiliary-only interpretation
 
-This means the current ticket-only summary-only query-filter interpretation is
-now better fixed by behavior coverage rather than by inference alone.
+This means the current summary-only query-filter interpretation is now better
+anchored in the docs rather than only in recent behavior tests.
 
 ---
 
 ## What was completed
 
-### Small ticket-only summary-only query-filter coverage slice implemented
+### Small summary-only query-filter contract consolidation slice implemented
 
-A focused test slice now covers the case where:
+A focused documentation pass was completed to align the current service-contract
+and MCP API wording around the already-covered summary-first + query-filter +
+memory-items-disabled behavior.
 
-- `lookup_scope == "ticket"`
-- two workflows are resolved
-- two episodes exist
-- only one episode summary matches the current query
-- `include_summaries = true`
-- `include_memory_items = false`
+The clarified current reading is:
 
-The current intended result in that case is:
+- candidate episodes may first be collected from one or more resolved workflows
+- lightweight query filtering may narrow that candidate set
+- the current visible summary-first child set should then be read from that
+  **surviving post-filter primary episode set**
+- grouped summary child ids/count and top-level summary-first child ids/count
+  should currently align to that same surviving set
+- when memory items are disabled, the grouped response may remain summary-only
+  while still representing that same surviving primary child set
+- in that shape, `primary_episode_groups_present_after_query_filter = false`
+  means episode-scoped grouped output is absent, not that the surviving response
+  is necessarily auxiliary-only
+- `auxiliary_only_after_query_filter = false` remains the correct reading when
+  the remaining visible grouped route is still the primary summary-first route
 
-- `resolved_workflow_count == 2`
-- `query_filter_applied == true`
-- `episodes_before_query_filter == 2`
-- `matched_episode_count == 1`
-- `episodes_returned == 1`
-- `summary_selection_applied == true`
-- `summary_selection_kind == "episode_summary_first"`
-- `summary_first_has_episode_groups == false`
-- `summary_first_is_summary_only == true`
-- `summary_first_child_episode_count == 1`
-- `summary_first_child_episode_ids == [{surviving_episode_id}]`
-- `primary_episode_groups_present_after_query_filter == false`
-- `auxiliary_only_after_query_filter == false`
-- grouped summary `child_episode_ids == [{surviving_episode_id}]`
-- grouped summary `child_episode_count == 1`
-- grouped summary `child_episode_groups_emitted == false`
-- grouped summary
-  `child_episode_groups_emission_reason == "memory_items_disabled"`
-- grouped summary `parent_scope_id == null`
-- no episode-scoped grouped output is emitted
+### Docs updated
 
-### Test added
+The current interpretation was clarified in:
 
-Added a new focused regression test covering the combined case:
+- `docs/memory/memory_get_context_service_contract.md`
+- `docs/mcp-api.md`
 
-- ticket-only lookup
-- summary-first selection
-- lightweight query filtering
-- one surviving visible episode
-- memory items disabled
-- summaries enabled
-- grouped output remains summary-only while still reflecting the surviving
-  post-filter child set
+The updates make explicit that the current docs should **not** be read as if:
 
-### Current intended reading of this behavior
+- summary-only grouped output after query filtering is merely an auxiliary
+  fallback
+- `primary_episode_groups_present_after_query_filter = false` always means no
+  primary grouped route remains visible
+- disabling memory items changes the surviving child-set rule
+- `"memory_items_disabled"` means something broader than current response-shape
+  emittedness
 
-Grouped and details consumers should currently understand this case like this:
+They also make explicit that:
 
-1. candidate episodes are collected from the resolved ticket workflow set
-2. query filtering narrows that candidate set to a surviving visible subset
-3. summary-first grouped reading is then formed from that surviving visible
-   primary set
-4. top-level summary-first child metadata follows that same surviving set
-5. grouped summary child metadata follows that same surviving set
-6. because memory items are disabled, no episode-scoped grouped entries are
-   emitted
-7. the grouped response remains summary-only for this response shape
-8. because the lookup resolved multiple workflows, grouped summary
-   `parent_scope_id` remains `null`
-
-This should **not** be read as:
-
-- a pre-filter summary snapshot remaining visible after filtering
-- filtered-out episodes still belonging to the visible summary-first child set
-- summary-only output implying that summary-first selection was not primary
-- `primary_episode_groups_present_after_query_filter = false` implying an
-  auxiliary-only response in this case
-- one surviving visible episode implying stronger single-workflow summary
-  parentage in the grouped summary entry
-
-It should be read as:
-
-- the current constrained ticket-only summary-first grouped reading
-- with the visible child set taken from the surviving post-query-filter primary
-  path
-- with summary-only grouped shaping caused by `include_memory_items = false`
-- and with conservative cross-workflow grouped summary parentage
-  (`parent_scope_id = null`)
+- summary-only grouped output can remain the current primary summary-first route
+- the surviving child set is still read from the same post-filter primary
+  episode set
+- absence of episode-scoped grouped output is narrower than loss of all primary
+  grouped visibility
 
 ### Why this slice is useful
 
-This slice improves confidence in the current summary-first grouped reading
-without broadening behavior.
+This slice improves continuity and interpretation quality without broadening
+behavior.
 
-It verifies that the current system behaves consistently when:
+It reduces ambiguity around the current meaning of:
 
-- ticket-only lookup resolves multiple workflows
-- query filtering narrows the current primary episode set
-- summary-first grouped reading must still follow that surviving visible set
-- the response shape remains summary-only because memory items are disabled
+- `summary_first_has_episode_groups`
+- `summary_first_is_summary_only`
+- `summary_first_child_episode_count`
+- `summary_first_child_episode_ids`
+- grouped summary `child_episode_count`
+- grouped summary `child_episode_ids`
+- `child_episode_groups_emission_reason`
+- `primary_episode_groups_present_after_query_filter`
+- `auxiliary_only_after_query_filter`
 
-This makes the current ticket-only query-filter + summary-only interaction
-explicit rather than leaving it to be reconstructed from separate ticket-only,
-summary-only, and memory-items-enabled cases.
-
-### Tests added/updated
-
-The summary-first grouped/details test coverage now explicitly checks the
-ticket-only, query-filtered, memory-items-disabled, summaries-enabled case.
-
-The expected current result is:
-
-- one surviving returned episode
-- top-level summary-first child ids/count aligned with the surviving visible
-  episode
-- grouped summary child ids/count aligned with that same surviving visible
-  episode
-- grouped output remains summary-only
-- grouped summary emittedness metadata reflects
-  `memory_items_disabled`
-- grouped summary `parent_scope_id == null`
-
-### Validation completed
-
-Validated this slice with:
-
-- `pytest tests/memory/test_service_context_details.py`
-
-Result at completion time:
-
-- `32 passed`
+That is useful because these fields and response shapes are now covered by
+behavior, and the docs should say the same thing the tests already establish.
 
 ---
 
@@ -175,16 +115,16 @@ Result at completion time:
 
 This slice intentionally did **not** do any of the following:
 
+- change `memory_get_context` service behavior
+- add new grouped metadata fields
+- add new retrieval routes
 - broaden relation traversal beyond the current constrained shape
 - include relation types beyond `supports`
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
-- introduce broader graph-backed selection semantics
-- add broader response-shape expansion
+- redesign grouped response structure
 - emit episode-scoped grouped entries when memory items are disabled
 - reclassify summary-only grouped output as auxiliary-only
-- strengthen grouped summary parentage in multi-workflow ticket-resolved cases
-  just because filtering leaves one surviving visible episode
 
 The current grouped interpretation remains:
 
@@ -194,6 +134,19 @@ The current grouped interpretation remains:
 - workspace and relation outputs remain top-level sibling auxiliary grouped
   surfaces where currently emitted
 - broader graph semantics remain intentionally deferred
+
+---
+
+## Validation completed
+
+Validated this docs-consolidation slice with:
+
+- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
+
+Result at completion time:
+
+- `37 passed`
 
 ---
 
@@ -212,19 +165,6 @@ The current grouped interpretation remains:
 - `docs/memory-model.md`
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
-
----
-
-## Validation status
-
-Recent relevant validation includes:
-
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_memory_context_related_items.py`
-
-Recent validation result for this slice:
-
-- `32 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -301,8 +241,8 @@ The current `0.6.0` state should now be read as:
 
 ## Key conclusion
 
-The current ticket-only summary-only query-filter behavior slice is now covered
-well enough for the current stage.
+The current summary-only query-filter contract docs are now better aligned with
+the existing behavior coverage.
 
 The next step should still avoid:
 
@@ -324,8 +264,8 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current ticket-only summary-only query-filter child-set reading as
-sufficiently fixed for the current stage.
+Treat the current summary-only query-filter reading as documented well enough
+for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without returning to another tiny

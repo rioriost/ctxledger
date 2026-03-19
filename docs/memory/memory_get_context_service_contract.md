@@ -160,6 +160,13 @@ primary path after query filtering, without requiring consumers to infer that
 only from grouped routes, summary-first sub-mode fields, or auxiliary-context
 survival fields.
 
+At the current stage, this field is intentionally narrower than a general
+"primary grouped visibility" indicator.
+
+In particular, it should currently be read as tracking episode-scoped grouped
+presence after query filtering, not whether some other primary grouped surface
+such as a surviving summary-only summary-first route remains visible.
+
 The current top-level details surface should also expose:
 
 - `auxiliary_only_after_query_filter`
@@ -170,6 +177,11 @@ It makes it explicit when the primary episode path no longer remains visible
 after query filtering but auxiliary context still remains visible, without
 requiring consumers to reconstruct that outcome only from primary-path absence
 plus auxiliary-route presence.
+
+At the current stage, this field should not be read as becoming `true` merely
+because episode-scoped grouped output is absent after query filtering if the
+remaining visible grouped route is still the primary summary-first route in its
+summary-only shape.
 
 ---
 
@@ -253,9 +265,14 @@ readings:
   - `summary_first_has_episode_groups = false`
   - `summary_first_is_summary_only = true`
 
-The summary-only case is expected when summary selection is active but no
-episode-scoped grouped entries are emitted on the primary chain, such as when
-memory items are disabled for the response shape.
+  The summary-only case is expected when summary selection is active but no
+  episode-scoped grouped entries are emitted on the primary chain, such as when
+  memory items are disabled for the response shape.
+
+  In the current query-filtered summary-first reading, this summary-only shaping
+  does not change the meaning of the visible child set:
+  the grouped summary entry should still be read from the surviving post-filter
+  primary episode set even though no episode-scoped grouped entries were emitted.
 
 The grouped summary entry now also makes summary-group child cardinality explicit
 through:
@@ -319,6 +336,10 @@ or were not emitted in the current response shape:
   episode-scoped grouped entries because memory-item-shaped episode output is
   disabled
 
+In the current query-filtered summary-only case, `"memory_items_disabled"`
+therefore explains response shaping, not a different surviving-child-set rule
+and not an auxiliary-only interpretation.
+
 This emittedness-reason metadata is intentionally narrow and current-state
 specific. It does not introduce a new retrieval route, a broader selection
 policy, or a stronger parentage claim. It only makes the current emittedness
@@ -374,6 +395,12 @@ This means filtered-out candidate episodes should not currently be assumed to
 remain visible in grouped episode output merely because they participated in the
 broader pre-filter candidate set for the same ticket- or workspace-resolved
 lookup.
+
+When memory items are disabled, this episode-scoped grouped layer is not
+emitted, but that should not be read as a different child-set rule.
+In that summary-only shape, the grouped summary entry and the top-level
+`summary_first_child_episode_*` metadata should still be read from the same
+surviving post-filter primary episode set.
 
 In summary-first cases, episode-scoped groups should still be read with `selection_kind = "direct_episode"` as the scope-level kind of the group itself.
 

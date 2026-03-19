@@ -1373,6 +1373,7 @@ That means:
   - when `summary_first_has_episode_groups = true`, grouped consumers should read the current primary grouped chain as `summary -> episode`
   - when `summary_first_is_summary_only = true`, grouped consumers should read the current primary grouped chain as summary-only for that response shape
   - the summary-only case is expected in narrow shaping scenarios such as `include_memory_items = false`
+  - in query-filtered summary-only cases, that summary-only grouped reading should still currently be read as the surviving primary summary-first route rather than as an auxiliary fallback
   - `child_episode_count` remains meaningful in both summary-only and summary-plus-episode cases because it describes selected child episode cardinality, not whether episode-scoped grouped entries were emitted
   - `child_episode_ordering = "returned_episode_order"` remains meaningful in both summary-only and summary-plus-episode cases because it describes the ordering semantics of the summary group's child episode references, not whether episode-scoped grouped entries were emitted
   - `child_episode_groups_emitted` remains meaningful in both summary-only and summary-plus-episode cases because it describes whether corresponding episode-scoped grouped entries were emitted for the current response shape, not how many child episodes the summary group represents
@@ -1416,7 +1417,10 @@ That means:
   - it means the primary episode path is gone while auxiliary context is still present
 - this field should currently be read alongside `primary_episode_groups_present_after_query_filter`:
   - `primary_episode_groups_present_after_query_filter = false` and `auxiliary_only_after_query_filter = true` means auxiliary-only survival after query filtering
-  - `primary_episode_groups_present_after_query_filter = false` and `auxiliary_only_after_query_filter = false` means neither the primary episode path nor any auxiliary grouped path remained visible
+  - `primary_episode_groups_present_after_query_filter = false` and `auxiliary_only_after_query_filter = false` means either:
+    - summary-only primary grouped output remains visible, or
+    - neither the primary episode path nor any auxiliary grouped path remained visible
+- in other words, `primary_episode_groups_present_after_query_filter = false` does not currently imply auxiliary-only output by itself, because summary-first primary grouped output may still remain visible as summary-only when memory items are disabled
 - top-level details consumers should currently read `summary_first_child_episode_count` as:
   - `0` when summary-first selection is not active
   - `{N}` when summary-first selection is active and the current summary-first grouped reading represents `N` child episodes
