@@ -393,6 +393,195 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
     }
 
 
+def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_multiple_sources() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = UUID("00000000-0000-0000-0000-000000000053")
+    created_at = datetime(2024, 10, 20, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_relation_repository = InMemoryMemoryRelationRepository()
+
+    first_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="First episode with supports source",
+        metadata={"kind": "supports-source-first"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    second_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Second episode with supports source",
+        metadata={"kind": "supports-source-second"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    episode_repository.create(first_episode)
+    episode_repository.create(second_episode)
+
+    first_source_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=first_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="First source memory item",
+        metadata={"kind": "first-source"},
+        created_at=created_at.replace(hour=3),
+        updated_at=created_at.replace(hour=3),
+    )
+    second_source_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=second_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Second source memory item",
+        metadata={"kind": "second-source"},
+        created_at=created_at.replace(hour=4),
+        updated_at=created_at.replace(hour=4),
+    )
+    shared_supports_target_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Shared supporting workspace memory item",
+        metadata={"kind": "shared-support"},
+        created_at=created_at.replace(hour=0),
+        updated_at=created_at.replace(hour=0),
+    )
+    workspace_root_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Workspace root memory item",
+        metadata={"kind": "workspace-root"},
+        created_at=created_at.replace(hour=0, minute=30),
+        updated_at=created_at.replace(hour=0, minute=30),
+    )
+
+    memory_item_repository.create(first_source_memory_item)
+    memory_item_repository.create(second_source_memory_item)
+    memory_item_repository.create(shared_supports_target_item)
+    memory_item_repository.create(workspace_root_item)
+
+    first_support_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=first_source_memory_item.memory_id,
+        target_memory_id=shared_supports_target_item.memory_id,
+        relation_type="supports",
+        metadata={"kind": "first-supports-edge"},
+        created_at=created_at.replace(hour=5),
+    )
+    second_support_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=second_source_memory_item.memory_id,
+        target_memory_id=shared_supports_target_item.memory_id,
+        relation_type="supports",
+        metadata={"kind": "second-supports-edge"},
+        created_at=created_at.replace(hour=6),
+    )
+    memory_relation_repository.create(first_support_relation)
+    memory_relation_repository.create(second_support_relation)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_relation_repository=memory_relation_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": str(workspace_id),
+                    "ticket_id": "TICKET-CONTEXT-RELATED-ITEMS-MULTI-SOURCE",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Second episode with supports source",
+        "First episode with supports source",
+    ]
+    assert response.details["related_context_is_auxiliary"] is True
+    assert response.details["related_context_relation_types"] == ["supports"]
+    assert response.details["related_context_selection_route"] == (
+        "relation_supports_auxiliary"
+    )
+    assert response.details["relation_supports_source_episode_count"] == 2
+    assert response.details["retrieval_routes_present"] == [
+        "episode_direct",
+        "workspace_inherited_auxiliary",
+        "relation_supports_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 2,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 2,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 2,
+        "workspace_inherited_auxiliary": 2,
+        "relation_supports_auxiliary": 1,
+    }
+    assert response.details["memory_context_groups"][3] == {
+        "scope": "relation",
+        "scope_id": "supports",
+        "group_id": "relation:supports_auxiliary",
+        "parent_scope": "workflow_instance",
+        "parent_scope_id": str(workflow_id),
+        "parent_group_scope": None,
+        "parent_group_id": None,
+        "selection_kind": "supports_related_auxiliary",
+        "selection_route": "relation_supports_auxiliary",
+        "relation_type": "supports",
+        "source_episode_ids": sorted(
+            [
+                str(first_episode.episode_id),
+                str(second_episode.episode_id),
+            ]
+        ),
+        "source_memory_ids": sorted(
+            [
+                str(first_source_memory_item.memory_id),
+                str(second_source_memory_item.memory_id),
+            ]
+        ),
+        "memory_items": [
+            {
+                "memory_id": str(shared_supports_target_item.memory_id),
+                "workspace_id": str(workspace_id),
+                "episode_id": None,
+                "type": "workspace_note",
+                "provenance": "workspace",
+                "content": "Shared supporting workspace memory item",
+                "metadata": {"kind": "shared-support"},
+                "created_at": shared_supports_target_item.created_at.isoformat(),
+                "updated_at": shared_supports_target_item.updated_at.isoformat(),
+            }
+        ],
+    }
+
+
 def test_memory_get_context_ignores_non_supports_relations_in_related_memory_items() -> (
     None
 ):
