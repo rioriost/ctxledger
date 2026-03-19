@@ -164,6 +164,29 @@ When summaries are enabled and returned, the response may include a grouped summ
 
 This is a grouped summary-oriented surface, not a replacement for raw memory items.
 
+At the current `0.6.0` stage, the primary summary/episode-chain explainability
+surface should be treated as explicit enough for the current contract slice.
+
+That means consumers can now read the current summary-first primary chain
+directly from the grouped summary entry and closely related top-level details
+metadata without needing additional summary-group helper fields for the current
+stage.
+
+In particular, the current explicit primary-chain explainability surface now
+covers:
+
+- whether summary-first selection is active
+- whether the current grouped reading is summary-only or summary-plus-episode
+- which child episodes the summary group references
+- how many child episodes the summary group represents
+- what ordering semantics apply to those child episode references
+- whether corresponding episode-scoped grouped entries were emitted
+- the current reason for that emittedness or non-emittedness
+
+This should currently be read as a good enough stopping point for the current
+primary-chain explainability loop, not as an invitation to keep adding narrowly
+incremental summary-group metadata without a stronger behavior need.
+
 At the current stage, this summary-first grouped surface has two explicit
 readings:
 
@@ -237,6 +260,27 @@ This emittedness-reason metadata is intentionally narrow and current-state
 specific. It does not introduce a new retrieval route, a broader selection
 policy, or a stronger parentage claim. It only makes the current emittedness
 reason explicit for grouped consumers.
+
+### Consolidation note for the current stage
+
+Taken together, the current summary-scoped grouped metadata and the closely
+related top-level summary-first details metadata should be treated as sufficient
+primary-chain explainability for the current `0.6.0` slice.
+
+In practical terms, the next work should not default to adding yet another small
+summary-group explanation field unless a clearer behavior gap appears.
+
+Instead, the current contract direction should be read as:
+
+- primary summary/episode-chain explainability is explicit enough for now
+- auxiliary workspace/relation grouped surfaces still remain top-level sibling
+  auxiliaries
+- broader relation expansion and deeper nesting semantics are still intentionally
+  deferred
+- the next meaningful step should preferably be either:
+  - a genuinely new small grouped-selection behavior choice
+  - or a contract-consolidation / interpretation step
+  - rather than another narrowly incremental summary-group metadata addition
 
 ### 2. Episode-scoped output
 

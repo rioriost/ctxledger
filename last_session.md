@@ -2,139 +2,104 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed another small, real grouped-selection behavior slice on the primary `memory_get_context` grouped path.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a consolidation loop around the current **primary summary/episode grouped explainability surface** of `memory_get_context`.
 
-This loop still did **not** widen relation traversal or change auxiliary-group positioning.
+This loop did **not** widen relation traversal, change auxiliary-group positioning, or introduce broader graph semantics.
 
-Instead, it refined the primary summary/episode grouped chain again by making summary-group emittedness reason explicit.
+Instead, it records that the current primary-chain explainability surface is now explicit enough for the current stage.
 
-The current grouped surface now more clearly distinguishes:
+At this point, the grouped response is much clearer about:
 
-- summary-first with episode groups
-- summary-first summary-only grouped output
-- the number of child episodes represented by the summary group
-- the ordering semantics of the summary group's child episode references
-- whether corresponding child episode-scoped groups were actually emitted in the current response shape
-- why corresponding child episode-scoped groups were or were not emitted in the current response shape
+- whether summary-first selection is active
+- whether the current primary grouped reading is `summary -> episode` or summary-only
+- how many child episodes the summary group represents
+- how to read the ordering of the summary group's child episode references
+- whether corresponding episode-scoped groups were emitted
+- why those episode-scoped groups were or were not emitted
 
-This keeps `memory_context_groups` as the primary grouped hierarchy-aware response surface while making the current summary-first primary-chain reading easier for grouped consumers to interpret directly.
+This means the recent loop of small primary-chain explainability refinements is now complete enough.
+
+---
 
 ## What was completed
 
-### Small primary grouped-selection behavior slice implemented
+### Primary grouped explainability surface is now explicit enough
 
-The current `memory_get_context` grouped summary entry now includes:
+The current summary-scoped `memory_context_groups` entry now has enough explicit metadata that grouped consumers no longer need to infer the main primary-chain reading from multiple indirect clues.
 
-- `child_episode_groups_emission_reason`
-
-This field is emitted on the summary-scoped `memory_context_groups` entry for the current summary-first grouped surface.
-
-### Current intended meaning of the new field
-
-The current intended interpretation is:
+The current primary summary-group explainability surface includes:
 
 - `child_episode_ids`
-  - identifies the child episodes referenced by the summary group
-
 - `child_episode_count`
-  - explicitly states the number of child episodes represented by that summary group
-
 - `child_episode_ordering`
-  - explicitly states how grouped consumers should read the ordering of `child_episode_ids`
-
 - `child_episode_groups_emitted`
-  - explicitly states whether corresponding episode-scoped grouped entries were emitted in the current response shape
-
 - `child_episode_groups_emission_reason`
-  - explicitly states the current reason those corresponding episode-scoped grouped entries were or were not emitted
 
-At the current stage:
-
-- `child_episode_groups_emission_reason = "memory_items_enabled"`
-  - means corresponding episode-scoped grouped entries are emitted because memory items are enabled for the current response shape
-
-- `child_episode_groups_emission_reason = "memory_items_disabled"`
-  - means corresponding episode-scoped grouped entries are not emitted because memory items are disabled for the current response shape
-
-### How this interacts with the previous slices
-
-The previous slices established explicit summary-first grouped explainability metadata including:
+At the top-level details layer, the current response also includes:
 
 - `summary_first_has_episode_groups`
 - `summary_first_is_summary_only`
-- `child_episode_count`
-- `child_episode_ordering`
-- `child_episode_groups_emitted`
 
-The current slice complements that by making summary-group emittedness reason explicit.
+Together, these fields now make the current summary-first grouped reading explicit enough for the current stage.
 
-That means the current grouped reading can now answer six nearby but distinct questions more directly:
+### Current intended reading
 
-1. is summary-first active?
-2. is the current grouped reading summary-only or summary-plus-episode?
-3. how many child episodes does the summary group represent?
-4. what ordering semantics apply to the summary group's child episode references?
-5. were corresponding child episode-scoped groups actually emitted in the current response shape?
-6. what is the current reason for that emittedness or non-emittedness?
+Grouped consumers should currently understand the primary summary/episode chain like this:
 
-### Important interpretation note
+1. **summary-first activation / mode**
+   - `summary_first_has_episode_groups`
+   - `summary_first_is_summary_only`
 
-`child_episode_groups_emission_reason` is **not** the same thing as child cardinality, child ordering, or emittedness itself.
+2. **summary-group child references**
+   - `child_episode_ids`
+   - `child_episode_count`
 
-At the current stage:
+3. **summary-group child ordering**
+   - `child_episode_ordering = "returned_episode_order"`
 
-- `child_episode_groups_emission_reason = "memory_items_disabled"` may still appear when:
-  - `child_episode_count > 0`
-  - `child_episode_ordering = "returned_episode_order"`
-  - `child_episode_groups_emitted = false`
-  - `summary_first_is_summary_only = true`
+4. **summary-group emittedness**
+   - `child_episode_groups_emitted`
 
-This is intentional.
+5. **summary-group emittedness reason**
+   - `child_episode_groups_emission_reason`
 
-It preserves the distinction between:
+This is enough to answer the main current questions without adding still more narrow summary-group fields.
 
-- selection/representation cardinality
-- selection/representation ordering semantics
-- grouped output emittedness
-- grouped output emittedness reason
+### What this means practically
 
-### Tests added/updated
+The current grouped contract can now tell a consumer:
 
-The grouped-selection test coverage now explicitly checks `child_episode_groups_emission_reason` in summary-group assertions across representative cases, including:
+- whether the grouped path is currently summary-only or `summary -> episode`
+- how many child episodes the summary group represents
+- what order those child episode references follow
+- whether corresponding episode-scoped grouped entries are present
+- why those episode-scoped grouped entries are present or absent in the current response shape
 
-- summary-first with multiple episode groups
-- summary-first summary-only grouped output
-- single-episode summary-first cases
-- multi-workflow summary-group cases
-- grouped ordering cases
+That is now a sufficiently explicit primary-chain explainability surface for the current `0.6.0` stage.
 
-### Validation completed
-
-Validated the slice with:
-
-- `pytest tests/memory/test_service_context_details.py`
-
-Result at completion time:
-
-- `19 passed`
+---
 
 ## What did not change
 
-This slice intentionally did **not** do any of the following:
+This consolidation loop intentionally did **not** do any of the following:
 
+- add another new summary-group metadata field
+- change the grouped response shape in a broader way
 - change auxiliary group positioning
 - nest workspace auxiliary groups into the summary/episode chain
 - nest relation auxiliary groups into the summary/episode chain
 - expand relation traversal beyond the current constrained `supports` slice
 - introduce broader graph semantics
-- add new retrieval routes
 - rename `summary_first`
-- broadly refactor grouped projection helpers
+- add new retrieval routes
+- broadly refactor grouped projection helpers again
 
 The current auxiliary-group interpretation remains:
 
 - workspace inherited auxiliary groups are top-level sibling auxiliary groups
 - relation supports auxiliary groups are top-level sibling auxiliary groups
+
+---
 
 ## Files most relevant to the current state
 
@@ -150,6 +115,20 @@ The current auxiliary-group interpretation remains:
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
 
+---
+
+## Validation status
+
+The recent primary-chain explainability slices were validated with:
+
+- `pytest tests/memory/test_service_context_details.py`
+
+Recent validation result at completion time:
+
+- `19 passed`
+
+---
+
 ## Current interpretation
 
 The current `0.6.0` state should now be read as:
@@ -160,69 +139,74 @@ The current `0.6.0` state should now be read as:
 - still not Apache AGE behavior expansion yet
 - clearer that `memory_context_groups` is the primary grouped hierarchy-aware surface
 - clearer that auxiliary workspace/relation groups remain sibling auxiliary surfaces
-- clearer that the current summary-first primary chain has explicit grouped readings:
-  - summary -> episode
-  - summary-only
-- clearer that the summary group itself now exposes explicit child cardinality through:
-  - `child_episode_count`
-- clearer that the summary group itself now exposes explicit child ordering semantics through:
-  - `child_episode_ordering = "returned_episode_order"`
-- clearer that the summary group itself now exposes explicit child emittedness through:
-  - `child_episode_groups_emitted`
-- clearer that the summary group itself now exposes explicit child emittedness reason through:
-  - `child_episode_groups_emission_reason`
+- clearer that the current summary-first primary chain now has an explicit enough explainability surface for the current stage
 
 In practice:
 
 - repository primitives are still good enough for the current slice
 - service projection structure is still good enough for the current slice
-- grouped surface interpretation is now better on the primary summary-first path
-- the latest slice again improved behavior/explainability rather than performing generic cleanup
+- grouped surface interpretation is now explicit enough on the primary summary-first path
+- another tiny summary-group explainability field is probably not the best next use of effort
+
+---
 
 ## Key conclusion
 
-The summary-group child-emission-reason refinement slice is complete enough.
+The current **primary summary/episode explainability refinement loop is complete enough**.
 
-The next step should again be a **small grouped-selection behavior slice** on the primary summary/episode chain, not a broad cleanup or relation expansion loop.
+The next step should **not** be to keep adding more tiny summary-group metadata fields unless a genuinely missing behavior or ambiguity is discovered.
+
+The next useful step should instead be one of:
+
+1. a small contract-consolidation / interpretation step
+2. a different small grouped-selection behavior choice
+3. only later, broader relation/group behavior
+
+---
 
 ## Explicit next step
 
 ### Next step
-Choose the next small grouped-selection behavior improvement on the **primary summary/episode chain**.
+Treat the current primary summary/episode grouped explainability surface as sufficiently explicit for now.
 
 ### Recommended target
-Continue refining the primary grouped path before widening auxiliary or relation behavior.
+Choose the next small behavior or contract step **without** continuing the pattern of adding ever-finer summary-group metadata unless clearly justified.
 
 ### Recommended focus
 Proceed in this order:
 
-1. primary grouped-selection behavior before relation expansion
-2. summary/episode grouped-chain refinement before new public shape expansion
-3. preserve auxiliary workspace/relation groups as sibling auxiliaries unless stronger retrieval semantics justify deeper parentage
-4. no new broad graph semantics yet
+1. preserve the current primary grouped interpretation as stable enough for the current stage
+2. avoid more tiny summary-group explainability additions by default
+3. keep workspace/relation auxiliary groups as sibling auxiliaries unless stronger retrieval semantics justify deeper parentage
+4. still avoid broad graph semantics or broad relation expansion
 
 ### Concrete next question to answer
-> What is the next smallest behavior improvement on the primary summary/episode grouped chain now that summary-first sub-mode, summary-group child cardinality, summary-group child ordering, summary-group emittedness, and summary-group emittedness reason are all explicit?
+> What is the next smallest useful grouped-selection or contract improvement now that the primary summary/episode explainability surface is explicit enough for the current stage?
+
+---
 
 ## Strong recommendation for the next session
 
 Prefer one of these, in order:
 
-1. another small primary-chain grouped-selection refinement
-2. a narrow summary/episode grouped explainability refinement
+1. a small consolidation / interpretation step built on the now-explicit primary-chain surface
+2. a different small grouped-selection behavior choice that is not just another tiny summary-group metadata field
 3. only later, broader relation/group behavior
 
 Avoid next session work that is primarily:
 
 - more generic helper cleanup
+- another hyper-narrow summary-group metadata addition without a clear missing behavior
 - premature broad response-shape expansion
 - broader relation traversal
 - graph-first expansion
 - auxiliary-group nesting without stronger retrieval semantics
 
+---
+
 ## Commit trail to remember
 
-Recent relevant commits before these latest slices:
+Recent relevant commits before the latest primary-chain explainability loop:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -231,29 +215,40 @@ Recent relevant commits before these latest slices:
 - `dd5480c` — `Clarify grouped memory context contract`
 - `c3aa2c0` — `Clarify summary-first group semantics`
 - `623011b` — `Refine next-step session note`
+
+Recent primary-chain explainability commits to remember:
+
 - `8d65a14` — `Clarify summary-first grouped context modes`
 - `d6c66ac` — `Add summary group child episode count`
 - `f72a774` — `Add summary group child ordering metadata`
 - `c74d9ef` — `Add summary group emittedness metadata`
+- `7c6b5a6` — `Add summary group emission reason metadata`
 
-Recent just-completed slice to remember conceptually:
+### Conceptual summary of the completed loop
 
-- summary-group `child_episode_groups_emission_reason` added
-- summary-group tests updated across representative summary-first cases
-- service contract and MCP API docs updated to match
-- validated with `pytest tests/memory/test_service_context_details.py`
+The recent primary-chain explainability loop established that the current grouped surface now explicitly covers:
+
+- summary-first mode
+- child cardinality
+- child ordering
+- child emittedness
+- emittedness reason
+
+That is enough for the current stage.
+
+---
 
 ## Short handoff note
 
-If work resumes from here, do **not** start with more generic cleanup.
+If work resumes from here, do **not** start by adding yet another tiny summary-group explainability field.
 
-Start from the now-explicit summary-first grouped interpretation:
+Start from the now-explicit primary summary/episode grouped interpretation:
 
-- summary-first sub-mode metadata is explicit
+- summary-first mode is explicit
 - summary-group child cardinality is explicit
 - summary-group child ordering is explicit
 - summary-group emittedness is explicit
 - summary-group emittedness reason is explicit
 - auxiliary workspace/relation groups remain top-level sibling auxiliary surfaces
 
-Choose the next small primary-chain grouped-selection refinement from that clearer base.
+Use that clearer base to choose the next genuinely useful small behavior or contract step.

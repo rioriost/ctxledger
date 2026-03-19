@@ -1369,6 +1369,7 @@ That means:
   - at the current stage, grouped consumers should read:
     - `child_episode_groups_emission_reason = "memory_items_enabled"` when corresponding episode-scoped grouped entries are emitted because memory items are enabled for the current response shape
     - `child_episode_groups_emission_reason = "memory_items_disabled"` when corresponding episode-scoped grouped entries are not emitted because memory items are disabled for the current response shape
+  - the current primary summary/episode explainability surface should now be treated as explicit enough for the current stage; the next slices should prefer real behavior choices or higher-level contract consolidation over continuing to add more narrow summary-group explanation fields
   - when grouped output is present in this current stage, ordering should be treated as a small compatibility commitment for grouped consumers rather than as incidental formatting:
     - the summary-oriented group appears first when present
     - episode-scoped groups follow in the same order as returned `episodes`
