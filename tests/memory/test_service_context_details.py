@@ -556,6 +556,7 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
         str(second_episode.episode_id),
     ]
     assert response.details["primary_episode_groups_present_after_query_filter"] is True
+    assert response.details["auxiliary_only_after_query_filter"] is False
     assert response.details["retrieval_routes_present"] == [
         "summary_first",
     ]
@@ -917,6 +918,7 @@ def test_memory_get_context_includes_only_summaries_when_memory_items_disabled()
     assert (
         response.details["primary_episode_groups_present_after_query_filter"] is False
     )
+    assert response.details["auxiliary_only_after_query_filter"] is False
     assert response.details["memory_context_groups"] == [
         {
             "scope": "summary",
@@ -1640,6 +1642,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
     assert (
         response.details["primary_episode_groups_present_after_query_filter"] is False
     )
+    assert response.details["auxiliary_only_after_query_filter"] is True
     assert response.details["memory_items"] == []
     assert response.details["memory_item_counts_by_episode"] == {}
     assert response.details["summaries"] == []

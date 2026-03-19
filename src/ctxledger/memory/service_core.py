@@ -1538,6 +1538,10 @@ class MemoryService:
         primary_episode_groups_present_after_query_filter = bool(
             episode_direct_group_present or summary_first_has_episode_groups
         )
+        auxiliary_only_after_query_filter = bool(
+            not primary_episode_groups_present_after_query_filter
+            and (inherited_memory_items or related_memory_items)
+        )
         relation_supports_source_episode_count = len(
             {
                 detail["episode_id"]
@@ -1599,6 +1603,7 @@ class MemoryService:
             "primary_episode_groups_present_after_query_filter": (
                 primary_episode_groups_present_after_query_filter
             ),
+            "auxiliary_only_after_query_filter": auxiliary_only_after_query_filter,
             "relation_supports_source_episode_count": (
                 relation_supports_source_episode_count if related_memory_items else 0
             ),

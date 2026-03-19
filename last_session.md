@@ -2,31 +2,31 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **post-query-filter primary episode-path reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **post-query-filter auxiliary-only reading** in `memory_get_context`.
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or alter the current one-hop `supports`-only auxiliary contract.
 
-Instead, it refined the current top-level `details` reading by making it explicit whether episode-scoped grouped output still remains present on the **primary path after query filtering**.
+Instead, it refined the top-level `details` reading by making it explicit when query filtering removes the primary episode-scoped grouped path while auxiliary context still remains visible.
 
 The current response is now clearer that:
 
 - the primary summary/episode grouped reading remains explicit enough for the current stage
-- auxiliary workspace visibility can still survive no-episode-match query-filter outcomes as intentional support preservation
+- workspace auxiliary visibility can still survive no-episode-match query-filter outcomes as intentional support preservation
 - constrained relation auxiliary reading remains explicit enough for the current stage
-- top-level details can now directly state whether primary episode-scoped grouped output survived query filtering
-- consumers no longer need to infer primary-path survival only from grouped routes, grouped scope counts, or auxiliary-only fallback visibility
+- top-level details can now directly state whether the post-filter response became auxiliary-only
+- consumers no longer need to infer auxiliary-only survival only from primary-path absence plus surviving auxiliary-route visibility
 
-This means the top-level post-filter reading is now slightly stronger without broadening retrieval semantics.
+This means the post-filter top-level reading is now slightly stronger without broadening retrieval semantics.
 
 ---
 
 ## What was completed
 
-### Small post-query-filter primary-path presence slice implemented
+### Small post-query-filter auxiliary-only slice implemented
 
 The current `details` surface now includes:
 
-- `primary_episode_groups_present_after_query_filter`
+- `auxiliary_only_after_query_filter`
 
 This field is additive top-level metadata.
 It does **not** replace grouped route metadata.
@@ -36,11 +36,12 @@ It complements it.
 
 The current intended interpretation is:
 
-- `primary_episode_groups_present_after_query_filter = false`
-  - no episode-scoped grouped output remains present on the primary path after query filtering
+- `auxiliary_only_after_query_filter = true`
+  - query filtering leaves no primary episode-scoped grouped output visible
+  - at least one auxiliary route still remains visible
 
-- `primary_episode_groups_present_after_query_filter = true`
-  - episode-scoped grouped output still remains present on the primary path after query filtering
+- `auxiliary_only_after_query_filter = false`
+  - any other case
 
 At the current stage, this field should be read conservatively:
 
@@ -52,22 +53,22 @@ At the current stage, this field should be read conservatively:
 
 ### Why this slice is useful
 
-This slice improves the current top-level `details` reading for post-filter primary-path visibility without requiring consumers to derive that answer only from:
+This slice improves the current top-level `details` reading for post-filter survival semantics without requiring consumers to reconstruct the auxiliary-only outcome only from:
 
+- primary-path absence
 - grouped route presence
 - grouped scope counts
-- summary-first sub-mode fields
-- auxiliary survival fields
+- auxiliary visibility fields
 
-It means consumers can now see directly whether the primary episode-group path remained visible after query filtering.
+It means consumers can now see directly when the post-filter response became auxiliary-only.
 
 ### Tests added/updated
 
 The current test coverage now explicitly checks:
 
-- `primary_episode_groups_present_after_query_filter is True` in the summary-first-with-episode-groups case
-- `primary_episode_groups_present_after_query_filter is False` in the summary-first summary-only case
-- `primary_episode_groups_present_after_query_filter is False` in the auxiliary-only no-episode-match query-filter case
+- `auxiliary_only_after_query_filter is False` in the summary-first-with-episode-groups case
+- `auxiliary_only_after_query_filter is False` in the summary-first summary-only case
+- `auxiliary_only_after_query_filter is True` in the auxiliary-only no-episode-match query-filter case
 
 ### Validation completed
 
@@ -146,7 +147,7 @@ The current `0.6.0` state should now be read as:
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains explicit enough to correlate back to returned episode-side context
 - top-level constrained relation source-episode cardinality is directly readable
-- top-level details now also make it explicit whether primary episode-scoped grouped output survived query filtering
+- top-level details now also make it explicit when the post-filter response became auxiliary-only
 
 In practice:
 
@@ -154,14 +155,14 @@ In practice:
 - service projection structure is still good enough for the current slice
 - primary-chain grouped reading is explicit enough
 - constrained relation grouped reading is explicit enough
-- top-level details are now slightly easier to consume directly for post-filter primary-path visibility
+- top-level details are now slightly easier to consume directly for post-filter auxiliary-only outcomes
 - another tiny grouped/detail helper field is still probably not the best next use of effort unless a clear behavior gap appears
 
 ---
 
 ## Key conclusion
 
-The current post-query-filter primary episode-path presence slice is complete enough.
+The current post-query-filter auxiliary-only slice is complete enough.
 
 The next step should still avoid:
 
@@ -182,7 +183,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current post-query-filter primary episode-path reading as sufficiently explicit for now.
+Treat the current post-query-filter auxiliary-only reading as sufficiently explicit for now.
 
 ### Recommended target
 Choose the next small behavior or contract step without continuing the pattern of ever-finer details/grouped mirror metadata unless clearly justified.
@@ -200,7 +201,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that post-query-filter primary episode-group presence is directly readable at the top-level details layer?
+> What is the next smallest useful grouped-selection or contract improvement now that post-query-filter auxiliary-only survival is directly readable at the top-level details layer?
 
 ---
 
@@ -246,11 +247,12 @@ Recent relevant commits before the latest post-query-filter slice:
 - `c051dfc` — `Add summary-first top-level child count`
 - `1b48903` — `Add summary-first top-level child ids`
 - `2487359` — `Add relation source episode count`
+- `5047c97` — `Add primary episode group presence after filter`
 
 Recent just-completed slice to remember conceptually:
 
-- top-level `primary_episode_groups_present_after_query_filter` added
-- post-filter primary-path details tests updated
+- top-level `auxiliary_only_after_query_filter` added
+- post-filter auxiliary-only details tests updated
 - service contract and MCP API docs updated to match
 - validated with `pytest tests/memory/test_service_context_details.py`
 
@@ -265,6 +267,7 @@ The recent loops established that the current grouped/details surface now explic
 - constrained relation auxiliary linkage back to returned episode-side context
 - top-level constrained relation source-episode cardinality
 - post-query-filter primary episode-group presence
+- post-query-filter auxiliary-only survival
 
 That is a good enough stopping point for the current stage without widening behavior.
 
@@ -284,6 +287,7 @@ Start from the current stable reading:
 - relation auxiliary grouped output is explicit enough to correlate back to returned episode-side context
 - top-level constrained relation source-episode cardinality is directly readable
 - top-level post-query-filter primary episode-group presence is directly readable
+- top-level post-query-filter auxiliary-only survival is directly readable
 - auxiliary surfaces remain auxiliary rather than newly reclassified primary selection paths
 
 Use that clearer base to choose the next genuinely useful small behavior or contract step.

@@ -1399,7 +1399,16 @@ That means:
 - top-level details consumers should currently read `primary_episode_groups_present_after_query_filter` as:
   - `false` when no primary episode-scoped grouped output remains after query filtering
   - `true` when primary episode-scoped grouped output still remains after query filtering
-- this field should currently be read as a direct top-level indication of whether the primary episode path survived query filtering, rather than requiring consumers to infer that only from grouped routes, grouped scope counts, or auxiliary-only fallback visibility
+- `auxiliary_only_after_query_filter` should currently be read as:
+  - `true` when query filtering leaves no primary episode-scoped grouped output but at least one auxiliary route remains visible
+  - `false` otherwise
+- this field should currently be read as a direct top-level indication that the post-filter response became auxiliary-only, rather than requiring consumers to infer that only from grouped routes, grouped scope counts, primary-path absence, and surviving auxiliary visibility
+- this field is intentionally narrower than a general "response empty/non-empty" indicator:
+  - it does not mean nothing was returned
+  - it means the primary episode path is gone while auxiliary context is still present
+- this field should currently be read alongside `primary_episode_groups_present_after_query_filter`:
+  - `primary_episode_groups_present_after_query_filter = false` and `auxiliary_only_after_query_filter = true` means auxiliary-only survival after query filtering
+  - `primary_episode_groups_present_after_query_filter = false` and `auxiliary_only_after_query_filter = false` means neither the primary episode path nor any auxiliary grouped path remained visible
 - top-level details consumers should currently read `summary_first_child_episode_count` as:
   - `0` when summary-first selection is not active
   - `{N}` when summary-first selection is active and the current summary-first grouped reading represents `N` child episodes
