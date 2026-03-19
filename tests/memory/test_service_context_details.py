@@ -3755,6 +3755,182 @@ def test_memory_get_context_ticket_only_multi_workflow_summary_first_with_memory
     ]
 
 
+def test_memory_get_context_ticket_only_multi_workflow_summary_first_with_limit_keeps_truncated_child_set_aligned() -> (
+    None
+):
+    first_workflow_id = uuid4()
+    second_workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000048"
+    created_at = datetime(2024, 10, 23, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    first_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=first_workflow_id,
+        summary="First ticket-only workflow low-limit summary-first case",
+        metadata={"kind": "ticket-only-multi-workflow-limit-first"},
+        created_at=created_at.replace(day=23),
+        updated_at=created_at.replace(day=23),
+    )
+    second_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=second_workflow_id,
+        summary="Second ticket-only workflow low-limit summary-first case",
+        metadata={"kind": "ticket-only-multi-workflow-limit-second"},
+        created_at=created_at.replace(day=22),
+        updated_at=created_at.replace(day=22),
+    )
+    episode_repository.create(first_episode)
+    episode_repository.create(second_episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=first_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="First ticket-only workflow low-limit memory item",
+        metadata={"kind": "first"},
+        created_at=created_at.replace(day=23, hour=2),
+        updated_at=created_at.replace(day=23, hour=2),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=second_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Second ticket-only workflow low-limit memory item",
+        metadata={"kind": "second"},
+        created_at=created_at.replace(day=22, hour=2),
+        updated_at=created_at.replace(day=22, hour=2),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                first_workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-TICKET-ONLY-MULTI-WORKFLOW-LIMIT",
+                },
+                second_workflow_id: {
+                    "workspace_id": "00000000-0000-0000-0000-000000000099",
+                    "ticket_id": "TICKET-CONTEXT-TICKET-ONLY-MULTI-WORKFLOW-LIMIT",
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            ticket_id="TICKET-CONTEXT-TICKET-ONLY-MULTI-WORKFLOW-LIMIT",
+            limit=1,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=True,
+        )
+    )
+
+    assert response.details["lookup_scope"] == "ticket"
+    assert response.details["resolved_workflow_count"] == 1
+    assert response.details["resolved_workflow_ids"] == [
+        str(first_workflow_id),
+    ]
+    assert [episode.summary for episode in response.episodes] == [
+        "First ticket-only workflow low-limit summary-first case",
+    ]
+    assert response.details["episodes_before_query_filter"] == 1
+    assert response.details["matched_episode_count"] == 1
+    assert response.details["episodes_returned"] == 1
+    assert response.details["summary_selection_applied"] is True
+    assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert response.details["summary_first_has_episode_groups"] is True
+    assert response.details["summary_first_is_summary_only"] is False
+    assert response.details["summary_first_child_episode_count"] == 1
+    assert response.details["summary_first_child_episode_ids"] == [
+        str(first_episode.episode_id),
+    ]
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == []
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "group_id": "summary:episode_summary_first",
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": None,
+            "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [
+                str(first_episode.episode_id),
+            ],
+            "child_episode_count": 1,
+            "child_episode_ordering": "returned_episode_order",
+            "child_episode_groups_emitted": True,
+            "child_episode_groups_emission_reason": "memory_items_enabled",
+            "summaries": [
+                {
+                    "episode_id": str(first_episode.episode_id),
+                    "workflow_instance_id": str(first_workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                }
+            ],
+        },
+        {
+            "scope": "episode",
+            "scope_id": str(first_episode.episode_id),
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(first_workflow_id),
+            "parent_group_scope": "summary",
+            "parent_group_id": "summary:episode_summary_first",
+            "selection_kind": "direct_episode",
+            "selection_route": "summary_first",
+            "selected_via_summary_first": True,
+            "memory_items": [
+                {
+                    "memory_id": str(first_memory_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": str(first_episode.episode_id),
+                    "type": "episode_note",
+                    "provenance": "episode",
+                    "content": "First ticket-only workflow low-limit memory item",
+                    "metadata": {"kind": "first"},
+                    "created_at": first_memory_item.created_at.isoformat(),
+                    "updated_at": first_memory_item.updated_at.isoformat(),
+                }
+            ],
+            "related_memory_items": [],
+            "related_memory_item_provenance": [],
+            "related_memory_relation_edges": [],
+        },
+    ]
+
+
 def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspace() -> (
     None
 ):
