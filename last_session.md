@@ -2,83 +2,82 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **top-level constrained relation-source cardinality reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **post-query-filter primary episode-path reading** in `memory_get_context`.
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or alter the current one-hop `supports`-only auxiliary contract.
 
-Instead, it refined the current constrained relation auxiliary reading by making the number of returned source episodes contributing to the current `supports` auxiliary surface directly readable from the top-level `details` layer.
+Instead, it refined the current top-level `details` reading by making it explicit whether episode-scoped grouped output still remains present on the **primary path after query filtering**.
 
 The current response is now clearer that:
 
-- constrained relation-derived support context remains auxiliary
-- constrained relation-derived support context remains limited to:
-  - one outgoing hop
-  - `supports` only
-  - auxiliary use only
-- relation-group source linkage is already readable at the grouped relation surface
-- top-level details can now also expose current constrained source-episode cardinality directly
-- consumers no longer need to derive that current source-episode count only from relation-group-local linkage fields
+- the primary summary/episode grouped reading remains explicit enough for the current stage
+- auxiliary workspace visibility can still survive no-episode-match query-filter outcomes as intentional support preservation
+- constrained relation auxiliary reading remains explicit enough for the current stage
+- top-level details can now directly state whether primary episode-scoped grouped output survived query filtering
+- consumers no longer need to infer primary-path survival only from grouped routes, grouped scope counts, or auxiliary-only fallback visibility
 
-This means the top-level relation auxiliary reading is now slightly stronger without broadening retrieval semantics.
+This means the top-level post-filter reading is now slightly stronger without broadening retrieval semantics.
 
 ---
 
 ## What was completed
 
-### Small top-level constrained relation source-count slice implemented
+### Small post-query-filter primary-path presence slice implemented
 
 The current `details` surface now includes:
 
-- `relation_supports_source_episode_count`
+- `primary_episode_groups_present_after_query_filter`
 
 This field is additive top-level metadata.
-It does **not** replace grouped relation metadata.
+It does **not** replace grouped route metadata.
 It complements it.
 
 ### Current intended meaning of the new field
 
 The current intended interpretation is:
 
-- `relation_supports_source_episode_count = 0`
-  - the current constrained `supports` auxiliary reading is not active
+- `primary_episode_groups_present_after_query_filter = false`
+  - no episode-scoped grouped output remains present on the primary path after query filtering
 
-- `relation_supports_source_episode_count = N`
-  - the current constrained `supports` auxiliary reading is active
-  - `N` returned source episodes contributed episode-side context to the current constrained relation auxiliary surface
+- `primary_episode_groups_present_after_query_filter = true`
+  - episode-scoped grouped output still remains present on the primary path after query filtering
 
 At the current stage, this field should be read conservatively:
 
 - it does **not** introduce a new retrieval route
-- it does **not** broaden relation traversal
-- it does **not** add relation types beyond `supports`
-- it does **not** make the relation auxiliary surface a new primary selection root
+- it does **not** broaden query-filter behavior
+- it does **not** replace grouped route metadata
 - it does **not** change auxiliary sibling positioning
-- it does **not** imply broader graph semantics
+- it does **not** imply broader matching semantics
 
 ### Why this slice is useful
 
-This slice improves the current top-level `details` reading for the constrained relation auxiliary surface without adding another tiny relation-group-local helper field.
+This slice improves the current top-level `details` reading for post-filter primary-path visibility without requiring consumers to derive that answer only from:
 
-It means consumers that primarily read `details` can now see the current source-side episode cardinality directly, rather than deriving it only from grouped relation fields such as:
+- grouped route presence
+- grouped scope counts
+- summary-first sub-mode fields
+- auxiliary survival fields
 
-- `source_episode_ids`
+It means consumers can now see directly whether the primary episode-group path remained visible after query filtering.
 
 ### Tests added/updated
 
-The constrained relation test coverage now explicitly checks:
+The current test coverage now explicitly checks:
 
-- `relation_supports_source_episode_count == 1` in the representative `supports` relation case
-- `relation_supports_source_episode_count == 0` when no constrained `supports` auxiliary reading is returned
+- `primary_episode_groups_present_after_query_filter is True` in the summary-first-with-episode-groups case
+- `primary_episode_groups_present_after_query_filter is False` in the summary-first summary-only case
+- `primary_episode_groups_present_after_query_filter is False` in the auxiliary-only no-episode-match query-filter case
 
 ### Validation completed
 
 Validated the slice with:
 
-- `pytest tests/memory/test_memory_context_related_items.py`
+- `pytest tests/memory/test_service_context_details.py`
 
 Result at completion time:
 
-- `2 passed`
+- `19 passed`
 
 ---
 
@@ -89,15 +88,15 @@ This slice intentionally did **not** do any of the following:
 - broaden relation traversal beyond one outgoing hop
 - include relation types beyond `supports`
 - make relation-derived support context part of the primary summary/episode selection path
-- nest relation groups into the summary/episode chain
-- change workspace auxiliary positioning
+- nest workspace or relation auxiliary groups into the summary/episode chain
+- change grouped response ordering
 - introduce graph-backed selection semantics
 - add broader response-shape expansion
 
 The current grouped interpretation remains:
 
 - `memory_context_groups` is still the primary grouped hierarchy-aware surface
-- primary summary/episode explainability is explicit enough for the current stage
+- primary summary/episode explainability is still explicit enough for the current stage
 - workspace/relation auxiliary groups remain top-level sibling auxiliary surfaces
 - constrained relation auxiliary reading remains explicit enough for the current stage
 
@@ -109,8 +108,8 @@ The current grouped interpretation remains:
 - `src/ctxledger/memory/service_core.py`
 
 ### Tests
-- `tests/memory/test_memory_context_related_items.py`
 - `tests/memory/test_service_context_details.py`
+- `tests/memory/test_memory_context_related_items.py`
 
 ### Design and contract docs
 - `docs/memory/memory_get_context_service_contract.md`
@@ -124,12 +123,12 @@ The current grouped interpretation remains:
 
 Recent relevant validation includes:
 
-- `pytest tests/memory/test_memory_context_related_items.py`
 - `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
 
 Recent validation result for this slice:
 
-- `2 passed` in `tests/memory/test_memory_context_related_items.py`
+- `19 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -146,8 +145,8 @@ The current `0.6.0` state should now be read as:
 - top-level summary-first selection identity/cardinality is directly readable
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains explicit enough to correlate back to returned episode-side context
-- top-level constrained relation source-episode cardinality is now directly readable through:
-  - `relation_supports_source_episode_count`
+- top-level constrained relation source-episode cardinality is directly readable
+- top-level details now also make it explicit whether primary episode-scoped grouped output survived query filtering
 
 In practice:
 
@@ -155,18 +154,18 @@ In practice:
 - service projection structure is still good enough for the current slice
 - primary-chain grouped reading is explicit enough
 - constrained relation grouped reading is explicit enough
-- top-level constrained relation details are now slightly easier to consume directly
-- another tiny grouped relation helper field is still probably not the best next use of effort
+- top-level details are now slightly easier to consume directly for post-filter primary-path visibility
+- another tiny grouped/detail helper field is still probably not the best next use of effort unless a clear behavior gap appears
 
 ---
 
 ## Key conclusion
 
-The current top-level constrained relation source-count slice is complete enough.
+The current post-query-filter primary episode-path presence slice is complete enough.
 
 The next step should still avoid:
 
-- another hyper-narrow relation metadata addition
+- another hyper-narrow metadata addition without a clear missing behavior
 - broad relation expansion
 - graph-first behavior expansion
 - auxiliary-group nesting without stronger retrieval semantics
@@ -183,10 +182,10 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current top-level constrained relation source-count reading as sufficiently explicit for now.
+Treat the current post-query-filter primary episode-path reading as sufficiently explicit for now.
 
 ### Recommended target
-Choose the next small behavior or contract step **without** continuing the pattern of adding ever-finer relation-local or details-local metadata unless clearly justified.
+Choose the next small behavior or contract step without continuing the pattern of ever-finer details/grouped mirror metadata unless clearly justified.
 
 ### Recommended focus
 Proceed in this order:
@@ -197,11 +196,11 @@ Proceed in this order:
    - one hop
    - `supports` only
    - auxiliary only
-4. avoid more tiny relation explainability additions by default
+4. avoid more tiny explainability additions by default
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that constrained relation source-episode cardinality is directly readable at the top-level details layer?
+> What is the next smallest useful grouped-selection or contract improvement now that post-query-filter primary episode-group presence is directly readable at the top-level details layer?
 
 ---
 
@@ -216,7 +215,7 @@ Prefer one of these, in order:
 Avoid next session work that is primarily:
 
 - more generic helper cleanup
-- another hyper-narrow relation metadata addition without a clear missing behavior
+- another hyper-narrow metadata addition without a clear missing behavior
 - premature broad response-shape expansion
 - broader relation traversal
 - graph-first expansion
@@ -226,7 +225,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest top-level constrained relation slice:
+Recent relevant commits before the latest post-query-filter slice:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -246,13 +245,14 @@ Recent relevant commits before the latest top-level constrained relation slice:
 - `64d7388` — `Consolidate relation auxiliary explainability`
 - `c051dfc` — `Add summary-first top-level child count`
 - `1b48903` — `Add summary-first top-level child ids`
+- `2487359` — `Add relation source episode count`
 
 Recent just-completed slice to remember conceptually:
 
-- top-level `relation_supports_source_episode_count` added
-- constrained relation details tests updated
+- top-level `primary_episode_groups_present_after_query_filter` added
+- post-filter primary-path details tests updated
 - service contract and MCP API docs updated to match
-- validated with `pytest tests/memory/test_memory_context_related_items.py`
+- validated with `pytest tests/memory/test_service_context_details.py`
 
 ### Conceptual summary of the completed loops
 
@@ -264,6 +264,7 @@ The recent loops established that the current grouped/details surface now explic
 - auxiliary workspace no-episode-match visibility reading
 - constrained relation auxiliary linkage back to returned episode-side context
 - top-level constrained relation source-episode cardinality
+- post-query-filter primary episode-group presence
 
 That is a good enough stopping point for the current stage without widening behavior.
 
@@ -271,7 +272,7 @@ That is a good enough stopping point for the current stage without widening beha
 
 ## Short handoff note
 
-If work resumes from here, do **not** start by broadening relation traversal or by adding another tiny relation-specific explainability field.
+If work resumes from here, do **not** start by broadening relation traversal or by adding another tiny explainability field unless there is a clear missing behavior.
 
 Start from the current stable reading:
 
@@ -282,6 +283,7 @@ Start from the current stable reading:
 - constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
 - relation auxiliary grouped output is explicit enough to correlate back to returned episode-side context
 - top-level constrained relation source-episode cardinality is directly readable
+- top-level post-query-filter primary episode-group presence is directly readable
 - auxiliary surfaces remain auxiliary rather than newly reclassified primary selection paths
 
 Use that clearer base to choose the next genuinely useful small behavior or contract step.

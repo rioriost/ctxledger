@@ -113,6 +113,7 @@ Representative route metadata includes:
 - `child_episode_groups_emitted`
 - `child_episode_groups_emission_reason`
 - `relation_supports_source_episode_count`
+- `primary_episode_groups_present_after_query_filter`
 
 This metadata exists to help consumers and operators understand **what was returned** and **why**.
 
@@ -146,6 +147,16 @@ They make the current child-episode cardinality and child-episode identity
 represented by the summary-first selection directly readable from top-level
 details without requiring grouped consumers to derive those values only from
 summary-group-local fields.
+
+The current top-level details surface should also expose:
+
+- `primary_episode_groups_present_after_query_filter`
+
+This field should be read as additive post-filter primary-path presence metadata.
+It makes it explicit whether episode-scoped grouped output remains present on the
+primary path after query filtering, without requiring consumers to infer that
+only from grouped routes, summary-first sub-mode fields, or auxiliary-context
+survival fields.
 
 ---
 
@@ -191,6 +202,8 @@ covers:
 
 - whether summary-first selection is active
 - whether the current grouped reading is summary-only or summary-plus-episode
+- whether episode-scoped grouped output remains present on the primary path after
+  query filtering
 - how many child episodes the current summary-first selection represents at the
   top-level details layer
 - which child episodes the current summary-first selection represents at the
@@ -362,6 +375,7 @@ In particular:
 The current details-layer fields that make this reading explicit include:
 
 - `all_episodes_filtered_out_by_query`
+- `primary_episode_groups_present_after_query_filter`
 - `inherited_context_is_auxiliary`
 - `inherited_context_returned_without_episode_matches`
 - `inherited_context_returned_as_auxiliary_without_episode_matches`
@@ -369,6 +383,7 @@ The current details-layer fields that make this reading explicit include:
 Taken together, these fields mean the current contract distinguishes between:
 
 - primary episode selection visibility
+- primary episode-group visibility after query filtering
 - auxiliary workspace-context visibility
 
 That distinction is intentional for the current `0.6.0` slice.

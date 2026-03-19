@@ -1396,6 +1396,10 @@ That means:
 - `inherited_context_returned_as_auxiliary_without_episode_matches` explicitly states that the inherited workspace context remained visible in that no-matching-episodes case because it is auxiliary
 - this should currently be interpreted as intentional auxiliary-context behavior rather than as evidence that inherited workspace items participate in episode matching
 - in other words, the current contract should treat the workspace auxiliary path as surviving query-filter loss of episode matches without reclassifying that auxiliary context as newly matched primary episode context
+- top-level details consumers should currently read `primary_episode_groups_present_after_query_filter` as:
+  - `false` when no primary episode-scoped grouped output remains after query filtering
+  - `true` when primary episode-scoped grouped output still remains after query filtering
+- this field should currently be read as a direct top-level indication of whether the primary episode path survived query filtering, rather than requiring consumers to infer that only from grouped routes, grouped scope counts, or auxiliary-only fallback visibility
 - top-level details consumers should currently read `summary_first_child_episode_count` as:
   - `0` when summary-first selection is not active
   - `{N}` when summary-first selection is active and the current summary-first grouped reading represents `N` child episodes
