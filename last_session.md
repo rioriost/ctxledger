@@ -2,13 +2,13 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **multi-workflow summary-first reading with memory items enabled** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **ticket-only multi-workflow summary-first reading with memory items enabled** in `memory_get_context`.
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or redesign the grouped response shape.
 
 Instead, it fixed and validated the current behavior when:
 
-- multiple workflows are resolved through workspace/ticket-style lookup
+- multiple workflows are resolved through **ticket-only** lookup
 - summaries are enabled
 - memory items are enabled
 - summary-first grouped reading spans returned episodes from more than one workflow
@@ -16,7 +16,7 @@ Instead, it fixed and validated the current behavior when:
 The current response is now clearer that:
 
 - summary-first grouped reading can span multiple workflows in the current constrained model
-- the grouped summary entry remains the primary grouped summary surface for that multi-workflow case
+- the grouped summary entry remains the primary grouped summary surface for that ticket-only multi-workflow case
 - the grouped summary entry does **not** claim a single workflow parent in that case
 - `parent_scope_id` on the summary group remains `null` for the cross-workflow grouped summary case
 - the grouped summary child set still aligns with:
@@ -25,17 +25,17 @@ The current response is now clearer that:
   - grouped episode-scoped entries
 - grouped episode entries still retain their own workflow-instance parent ids even when the summary-first parent group spans multiple workflows
 
-This means the current multi-workflow summary-first reading is now better fixed by behavior coverage rather than by interpretation alone.
+This means the current ticket-only multi-workflow summary-first reading is now better fixed by behavior coverage rather than by interpretation alone.
 
 ---
 
 ## What was completed
 
-### Small multi-workflow summary-first memory-items coverage slice implemented
+### Small ticket-only multi-workflow summary-first memory-items coverage slice implemented
 
 A new focused test slice now covers the case where:
 
-- two workflows resolve through workspace/ticket-style lookup
+- two workflows resolve through **ticket-only** lookup
 - each workflow contributes an episode
 - each returned episode contributes memory items
 - summaries are enabled
@@ -43,6 +43,7 @@ A new focused test slice now covers the case where:
 
 The current intended result in that case is:
 
+- `lookup_scope == "ticket"`
 - both workflows are resolved
 - both returned episodes participate in the current summary-first grouped reading
 - `summary_selection_applied == true`
@@ -78,15 +79,15 @@ This should **not** be read as:
 
 It should be read as:
 
-- the current constrained multi-workflow summary-first grouped reading
+- the current constrained ticket-only multi-workflow summary-first grouped reading
 - with a shared summary group over the returned cross-workflow episode set
 - and per-episode workflow-instance parentage still preserved on episode-scoped groups
 
 ### Why this slice is useful
 
-This slice improves confidence in the current multi-workflow summary-first reading without broadening behavior.
+This slice improves confidence in the current ticket-only multi-workflow summary-first reading without broadening behavior.
 
-It verifies that the current system behaves consistently when summary-first grouped reading spans more than one workflow:
+It verifies that the current system behaves consistently when summary-first grouped reading spans more than one workflow through ticket-only resolution:
 
 - top-level summary-first child metadata remains aligned
 - grouped summary child metadata remains aligned
@@ -94,11 +95,11 @@ It verifies that the current system behaves consistently when summary-first grou
 - summary-group parentage remains conservative (`parent_scope_id = null`)
 - episode-group parentage remains workflow-specific
 
-This makes the current multi-workflow grouped reading explicit rather than leaving it to be reconstructed from partial assumptions.
+This makes the current ticket-only multi-workflow grouped reading explicit rather than leaving it to be reconstructed from partial assumptions.
 
 ### Tests added/updated
 
-The summary-first grouped/details test coverage now explicitly checks the multi-workflow, memory-items-enabled case.
+The summary-first grouped/details test coverage now explicitly checks the ticket-only multi-workflow, memory-items-enabled case.
 
 The expected current result is:
 
@@ -117,7 +118,7 @@ Validated the slice with:
 
 Result at completion time:
 
-- `24 passed`
+- `25 passed`
 
 ---
 
@@ -169,7 +170,7 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `24 passed` in `tests/memory/test_service_context_details.py`
+- `25 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -187,6 +188,7 @@ The current `0.6.0` state should now be read as:
 - summary-first query-filter surviving-child-set behavior is explicitly covered by behavior
 - summaries-disabled primary-path behavior is explicitly covered by behavior
 - multi-workflow summary-first memory-items behavior is explicitly covered by behavior
+- ticket-only multi-workflow summary-first memory-items behavior is explicitly covered by behavior
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
 - workspace inherited auxiliary limit/truncation behavior is explicitly covered by behavior
 - constrained relation `supports` auxiliary grouped output remains explicit enough to correlate back to returned episode-side context
@@ -204,6 +206,7 @@ In practice:
 - summary-first query-filter interaction is better anchored by behavior coverage
 - summaries-disabled primary-path behavior is better anchored by behavior coverage
 - multi-workflow summary-first memory-items behavior is better anchored by behavior coverage
+- ticket-only multi-workflow summary-first memory-items behavior is better anchored by behavior coverage
 - workspace inherited auxiliary emission shaping is better anchored by behavior coverage
 - constrained relation grouped reading is explicit enough
 - constrained relation negative-path behavior is better anchored by behavior coverage
@@ -214,7 +217,7 @@ In practice:
 
 ## Key conclusion
 
-The current multi-workflow summary-first memory-items coverage slice is complete enough.
+The current ticket-only multi-workflow summary-first memory-items coverage slice is complete enough.
 
 The next step should still avoid:
 
@@ -235,7 +238,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current multi-workflow summary-first memory-items reading as sufficiently fixed for the current stage.
+Treat the current ticket-only multi-workflow summary-first memory-items reading as sufficiently fixed for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without continuing the pattern of ever-finer details / grouped mirror metadata unless clearly justified.
@@ -253,7 +256,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that multi-workflow summary-first memory-items behavior is explicitly covered?
+> What is the next smallest useful grouped-selection or contract improvement now that ticket-only multi-workflow summary-first memory-items behavior is explicitly covered?
 
 ---
 
@@ -278,7 +281,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest multi-workflow summary-first memory-items slice:
+Recent relevant commits before the latest ticket-only multi-workflow slice:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -312,9 +315,9 @@ Recent relevant commits before the latest multi-workflow summary-first memory-it
 
 ### Recent just-completed slice to remember conceptually
 
-- multi-workflow summary-first memory-items behavior covered by test
+- ticket-only multi-workflow summary-first memory-items behavior covered by test
 - grouped summary child set aligned with returned cross-workflow episodes
-- grouped summary `parent_scope_id` remains `null` in the multi-workflow case
+- grouped summary `parent_scope_id` remains `null` in the ticket-only multi-workflow case
 - grouped episode entries keep their own workflow-instance parent ids
 - validated with `pytest tests/memory/test_service_context_details.py`
 
@@ -328,6 +331,7 @@ The recent loops established that the current grouped/details surface now explic
 - summary-first query-filter surviving-child-set behavior
 - summaries-disabled primary-path behavior
 - multi-workflow summary-first memory-items behavior
+- ticket-only multi-workflow summary-first memory-items behavior
 - workspace auxiliary no-episode-match visibility reading
 - workspace inherited auxiliary limit / truncation behavior
 - constrained relation auxiliary linkage back to returned episode-side context
@@ -353,6 +357,7 @@ Start from the current stable reading:
 - summary-first query-filter surviving-child-set behavior is fixed by coverage
 - summaries-disabled primary-path behavior is fixed by coverage
 - multi-workflow summary-first memory-items behavior is fixed by coverage
+- ticket-only multi-workflow summary-first memory-items behavior is fixed by coverage
 - workspace auxiliary no-episode-match visibility is intentional support preservation
 - workspace inherited auxiliary limit / truncation behavior is fixed by coverage
 - constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
