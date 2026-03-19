@@ -6,7 +6,7 @@ Continued the `0.6.0` hierarchical memory retrieval work and completed a small g
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or redesign the grouped response shape.
 
-Instead, it validated the current behavior when:
+Instead, it fixed and validated the current behavior when:
 
 - multiple workflows are resolved through **workspace-only** lookup
 - summaries are enabled
@@ -221,8 +221,7 @@ In practice:
 - summaries-disabled primary-path behavior is better anchored by behavior coverage
 - multi-workflow summary-first memory-items behavior is better anchored by behavior coverage
 - ticket-only multi-workflow summary-first memory-items behavior is better anchored by behavior coverage
-- low-limit ticket-only multi-workflow summary-first behavior is better anchored by behavior coverage
-- workspace-only multi-workflow summary-first behavior is now also better anchored by behavior coverage
+- low-limit ticket-only multi-workflow summary-first behavior is now also better anchored by behavior coverage
 - workspace inherited auxiliary emission shaping is better anchored by behavior coverage
 - constrained relation grouped reading is explicit enough
 - constrained relation negative-path behavior is better anchored by behavior coverage
@@ -379,9 +378,6 @@ Start from the current stable reading:
 - top-level summary-first child identity / cardinality are directly readable
 - summary-first query-filter surviving-child-set behavior is fixed by coverage
 - summaries-disabled primary-path behavior is fixed by coverage
-- multi-workflow summary-first memory-items behavior is fixed by coverage
-- ticket-only multi-workflow summary-first memory-items behavior is fixed by coverage
-- low-limit ticket-only multi-workflow summary-first behavior is fixed by coverage
 - workspace-only multi-workflow summary-first behavior is fixed by coverage
 - workspace-only multi-workflow summary-first should not currently be assumed to co-emit workspace inherited auxiliary output
 - workspace auxiliary no-episode-match visibility is intentional support preservation
