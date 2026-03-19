@@ -42,7 +42,7 @@ A focused test slice now covers the case where:
 The current intended result in that case is:
 
 - `lookup_scope == "ticket"`
-- both workflows are still resolved
+- `resolved_workflow_count == 2`
 - `episodes_before_query_filter == 2`
 - `matched_episode_count == 1`
 - `episodes_returned == 1`
@@ -58,6 +58,21 @@ The current intended result in that case is:
   - contains the same surviving child episode id/count
 - grouped episode-scoped output contains only the surviving emitted episode group
 - no auxiliary grouped route is assumed unless actually emitted
+
+### Test added
+
+Added a new focused regression test covering the combined case:
+
+- single reference pattern reused from the existing **single-workflow query-filter summary-first** case
+- cross-workflow grouped expectations reused from the existing **ticket-only multi-workflow summary-first with memory items** case
+- new combined case fixed as:
+  - ticket-only lookup
+  - two resolved workflows
+  - two candidate episodes
+  - query matches only one episode
+  - summaries enabled
+  - memory items enabled
+  - summary-first child set follows only the surviving post-filter episode
 
 ### Current intended reading of this behavior
 
@@ -117,7 +132,7 @@ Validated this slice with:
 
 Result at completion time:
 
-- `28 passed`
+- `29 passed`
 
 ---
 
@@ -169,7 +184,7 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `28 passed` in `tests/memory/test_service_context_details.py`
+- `29 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -258,139 +273,9 @@ Proceed in this order:
 2. preserve workspace/relation auxiliary groups as sibling auxiliaries where they are currently emitted
 3. preserve the constrained relation-aware scope:
    - one hop
-   - `supports` only
-   - auxiliary only
-4. prefer a genuinely different small behavior choice over another tiny explainability addition
-5. still avoid broad graph semantics or relation-driven primary selection
-
-### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that ticket-only query-filter summary-first surviving-child-set behavior is explicitly covered?
-
----
-
-## Strong recommendation for the next session
-
-Prefer one of these, in order:
-
-1. a genuinely different small grouped-selection behavior choice
-2. a broader contract-consolidation / interpretation step
-3. only later, broader relation/group behavior
-
-Avoid next session work that is primarily:
-
-- more generic helper cleanup
-- another hyper-narrow metadata addition without a clear missing behavior
-- premature broad response-shape expansion
-- broader relation traversal
-- graph-first expansion
-- auxiliary-group nesting without stronger retrieval semantics
-
----
-
-## Commit trail to remember
-
-Recent relevant commits before the latest ticket-only query-filter slice:
-
-- `ac54a63` — `Add hierarchy primitive design note`
-- `dfac5fa` — `Add bulk episode memory item lookup`
-- `be51b5b` — `Extract memory context projection helpers`
-- `cd234fc` — `Update last session note`
-- `dd5480c` — `Clarify grouped memory context contract`
-- `c3aa2c0` — `Clarify summary-first group semantics`
-- `623011b` — `Refine next-step session note`
-- `8d65a14` — `Clarify summary-first grouped context modes`
-- `d6c66ac` — `Add summary group child episode count`
-- `f72a774` — `Add summary group child ordering metadata`
-- `c74d9ef` — `Add summary group emittedness metadata`
-- `7c6b5a6` — `Add summary group emission reason metadata`
-- `73ee2b5` — `Consolidate primary chain explainability notes`
-- `90e964d` — `Clarify auxiliary no-episode-match visibility`
-- `b362593` — `Add relation auxiliary source linkage`
-- `64d7388` — `Consolidate relation auxiliary explainability`
-- `c051dfc` — `Add summary-first top-level child count`
-- `1b48903` — `Add summary-first top-level child ids`
-- `2487359` — `Add relation source episode count`
-- `5047c97` — `Add primary episode group presence after filter`
-- `2eeb3bd` — `Add auxiliary-only-after-filter flag`
-- `db06003` — `Cover multi-source relation aggregation`
-- `b98b83a` — `Clarify relation aggregation ordering`
-- `e94b9fc` — `Cover relation aggregation limit behavior`
-- `163cb3e` — `Cover summary-first query-filter child set`
-- `4926491` — `Cover relation memory-items-disabled case`
-- `c14067d` — `Cover include-episodes false shaping`
-- `f04aad2` — `Cover summaries-disabled primary path`
-- `194c76a` — `Cover workspace inherited limit behavior`
-- `0b8dfec` — `Cover multi-workflow summary-first items`
-- `6f7c8ce` — `Cover ticket-only multi-workflow summary-first`
-- `44c5d32` — `Cover low-limit ticket-only summary-first`
-- `43e5250` — `Polish latest session handoff`
-- `c4ee4d9` — `Cover workspace-only multi-workflow summary-first`
-- `c51b999` — `Document workspace-only multi-workflow behavior`
-
-### Recent just-completed slice to remember conceptually
-
-- ticket-only query-filter summary-first surviving-child-set behavior covered by test
-- top-level summary-first child ids/count aligned with the surviving post-filter visible episode set
-- grouped summary child ids/count aligned with the same surviving post-filter visible episode set
-- grouped episode output aligned with the same surviving post-filter visible episode set
-- no auxiliary coexistence assumed unless it is actually emitted
-- validated with `pytest tests/memory/test_service_context_details.py`
-
-### Conceptual summary of the completed loops
-
-The recent coverage work established that the current grouped/details surface now explicitly covers:
-
-- primary summary/episode explainability
-- top-level summary-first selection identity
-- top-level summary-first selection cardinality
-- summary-first query-filter surviving-child-set behavior
-- summaries-disabled primary-path behavior
-- multi-workflow summary-first memory-items behavior
-- ticket-only multi-workflow summary-first memory-items behavior
-- low-limit ticket-only multi-workflow summary-first behavior
-- workspace-only multi-workflow summary-first behavior
-- workspace-only query-filter summary-first surviving-child-set behavior
-- ticket-only query-filter summary-first surviving-child-set behavior
-- workspace auxiliary no-episode-match visibility reading
-- workspace inherited auxiliary limit / truncation behavior
-- constrained relation auxiliary linkage back to returned episode-side context
-- top-level constrained relation source-episode cardinality
-- constrained relation auxiliary aggregation across multiple returned source episodes
-- constrained relation auxiliary first-seen distinct-target ordering
-- constrained relation auxiliary low-limit truncation
-- constrained relation auxiliary memory-items-disabled reading
-- `include_episodes = false` episode-less shaping behavior
-
-That is a good enough stopping point for the current stage without widening behavior.
-
----
-
-## Short handoff note
-
-If work resumes from here, do **not** start by adding another tiny explainability field unless there is a clear missing behavior.
-
-Start from the current stable reading:
-
-- primary summary/episode explainability is explicit enough
-- top-level summary-first child identity / cardinality are directly readable
-- summary-first query-filter surviving-child-set behavior is fixed by coverage
-- summaries-disabled primary-path behavior is fixed by coverage
-- multi-workflow summary-first memory-items behavior is fixed by coverage
-- ticket-only multi-workflow summary-first memory-items behavior is fixed by coverage
-- low-limit ticket-only multi-workflow summary-first behavior is fixed by coverage
-- workspace-only multi-workflow summary-first behavior is fixed by coverage
-- workspace-only query-filter summary-first behavior is fixed by coverage
-- ticket-only query-filter summary-first behavior is fixed by coverage
-- workspace-only multi-workflow summary-first should not currently be assumed to co-emit workspace inherited auxiliary output
-- workspace auxiliary no-episode-match visibility is intentional support preservation
-- workspace inherited auxiliary limit / truncation behavior is fixed by coverage
-- constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
-- relation auxiliary grouped output is explicit enough to correlate back to returned episode-side context
-- constrained multi-source relation aggregation is covered by behavior
-- current constrained relation aggregation ordering is best read as first-seen distinct-target order under the present source-side traversal
-- current constrained relation aggregation truncation is best read as truncation over that first-seen distinct-target sequence
-- constrained relation auxiliary output is not surfaced when `include_memory_items = false`
-- `include_episodes = false` keeps the visible response episode-less while still allowing current auxiliary workspace visibility
-- auxiliary surfaces remain auxiliary rather than newly reclassified primary selection paths
-
-Use that clearer base to choose the next genuinely useful small behavior or contract step.
+   - current relation set
+   - current auxiliary-group placement
+4. prefer either:
+   - one genuinely different grouped-selection behavior slice, or
+   - one contract/documentation consolidation step
+5. keep the next change semantically small and easy to validate
