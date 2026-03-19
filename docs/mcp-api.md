@@ -1414,7 +1414,10 @@ That means:
 - relation-scoped grouped entries may now also expose:
   - `source_episode_ids`
   - `source_memory_ids`
-- these source-linkage fields should currently be read as additive grouped explainability metadata that makes the constrained source-side linkage easier to inspect directly at the relation-group level
+- top-level details may now also expose:
+  - `relation_supports_source_episode_count = {number of returned episode ids that surfaced the current constrained relation auxiliary reading}`
+- these source-linkage fields should currently be read as additive grouped/details explainability metadata that makes the constrained source-side linkage easier to inspect directly
+- `relation_supports_source_episode_count` should currently be read as the top-level details counterpart of relation-group source episode linkage cardinality, so consumers do not need to derive that count only from relation-group-local source episode ids
 - this relation auxiliary surface should now be treated as explicit enough for the current stage:
   - relation support context is auxiliary
   - relation support context is still one-hop and `supports`-only
@@ -1433,6 +1436,7 @@ That means:
 - grouped consumers should currently correlate relation-scoped grouped output back to returned episode-side context through:
   - `source_episode_ids`
   - `source_memory_ids`
+  - `relation_supports_source_episode_count`
   - the existing per-episode related-item convenience and compatibility surfaces
 - the current constrained linkage reading is therefore:
   - returned episode-side memory items surface constrained supports-related targets

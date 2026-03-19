@@ -1535,6 +1535,14 @@ class MemoryService:
             if summary_selection_applied
             else []
         )
+        relation_supports_source_episode_count = len(
+            {
+                detail["episode_id"]
+                for detail in memory_item_details
+                if detail.get("related_memory_items")
+                and isinstance(detail.get("episode_id"), str)
+            }
+        )
 
         return {
             "retrieval_routes_present": [
@@ -1585,6 +1593,9 @@ class MemoryService:
             "summary_first_is_summary_only": summary_first_is_summary_only,
             "summary_first_child_episode_count": summary_first_child_episode_count,
             "summary_first_child_episode_ids": summary_first_child_episode_ids,
+            "relation_supports_source_episode_count": (
+                relation_supports_source_episode_count if related_memory_items else 0
+            ),
             "retrieval_route_item_counts": {
                 "summary_first": len(summaries) if summary_selection_applied else 0,
                 "episode_direct": episode_direct_item_count,

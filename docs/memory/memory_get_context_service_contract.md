@@ -112,6 +112,7 @@ Representative route metadata includes:
 - `child_episode_ordering`
 - `child_episode_groups_emitted`
 - `child_episode_groups_emission_reason`
+- `relation_supports_source_episode_count`
 
 This metadata exists to help consumers and operators understand **what was returned** and **why**.
 
@@ -405,6 +406,17 @@ linkage easier to read through:
 - `source_episode_ids`
 - `source_memory_ids`
 
+The current top-level details surface should also expose:
+
+- `relation_supports_source_episode_count`
+
+This field should be read as additive constrained relation-source cardinality
+metadata.
+It makes the current number of source episodes contributing to the constrained
+`supports` auxiliary reading directly readable from top-level details without
+requiring consumers to derive that count only from relation-group-local source
+linkage fields.
+
 At the episode-group level, the current response still preserves linkage through
 embedded provenance and relation-edge details such as:
 
@@ -509,6 +521,9 @@ relation-group explanation field unless a clearer behavior gap appears.
 Instead, the current contract direction should be read as:
 
 - constrained relation auxiliary grouped reading is explicit enough for now
+- top-level details may still mirror a small amount of constrained relation
+  source-cardinality metadata when that improves direct readability without
+  broadening behavior
 - workspace/relation auxiliary grouped surfaces still remain top-level sibling
   auxiliaries
 - broader relation expansion and deeper graph semantics are still intentionally

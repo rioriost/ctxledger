@@ -157,6 +157,7 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
     assert response.details["related_context_selection_route"] == (
         "relation_supports_auxiliary"
     )
+    assert response.details["relation_supports_source_episode_count"] == 1
     assert response.details["primary_retrieval_routes_present"] == [
         "episode_direct",
     ]
@@ -497,6 +498,7 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
     assert response.details["related_context_is_auxiliary"] is False
     assert response.details["related_context_relation_types"] == []
     assert response.details["related_context_selection_route"] is None
+    assert response.details["relation_supports_source_episode_count"] == 0
     assert response.details["retrieval_routes_present"] == [
         "episode_direct",
         "workspace_inherited_auxiliary",
