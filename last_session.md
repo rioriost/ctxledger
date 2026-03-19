@@ -31,7 +31,7 @@ This means the current low-limit ticket-only multi-workflow summary-first readin
 
 ### Small low-limit ticket-only multi-workflow summary-first coverage slice implemented
 
-A new focused test slice now covers the case where:
+A focused test slice now covers the case where:
 
 - two workflows share the same `ticket_id`
 - each workflow has an episode
@@ -329,7 +329,7 @@ Recent relevant commits before the latest low-limit ticket-only multi-workflow s
 
 ### Conceptual summary of the completed loops
 
-The recent loops established that the current grouped/details surface now explicitly covers:
+The recent coverage work established that the current grouped/details surface now explicitly covers:
 
 - primary summary/episode explainability
 - top-level summary-first selection identity
