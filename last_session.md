@@ -2,94 +2,102 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **`include_episodes = false` response-shaping reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **summaries-disabled primary-path reading** in `memory_get_context`.
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or add a new response field.
 
-Instead, it fixed and validated the current shaping behavior when episode return is disabled at the response level, even when workspace-scoped auxiliary context is still available.
+Instead, it fixed and validated the current behavior when:
+
+- `include_episodes = true`
+- `include_memory_items = true`
+- `include_summaries = false`
 
 The current response is now clearer that:
 
-- `include_episodes = false` is a shaping decision on the returned episode path
-- the response remains episode-less at the top level in that case
-- the current shaping path may still preserve workspace-scoped auxiliary grouped output
-- this is not the same thing as primary episode-group visibility
-- this is not the same thing as summary-first grouped output
-- this is not a broader response-shape expansion
-- this is the current contract for the episode-less shaping branch
+- disabling summaries disables the current summary-first grouped path
+- disabling summaries does **not** disable the primary episode path
+- the primary path remains visible through `episode_direct`
+- top-level summary-first details become inactive in that branch
+- grouped episode-scoped output still remains visible on the primary path
 
-This means the current `include_episodes = false` reading is now better fixed by behavior coverage rather than by inference alone.
+This means the current summaries-disabled primary-path reading is now better fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small `include_episodes = false` shaping coverage slice implemented
+### Small summaries-disabled primary-path coverage slice implemented
 
-A new shaping-focused test slice now covers the case where:
+A new focused test slice now covers the case where:
 
-- a workflow has at least one episode
-- an episode-side memory item exists
-- an inherited workspace-scoped memory item exists
+- a workflow has an episode
+- episode-side memory items exist
 - the request uses:
-  - `include_episodes = false`
+  - `include_episodes = true`
   - `include_memory_items = true`
   - `include_summaries = false`
 
 The current intended result in that case is:
 
-- `episodes == ()`
-- top-level episode-oriented detail surfaces remain empty
-- no episode-scoped grouped output is returned
-- no summary-scoped grouped output is returned
-- workspace-scoped auxiliary grouped output may still remain visible
-- grouped retrieval routes remain auxiliary-only in that response shape
+- `episodes` still contains the visible episode
+- `summaries == []`
+- `summary_selection_applied == false`
+- `summary_selection_kind == null`
+- `summary_first_has_episode_groups == false`
+- `summary_first_is_summary_only == false`
+- `summary_first_child_episode_count == 0`
+- `summary_first_child_episode_ids == []`
+- `primary_episode_groups_present_after_query_filter == true`
+- `auxiliary_only_after_query_filter == false`
+- the primary retrieval route is `episode_direct`
+- grouped output contains an episode-scoped group
+- no summary-scoped grouped output is emitted
 
 ### Current intended reading of this behavior
 
 Grouped and details consumers should currently understand this case like this:
 
-1. the response shaping disables returned episode visibility
-2. that shaping suppresses the primary episode/scoped grouped path from the returned response
-3. summary-first grouped output is not formed on this path
-4. workspace-scoped auxiliary context may still remain visible if available
-5. that remaining visibility should be read as auxiliary support preservation within the current shaping branch
+1. summaries are disabled at response-shaping time
+2. summary-first grouped assembly is therefore inactive
+3. the primary path does **not** disappear
+4. the current primary path remains the direct episode-scoped grouped reading
+5. top-level summary-first metadata should remain in its inactive shape
 
 This should **not** be read as:
 
-- hidden primary episode groups still being part of the visible grouped response
-- summary-first still being active behind the scenes of the returned shape
-- a contradiction in the grouped route model
-- broader graph or relation behavior
+- the primary path being disabled
+- hidden summary-first grouping still structuring the returned response
+- a contradiction between grouped routes and grouped output
+- broader retrieval-semantics expansion
 
 It should be read as:
 
-- current response shaping for an intentionally episode-less return path
+- current response shaping for a primary-path-visible but summaries-disabled branch
 
 ### Why this slice is useful
 
-This slice improves confidence in the current response-shaping contract without broadening behavior.
+This slice improves confidence in the current primary-path contract without broadening behavior.
 
-It verifies that the current system behaves consistently when the request disables episode return:
+It verifies that the current system behaves consistently when summaries are disabled:
 
-- no top-level episode return
-- no primary grouped episode path in the returned shape
-- no summary-first grouped path in the returned shape
-- auxiliary workspace visibility can still remain when applicable
+- no summary-scoped grouped output
+- no summary-first route
+- no active top-level summary-first child metadata
+- primary episode-scoped grouped output still present
 
-This makes the current shaping branch explicit rather than leaving it to be reconstructed from multiple indirect signals.
+This makes the summaries-disabled branch explicit rather than leaving it to be reconstructed from multiple indirect signals.
 
 ### Tests added/updated
 
-The response-shaping test coverage now explicitly checks the case where `include_episodes = false` while workspace auxiliary context is still available.
+The response-shaping test coverage now explicitly checks the case where summaries are disabled but the primary episode path remains visible.
 
 The expected current result is:
 
-- `episodes == ()`
-- empty episode-oriented top-level fields
-- no summary/episode grouped output
-- workspace-scoped grouped auxiliary output still present
-- grouped retrieval routes remain auxiliary-only in the returned response shape
+- no summary-first grouped reading
+- no summary-scoped grouped output
+- active `episode_direct` primary path
+- inactive summary-first top-level metadata
+- episode-scoped grouped output still present
 
 ### Validation completed
 
@@ -99,7 +107,7 @@ Validated the slice with:
 
 Result at completion time:
 
-- `21 passed`
+- `22 passed`
 
 ---
 
@@ -113,8 +121,8 @@ This slice intentionally did **not** do any of the following:
 - change constrained relation auxiliary positioning
 - introduce graph-backed selection semantics
 - add broader response-shape expansion
-- make `include_episodes = false` preserve hidden primary grouped episode output
-- make `include_episodes = false` preserve summary-first grouped output in the visible response
+- make summaries-disabled responses preserve hidden summary-first grouped output
+- make summaries-disabled responses suppress the direct primary episode path
 
 The current grouped interpretation remains:
 
@@ -151,7 +159,7 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `21 passed` in `tests/memory/test_service_context_details.py`
+- `22 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -167,6 +175,7 @@ The current `0.6.0` state should now be read as:
 - primary summary/episode explainability remains explicit enough for the current stage
 - top-level summary-first selection identity/cardinality is directly readable
 - summary-first query-filter surviving-child-set behavior is explicitly covered by behavior
+- summaries-disabled primary-path behavior is explicitly covered by behavior
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains explicit enough to correlate back to returned episode-side context
 - constrained relation auxiliary aggregation across multiple returned source episodes is explicitly covered by behavior
@@ -181,6 +190,7 @@ In practice:
 - service projection structure is still good enough for the current slice
 - primary-chain grouped reading is explicit enough
 - summary-first query-filter interaction is better anchored by behavior coverage
+- summaries-disabled primary-path behavior is now also better anchored by behavior coverage
 - constrained relation grouped reading is explicit enough
 - constrained relation negative-path behavior is better anchored by behavior coverage
 - current episode-less shaping behavior is also better anchored by behavior coverage
@@ -190,7 +200,7 @@ In practice:
 
 ## Key conclusion
 
-The current `include_episodes = false` shaping coverage slice is complete enough.
+The current summaries-disabled primary-path coverage slice is complete enough.
 
 The next step should still avoid:
 
@@ -211,7 +221,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current `include_episodes = false` response-shaping reading as sufficiently fixed for the current stage.
+Treat the current summaries-disabled primary-path reading as sufficiently fixed for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without continuing the pattern of ever-finer details/grouped mirror metadata unless clearly justified.
@@ -229,7 +239,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that the current episode-less `include_episodes = false` shaping branch is explicitly covered?
+> What is the next smallest useful grouped-selection or contract improvement now that summaries-disabled primary-path behavior is explicitly covered?
 
 ---
 
@@ -254,7 +264,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest `include_episodes = false` shaping slice:
+Recent relevant commits before the latest summaries-disabled primary-path slice:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -282,12 +292,13 @@ Recent relevant commits before the latest `include_episodes = false` shaping sli
 - `e94b9fc` — `Cover relation aggregation limit behavior`
 - `163cb3e` — `Cover summary-first query-filter child set`
 - `4926491` — `Cover relation memory-items-disabled case`
+- `c14067d` — `Cover include-episodes false shaping`
 
 ### Recent just-completed slice to remember conceptually
 
-- `include_episodes = false` shaping behavior covered by test
-- current episode-less response branch fixed against available workspace auxiliary visibility
-- no hidden primary grouped episode path is surfaced in that branch
+- summaries-disabled primary-path behavior covered by test
+- direct primary episode path remains visible when summaries are disabled
+- summary-first metadata/grouping stays inactive in that branch
 - validated with `pytest tests/memory/test_service_context_details.py`
 
 ### Conceptual summary of the completed loops
@@ -298,6 +309,7 @@ The recent loops established that the current grouped/details surface now explic
 - top-level summary-first selection identity
 - top-level summary-first selection cardinality
 - summary-first query-filter surviving-child-set behavior
+- summaries-disabled primary-path behavior
 - workspace auxiliary no-episode-match visibility reading
 - constrained relation auxiliary linkage back to returned episode-side context
 - top-level constrained relation source-episode cardinality
@@ -313,13 +325,14 @@ That is a good enough stopping point for the current stage without widening beha
 
 ## Short handoff note
 
-If work resumes from here, do **not** start by broadening relation traversal or by adding another tiny explainability field unless there is a clear missing behavior.
+If work resumes from here, do **not** start by adding another tiny explainability field unless there is a clear missing behavior.
 
 Start from the current stable reading:
 
 - primary summary/episode explainability is explicit enough
 - top-level summary-first child identity/cardinality is directly readable
 - summary-first query-filter surviving-child-set behavior is fixed by coverage
+- summaries-disabled primary-path behavior is fixed by coverage
 - workspace auxiliary no-episode-match visibility is intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
 - relation auxiliary grouped output is explicit enough to correlate back to returned episode-side context

@@ -1257,6 +1257,173 @@ def test_memory_get_context_includes_only_memory_items_when_summaries_disabled()
     assert response.details["summary_selection_kind"] is None
 
 
+def test_memory_get_context_summaries_disabled_keeps_primary_path_episode_direct() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000034"
+    created_at = datetime(2024, 10, 8, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode with summaries disabled primary path",
+        metadata={"kind": "summaries-disabled-primary-path"},
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Stored episode detail",
+        metadata={"kind": "note"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="checkpoint_note",
+        provenance="checkpoint",
+        content="Stored checkpoint detail",
+        metadata={"kind": "checkpoint"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-SUMMARIES-DISABLED-PRIMARY-PATH",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Episode with summaries disabled primary path"
+    ]
+    assert response.details["summaries"] == []
+    assert response.details["summary_selection_applied"] is False
+    assert response.details["summary_selection_kind"] is None
+    assert response.details["summary_first_has_episode_groups"] is False
+    assert response.details["summary_first_is_summary_only"] is False
+    assert response.details["summary_first_child_episode_count"] == 0
+    assert response.details["summary_first_child_episode_ids"] == []
+    assert response.details["primary_episode_groups_present_after_query_filter"] is True
+    assert response.details["auxiliary_only_after_query_filter"] is False
+    assert response.details["retrieval_routes_present"] == [
+        "episode_direct",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "episode_direct",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == []
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 2,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_presence"] == {
+        "summary_first": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "episode_direct": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "workspace_inherited_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+    }
+    assert response.details["retrieval_route_scopes_present"] == {
+        "summary_first": [],
+        "episode_direct": [
+            "episode",
+        ],
+        "workspace_inherited_auxiliary": [],
+        "relation_supports_auxiliary": [],
+    }
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "episode",
+            "scope_id": str(episode.episode_id),
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "parent_group_scope": None,
+            "parent_group_id": None,
+            "selection_kind": "direct_episode",
+            "selection_route": "episode_direct",
+            "selected_via_summary_first": False,
+            "memory_items": [
+                {
+                    "memory_id": str(second_memory_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": str(episode.episode_id),
+                    "type": "checkpoint_note",
+                    "provenance": "checkpoint",
+                    "content": "Stored checkpoint detail",
+                    "metadata": {"kind": "checkpoint"},
+                    "created_at": second_memory_item.created_at.isoformat(),
+                    "updated_at": second_memory_item.updated_at.isoformat(),
+                },
+                {
+                    "memory_id": str(first_memory_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": str(episode.episode_id),
+                    "type": "episode_note",
+                    "provenance": "episode",
+                    "content": "Stored episode detail",
+                    "metadata": {"kind": "note"},
+                    "created_at": first_memory_item.created_at.isoformat(),
+                    "updated_at": first_memory_item.updated_at.isoformat(),
+                },
+            ],
+            "related_memory_items": [],
+            "related_memory_item_provenance": [],
+            "related_memory_relation_edges": [],
+        }
+    ]
+
+
 def test_memory_get_context_includes_inherited_workspace_items_in_details_shape() -> (
     None
 ):
