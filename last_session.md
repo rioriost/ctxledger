@@ -2,95 +2,104 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **relation auxiliary behavior when memory items are disabled** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **`include_episodes = false` response-shaping reading** in `memory_get_context`.
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or add a new response field.
 
-Instead, it fixed and validated the current behavior that the constrained relation `supports` auxiliary path is **not surfaced** when `include_memory_items = false`.
+Instead, it fixed and validated the current shaping behavior when episode return is disabled at the response level, even when workspace-scoped auxiliary context is still available.
 
 The current response is now clearer that:
 
-- constrained relation-derived support context still depends on episode-side memory-item-shaped source context
-- disabling memory items disables the current relation auxiliary path as well
-- this is true even when `supports` relations exist in storage
-- the current system does **not** surface relation-derived auxiliary output from summaries alone
-- the absence of relation auxiliary output in this case is a current behavior choice, not broader relation expansion
+- `include_episodes = false` is a shaping decision on the returned episode path
+- the response remains episode-less at the top level in that case
+- the current shaping path may still preserve workspace-scoped auxiliary grouped output
+- this is not the same thing as primary episode-group visibility
+- this is not the same thing as summary-first grouped output
+- this is not a broader response-shape expansion
+- this is the current contract for the episode-less shaping branch
 
-This means the current constrained relation auxiliary reading is now better fixed on both its positive path and one important negative path.
+This means the current `include_episodes = false` reading is now better fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small memory-items-disabled relation coverage slice implemented
+### Small `include_episodes = false` shaping coverage slice implemented
 
-A new relation-focused test slice now covers the case where:
+A new shaping-focused test slice now covers the case where:
 
-- an episode exists
+- a workflow has at least one episode
 - an episode-side memory item exists
-- a valid `supports` relation exists from that memory item to a workspace-scoped target
-- but the request uses:
-  - `include_memory_items = false`
+- an inherited workspace-scoped memory item exists
+- the request uses:
+  - `include_episodes = false`
+  - `include_memory_items = true`
+  - `include_summaries = false`
 
 The current intended result in that case is:
 
-- `episodes` may still be returned
-- `memory_items == []`
-- `related_memory_items == []`
-- `related_memory_items_by_episode == {}`
-- `related_context_is_auxiliary == false`
-- `related_context_relation_types == []`
-- `related_context_selection_route == null`
-- `relation_supports_source_episode_count == 0`
-- no `relation_supports_auxiliary` route is present
-- no relation-scoped grouped output is emitted
+- `episodes == ()`
+- top-level episode-oriented detail surfaces remain empty
+- no episode-scoped grouped output is returned
+- no summary-scoped grouped output is returned
+- workspace-scoped auxiliary grouped output may still remain visible
+- grouped retrieval routes remain auxiliary-only in that response shape
 
 ### Current intended reading of this behavior
 
 Grouped and details consumers should currently understand this case like this:
 
-1. the current relation auxiliary path is sourced from episode-side memory-item-shaped context
-2. when `include_memory_items = false`, that source path is not surfaced
-3. therefore the constrained relation auxiliary path is also not surfaced
-4. this should **not** be read as:
-   - missing relation data in storage
-   - query filtering behavior
-   - broader relation failure
-5. this should be read as:
-   - current response-shaping behavior for the constrained relation slice
+1. the response shaping disables returned episode visibility
+2. that shaping suppresses the primary episode/scoped grouped path from the returned response
+3. summary-first grouped output is not formed on this path
+4. workspace-scoped auxiliary context may still remain visible if available
+5. that remaining visibility should be read as auxiliary support preservation within the current shaping branch
+
+This should **not** be read as:
+
+- hidden primary episode groups still being part of the visible grouped response
+- summary-first still being active behind the scenes of the returned shape
+- a contradiction in the grouped route model
+- broader graph or relation behavior
+
+It should be read as:
+
+- current response shaping for an intentionally episode-less return path
 
 ### Why this slice is useful
 
-This slice improves confidence in the current constrained relation-aware reading without broadening behavior.
+This slice improves confidence in the current response-shaping contract without broadening behavior.
 
-It verifies that the current relation auxiliary path behaves consistently with the current architecture:
+It verifies that the current system behaves consistently when the request disables episode return:
 
-- episode-side memory context first
-- constrained one-hop `supports` derivation second
-- auxiliary grouped relation output only when that source path is enabled
+- no top-level episode return
+- no primary grouped episode path in the returned shape
+- no summary-first grouped path in the returned shape
+- auxiliary workspace visibility can still remain when applicable
 
-This makes the current negative-path behavior explicit rather than leaving it as an assumption.
+This makes the current shaping branch explicit rather than leaving it to be reconstructed from multiple indirect signals.
 
 ### Tests added/updated
 
-The relation grouped/details test coverage now explicitly checks the case where `supports` relations exist but `include_memory_items = false`.
+The response-shaping test coverage now explicitly checks the case where `include_episodes = false` while workspace auxiliary context is still available.
 
 The expected current result is:
 
-- no relation auxiliary context is surfaced
-- no relation auxiliary route is present
-- no relation grouped output is emitted
-- top-level relation details remain inactive
+- `episodes == ()`
+- empty episode-oriented top-level fields
+- no summary/episode grouped output
+- workspace-scoped grouped auxiliary output still present
+- grouped retrieval routes remain auxiliary-only in the returned response shape
 
 ### Validation completed
 
 Validated the slice with:
 
-- `pytest tests/memory/test_memory_context_related_items.py`
+- `pytest tests/memory/test_service_context_details.py`
 
 Result at completion time:
 
-- `5 passed`
+- `21 passed`
 
 ---
 
@@ -100,12 +109,12 @@ This slice intentionally did **not** do any of the following:
 
 - broaden relation traversal beyond one outgoing hop
 - include relation types beyond `supports`
-- make relation-derived support context available when memory-item-shaped source context is disabled
-- make summaries alone drive constrained relation output
-- nest relation groups into the summary/episode chain
 - change workspace auxiliary positioning
+- change constrained relation auxiliary positioning
 - introduce graph-backed selection semantics
 - add broader response-shape expansion
+- make `include_episodes = false` preserve hidden primary grouped episode output
+- make `include_episodes = false` preserve summary-first grouped output in the visible response
 
 The current grouped interpretation remains:
 
@@ -122,8 +131,8 @@ The current grouped interpretation remains:
 - `src/ctxledger/memory/service_core.py`
 
 ### Tests
-- `tests/memory/test_memory_context_related_items.py`
 - `tests/memory/test_service_context_details.py`
+- `tests/memory/test_memory_context_related_items.py`
 
 ### Design and contract docs
 - `docs/memory/memory_get_context_service_contract.md`
@@ -137,12 +146,12 @@ The current grouped interpretation remains:
 
 Recent relevant validation includes:
 
-- `pytest tests/memory/test_memory_context_related_items.py`
 - `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
 
 Recent validation result for this slice:
 
-- `5 passed` in `tests/memory/test_memory_context_related_items.py`
+- `21 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -164,6 +173,7 @@ The current `0.6.0` state should now be read as:
 - constrained relation auxiliary `memory_items` ordering is currently best read as first-seen distinct target order under the present source-side traversal
 - constrained relation auxiliary low-limit truncation is currently best read as truncation over that first-seen distinct-target sequence
 - constrained relation auxiliary output is currently disabled when `include_memory_items = false`
+- `include_episodes = false` now has explicit shaping coverage for the returned episode-less branch
 
 In practice:
 
@@ -172,14 +182,15 @@ In practice:
 - primary-chain grouped reading is explicit enough
 - summary-first query-filter interaction is better anchored by behavior coverage
 - constrained relation grouped reading is explicit enough
-- constrained relation negative-path behavior is now also better anchored by behavior coverage
+- constrained relation negative-path behavior is better anchored by behavior coverage
+- current episode-less shaping behavior is also better anchored by behavior coverage
 - another tiny grouped/detail helper field is still probably not the best next use of effort unless a clear behavior gap appears
 
 ---
 
 ## Key conclusion
 
-The current relation-memory-items-disabled coverage slice is complete enough.
+The current `include_episodes = false` shaping coverage slice is complete enough.
 
 The next step should still avoid:
 
@@ -200,7 +211,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current constrained relation behavior when `include_memory_items = false` as sufficiently fixed for the current stage.
+Treat the current `include_episodes = false` response-shaping reading as sufficiently fixed for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without continuing the pattern of ever-finer details/grouped mirror metadata unless clearly justified.
@@ -218,7 +229,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that constrained relation auxiliary behavior is explicitly covered on its positive path, multi-source path, low-limit path, and memory-items-disabled path?
+> What is the next smallest useful grouped-selection or contract improvement now that the current episode-less `include_episodes = false` shaping branch is explicitly covered?
 
 ---
 
@@ -243,7 +254,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest relation-memory-items-disabled slice:
+Recent relevant commits before the latest `include_episodes = false` shaping slice:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -270,13 +281,14 @@ Recent relevant commits before the latest relation-memory-items-disabled slice:
 - `b98b83a` — `Clarify relation aggregation ordering`
 - `e94b9fc` — `Cover relation aggregation limit behavior`
 - `163cb3e` — `Cover summary-first query-filter child set`
+- `4926491` — `Cover relation memory-items-disabled case`
 
 ### Recent just-completed slice to remember conceptually
 
-- constrained relation path explicitly covered when `include_memory_items = false`
-- no relation auxiliary route/group/output is surfaced in that case
-- current negative-path behavior now matches the current source-path model more explicitly
-- validated with `pytest tests/memory/test_memory_context_related_items.py`
+- `include_episodes = false` shaping behavior covered by test
+- current episode-less response branch fixed against available workspace auxiliary visibility
+- no hidden primary grouped episode path is surfaced in that branch
+- validated with `pytest tests/memory/test_service_context_details.py`
 
 ### Conceptual summary of the completed loops
 
@@ -293,6 +305,7 @@ The recent loops established that the current grouped/details surface now explic
 - constrained relation auxiliary first-seen ordering reading
 - constrained relation auxiliary low-limit truncation reading
 - constrained relation auxiliary memory-items-disabled reading
+- `include_episodes = false` episode-less shaping behavior
 
 That is a good enough stopping point for the current stage without widening behavior.
 
@@ -314,6 +327,6 @@ Start from the current stable reading:
 - current constrained relation aggregation ordering is best read as first-seen distinct target order under the present source-side traversal
 - current constrained relation aggregation truncation is best read as truncation over that first-seen distinct-target sequence
 - constrained relation auxiliary output is not surfaced when `include_memory_items = false`
-- auxiliary surfaces remain auxiliary rather than newly reclassified primary selection paths
+- `include_episodes = false` keeps the visible response episode-less while still allowing current auxiliary workspace visibility
 
 Use that clearer base to choose the next genuinely useful small behavior or contract step.

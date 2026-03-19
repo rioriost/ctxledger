@@ -335,6 +335,212 @@ def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
     assert no_episode_response.details["workflow_instance_id"] == str(workflow_id)
 
 
+def test_memory_get_context_include_episodes_false_keeps_response_episode_less_even_when_memory_items_are_enabled() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000031"
+    created_at = datetime(2024, 10, 4, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode hidden by include_episodes false shaping",
+        metadata={"kind": "episode-hidden"},
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+
+    direct_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Direct memory item that should stay hidden",
+        metadata={"kind": "hidden-memory-item"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    inherited_workspace_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Inherited workspace item hidden by include_episodes false shaping",
+        metadata={"kind": "hidden-workspace-item"},
+        created_at=created_at.replace(hour=0),
+        updated_at=created_at.replace(hour=0),
+    )
+    memory_item_repository.create(direct_memory_item)
+    memory_item_repository.create(inherited_workspace_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-INCLUDE-EPISODES-FALSE-SHAPING",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=False,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert response.episodes == ()
+    assert response.details["lookup_scope"] == "workflow_instance"
+    assert response.details["resolved_workflow_count"] == 1
+    assert response.details["resolved_workflow_ids"] == [str(workflow_id)]
+    assert response.details["query_tokens"] == []
+    assert response.details["query_filter_applied"] is False
+    assert response.details["episodes_before_query_filter"] == 0
+    assert response.details["matched_episode_count"] == 0
+    assert response.details["episodes_returned"] == 0
+    assert response.details["episode_explanations"] == []
+    assert response.details["memory_items"] == []
+    assert response.details["memory_item_counts_by_episode"] == {}
+    assert response.details["summaries"] == []
+    assert response.details["summary_selection_applied"] is False
+    assert response.details["summary_selection_kind"] is None
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "workspace",
+            "scope_id": workspace_id,
+            "parent_scope": None,
+            "parent_scope_id": None,
+            "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
+            "memory_items": [
+                {
+                    "memory_id": str(inherited_workspace_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": None,
+                    "type": "workspace_note",
+                    "provenance": "workspace",
+                    "content": "Inherited workspace item hidden by include_episodes false shaping",
+                    "metadata": {"kind": "hidden-workspace-item"},
+                    "created_at": inherited_workspace_item.created_at.isoformat(),
+                    "updated_at": inherited_workspace_item.updated_at.isoformat(),
+                }
+            ],
+        }
+    ]
+    assert response.details["retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == []
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_presence"] == {
+        "summary_first": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "episode_direct": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "workspace_inherited_auxiliary": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+    }
+    assert response.details["retrieval_route_scope_counts"] == {
+        "summary_first": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "episode_direct": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "workspace_inherited_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 1,
+            "relation": 0,
+        },
+        "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+    }
+    assert response.details["retrieval_route_scope_item_counts"] == {
+        "summary_first": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "episode_direct": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "workspace_inherited_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 1,
+            "relation": 0,
+        },
+        "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+    }
+    assert response.details["retrieval_route_scopes_present"] == {
+        "summary_first": [],
+        "episode_direct": [],
+        "workspace_inherited_auxiliary": [
+            "workspace",
+        ],
+        "relation_supports_auxiliary": [],
+    }
+    assert response.details["workflow_instance_id"] == str(workflow_id)
+
+
 def test_memory_get_context_includes_episode_explanations_without_query_filter() -> (
     None
 ):
