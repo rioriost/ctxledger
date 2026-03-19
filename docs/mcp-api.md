@@ -1356,8 +1356,10 @@ That means:
     - `child_episode_groups_emission_reason = "memory_items_enabled" | "memory_items_disabled"`
     - `summaries = [...]`
   - `summary_first_child_episode_count = {number of child episode ids represented by the current summary-first grouped reading}`
+  - `summary_first_child_episode_ids = [{episode ids represented by the current summary-first grouped reading}]`
   - `child_episode_count` should currently be read as explicit summary-group child cardinality metadata for grouped consumers, so they do not need to infer child count only by measuring `child_episode_ids`
   - `summary_first_child_episode_count` should currently be read as the top-level details counterpart of current summary-first child cardinality, so consumers do not need to derive that count only from grouped summary entries
+  - `summary_first_child_episode_ids` should currently be read as the top-level details counterpart of the current summary-group child episode references, so consumers do not need to inspect grouped summary entries just to recover which child episodes the current summary-first reading represents
   - `child_episode_ordering = "returned_episode_order"` should currently be read as explicit summary-group ordering metadata for grouped consumers, so they do not need to infer whether `child_episode_ids` follows returned episode ordering
   - `child_episode_groups_emitted = true` should currently be read as explicit summary-group emittedness metadata for grouped consumers, so they do not need to infer whether corresponding episode-scoped groups were emitted only from broader response-shaping clues
   - `child_episode_groups_emission_reason` should currently be read as explicit summary-group emittedness-reason metadata for grouped consumers, so they do not need to infer the current emittedness reason only from broader response-shaping clues
@@ -1397,6 +1399,9 @@ That means:
 - top-level details consumers should currently read `summary_first_child_episode_count` as:
   - `0` when summary-first selection is not active
   - `{N}` when summary-first selection is active and the current summary-first grouped reading represents `N` child episodes
+- top-level details consumers should currently read `summary_first_child_episode_ids` as:
+  - `[]` when summary-first selection is not active
+  - `[{episode ids}]` when summary-first selection is active and the current summary-first grouped reading represents those child episodes
 - `related_memory_items` is currently narrower than general relation-aware retrieval:
   - it starts from returned episode memory items only
   - it follows one outgoing hop only

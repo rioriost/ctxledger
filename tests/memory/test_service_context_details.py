@@ -551,6 +551,10 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
     assert response.details["summary_first_has_episode_groups"] is True
     assert response.details["summary_first_is_summary_only"] is False
     assert response.details["summary_first_child_episode_count"] == 2
+    assert response.details["summary_first_child_episode_ids"] == [
+        str(first_episode.episode_id),
+        str(second_episode.episode_id),
+    ]
     assert response.details["retrieval_routes_present"] == [
         "summary_first",
     ]
@@ -906,6 +910,9 @@ def test_memory_get_context_includes_only_summaries_when_memory_items_disabled()
     assert response.details["summary_first_has_episode_groups"] is False
     assert response.details["summary_first_is_summary_only"] is True
     assert response.details["summary_first_child_episode_count"] == 1
+    assert response.details["summary_first_child_episode_ids"] == [
+        str(episode.episode_id),
+    ]
     assert response.details["memory_context_groups"] == [
         {
             "scope": "summary",

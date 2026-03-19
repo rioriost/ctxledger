@@ -107,6 +107,7 @@ Representative route metadata includes:
 - `summary_first_has_episode_groups`
 - `summary_first_is_summary_only`
 - `summary_first_child_episode_count`
+- `summary_first_child_episode_ids`
 - `child_episode_count`
 - `child_episode_ordering`
 - `child_episode_groups_emitted`
@@ -137,11 +138,13 @@ or:
 The current top-level details surface should also expose:
 
 - `summary_first_child_episode_count`
+- `summary_first_child_episode_ids`
 
-This field should be read as additive summary-first selection-cardinality metadata.
-It makes the current number of child episodes represented by the summary-first
-selection directly readable from top-level details without requiring grouped
-consumers to derive that count only from summary-group-local fields.
+These fields should be read as additive summary-first selection metadata.
+They make the current child-episode cardinality and child-episode identity
+represented by the summary-first selection directly readable from top-level
+details without requiring grouped consumers to derive those values only from
+summary-group-local fields.
 
 ---
 
@@ -188,6 +191,8 @@ covers:
 - whether summary-first selection is active
 - whether the current grouped reading is summary-only or summary-plus-episode
 - how many child episodes the current summary-first selection represents at the
+  top-level details layer
+- which child episodes the current summary-first selection represents at the
   top-level details layer
 - which child episodes the summary group references
 - how many child episodes the summary group represents

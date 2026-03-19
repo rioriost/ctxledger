@@ -2,18 +2,19 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **summary-first top-level selection-cardinality reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **summary-first top-level selection-identity reading** in `memory_get_context`.
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or add another summary-group-local helper field.
 
-Instead, it refined the current summary-first reading by making child-episode cardinality directly readable from the top-level `details` surface.
+Instead, it refined the current summary-first reading by making child-episode identity directly readable from the top-level `details` surface.
 
 The current response is now clearer that:
 
 - summary-first selection can be identified at the top-level details layer
 - summary-first summary/episode grouped reading can already be interpreted from grouped metadata
-- the current summary-first child-episode cardinality is now also directly readable from top-level details
-- grouped consumers no longer need to rely only on summary-group-local child-cardinality fields when they want the current summary-first selection count
+- the current summary-first child-episode cardinality is directly readable from top-level details
+- the current summary-first child-episode identity is now also directly readable from top-level details
+- grouped consumers no longer need to inspect grouped summary entries just to recover which child episodes the current summary-first reading represents
 
 This means the top-level summary-first reading is now slightly stronger without widening retrieval semantics.
 
@@ -21,11 +22,11 @@ This means the top-level summary-first reading is now slightly stronger without 
 
 ## What was completed
 
-### Small top-level summary-first cardinality slice implemented
+### Small top-level summary-first child-identity slice implemented
 
 The current `details` surface now includes:
 
-- `summary_first_child_episode_count`
+- `summary_first_child_episode_ids`
 
 This field is additive top-level metadata.
 It does **not** replace grouped summary metadata.
@@ -35,32 +36,37 @@ It complements it.
 
 The current intended interpretation is:
 
-- `summary_first_child_episode_count = 0`
+- `summary_first_child_episode_ids = []`
   - summary-first selection is not active
 
-- `summary_first_child_episode_count = N`
+- `summary_first_child_episode_ids = [{episode ids}]`
   - summary-first selection is active
-  - the current summary-first grouped reading represents `N` child episodes
+  - the current summary-first grouped reading represents those child episodes
 
 At the current stage, this field should be read conservatively:
 
 - it does **not** introduce a new retrieval route
 - it does **not** broaden summary-first behavior
-- it does **not** replace `child_episode_count` on the grouped summary entry
+- it does **not** replace `child_episode_ids` on the grouped summary entry
 - it does **not** imply stronger parentage or stronger matching semantics
 
 ### Why this slice is useful
 
 This slice improves the current top-level `details` reading for summary-first selection without adding still more summary-group-local fields.
 
-It means consumers that primarily read `details` can now see the current summary-first selection cardinality directly, rather than deriving it only from grouped summary entries.
+It means consumers that primarily read `details` can now recover both:
+
+- current summary-first child cardinality
+- current summary-first child identity
+
+directly, rather than deriving those values only from grouped summary entries.
 
 ### Tests added/updated
 
 The summary-first test coverage now explicitly checks:
 
-- `summary_first_child_episode_count == 2` in the summary-first-with-episode-groups case
-- `summary_first_child_episode_count == 1` in the summary-first summary-only case
+- `summary_first_child_episode_ids == [first_episode_id, second_episode_id]` in the summary-first-with-episode-groups case
+- `summary_first_child_episode_ids == [episode_id]` in the summary-first summary-only case
 
 ### Validation completed
 
@@ -136,7 +142,9 @@ The current `0.6.0` state should now be read as:
 - still not Apache AGE behavior expansion yet
 - `memory_context_groups` remains the primary grouped hierarchy-aware surface
 - primary summary/episode explainability remains explicit enough for the current stage
-- top-level summary-first selection cardinality is now easier to read directly through:
+- top-level summary-first selection identity is now easier to read directly through:
+  - `summary_first_child_episode_ids`
+- top-level summary-first selection cardinality remains directly readable through:
   - `summary_first_child_episode_count`
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains explicit enough to correlate back to returned episode-side context
@@ -153,7 +161,7 @@ In practice:
 
 ## Key conclusion
 
-The current top-level summary-first child-count slice is complete enough.
+The current top-level summary-first child-ids slice is complete enough.
 
 The next step should still avoid:
 
@@ -165,8 +173,8 @@ The next step should still avoid:
 
 The next useful step should instead be one of:
 
-1. a different small grouped-selection behavior choice
-2. a higher-level contract-consolidation / interpretation step
+1. a genuinely different small grouped-selection behavior choice
+2. a broader contract-consolidation / interpretation step
 3. only later, broader relation/group behavior
 
 ---
@@ -174,7 +182,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current summary-first top-level child-cardinality reading as sufficiently explicit for now.
+Treat the current summary-first top-level child-identity reading as sufficiently explicit for now.
 
 ### Recommended target
 Choose the next small behavior or contract step **without** continuing the pattern of adding ever-finer summary-group-local metadata unless clearly justified.
@@ -192,7 +200,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that summary-first selection cardinality is directly readable at the top-level details layer?
+> What is the next smallest useful grouped-selection or contract improvement now that summary-first child-episode identity is directly readable at the top-level details layer?
 
 ---
 
@@ -217,7 +225,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest top-level summary-first slice:
+Recent relevant commits before the latest top-level summary-first identity slice:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -235,10 +243,11 @@ Recent relevant commits before the latest top-level summary-first slice:
 - `90e964d` — `Clarify auxiliary no-episode-match visibility`
 - `b362593` — `Add relation auxiliary source linkage`
 - `64d7388` — `Consolidate relation auxiliary explainability`
+- `c051dfc` — `Add summary-first top-level child count`
 
 Recent just-completed slice to remember conceptually:
 
-- top-level `summary_first_child_episode_count` added
+- top-level `summary_first_child_episode_ids` added
 - summary-first details tests updated
 - service contract and MCP API docs updated to match
 - validated with `pytest tests/memory/test_service_context_details.py`
@@ -249,6 +258,7 @@ The recent loops established that the current grouped/details surface now explic
 
 - primary summary/episode explainability
 - top-level summary-first selection cardinality
+- top-level summary-first selection identity
 - auxiliary workspace no-episode-match visibility reading
 - constrained relation auxiliary linkage back to returned episode-side context
 
@@ -264,6 +274,7 @@ Start from the current stable reading:
 
 - primary summary/episode explainability is explicit enough
 - top-level summary-first child cardinality is directly readable
+- top-level summary-first child identity is directly readable
 - workspace auxiliary no-episode-match visibility is intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
 - relation auxiliary grouped output is explicit enough to correlate back to returned episode-side context
