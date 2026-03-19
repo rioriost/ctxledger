@@ -1527,6 +1527,9 @@ class MemoryService:
         summary_first_is_summary_only = bool(
             summary_selection_applied and not summary_first_has_episode_groups
         )
+        summary_first_child_episode_count = (
+            matched_episode_count if summary_selection_applied else 0
+        )
 
         return {
             "retrieval_routes_present": [
@@ -1575,6 +1578,7 @@ class MemoryService:
             },
             "summary_first_has_episode_groups": summary_first_has_episode_groups,
             "summary_first_is_summary_only": summary_first_is_summary_only,
+            "summary_first_child_episode_count": summary_first_child_episode_count,
             "retrieval_route_item_counts": {
                 "summary_first": len(summaries) if summary_selection_applied else 0,
                 "episode_direct": episode_direct_item_count,

@@ -2,103 +2,97 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small consolidation loop around the current **constrained relation `supports` auxiliary grouped reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **summary-first top-level selection-cardinality reading** in `memory_get_context`.
 
-This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or turn relation-derived support context into a new primary selection path.
+This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or add another summary-group-local helper field.
 
-Instead, it records that the current relation auxiliary reading is now explicit enough for the current stage after the recent relation-group source-linkage refinement.
+Instead, it refined the current summary-first reading by making child-episode cardinality directly readable from the top-level `details` surface.
 
-At this point, the grouped response is clearer that:
+The current response is now clearer that:
 
-- relation-derived support context remains auxiliary
-- relation-derived support context remains constrained to:
-  - one outgoing hop
-  - `supports` only
-  - auxiliary use only
-- the relation auxiliary group remains a top-level sibling auxiliary surface
-- the relation auxiliary group is still surfaced from returned episode-side memory context rather than from broader graph traversal
-- the relation auxiliary group is now easier to correlate back to returned episode-side context directly at the relation-group level
+- summary-first selection can be identified at the top-level details layer
+- summary-first summary/episode grouped reading can already be interpreted from grouped metadata
+- the current summary-first child-episode cardinality is now also directly readable from top-level details
+- grouped consumers no longer need to rely only on summary-group-local child-cardinality fields when they want the current summary-first selection count
 
-This means the recent relation auxiliary refinement loop is now complete enough.
+This means the top-level summary-first reading is now slightly stronger without widening retrieval semantics.
 
 ---
 
 ## What was completed
 
-### Relation auxiliary grouped reading is now explicit enough
+### Small top-level summary-first cardinality slice implemented
 
-The current relation-scoped `memory_context_groups` entry for the constrained `supports` slice now has enough explicit linkage metadata that grouped consumers no longer need to reconstruct the source-side relation reading only from embedded episode-group provenance fields.
+The current `details` surface now includes:
 
-The current relation auxiliary grouped surface now includes:
+- `summary_first_child_episode_count`
 
-- `source_episode_ids`
-- `source_memory_ids`
+This field is additive top-level metadata.
+It does **not** replace grouped summary metadata.
+It complements it.
 
-These fields make it easier to understand which returned episode-side context surfaced the current relation auxiliary group.
-
-### Current intended meaning of the current relation-group linkage fields
+### Current intended meaning of the new field
 
 The current intended interpretation is:
 
-- `source_episode_ids`
-  - identifies the returned episode ids whose episode-side memory context surfaced the current relation auxiliary group
+- `summary_first_child_episode_count = 0`
+  - summary-first selection is not active
 
-- `source_memory_ids`
-  - identifies the source memory ids from which the current constrained `supports` targets were reached
+- `summary_first_child_episode_count = N`
+  - summary-first selection is active
+  - the current summary-first grouped reading represents `N` child episodes
 
-At the current stage, these fields should be read conservatively:
+At the current stage, this field should be read conservatively:
 
-- they do **not** introduce broader graph traversal
-- they do **not** make the relation group a primary selection root
-- they do **not** change auxiliary positioning
-- they do **not** imply stronger parentage than the current sibling auxiliary contract already supports
+- it does **not** introduce a new retrieval route
+- it does **not** broaden summary-first behavior
+- it does **not** replace `child_episode_count` on the grouped summary entry
+- it does **not** imply stronger parentage or stronger matching semantics
 
-### Current intended grouped reading
+### Why this slice is useful
 
-Grouped consumers should currently understand the constrained relation auxiliary surface like this:
+This slice improves the current top-level `details` reading for summary-first selection without adding still more summary-group-local fields.
 
-1. returned episode-side memory items remain the source-side context
-2. constrained one-hop `supports` targets may be surfaced from that source-side context
-3. those constrained targets may appear in:
-   - episode-group embedded convenience surfaces
-   - compatibility-oriented related-item surfaces
-   - the top-level relation-scoped grouped auxiliary surface
-4. the relation-scoped grouped auxiliary surface is therefore:
-   - grouped
-   - auxiliary
-   - top-level sibling-positioned
-   - still anchored in returned episode-side context
+It means consumers that primarily read `details` can now see the current summary-first selection cardinality directly, rather than deriving it only from grouped summary entries.
 
-### What this means practically
+### Tests added/updated
 
-The current grouped contract can now tell a consumer:
+The summary-first test coverage now explicitly checks:
 
-- that the relation auxiliary surface is still constrained and auxiliary
-- which returned episodes surfaced the current relation group
-- which source memory ids surfaced the current relation group
-- that the relation group should still be read as grouped support context rather than as an independent graph root or primary selection path
+- `summary_first_child_episode_count == 2` in the summary-first-with-episode-groups case
+- `summary_first_child_episode_count == 1` in the summary-first summary-only case
 
-That is now a sufficiently explicit relation auxiliary reading for the current `0.6.0` stage.
+### Validation completed
+
+Validated the slice with:
+
+- `pytest tests/memory/test_service_context_details.py`
+
+Result at completion time:
+
+- `19 passed`
 
 ---
 
 ## What did not change
 
-This consolidation loop intentionally did **not** do any of the following:
+This slice intentionally did **not** do any of the following:
 
-- broaden relation traversal beyond one outgoing hop
-- include relation types beyond `supports`
-- make relation-derived support context part of the primary summary/episode selection path
-- nest relation groups into the summary/episode chain
+- add another summary-group-local helper field
+- change grouped response ordering
+- change summary-group child ordering semantics
+- change summary-group emittedness semantics
 - change workspace auxiliary positioning
-- introduce graph-backed selection semantics
-- add broader response-shape expansion
-- add another new relation-group helper field
+- change relation auxiliary positioning
+- broaden relation traversal
+- introduce broader graph semantics
 
-The current auxiliary-group interpretation remains:
+The current grouped interpretation remains:
 
-- workspace inherited auxiliary groups are top-level sibling auxiliary groups
-- relation supports auxiliary groups are top-level sibling auxiliary groups
+- `memory_context_groups` is still the primary grouped hierarchy-aware surface
+- primary summary/episode explainability is explicit enough for the current stage
+- workspace/relation auxiliary groups remain top-level sibling auxiliary surfaces
+- constrained relation auxiliary reading remains explicit enough for the current stage
 
 ---
 
@@ -108,8 +102,8 @@ The current auxiliary-group interpretation remains:
 - `src/ctxledger/memory/service_core.py`
 
 ### Tests
-- `tests/memory/test_memory_context_related_items.py`
 - `tests/memory/test_service_context_details.py`
+- `tests/memory/test_memory_context_related_items.py`
 
 ### Design and contract docs
 - `docs/memory/memory_get_context_service_contract.md`
@@ -123,11 +117,12 @@ The current auxiliary-group interpretation remains:
 
 Recent relevant validation includes:
 
+- `pytest tests/memory/test_service_context_details.py`
 - `pytest tests/memory/test_memory_context_related_items.py`
 
-Recent validation result at completion time:
+Recent validation result for this slice:
 
-- `2 passed`
+- `19 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -140,27 +135,33 @@ The current `0.6.0` state should now be read as:
 - still not broader graph traversal
 - still not Apache AGE behavior expansion yet
 - `memory_context_groups` remains the primary grouped hierarchy-aware surface
-- primary summary/episode explainability is explicit enough for the current stage
-- auxiliary workspace/relation groups remain sibling auxiliary surfaces
-- inherited workspace auxiliary visibility without episode matches remains intentional current behavior
-- constrained relation `supports` auxiliary grouped output is now explicit enough to correlate back to returned episode-side context for the current stage
+- primary summary/episode explainability remains explicit enough for the current stage
+- top-level summary-first selection cardinality is now easier to read directly through:
+  - `summary_first_child_episode_count`
+- workspace auxiliary no-episode-match visibility remains intentional support preservation
+- constrained relation `supports` auxiliary grouped output remains explicit enough to correlate back to returned episode-side context
 
 In practice:
 
 - repository primitives are still good enough for the current slice
 - service projection structure is still good enough for the current slice
-- primary-chain explainability is explicit enough for now
-- workspace auxiliary no-match interpretation is explicit enough for now
-- relation auxiliary grouped reading is also explicit enough for now
-- another tiny relation-group metadata addition is probably not the best next use of effort
+- primary-chain grouped reading is explicit enough
+- top-level summary-first details are now slightly easier to consume directly
+- another tiny grouped summary helper field is still probably not the best next use of effort
 
 ---
 
 ## Key conclusion
 
-The current **relation auxiliary consolidation loop is complete enough**.
+The current top-level summary-first child-count slice is complete enough.
 
-The next step should **not** be to keep adding more tiny relation-group metadata fields unless a genuinely missing behavior or ambiguity is discovered.
+The next step should still avoid:
+
+- another hyper-narrow summary-group metadata addition
+- broad relation expansion
+- graph-first behavior expansion
+- auxiliary-group nesting without stronger retrieval semantics
+- generic cleanup for its own sake
 
 The next useful step should instead be one of:
 
@@ -173,10 +174,10 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current constrained relation `supports` auxiliary grouped reading as sufficiently explicit for now.
+Treat the current summary-first top-level child-cardinality reading as sufficiently explicit for now.
 
 ### Recommended target
-Choose the next small behavior or contract step **without** broadening relation traversal or collapsing auxiliary sibling positioning.
+Choose the next small behavior or contract step **without** continuing the pattern of adding ever-finer summary-group-local metadata unless clearly justified.
 
 ### Recommended focus
 Proceed in this order:
@@ -187,11 +188,11 @@ Proceed in this order:
    - one hop
    - `supports` only
    - auxiliary only
-4. avoid more tiny relation-group explainability additions by default
+4. avoid more tiny summary-group explainability additions by default
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that the constrained relation auxiliary group is explicit enough for the current stage?
+> What is the next smallest useful grouped-selection or contract improvement now that summary-first selection cardinality is directly readable at the top-level details layer?
 
 ---
 
@@ -200,13 +201,13 @@ Proceed in this order:
 Prefer one of these, in order:
 
 1. a genuinely different small grouped-selection behavior choice
-2. a broader contract-consolidation / interpretation step that does not just add another tiny relation-group field
+2. a broader contract-consolidation / interpretation step that does not just add another tiny metadata field
 3. only later, broader relation/group behavior
 
 Avoid next session work that is primarily:
 
 - more generic helper cleanup
-- another hyper-narrow relation-group metadata addition without a clear missing behavior
+- another hyper-narrow summary metadata addition without a clear missing behavior
 - premature broad response-shape expansion
 - broader relation traversal
 - graph-first expansion
@@ -216,7 +217,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest relation consolidation loop:
+Recent relevant commits before the latest top-level summary-first slice:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -233,12 +234,21 @@ Recent relevant commits before the latest relation consolidation loop:
 - `73ee2b5` — `Consolidate primary chain explainability notes`
 - `90e964d` — `Clarify auxiliary no-episode-match visibility`
 - `b362593` — `Add relation auxiliary source linkage`
+- `64d7388` — `Consolidate relation auxiliary explainability`
+
+Recent just-completed slice to remember conceptually:
+
+- top-level `summary_first_child_episode_count` added
+- summary-first details tests updated
+- service contract and MCP API docs updated to match
+- validated with `pytest tests/memory/test_service_context_details.py`
 
 ### Conceptual summary of the completed loops
 
-The recent loops established that the current grouped surface now explicitly covers:
+The recent loops established that the current grouped/details surface now explicitly covers:
 
 - primary summary/episode explainability
+- top-level summary-first selection cardinality
 - auxiliary workspace no-episode-match visibility reading
 - constrained relation auxiliary linkage back to returned episode-side context
 
@@ -248,14 +258,15 @@ That is a good enough stopping point for the current stage without widening beha
 
 ## Short handoff note
 
-If work resumes from here, do **not** start by broadening relation traversal or by nesting auxiliary groups into the primary chain.
+If work resumes from here, do **not** start by adding yet another tiny summary-group-local helper field.
 
 Start from the current stable reading:
 
 - primary summary/episode explainability is explicit enough
+- top-level summary-first child cardinality is directly readable
 - workspace auxiliary no-episode-match visibility is intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
-- relation auxiliary grouped output is now explicit enough to correlate back to returned episode-side context
+- relation auxiliary grouped output is explicit enough to correlate back to returned episode-side context
 - auxiliary surfaces remain auxiliary rather than newly reclassified primary selection paths
 
 Use that clearer base to choose the next genuinely useful small behavior or contract step.
