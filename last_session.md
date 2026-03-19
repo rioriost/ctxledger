@@ -3,106 +3,156 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-**contract-consolidation** slice for the current relation auxiliary reading in
-`memory_get_context`.
+focused **behavior-coverage** slice for the current **summary-first +
+query-filter + memory-items-disabled** reading in `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
-Instead, it consolidated the documented reading for the already-covered
-constrained relation auxiliary path, especially where `supports`-derived grouped
-output, source-side linkage, and grouped-vs-compatibility surface roles can be
-misread.
+Instead, it fixed and validated the current behavior when:
 
-The current docs now more explicitly state that:
+- summary-first selection is active
+- lightweight query filtering narrows the visible episode set
+- memory items are disabled
+- summaries remain enabled
 
-- constrained relation-derived context remains **auxiliary**
-- the current relation-aware slice remains limited to one outgoing `supports`
-  hop from returned episode memory items
-- relation-scoped grouped output remains the **primary structured grouped
-  relation-aware surface**
-- shared constrained targets are currently **aggregated once** in the
-  relation-scoped group
-- multi-source contribution should currently be read through
-  `source_episode_ids` and `source_memory_ids`
-- flat and per-episode related outputs remain **compatibility** or
-  **convenience** surfaces over that same constrained slice
-- those flatter surfaces should **not** be read as stronger or more canonical
-  relation-selection surfaces than the relation-scoped grouped output
+The current behavior is now clearer that:
 
-This means the current constrained relation auxiliary interpretation is now
-better anchored in the docs rather than only in tests and prior notes.
+- query filtering still narrows the visible summary-first child set to the
+  **surviving post-filter primary episode set**
+- top-level `summary_first_child_episode_*` metadata follows that surviving
+  post-filter set
+- grouped summary `child_episode_*` metadata follows that same surviving
+  post-filter set
+- the grouped response remains **summary-only**
+- episode-scoped grouped entries are **not** emitted in this response shape
+- `child_episode_groups_emitted = false`
+- `child_episode_groups_emission_reason = "memory_items_disabled"`
+- `primary_episode_groups_present_after_query_filter = false` does **not**
+  imply auxiliary-only output in this case, because the remaining visible route
+  is still the primary summary-first grouped surface
+
+This means the current summary-only query-filter interpretation is now better
+fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small relation auxiliary contract consolidation slice implemented
+### Small summary-only query-filter coverage slice implemented
 
-A focused documentation pass was completed to align the current service-contract,
-MCP API, and memory-model wording around the constrained relation auxiliary
-surface.
+A focused test slice now covers the case where:
 
-The clarified current reading is:
+- one workflow is resolved
+- two episodes exist
+- only one episode summary matches the current query
+- `include_summaries = true`
+- `include_memory_items = false`
 
-- returned episode memory items may surface constrained `supports` targets
-- those targets may also appear in the top-level relation-scoped auxiliary group
-- that relation-scoped group should currently be read as a grouped auxiliary
-  aggregation of returned episode-side relation context
-- when multiple returned source episodes or source memory items contribute to the
-  same visible target, that shared target is currently aggregated once in the
-  relation-scoped group
-- the current relation-group `memory_items` ordering should currently be read as
-  first-seen target ordering under the constrained source-side traversal path
-- multi-source contribution should therefore currently be read through
-  `source_episode_ids` and `source_memory_ids`, not by expecting duplicated
-  target entries in relation-group `memory_items`
+The current intended result in that case is:
 
-### Docs updated
+- `query_filter_applied == true`
+- `episodes_before_query_filter == 2`
+- `matched_episode_count == 1`
+- `episodes_returned == 1`
+- `summary_selection_applied == true`
+- `summary_selection_kind == "episode_summary_first"`
+- `summary_first_has_episode_groups == false`
+- `summary_first_is_summary_only == true`
+- `summary_first_child_episode_count == 1`
+- `summary_first_child_episode_ids == [{surviving_episode_id}]`
+- `primary_episode_groups_present_after_query_filter == false`
+- `auxiliary_only_after_query_filter == false`
+- grouped summary `child_episode_ids == [{surviving_episode_id}]`
+- grouped summary `child_episode_count == 1`
+- grouped summary `child_episode_groups_emitted == false`
+- grouped summary
+  `child_episode_groups_emission_reason == "memory_items_disabled"`
+- no episode-scoped grouped output is emitted
 
-The current interpretation was clarified in:
+### Test added
 
-- `docs/memory/memory_get_context_service_contract.md`
-- `docs/mcp-api.md`
-- `docs/memory-model.md`
+Added a new focused regression test covering the combined case:
 
-The updates make explicit that the current docs should **not** be read as if:
+- summary-first selection
+- lightweight query filtering
+- one surviving visible episode
+- memory items disabled
+- summaries enabled
+- grouped output remains summary-only while still reflecting the surviving
+  post-filter child set
 
-- duplicated visible targets are required to show multi-source contribution
-- flat `related_memory_items` is a more canonical relation surface than the
-  relation-scoped grouped output
-- `related_memory_items_by_episode` is a more canonical relation surface than
-  the relation-scoped grouped output
-- group-local embedded related items replace the top-level relation-scoped
-  grouped aggregation
+### Current intended reading of this behavior
 
-They also make explicit that:
+Grouped and details consumers should currently understand this case like this:
 
-- relation-scoped grouped output is the primary structured grouped
-  relation-aware surface
-- flat and per-episode related outputs are compatibility-oriented mirrors
-- group-local embedded related items are local grouped explainability and
-  inspection surfaces
+1. candidate episodes are collected for the resolved workflow
+2. query filtering narrows that candidate set to a surviving visible subset
+3. summary-first grouped reading is then formed from that surviving visible
+   primary set
+4. top-level summary-first child metadata follows that same surviving set
+5. grouped summary child metadata follows that same surviving set
+6. because memory items are disabled, no episode-scoped grouped entries are
+   emitted
+7. the grouped response remains summary-only for this response shape
+
+This should **not** be read as:
+
+- a pre-filter summary snapshot remaining visible after filtering
+- filtered-out episodes still belonging to the visible summary-first child set
+- summary-only output implying that summary-first selection was not primary
+- `primary_episode_groups_present_after_query_filter = false` implying an
+  auxiliary-only response in this case
+
+It should be read as:
+
+- the current constrained summary-first grouped reading
+- with the visible child set taken from the surviving post-query-filter primary
+  path
+- and with summary-only grouped shaping caused by
+  `include_memory_items = false`
 
 ### Why this slice is useful
 
-This slice improves continuity and interpretation quality without broadening
-behavior.
+This slice improves confidence in the current summary-first grouped reading
+without broadening behavior.
 
-It reduces ambiguity around the current meaning of:
+It verifies that the current system behaves consistently when:
 
-- relation-scoped `memory_context_groups` entries with
-  `selection_route = "relation_supports_auxiliary"`
-- `source_episode_ids`
-- `source_memory_ids`
-- `relation_supports_source_episode_count`
-- `related_memory_items`
-- `related_memory_items_by_episode`
-- group-local embedded `related_memory_items`
+- query filtering narrows the current primary episode set
+- summary-first grouped reading must still follow that surviving visible set
+- the response shape remains summary-only because memory items are disabled
 
-That is useful because these fields and grouped outputs are already covered by
-behavior, and the docs should say the same thing the tests already establish.
+This makes the current query-filter + summary-only interaction explicit rather
+than leaving it to be reconstructed from separate summary-only and
+memory-items-enabled cases.
+
+### Tests added/updated
+
+The summary-first grouped/details test coverage now explicitly checks the
+query-filtered, memory-items-disabled, summaries-enabled case.
+
+The expected current result is:
+
+- one surviving returned episode
+- top-level summary-first child ids/count aligned with the surviving visible
+  episode
+- grouped summary child ids/count aligned with that same surviving visible
+  episode
+- grouped output remains summary-only
+- grouped summary emittedness metadata reflects
+  `memory_items_disabled`
+
+### Validation completed
+
+Validated this slice with:
+
+- `pytest tests/memory/test_service_context_details.py`
+
+Result at completion time:
+
+- `30 passed`
 
 ---
 
@@ -110,16 +160,14 @@ behavior, and the docs should say the same thing the tests already establish.
 
 This slice intentionally did **not** do any of the following:
 
-- change `memory_get_context` service behavior
-- add new grouped metadata fields
-- add new retrieval routes
 - broaden relation traversal beyond the current constrained shape
 - include relation types beyond `supports`
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
-- redesign grouped response structure
-- reclassify relation-derived auxiliary output as an independent primary
-  selection path
+- introduce broader graph-backed selection semantics
+- add broader response-shape expansion
+- emit episode-scoped grouped entries when memory items are disabled
+- reclassify summary-only grouped output as auxiliary-only
 
 The current grouped interpretation remains:
 
@@ -129,18 +177,6 @@ The current grouped interpretation remains:
 - workspace and relation outputs remain top-level sibling auxiliary grouped
   surfaces where currently emitted
 - broader graph semantics remain intentionally deferred
-
----
-
-## Validation completed
-
-Validated this docs-consolidation slice with:
-
-- `pytest tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
-
-Result at completion time:
-
-- `34 passed`
 
 ---
 
@@ -162,6 +198,19 @@ Result at completion time:
 
 ---
 
+## Validation status
+
+Recent relevant validation includes:
+
+- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
+
+Recent validation result for this slice:
+
+- `30 passed` in `tests/memory/test_service_context_details.py`
+
+---
+
 ## Current interpretation
 
 The current `0.6.0` state should now be read as:
@@ -180,7 +229,18 @@ The current `0.6.0` state should now be read as:
 - top-level summary-first child ids/count should currently be read from that
   same surviving post-filter primary set
 - grouped episode output should currently follow that same surviving post-filter
-  primary set
+  primary set when memory items are enabled
+- when memory items are disabled, the grouped response may remain summary-only
+  while still using that same surviving post-filter child set
+- `summary_first_has_episode_groups = false` and
+  `summary_first_is_summary_only = true` should currently be read as shaping of
+  the primary grouped route rather than as loss of summary-first selection
+- `primary_episode_groups_present_after_query_filter = false` can currently mean
+  either:
+  - summary-only primary grouped output remains visible, or
+  - no primary episode-scoped grouped output remains visible at all
+- `auxiliary_only_after_query_filter = false` remains the correct reading for
+  the current summary-only query-filter case
 - multi-workflow workspace/ticket summary groups still keep
   `parent_scope_id = null`
 - narrowing to one surviving visible episode does not currently imply stronger
@@ -226,8 +286,8 @@ The current `0.6.0` state should now be read as:
 
 ## Key conclusion
 
-The current relation auxiliary contract docs are now better aligned with the
-existing behavior coverage.
+The current summary-only query-filter behavior slice is now covered well enough
+for the current stage.
 
 The next step should still avoid:
 
@@ -249,12 +309,12 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current constrained relation auxiliary reading as documented well
-enough for the current stage.
+Treat the current summary-only query-filter child-set reading as sufficiently
+fixed for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without returning to another tiny
-relation-group explainability addition unless a clear behavior gap appears.
+summary-group explainability addition unless a clear behavior gap appears.
 
 ### Recommended focus
 Proceed in this order:

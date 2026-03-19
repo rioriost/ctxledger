@@ -2368,6 +2368,159 @@ def test_memory_get_context_summary_first_query_filter_uses_surviving_child_set(
     ]
 
 
+def test_memory_get_context_query_filter_keeps_summary_first_child_set_when_memory_items_disabled() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000048"
+    created_at = datetime(2024, 10, 22, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    matching_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Summary-only surviving query match",
+        metadata={"kind": "matching"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    filtered_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Summary-only filtered out by query",
+        metadata={"kind": "filtered"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    episode_repository.create(matching_episode)
+    episode_repository.create(filtered_episode)
+
+    matching_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=matching_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Matching summary-only memory item",
+        metadata={"kind": "matching-note"},
+        created_at=created_at.replace(hour=3),
+        updated_at=created_at.replace(hour=3),
+    )
+    filtered_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=filtered_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Filtered summary-only memory item",
+        metadata={"kind": "filtered-note"},
+        created_at=created_at.replace(hour=4),
+        updated_at=created_at.replace(hour=4),
+    )
+    memory_item_repository.create(matching_memory_item)
+    memory_item_repository.create(filtered_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-SUMMARY-FIRST-QUERY-FILTER-SUMMARY-ONLY",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            query="surviving query",
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=True,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Summary-only surviving query match"
+    ]
+    assert response.details["query_filter_applied"] is True
+    assert response.details["matched_episode_count"] == 1
+    assert response.details["episodes_before_query_filter"] == 2
+    assert response.details["episodes_returned"] == 1
+    assert response.details["summary_selection_applied"] is True
+    assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert response.details["summary_first_has_episode_groups"] is False
+    assert response.details["summary_first_is_summary_only"] is True
+    assert response.details["summary_first_child_episode_count"] == 1
+    assert response.details["summary_first_child_episode_ids"] == [
+        str(matching_episode.episode_id),
+    ]
+    assert (
+        response.details["primary_episode_groups_present_after_query_filter"] is False
+    )
+    assert response.details["auxiliary_only_after_query_filter"] is False
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == []
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 1,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "group_id": "summary:episode_summary_first",
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(matching_episode.episode_id)],
+            "child_episode_count": 1,
+            "child_episode_ordering": "returned_episode_order",
+            "child_episode_groups_emitted": False,
+            "child_episode_groups_emission_reason": "memory_items_disabled",
+            "summaries": [
+                {
+                    "episode_id": str(matching_episode.episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                }
+            ],
+        }
+    ]
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(matching_episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "query_match_evaluation",
+            "matched_summary": True,
+            "matched_metadata_values": [],
+        }
+    ]
+
+
 def test_memory_get_context_workspace_only_query_filter_summary_first_uses_surviving_child_set() -> (
     None
 ):
