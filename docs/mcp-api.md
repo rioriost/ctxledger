@@ -1398,6 +1398,9 @@ That means:
   - it includes only `supports` relations
   - it ignores other relation types in this slice
 - relation-scoped `memory_context_groups` entries are the current primary structured grouped relation-aware surface
+- relation-scoped grouped output should currently be read as relation-derived auxiliary support context that was surfaced from returned episode-side memory context rather than as an independent primary selection path
+- grouped consumers should currently expect the relation auxiliary surface to remain top-level and sibling-positioned rather than nested into the primary summary/episode chain
+- the current relation auxiliary reading is still anchored in returned episode-side context even though the relation-scoped group itself remains top-level
 - `related_memory_items_by_episode` remains a compatibility-oriented per-episode surface in the current stage
 - group-local `memory_context_groups[*]["related_memory_items"]` remains a convenience view for grouped consumers
 - when per-group related context is present, it should be understood as a compatibility- and convenience-preserving refinement of the same constrained `supports`-only behavior rather than as broader graph traversal
@@ -1405,6 +1408,11 @@ That means:
 - `related_context_is_auxiliary` makes the current support-role of related context explicit
 - `related_context_relation_types` makes the currently constrained relation contract explicit without widening traversal behavior
 - `relation_memory_context_groups_are_primary_output` makes the current primary grouped relation-aware surface explicit
+- grouped consumers should currently correlate relation-scoped grouped output back to returned episode-side context through the existing per-episode related-item convenience and compatibility surfaces rather than by treating the relation group as a broader graph-traversal root
+- the current constrained linkage reading is therefore:
+  - returned episode-side memory items surface constrained supports-related targets
+  - those same targets may appear in the top-level relation-scoped auxiliary group
+  - the relation-scoped group is a grouped auxiliary aggregation of that returned episode-side relation context
 - `flat_related_memory_items_is_compatibility_field` makes the compatibility status of the flat top-level field explicit
 - `related_memory_items_by_episode_are_compatibility_output` makes the compatibility status of the per-episode mapping explicit
 - `group_related_memory_items_are_convenience_output` makes the convenience status of group-local embedded related items explicit

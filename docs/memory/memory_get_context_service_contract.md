@@ -366,6 +366,41 @@ When constrained relation-derived support context is available, the response may
 
 This is currently the primary grouped structured surface for relation-derived supporting context.
 
+At the current stage, grouped consumers should also read this relation-scoped
+auxiliary surface as linkable back to the returned episode-side context that
+surfaced it.
+
+In particular, the current relation-aware grouped reading should be understood
+conservatively as:
+
+- relation-derived support context is still auxiliary
+- it is still limited to the current constrained `supports` slice
+- it is still surfaced from returned episode memory items rather than from a
+  broader graph traversal
+- the relation group should therefore be read as support context linked back to
+  returned episode-side context, not as an independent primary selection path
+
+This is already partly visible in the current response through episode-group
+embedded relation provenance such as:
+
+- `related_memory_item_provenance[*].source_memory_id`
+- `related_memory_item_provenance[*].target_memory_id`
+- `related_memory_item_provenance[*].source_group_scope`
+- `related_memory_item_provenance[*].target_group_selection_kind`
+- `related_memory_relation_edges[*].source_memory_id`
+- `related_memory_relation_edges[*].target_memory_id`
+
+Taken together, these current fields mean grouped consumers can already recover
+the linkage between:
+
+- returned episode-side memory context
+- constrained `supports` relation edges
+- relation-scoped auxiliary grouped output
+
+That current linkage should be treated as sufficient for the present contract
+slice unless a later behavior change chooses to make relation-group source
+linkage more explicit at the relation-group level itself.
+
 ### Auxiliary visibility without episode matches
 
 The current contract should also be read as allowing inherited workspace
@@ -425,9 +460,14 @@ These are reflected by metadata such as:
 
 ### Convenience output
 
-The current convenience-oriented related-context surface is:
+The current convenience-oriented related-context surfaces include:
 
 - episode-group embedded `related_memory_items`
+- episode-group embedded relation provenance and relation-edge linkage details
+
+These convenience-oriented episode-group fields are important to the current
+grouped relation reading because they preserve the source-side linkage that
+explains why relation-scoped auxiliary grouped output was surfaced.
 
 This is reflected by:
 

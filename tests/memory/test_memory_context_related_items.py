@@ -374,6 +374,8 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
         "selection_kind": "supports_related_auxiliary",
         "selection_route": "relation_supports_auxiliary",
         "relation_type": "supports",
+        "source_episode_ids": [str(episode.episode_id)],
+        "source_memory_ids": [str(direct_memory_item.memory_id)],
         "memory_items": [
             {
                 "memory_id": str(supports_target_item.memory_id),

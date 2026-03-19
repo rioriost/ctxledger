@@ -1822,6 +1822,25 @@ class MemoryService:
                     "selection_kind": "supports_related_auxiliary",
                     "selection_route": "relation_supports_auxiliary",
                     "relation_type": "supports",
+                    "source_memory_ids": sorted(
+                        {
+                            detail["source_memory_id"]
+                            for detail in memory_item_details
+                            for detail in detail.get(
+                                "related_memory_item_provenance", []
+                            )
+                            if detail.get("relation_type") == "supports"
+                            and isinstance(detail.get("source_memory_id"), str)
+                        }
+                    ),
+                    "source_episode_ids": sorted(
+                        {
+                            detail["episode_id"]
+                            for detail in memory_item_details
+                            if detail.get("related_memory_items")
+                            and isinstance(detail.get("episode_id"), str)
+                        }
+                    ),
                     "memory_items": [
                         self._serialize_memory_item(memory_item)
                         for memory_item in related_memory_items
