@@ -456,6 +456,28 @@ def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_
         created_at=created_at.replace(hour=0),
         updated_at=created_at.replace(hour=0),
     )
+    first_seen_supports_target_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="First-seen supporting workspace memory item",
+        metadata={"kind": "first-seen-support"},
+        created_at=created_at.replace(hour=0, minute=10),
+        updated_at=created_at.replace(hour=0, minute=10),
+    )
+    later_seen_supports_target_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Later-seen supporting workspace memory item",
+        metadata={"kind": "later-seen-support"},
+        created_at=created_at.replace(hour=0, minute=20),
+        updated_at=created_at.replace(hour=0, minute=20),
+    )
     workspace_root_item = MemoryItemRecord(
         memory_id=uuid4(),
         workspace_id=workspace_id,
@@ -471,6 +493,8 @@ def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_
     memory_item_repository.create(first_source_memory_item)
     memory_item_repository.create(second_source_memory_item)
     memory_item_repository.create(shared_supports_target_item)
+    memory_item_repository.create(first_seen_supports_target_item)
+    memory_item_repository.create(later_seen_supports_target_item)
     memory_item_repository.create(workspace_root_item)
 
     first_support_relation = MemoryRelationRecord(
@@ -489,8 +513,26 @@ def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_
         metadata={"kind": "second-supports-edge"},
         created_at=created_at.replace(hour=6),
     )
+    third_support_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=first_source_memory_item.memory_id,
+        target_memory_id=first_seen_supports_target_item.memory_id,
+        relation_type="supports",
+        metadata={"kind": "third-supports-edge"},
+        created_at=created_at.replace(hour=7),
+    )
+    fourth_support_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=second_source_memory_item.memory_id,
+        target_memory_id=later_seen_supports_target_item.memory_id,
+        relation_type="supports",
+        metadata={"kind": "fourth-supports-edge"},
+        created_at=created_at.replace(hour=8),
+    )
     memory_relation_repository.create(first_support_relation)
     memory_relation_repository.create(second_support_relation)
+    memory_relation_repository.create(third_support_relation)
+    memory_relation_repository.create(fourth_support_relation)
 
     service = MemoryService(
         episode_repository=episode_repository,
@@ -540,8 +582,8 @@ def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 2,
-        "workspace_inherited_auxiliary": 2,
-        "relation_supports_auxiliary": 1,
+        "workspace_inherited_auxiliary": 4,
+        "relation_supports_auxiliary": 3,
     }
     assert response.details["memory_context_groups"][3] == {
         "scope": "relation",
@@ -568,6 +610,17 @@ def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_
         ),
         "memory_items": [
             {
+                "memory_id": str(later_seen_supports_target_item.memory_id),
+                "workspace_id": str(workspace_id),
+                "episode_id": None,
+                "type": "workspace_note",
+                "provenance": "workspace",
+                "content": "Later-seen supporting workspace memory item",
+                "metadata": {"kind": "later-seen-support"},
+                "created_at": later_seen_supports_target_item.created_at.isoformat(),
+                "updated_at": later_seen_supports_target_item.updated_at.isoformat(),
+            },
+            {
                 "memory_id": str(shared_supports_target_item.memory_id),
                 "workspace_id": str(workspace_id),
                 "episode_id": None,
@@ -577,7 +630,18 @@ def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_
                 "metadata": {"kind": "shared-support"},
                 "created_at": shared_supports_target_item.created_at.isoformat(),
                 "updated_at": shared_supports_target_item.updated_at.isoformat(),
-            }
+            },
+            {
+                "memory_id": str(first_seen_supports_target_item.memory_id),
+                "workspace_id": str(workspace_id),
+                "episode_id": None,
+                "type": "workspace_note",
+                "provenance": "workspace",
+                "content": "First-seen supporting workspace memory item",
+                "metadata": {"kind": "first-seen-support"},
+                "created_at": first_seen_supports_target_item.created_at.isoformat(),
+                "updated_at": first_seen_supports_target_item.updated_at.isoformat(),
+            },
         ],
     }
 

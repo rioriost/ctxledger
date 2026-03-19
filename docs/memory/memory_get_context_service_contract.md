@@ -427,6 +427,10 @@ conservatively as:
   broader graph traversal
 - the relation group should therefore be read as support context linked back to
   returned episode-side context, not as an independent primary selection path
+- when multiple source-side contexts surface multiple constrained `supports`
+  targets, the current relation-group `memory_items` ordering should be read as
+  first-seen target ordering under the current source-side traversal path rather
+  than as graph ranking, semantic importance, or a broader canonical order
 
 This linkage is now explicit enough through the current relation-group and
 episode-group surfaces together.
@@ -464,6 +468,8 @@ linkage between:
 - returned episode-side memory context
 - constrained `supports` relation edges
 - relation-scoped auxiliary grouped output
+- current first-seen target ordering within the constrained relation auxiliary
+  aggregation
 
 without needing another narrowly incremental relation-group helper field for the
 current stage.
@@ -545,6 +551,15 @@ explains why relation-scoped auxiliary grouped output was surfaced.
 Taken together, the current relation-scoped grouped metadata and the existing
 episode-group provenance/linkage fields should be treated as sufficient
 relation-auxiliary explainability for the current `0.6.0` slice.
+
+That current explainability surface should also be read as sufficient to explain
+the present constrained aggregation ordering behavior:
+
+- relation-group target `memory_items` currently follow first-seen target
+  ordering under the source-side traversal path
+- shared targets are aggregated once
+- multiple contributing sources can still remain visible through
+  `source_episode_ids` and `source_memory_ids`
 
 In practical terms, the next work should not default to adding yet another small
 relation-group explanation field unless a clearer behavior gap appears.

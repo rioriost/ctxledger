@@ -21,6 +21,10 @@ The current response is now clearer that:
   - `source_episode_ids`
   - `source_memory_ids`
   - `relation_supports_source_episode_count`
+- the current constrained aggregation ordering is now also better understood:
+  - relation-group `memory_items` follow the current **first-seen target order**
+  - that first-seen order is determined by the current source-side traversal order through returned episode-side memory context
+  - this is the current behavior reading, not broader graph ranking semantics
 
 This means the constrained relation auxiliary aggregation reading is now better fixed by actual behavior coverage, not just interpretation alone.
 
@@ -51,10 +55,31 @@ Grouped consumers should currently understand the constrained multi-source `supp
 2. one-hop `supports` traversal may reach the same target from multiple source memory items
 3. the relation auxiliary group should aggregate that constrained support context
 4. the grouped relation surface should therefore:
-   - deduplicate the shared target in relation-group `memory_items`
+   - deduplicate shared targets in relation-group `memory_items`
    - preserve all contributing source episode ids in `source_episode_ids`
    - preserve all contributing source memory ids in `source_memory_ids`
    - remain auxiliary and sibling-positioned rather than becoming a new primary path
+
+### Current ordering reading for constrained relation aggregation
+
+The current behavior now also has a clearer ordering reading.
+
+For the constrained `supports` auxiliary aggregation:
+
+- relation-group `memory_items` are currently emitted in **first-seen target order**
+- "first-seen" should be understood relative to the current traversal over returned episode-side memory context
+- this is not currently a semantic ranking signal
+- this is not graph-priority ordering
+- this is not relation-weight ordering
+- this is the present constrained aggregation behavior
+
+In practice, this means:
+
+- if multiple returned source contexts surface multiple `supports` targets
+- and a shared target is encountered during that traversal
+- the relation auxiliary group's `memory_items` ordering follows the current first encounter order of distinct target memory ids
+
+This ordering reading is now better fixed by test behavior.
 
 ### Why this slice is useful
 
@@ -67,6 +92,8 @@ It verifies that the current relation auxiliary group behaves like a **constrain
 - newly nested relation ownership semantics
 - relation-driven primary selection
 
+It also makes the current constrained aggregation ordering easier to reason about by confirming the present first-seen target behavior.
+
 ### Tests added/updated
 
 The relation grouped test coverage now explicitly checks the case where multiple returned source episodes point to the same `supports` target.
@@ -77,6 +104,8 @@ The expected current result is:
 - multiple contributing `source_episode_ids`
 - multiple contributing `source_memory_ids`
 - `relation_supports_source_episode_count == 2`
+
+The covered case now also fixes the current ordering reading for multiple constrained `supports` targets within the same aggregation flow.
 
 ### Validation completed
 
@@ -101,6 +130,7 @@ This slice intentionally did **not** do any of the following:
 - change workspace auxiliary positioning
 - introduce graph-backed selection semantics
 - add broader response-shape expansion
+- reinterpret current first-seen ordering as stronger semantic ranking
 
 The current grouped interpretation remains:
 
@@ -154,7 +184,8 @@ The current `0.6.0` state should now be read as:
 - top-level summary-first selection identity/cardinality is directly readable
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains explicit enough to correlate back to returned episode-side context
-- constrained relation auxiliary aggregation across multiple returned source episodes is now explicitly covered by test behavior
+- constrained relation auxiliary aggregation across multiple returned source episodes is now explicitly covered by behavior
+- constrained relation auxiliary `memory_items` ordering is currently best read as first-seen target order under the present source-side traversal
 
 In practice:
 
@@ -208,7 +239,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that constrained relation auxiliary aggregation across multiple returned source episodes is explicitly covered?
+> What is the next smallest useful grouped-selection or contract improvement now that constrained relation auxiliary aggregation across multiple returned source episodes is explicitly covered and its current first-seen ordering reading is understood?
 
 ---
 
@@ -261,6 +292,7 @@ Recent relevant commits before the latest multi-source relation aggregation slic
 
 - multi-source constrained `supports` aggregation behavior covered by test
 - shared target aggregation across multiple returned source episodes validated
+- current first-seen target ordering for constrained relation aggregation documented in the handoff reading
 - no behavior widening beyond current one-hop supports-only auxiliary semantics
 - validated with `pytest tests/memory/test_memory_context_related_items.py`
 
@@ -277,6 +309,7 @@ The recent loops established that the current grouped/details surface now explic
 - constrained relation auxiliary linkage back to returned episode-side context
 - top-level constrained relation source-episode cardinality
 - constrained relation auxiliary aggregation across multiple returned source episodes
+- current first-seen ordering reading for constrained relation aggregation
 
 That is a good enough stopping point for the current stage without widening behavior.
 
@@ -296,5 +329,7 @@ Start from the current stable reading:
 - constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
 - relation auxiliary grouped output is explicit enough to correlate back to returned episode-side context
 - constrained multi-source relation aggregation is now covered by behavior
+- current constrained relation aggregation ordering is best read as first-seen target order under the present source-side traversal
+- auxiliary surfaces remain auxiliary rather than newly reclassified primary selection paths
 
 Use that clearer base to choose the next genuinely useful small behavior or contract step.

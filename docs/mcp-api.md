@@ -1455,6 +1455,7 @@ That means:
   - returned episode-side memory items surface constrained supports-related targets
   - those same targets may appear in the top-level relation-scoped auxiliary group
   - the relation-scoped group is a grouped auxiliary aggregation of that returned episode-side relation context
+  - when multiple returned source episodes or source memory items surface multiple `supports` targets, the current relation-group `memory_items` ordering should be read as first-seen target order in the current constrained aggregation flow
 - `flat_related_memory_items_is_compatibility_field` makes the compatibility status of the flat top-level field explicit
 - `related_memory_items_by_episode_are_compatibility_output` makes the compatibility status of the per-episode mapping explicit
 - `group_related_memory_items_are_convenience_output` makes the convenience status of group-local embedded related items explicit
