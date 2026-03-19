@@ -2,124 +2,98 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **constrained relation `supports` auxiliary aggregation limit/truncation reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **summary-first query-filter surviving-child-set reading** in `memory_get_context`.
 
-This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or alter the current one-hop `supports`-only auxiliary contract.
+This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or add another narrow summary-group helper field.
 
-Instead, it fixed and validated how the current constrained relation auxiliary aggregation behaves when multiple returned source episodes / source memory items surface multiple distinct `supports` targets but the request `limit` truncates the relation-derived auxiliary surface.
+Instead, it fixed and validated the current behavior when summary-first retrieval is active, multiple candidate episodes exist, and query filtering leaves only a subset visible on the primary summary/episode path.
 
 The current response is now clearer that:
 
-- constrained relation-derived support context remains auxiliary
-- constrained relation-derived support context remains limited to:
-  - one outgoing hop
-  - `supports` only
-  - auxiliary use only
-- distinct target dedup still applies before/while aggregation
-- truncation happens within the current constrained first-seen aggregation flow
-- the relation auxiliary group's `memory_items` reflect the currently emitted distinct targets after that truncation
-- source linkage remains visible through:
-  - `source_episode_ids`
-  - `source_memory_ids`
-  - `relation_supports_source_episode_count`
+- summary-first selection remains a primary grouped-reading mode rather than a separate graph behavior
+- query filtering can narrow the visible child set of the current summary-first grouped reading
+- top-level summary-first child identity/cardinality should follow the **surviving post-filter child set**
+- the grouped summary entry should also reflect that same surviving post-filter child set
+- the current summary-first grouped reading therefore remains aligned between:
+  - returned `episodes`
+  - top-level `details`
+  - grouped summary metadata
+  - grouped episode-scoped entries
 
-This means the constrained relation auxiliary aggregation reading is now better fixed by behavior coverage in both multi-source and low-limit cases.
+This means the current summary-first query-filter surviving-set reading is now better fixed by behavior coverage rather than by interpretation alone.
 
 ---
 
 ## What was completed
 
-### Small constrained relation limit/truncation coverage slice implemented
+### Small summary-first query-filter surviving-set coverage slice implemented
 
-A new relation-focused test slice now covers the case where:
+A new summary-first-focused test slice now covers the case where:
 
-- two returned source episodes each contain episode-side memory items
-- multiple `supports` targets are reachable across those returned source contexts
-- shared-target dedup applies
-- request `limit` truncates the constrained relation auxiliary surface before all distinct targets are emitted
+- multiple candidate episodes exist before query filtering
+- summaries are enabled
+- memory items are enabled
+- query filtering leaves only one surviving episode on the primary path
 
-The current intended grouped reading in that case is:
+The current intended grouped/details reading in that case is:
 
-- the relation auxiliary group remains top-level and auxiliary
-- emitted relation-group `memory_items` reflect the current truncated set of distinct targets
-- `source_episode_ids` still preserve all contributing source episodes visible in the current constrained aggregation reading
-- `source_memory_ids` still preserve all contributing source memory ids visible in the current constrained aggregation reading
-- top-level `relation_supports_source_episode_count` still reflects the number of contributing source episodes in the current constrained reading
+- `episodes` contains only the surviving episode
+- `matched_episode_count` reflects only the surviving episode count
+- `summary_first_child_episode_count` reflects only the surviving child count
+- `summary_first_child_episode_ids` reflects only the surviving child ids
+- the grouped summary entry `child_episode_ids` reflects only the surviving child ids
+- the grouped summary entry `child_episode_count` reflects only the surviving child count
+- the grouped episode entry list contains only the surviving episode-scoped group
 
-### Current intended grouped reading for the covered low-limit case
+### Current intended grouped/details reading for the covered case
 
-Grouped consumers should currently understand the constrained low-limit `supports` aggregation like this:
+Grouped and details consumers should currently understand the summary-first query-filtered surviving-child-set case like this:
 
-1. returned episode-side memory items remain the source-side context
-2. one-hop `supports` traversal may reach multiple distinct targets across multiple returned source contexts
-3. shared targets are still deduplicated
-4. the constrained relation auxiliary group then reflects the current first-seen distinct targets up to the current limit
-5. the grouped relation surface should therefore:
-   - remain auxiliary and sibling-positioned
-   - aggregate support context rather than become a new primary path
-   - preserve current source-side linkage
-   - expose only the currently emitted truncated distinct target set in relation-group `memory_items`
+1. candidate episodes are collected first
+2. query filtering narrows that candidate set to a surviving episode subset
+3. summary-first grouped reading is then formed from that surviving subset
+4. the current summary-first child set should therefore be read from the post-filter visible primary path, not from the pre-filter candidate set
 
-### Current ordering and truncation reading
+In practical terms, this means:
 
-The current behavior now has a clearer truncation reading for constrained relation aggregation.
-
-For the constrained `supports` auxiliary aggregation:
-
-- relation-group `memory_items` are currently emitted in **first-seen distinct target order**
-- "first-seen" should be understood relative to the current traversal over returned episode-side memory context
-- shared targets are still aggregated once
-- when `limit` truncates the constrained relation auxiliary surface, truncation applies to that emitted distinct-target sequence
-- this is not currently a semantic ranking signal
-- this is not graph-priority ordering
-- this is not relation-weight ordering
-- this is the present constrained aggregation + truncation behavior
-
-In practice, this means:
-
-- if multiple returned source contexts surface multiple `supports` targets
-- and the current request limit is smaller than the number of distinct reachable targets
-- the relation auxiliary group's `memory_items` follow the current first-seen distinct target order up to the current limit boundary
-
-This truncation reading is now better fixed by test behavior.
+- top-level summary-first child metadata follows the surviving post-filter set
+- grouped summary child metadata follows the surviving post-filter set
+- grouped episode-scoped output follows the surviving post-filter set
 
 ### Why this slice is useful
 
-This slice improves confidence in the current constrained relation-aware reading without broadening behavior.
+This slice improves confidence in the current summary-first reading without broadening behavior.
 
-It verifies that the current relation auxiliary group behaves like a **constrained grouped aggregation** of returned episode-side support context even under truncation, not like:
+It verifies that the current summary-first grouped reading behaves like a **post-query-filter primary grouped reading** rather than like:
 
-- broader graph traversal
-- duplicated target emission per source
-- newly nested relation ownership semantics
-- relation-driven primary selection
-- hidden reordering by semantic or graph priority
+- a pre-filter summary snapshot that survives independently of filtered episode visibility
+- a broader candidate-set explanation surface
+- a graph-backed hierarchy where filtered children remain structurally attached
 
-It also makes the current constrained aggregation limit behavior easier to reason about by confirming the present first-seen distinct-target truncation behavior.
+It also makes the current summary-first query interaction easier to reason about by confirming that the visible summary-first child set is the surviving post-filter set.
 
 ### Tests added/updated
 
-The relation grouped test coverage now explicitly checks the case where multiple returned source episodes point to multiple distinct `supports` targets under a low request limit.
+The summary-first grouped/details test coverage now explicitly checks the case where multiple candidate episodes exist but query filtering leaves only one surviving episode.
 
 The expected current result is:
 
-- truncated relation-group `memory_items` contains only the first emitted distinct targets up to the current limit
-- shared-target dedup still holds
-- multiple contributing `source_episode_ids` remain visible
-- multiple contributing `source_memory_ids` remain visible
-- `relation_supports_source_episode_count == 2`
-
-The covered case now also fixes the current truncation reading for constrained `supports` aggregation under low-limit conditions.
+- one surviving returned episode
+- `summary_first_child_episode_count == 1`
+- `summary_first_child_episode_ids == [surviving_episode_id]`
+- grouped summary `child_episode_ids == [surviving_episode_id]`
+- grouped summary `child_episode_count == 1`
+- only one grouped episode-scoped entry remains on the primary path
 
 ### Validation completed
 
 Validated the slice with:
 
-- `pytest tests/memory/test_memory_context_related_items.py`
+- `pytest tests/memory/test_service_context_details.py`
 
 Result at completion time:
 
-- `4 passed`
+- `20 passed`
 
 ---
 
@@ -127,14 +101,13 @@ Result at completion time:
 
 This slice intentionally did **not** do any of the following:
 
-- broaden relation traversal beyond one outgoing hop
-- include relation types beyond `supports`
-- make relation-derived support context part of the primary summary/episode selection path
-- nest relation groups into the summary/episode chain
+- add a new summary-first route
+- preserve filtered-out episodes inside the visible summary-group child set
+- broaden query-filter behavior beyond the existing lightweight filtering model
 - change workspace auxiliary positioning
+- change constrained relation auxiliary positioning
 - introduce graph-backed selection semantics
 - add broader response-shape expansion
-- reinterpret current first-seen ordering as stronger semantic ranking
 
 The current grouped interpretation remains:
 
@@ -151,8 +124,8 @@ The current grouped interpretation remains:
 - `src/ctxledger/memory/service_core.py`
 
 ### Tests
-- `tests/memory/test_memory_context_related_items.py`
 - `tests/memory/test_service_context_details.py`
+- `tests/memory/test_memory_context_related_items.py`
 
 ### Design and contract docs
 - `docs/memory/memory_get_context_service_contract.md`
@@ -166,12 +139,12 @@ The current grouped interpretation remains:
 
 Recent relevant validation includes:
 
-- `pytest tests/memory/test_memory_context_related_items.py`
 - `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
 
 Recent validation result for this slice:
 
-- `4 passed` in `tests/memory/test_memory_context_related_items.py`
+- `20 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -186,6 +159,7 @@ The current `0.6.0` state should now be read as:
 - `memory_context_groups` remains the primary grouped hierarchy-aware surface
 - primary summary/episode explainability remains explicit enough for the current stage
 - top-level summary-first selection identity/cardinality is directly readable
+- summary-first query-filter surviving-child-set behavior is now explicitly covered by test behavior
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains explicit enough to correlate back to returned episode-side context
 - constrained relation auxiliary aggregation across multiple returned source episodes is explicitly covered by behavior
@@ -197,15 +171,15 @@ In practice:
 - repository primitives are still good enough for the current slice
 - service projection structure is still good enough for the current slice
 - primary-chain grouped reading is explicit enough
+- summary-first query-filter interaction is now better anchored by behavior coverage
 - constrained relation grouped reading is explicit enough
-- the current constrained relation aggregation semantics are now better anchored by behavior coverage
 - another tiny grouped/detail helper field is still probably not the best next use of effort unless a clear behavior gap appears
 
 ---
 
 ## Key conclusion
 
-The current constrained relation aggregation limit/truncation coverage slice is complete enough.
+The current summary-first query-filter surviving-set coverage slice is complete enough.
 
 The next step should still avoid:
 
@@ -226,7 +200,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current constrained relation auxiliary aggregation + truncation reading as sufficiently fixed for the current stage.
+Treat the current summary-first query-filter surviving-child-set reading as sufficiently fixed for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without continuing the pattern of ever-finer details/grouped mirror metadata unless clearly justified.
@@ -244,7 +218,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that constrained relation auxiliary aggregation across multiple returned source episodes is explicitly covered in both multi-source and low-limit cases?
+> What is the next smallest useful grouped-selection or contract improvement now that summary-first query-filter surviving-child-set behavior is explicitly covered?
 
 ---
 
@@ -269,7 +243,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest constrained relation limit/truncation slice:
+Recent relevant commits before the latest summary-first query-filter slice:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -294,14 +268,14 @@ Recent relevant commits before the latest constrained relation limit/truncation 
 - `2eeb3bd` — `Add auxiliary-only-after-filter flag`
 - `db06003` — `Cover multi-source relation aggregation`
 - `b98b83a` — `Clarify relation aggregation ordering`
+- `e94b9fc` — `Cover relation aggregation limit behavior`
 
 ### Recent just-completed slice to remember conceptually
 
-- low-limit constrained `supports` aggregation behavior covered by test
-- shared-target dedup still validated under truncation
-- current first-seen distinct-target truncation behavior validated
-- no behavior widening beyond current one-hop supports-only auxiliary semantics
-- validated with `pytest tests/memory/test_memory_context_related_items.py`
+- summary-first query-filter surviving-child-set behavior covered by test
+- surviving summary-first child ids/count fixed against post-filter visible primary path
+- no behavior widening beyond current summary-first and lightweight query-filter semantics
+- validated with `pytest tests/memory/test_service_context_details.py`
 
 ### Conceptual summary of the completed loops
 
@@ -310,6 +284,7 @@ The recent loops established that the current grouped/details surface now explic
 - primary summary/episode explainability
 - top-level summary-first selection identity
 - top-level summary-first selection cardinality
+- summary-first query-filter surviving-child-set behavior
 - workspace auxiliary no-episode-match visibility reading
 - constrained relation auxiliary linkage back to returned episode-side context
 - top-level constrained relation source-episode cardinality
@@ -329,10 +304,11 @@ Start from the current stable reading:
 
 - primary summary/episode explainability is explicit enough
 - top-level summary-first child identity/cardinality is directly readable
+- summary-first query-filter surviving-child-set behavior is fixed by coverage
 - workspace auxiliary no-episode-match visibility is intentional support preservation
 - constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
 - relation auxiliary grouped output is explicit enough to correlate back to returned episode-side context
-- constrained multi-source relation aggregation is now covered by behavior
+- constrained multi-source relation aggregation is covered by behavior
 - current constrained relation aggregation ordering is best read as first-seen distinct target order under the present source-side traversal
 - current constrained relation aggregation truncation is best read as truncation over that first-seen distinct-target sequence
 - auxiliary surfaces remain auxiliary rather than newly reclassified primary selection paths
