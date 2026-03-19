@@ -3,7 +3,7 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-focused **behavior-coverage** slice for the current **workspace-only +
+focused **behavior-coverage** slice for the current **ticket-only +
 summary-first + query-filter + memory-items-disabled** reading in
 `memory_get_context`.
 
@@ -13,8 +13,8 @@ new response field.
 
 Instead, it fixed and validated the current behavior when:
 
-- lookup is `workspace_id` only
-- multiple workflows are resolved from the workspace
+- lookup is `ticket_id` only
+- multiple workflows are resolved from the ticket
 - lightweight query filtering narrows the visible episode set
 - memory items are disabled
 - summaries remain enabled
@@ -31,24 +31,24 @@ The current behavior is now clearer that:
 - episode-scoped grouped entries are **not** emitted in this response shape
 - `child_episode_groups_emitted = false`
 - `child_episode_groups_emission_reason = "memory_items_disabled"`
-- in this multi-workflow workspace-resolved case, grouped summary
+- in this multi-workflow ticket-resolved case, grouped summary
   `parent_scope_id` remains `null`
 - `primary_episode_groups_present_after_query_filter = false` does **not**
   imply auxiliary-only output in this case, because the remaining visible route
   is still the primary summary-first grouped surface
 
-This means the current workspace-only summary-only query-filter interpretation is
+This means the current ticket-only summary-only query-filter interpretation is
 now better fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small workspace-only summary-only query-filter coverage slice implemented
+### Small ticket-only summary-only query-filter coverage slice implemented
 
 A focused test slice now covers the case where:
 
-- `lookup_scope == "workspace"`
+- `lookup_scope == "ticket"`
 - two workflows are resolved
 - two episodes exist
 - only one episode summary matches the current query
@@ -82,7 +82,7 @@ The current intended result in that case is:
 
 Added a new focused regression test covering the combined case:
 
-- workspace-only lookup
+- ticket-only lookup
 - summary-first selection
 - lightweight query filtering
 - one surviving visible episode
@@ -95,7 +95,7 @@ Added a new focused regression test covering the combined case:
 
 Grouped and details consumers should currently understand this case like this:
 
-1. candidate episodes are collected from the resolved workspace workflow set
+1. candidate episodes are collected from the resolved ticket workflow set
 2. query filtering narrows that candidate set to a surviving visible subset
 3. summary-first grouped reading is then formed from that surviving visible
    primary set
@@ -119,7 +119,7 @@ This should **not** be read as:
 
 It should be read as:
 
-- the current constrained workspace-only summary-first grouped reading
+- the current constrained ticket-only summary-first grouped reading
 - with the visible child set taken from the surviving post-query-filter primary
   path
 - with summary-only grouped shaping caused by `include_memory_items = false`
@@ -133,19 +133,19 @@ without broadening behavior.
 
 It verifies that the current system behaves consistently when:
 
-- workspace-only lookup resolves multiple workflows
+- ticket-only lookup resolves multiple workflows
 - query filtering narrows the current primary episode set
 - summary-first grouped reading must still follow that surviving visible set
 - the response shape remains summary-only because memory items are disabled
 
-This makes the current workspace-only query-filter + summary-only interaction
-explicit rather than leaving it to be reconstructed from separate workspace-only,
+This makes the current ticket-only query-filter + summary-only interaction
+explicit rather than leaving it to be reconstructed from separate ticket-only,
 summary-only, and memory-items-enabled cases.
 
 ### Tests added/updated
 
 The summary-first grouped/details test coverage now explicitly checks the
-workspace-only, query-filtered, memory-items-disabled, summaries-enabled case.
+ticket-only, query-filtered, memory-items-disabled, summaries-enabled case.
 
 The expected current result is:
 
@@ -167,7 +167,7 @@ Validated this slice with:
 
 Result at completion time:
 
-- `31 passed`
+- `32 passed`
 
 ---
 
@@ -183,8 +183,8 @@ This slice intentionally did **not** do any of the following:
 - add broader response-shape expansion
 - emit episode-scoped grouped entries when memory items are disabled
 - reclassify summary-only grouped output as auxiliary-only
-- strengthen grouped summary parentage in multi-workflow workspace-resolved
-  cases just because filtering leaves one surviving visible episode
+- strengthen grouped summary parentage in multi-workflow ticket-resolved cases
+  just because filtering leaves one surviving visible episode
 
 The current grouped interpretation remains:
 
@@ -224,7 +224,7 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `31 passed` in `tests/memory/test_service_context_details.py`
+- `32 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -260,6 +260,8 @@ The current `0.6.0` state should now be read as:
   the current summary-only query-filter case
 - workspace-only multi-workflow summary-first grouped summaries still keep
   `parent_scope_id = null`
+- ticket-only multi-workflow summary-first grouped summaries also keep
+  `parent_scope_id = null`
 - narrowing to one surviving visible episode does not currently imply stronger
   grouped summary parentage
 - inherited workspace-scoped memory remains auxiliary support context
@@ -272,10 +274,6 @@ The current `0.6.0` state should now be read as:
   workspace support context, not revived primary selection
 - current workspace-only multi-workflow summary-first reading does not currently
   show sibling workspace auxiliary coexistence unless actually emitted
-- workspace auxiliary no-episode-match visibility remains intentional support
-  preservation
-- workspace inherited auxiliary limit/truncation behavior is explicitly covered
-  by behavior
 - constrained relation `supports` auxiliary grouped output remains explicit
   enough to correlate back to returned episode-side context
 - constrained relation auxiliary aggregation across multiple returned source
@@ -303,8 +301,8 @@ The current `0.6.0` state should now be read as:
 
 ## Key conclusion
 
-The current workspace-only summary-only query-filter behavior slice is now
-covered well enough for the current stage.
+The current ticket-only summary-only query-filter behavior slice is now covered
+well enough for the current stage.
 
 The next step should still avoid:
 
@@ -326,7 +324,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current workspace-only summary-only query-filter child-set reading as
+Treat the current ticket-only summary-only query-filter child-set reading as
 sufficiently fixed for the current stage.
 
 ### Recommended target
