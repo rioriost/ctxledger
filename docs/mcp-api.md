@@ -1254,6 +1254,7 @@ When `include_memory_items=true`, the response may now distinguish:
    - also exposed through `related_memory_items_by_episode`
    - may also be exposed in episode-scoped `memory_context_groups` entries as group-local related context
    - workspace-scoped groups are not widened by this slice
+   - when query filtering removes all returned episodes, this current relation-derived path has no surviving returned episode-side memory context to traverse from
 
 `hierarchy_applied` is currently `true` when inherited workspace-scoped items are
 present in the returned context details, and `false` otherwise.
@@ -1283,6 +1284,7 @@ That means:
 - `group_related_memory_items_are_convenience_output = true` when episode-group embedded related items are present as a convenience surface
 - `related_context_is_auxiliary = false` when no related memory items are returned
 - `related_context_relation_types = []` when no related memory items are returned
+- when query filtering removes all returned episodes, the constrained relation-aware slice currently leaves no visible relation-derived output because there is no longer any returned episode-side memory context from which to derive it
 
 At the current implementation stage, inherited workspace-scoped memory is treated
 as intentional auxiliary support context rather than as part of the
@@ -1448,6 +1450,13 @@ That means:
 - relation-scoped grouped output should currently be read as relation-derived auxiliary support context that was surfaced from returned episode-side memory context rather than as an independent primary selection path
 - grouped consumers should currently expect the relation auxiliary surface to remain top-level and sibling-positioned rather than nested into the primary summary/episode chain
 - the current relation auxiliary reading is still anchored in returned episode-side context even though the relation-scoped group itself remains top-level
+- when query filtering removes all returned episodes, this constrained relation auxiliary surface does not currently survive as a visible fallback route:
+  - `related_context_is_auxiliary = false`
+  - `related_context_relation_types = []`
+  - `related_memory_items = []`
+  - `related_memory_items_by_episode = {}`
+  - `relation_supports_auxiliary` is absent from the visible grouped routes
+  - workspace auxiliary grouped output may still remain visible where currently supported
 - relation-scoped grouped entries may now also expose:
   - `source_episode_ids`
   - `source_memory_ids`

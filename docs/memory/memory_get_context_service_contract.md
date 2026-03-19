@@ -63,6 +63,7 @@ At a high level, it works like this:
 5. optionally collect direct episode memory items
 6. optionally collect inherited workspace memory items as auxiliary context
 7. optionally collect one-hop `supports`-related memory items from returned episode memory items
+   - when query filtering removes all returned episodes, this current relation-derived path has no surviving returned episode-side memory context to traverse from
 8. expose grouped and flat details that make the assembly path observable
 
 This means the current contract is already multi-route, but still deliberately narrow and explainable.
@@ -513,6 +514,17 @@ conservatively as:
   broader graph traversal
 - the relation group should therefore be read as support context linked back to
   returned episode-side context, not as an independent primary selection path
+- when query filtering removes all returned episodes, this constrained relation
+  auxiliary surface does not currently survive as a visible fallback route,
+  because it is still derived only from returned episode memory items
+- in that no-surviving-episode case:
+  - `related_context_is_auxiliary = false`
+  - `related_context_relation_types = []`
+  - `related_memory_items = []`
+  - `related_memory_items_by_episode = {}`
+  - `relation_supports_auxiliary` is absent from the visible grouped routes
+  - workspace auxiliary grouped output may still remain visible where currently
+    supported
 - when multiple source-side contexts surface multiple constrained `supports`
   targets, the current relation-group `memory_items` ordering should be read as
   first-seen target ordering under the current source-side traversal path rather
@@ -667,6 +679,10 @@ the present constrained aggregation behavior:
 - grouped relation output remains the primary structured relation-aware surface,
   while flat and per-episode related outputs remain compatibility or convenience
   surfaces over that same constrained slice
+- when query filtering removes all returned episodes, that same constrained
+  relation-aware slice currently leaves no visible relation-derived output,
+  because there is no longer any returned episode-side memory context from which
+  to derive it
 
 In practical terms, the next work should not default to adding yet another small
 relation-group explanation field unless a clearer behavior gap appears.
@@ -709,6 +725,9 @@ Current constraints include:
 - only `relation_type = "supports"` is currently included
 - relation-derived context is treated as auxiliary support context
 - relation-derived context does not currently drive episode selection
+- relation-derived context is currently derived only from returned episode memory
+  items, so it does not remain visible when query filtering removes all returned
+  episodes
 
 This keeps the retrieval path understandable while the broader hierarchy work is still in progress.
 
