@@ -1401,6 +1401,18 @@ That means:
 - relation-scoped grouped output should currently be read as relation-derived auxiliary support context that was surfaced from returned episode-side memory context rather than as an independent primary selection path
 - grouped consumers should currently expect the relation auxiliary surface to remain top-level and sibling-positioned rather than nested into the primary summary/episode chain
 - the current relation auxiliary reading is still anchored in returned episode-side context even though the relation-scoped group itself remains top-level
+- relation-scoped grouped entries may now also expose:
+  - `source_episode_ids`
+  - `source_memory_ids`
+- these source-linkage fields should currently be read as additive grouped explainability metadata that makes the constrained source-side linkage easier to inspect directly at the relation-group level
+- this relation auxiliary surface should now be treated as explicit enough for the current stage:
+  - relation support context is auxiliary
+  - relation support context is still one-hop and `supports`-only
+  - relation-group linkage back to returned episode-side context is now directly readable enough without broadening traversal semantics
+- the next slices should therefore prefer either:
+  - a higher-level contract / interpretation step
+  - or a genuinely new small behavior choice
+  - rather than continuing to add narrowly incremental relation-group metadata without a clearer behavior need
 - `related_memory_items_by_episode` remains a compatibility-oriented per-episode surface in the current stage
 - group-local `memory_context_groups[*]["related_memory_items"]` remains a convenience view for grouped consumers
 - when per-group related context is present, it should be understood as a compatibility- and convenience-preserving refinement of the same constrained `supports`-only behavior rather than as broader graph traversal
@@ -1408,7 +1420,10 @@ That means:
 - `related_context_is_auxiliary` makes the current support-role of related context explicit
 - `related_context_relation_types` makes the currently constrained relation contract explicit without widening traversal behavior
 - `relation_memory_context_groups_are_primary_output` makes the current primary grouped relation-aware surface explicit
-- grouped consumers should currently correlate relation-scoped grouped output back to returned episode-side context through the existing per-episode related-item convenience and compatibility surfaces rather than by treating the relation group as a broader graph-traversal root
+- grouped consumers should currently correlate relation-scoped grouped output back to returned episode-side context through:
+  - `source_episode_ids`
+  - `source_memory_ids`
+  - the existing per-episode related-item convenience and compatibility surfaces
 - the current constrained linkage reading is therefore:
   - returned episode-side memory items surface constrained supports-related targets
   - those same targets may appear in the top-level relation-scoped auxiliary group

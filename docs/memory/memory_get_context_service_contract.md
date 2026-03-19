@@ -366,11 +366,10 @@ When constrained relation-derived support context is available, the response may
 
 This is currently the primary grouped structured surface for relation-derived supporting context.
 
-At the current stage, grouped consumers should also read this relation-scoped
-auxiliary surface as linkable back to the returned episode-side context that
-surfaced it.
+At the current `0.6.0` stage, the constrained relation auxiliary grouped reading
+should now also be treated as explicit enough for the current contract slice.
 
-In particular, the current relation-aware grouped reading should be understood
+Grouped consumers should currently read this relation-scoped auxiliary surface
 conservatively as:
 
 - relation-derived support context is still auxiliary
@@ -380,8 +379,17 @@ conservatively as:
 - the relation group should therefore be read as support context linked back to
   returned episode-side context, not as an independent primary selection path
 
-This is already partly visible in the current response through episode-group
-embedded relation provenance such as:
+This linkage is now explicit enough through the current relation-group and
+episode-group surfaces together.
+
+At the relation-group level, the current grouped output now makes source-side
+linkage easier to read through:
+
+- `source_episode_ids`
+- `source_memory_ids`
+
+At the episode-group level, the current response still preserves linkage through
+embedded provenance and relation-edge details such as:
 
 - `related_memory_item_provenance[*].source_memory_id`
 - `related_memory_item_provenance[*].target_memory_id`
@@ -390,16 +398,19 @@ embedded relation provenance such as:
 - `related_memory_relation_edges[*].source_memory_id`
 - `related_memory_relation_edges[*].target_memory_id`
 
-Taken together, these current fields mean grouped consumers can already recover
-the linkage between:
+Taken together, these current fields mean grouped consumers can now recover the
+linkage between:
 
 - returned episode-side memory context
 - constrained `supports` relation edges
 - relation-scoped auxiliary grouped output
 
-That current linkage should be treated as sufficient for the present contract
-slice unless a later behavior change chooses to make relation-group source
-linkage more explicit at the relation-group level itself.
+without needing another narrowly incremental relation-group helper field for the
+current stage.
+
+This should currently be read as a good enough stopping point for the present
+relation-auxiliary explainability slice, not as an invitation to keep adding
+tiny relation-group metadata without a stronger behavior need.
 
 ### Auxiliary visibility without episode matches
 
@@ -468,6 +479,27 @@ The current convenience-oriented related-context surfaces include:
 These convenience-oriented episode-group fields are important to the current
 grouped relation reading because they preserve the source-side linkage that
 explains why relation-scoped auxiliary grouped output was surfaced.
+
+### Consolidation note for the current stage
+
+Taken together, the current relation-scoped grouped metadata and the existing
+episode-group provenance/linkage fields should be treated as sufficient
+relation-auxiliary explainability for the current `0.6.0` slice.
+
+In practical terms, the next work should not default to adding yet another small
+relation-group explanation field unless a clearer behavior gap appears.
+
+Instead, the current contract direction should be read as:
+
+- constrained relation auxiliary grouped reading is explicit enough for now
+- workspace/relation auxiliary grouped surfaces still remain top-level sibling
+  auxiliaries
+- broader relation expansion and deeper graph semantics are still intentionally
+  deferred
+- the next meaningful step should preferably be either:
+  - a genuinely new small grouped-selection behavior choice
+  - or a contract-consolidation / interpretation step
+  - rather than another narrowly incremental relation-group metadata addition
 
 This is reflected by:
 

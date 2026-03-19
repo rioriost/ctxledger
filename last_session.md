@@ -2,34 +2,41 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **relation `supports` auxiliary grouped reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small consolidation loop around the current **constrained relation `supports` auxiliary grouped reading** in `memory_get_context`.
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or turn relation-derived support context into a new primary selection path.
 
-Instead, it refined the current constrained relation-aware grouped reading by making the top-level relation auxiliary group easier to correlate back to the returned episode-side context that surfaced it.
+Instead, it records that the current relation auxiliary reading is now explicit enough for the current stage after the recent relation-group source-linkage refinement.
 
-The current grouped response is now clearer that:
+At this point, the grouped response is clearer that:
 
 - relation-derived support context remains auxiliary
-- relation-derived support context remains constrained to the current `supports` slice
-- the relation auxiliary group is still a top-level sibling auxiliary surface
+- relation-derived support context remains constrained to:
+  - one outgoing hop
+  - `supports` only
+  - auxiliary use only
+- the relation auxiliary group remains a top-level sibling auxiliary surface
 - the relation auxiliary group is still surfaced from returned episode-side memory context rather than from broader graph traversal
-- relation-group linkage back to returned episode-side context is now easier to read directly at the relation-group level
+- the relation auxiliary group is now easier to correlate back to returned episode-side context directly at the relation-group level
+
+This means the recent relation auxiliary refinement loop is now complete enough.
 
 ---
 
 ## What was completed
 
-### Small relation auxiliary linkage slice implemented
+### Relation auxiliary grouped reading is now explicit enough
 
-The relation-scoped `memory_context_groups` entry for the current `supports` auxiliary slice now includes:
+The current relation-scoped `memory_context_groups` entry for the constrained `supports` slice now has enough explicit linkage metadata that grouped consumers no longer need to reconstruct the source-side relation reading only from embedded episode-group provenance fields.
+
+The current relation auxiliary grouped surface now includes:
 
 - `source_episode_ids`
 - `source_memory_ids`
 
-These fields make the current grouped relation reading easier to interpret without changing the underlying retrieval semantics.
+These fields make it easier to understand which returned episode-side context surfaced the current relation auxiliary group.
 
-### Current intended meaning of the new fields
+### Current intended meaning of the current relation-group linkage fields
 
 The current intended interpretation is:
 
@@ -37,7 +44,7 @@ The current intended interpretation is:
   - identifies the returned episode ids whose episode-side memory context surfaced the current relation auxiliary group
 
 - `source_memory_ids`
-  - identifies the episode-side source memory ids from which the current constrained `supports` targets were reached
+  - identifies the source memory ids from which the current constrained `supports` targets were reached
 
 At the current stage, these fields should be read conservatively:
 
@@ -48,7 +55,7 @@ At the current stage, these fields should be read conservatively:
 
 ### Current intended grouped reading
 
-Grouped consumers should currently read the relation auxiliary surface like this:
+Grouped consumers should currently understand the constrained relation auxiliary surface like this:
 
 1. returned episode-side memory items remain the source-side context
 2. constrained one-hop `supports` targets may be surfaced from that source-side context
@@ -62,38 +69,22 @@ Grouped consumers should currently read the relation auxiliary surface like this
    - top-level sibling-positioned
    - still anchored in returned episode-side context
 
-### Why this slice is useful
+### What this means practically
 
-This slice improves the grouped relation reading without widening behavior.
+The current grouped contract can now tell a consumer:
 
-It makes the current constrained relation-aware grouped surface easier to interpret directly by showing which returned episode-side context actually surfaced the relation auxiliary group.
+- that the relation auxiliary surface is still constrained and auxiliary
+- which returned episodes surfaced the current relation group
+- which source memory ids surfaced the current relation group
+- that the relation group should still be read as grouped support context rather than as an independent graph root or primary selection path
 
-That means grouped consumers no longer need to rely only on the embedded episode-group provenance fields to reconstruct that linkage.
-
-### Tests added/updated
-
-The relation grouped test coverage now explicitly checks that the relation-scoped auxiliary group includes:
-
-- `source_episode_ids`
-- `source_memory_ids`
-
-in the representative `supports` relation case.
-
-### Validation completed
-
-Validated the slice with:
-
-- `pytest tests/memory/test_memory_context_related_items.py`
-
-Result at completion time:
-
-- `2 passed`
+That is now a sufficiently explicit relation auxiliary reading for the current `0.6.0` stage.
 
 ---
 
 ## What did not change
 
-This slice intentionally did **not** do any of the following:
+This consolidation loop intentionally did **not** do any of the following:
 
 - broaden relation traversal beyond one outgoing hop
 - include relation types beyond `supports`
@@ -102,6 +93,7 @@ This slice intentionally did **not** do any of the following:
 - change workspace auxiliary positioning
 - introduce graph-backed selection semantics
 - add broader response-shape expansion
+- add another new relation-group helper field
 
 The current auxiliary-group interpretation remains:
 
@@ -151,32 +143,29 @@ The current `0.6.0` state should now be read as:
 - primary summary/episode explainability is explicit enough for the current stage
 - auxiliary workspace/relation groups remain sibling auxiliary surfaces
 - inherited workspace auxiliary visibility without episode matches remains intentional current behavior
-- relation `supports` auxiliary grouped output is now easier to correlate back to returned episode-side context
+- constrained relation `supports` auxiliary grouped output is now explicit enough to correlate back to returned episode-side context for the current stage
 
 In practice:
 
 - repository primitives are still good enough for the current slice
 - service projection structure is still good enough for the current slice
 - primary-chain explainability is explicit enough for now
-- the latest useful refinement moved to the relation auxiliary grouped reading without broadening behavior
+- workspace auxiliary no-match interpretation is explicit enough for now
+- relation auxiliary grouped reading is also explicit enough for now
+- another tiny relation-group metadata addition is probably not the best next use of effort
 
 ---
 
 ## Key conclusion
 
-The current relation auxiliary linkage refinement slice is complete enough.
+The current **relation auxiliary consolidation loop is complete enough**.
 
-The next step should still avoid:
-
-- broad relation expansion
-- broader graph-first behavior
-- auxiliary-group nesting without stronger retrieval semantics
-- generic cleanup for its own sake
+The next step should **not** be to keep adding more tiny relation-group metadata fields unless a genuinely missing behavior or ambiguity is discovered.
 
 The next useful step should instead be one of:
 
-1. a small contract-consolidation / interpretation step around the now-clearer relation auxiliary reading
-2. a different small grouped-selection behavior choice
+1. a different small grouped-selection behavior choice
+2. a higher-level contract-consolidation / interpretation step
 3. only later, broader relation/group behavior
 
 ---
@@ -184,7 +173,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current constrained relation `supports` auxiliary grouped reading as clearer, but still intentionally narrow.
+Treat the current constrained relation `supports` auxiliary grouped reading as sufficiently explicit for now.
 
 ### Recommended target
 Choose the next small behavior or contract step **without** broadening relation traversal or collapsing auxiliary sibling positioning.
@@ -198,13 +187,11 @@ Proceed in this order:
    - one hop
    - `supports` only
    - auxiliary only
-4. prefer either:
-   - a small contract clarification built on the clearer relation grouped reading
-   - or a different small behavior slice
+4. avoid more tiny relation-group explainability additions by default
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that the constrained relation auxiliary group is easier to link back to returned episode-side context?
+> What is the next smallest useful grouped-selection or contract improvement now that the constrained relation auxiliary group is explicit enough for the current stage?
 
 ---
 
@@ -212,13 +199,14 @@ Proceed in this order:
 
 Prefer one of these, in order:
 
-1. a small consolidation / interpretation step built on the now-clearer relation auxiliary reading
-2. a different small grouped-selection behavior choice that does not broaden relation traversal
+1. a genuinely different small grouped-selection behavior choice
+2. a broader contract-consolidation / interpretation step that does not just add another tiny relation-group field
 3. only later, broader relation/group behavior
 
 Avoid next session work that is primarily:
 
 - more generic helper cleanup
+- another hyper-narrow relation-group metadata addition without a clear missing behavior
 - premature broad response-shape expansion
 - broader relation traversal
 - graph-first expansion
@@ -228,7 +216,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest relation slice:
+Recent relevant commits before the latest relation consolidation loop:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -244,6 +232,7 @@ Recent relevant commits before the latest relation slice:
 - `7c6b5a6` — `Add summary group emission reason metadata`
 - `73ee2b5` — `Consolidate primary chain explainability notes`
 - `90e964d` — `Clarify auxiliary no-episode-match visibility`
+- `b362593` — `Add relation auxiliary source linkage`
 
 ### Conceptual summary of the completed loops
 
@@ -265,8 +254,8 @@ Start from the current stable reading:
 
 - primary summary/episode explainability is explicit enough
 - workspace auxiliary no-episode-match visibility is intentional support preservation
-- relation `supports` auxiliary grouped output remains top-level and sibling-positioned
-- relation auxiliary grouped output is now easier to correlate back to returned episode-side context
+- constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
+- relation auxiliary grouped output is now explicit enough to correlate back to returned episode-side context
 - auxiliary surfaces remain auxiliary rather than newly reclassified primary selection paths
 
 Use that clearer base to choose the next genuinely useful small behavior or contract step.
