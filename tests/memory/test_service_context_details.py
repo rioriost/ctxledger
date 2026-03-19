@@ -1021,6 +1021,294 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
     ]
 
 
+def test_memory_get_context_query_filter_keeps_workspace_inherited_auxiliary_limit_truncation() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000031"
+    created_at = datetime(2024, 10, 4, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    matching_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode survives workspace-limit query",
+        metadata={"kind": "workspace-limit-matching"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    filtered_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode filtered out before workspace-limit truncation",
+        metadata={"kind": "workspace-limit-filtered"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    episode_repository.create(matching_episode)
+    episode_repository.create(filtered_episode)
+
+    direct_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=matching_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Direct memory item for query-filtered workspace shaping",
+        metadata={"kind": "direct-memory-item"},
+        created_at=created_at.replace(hour=3),
+        updated_at=created_at.replace(hour=3),
+    )
+    newer_inherited_workspace_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Newer inherited workspace item after query filtering",
+        metadata={"kind": "newer-workspace-item"},
+        created_at=created_at.replace(hour=1, minute=30),
+        updated_at=created_at.replace(hour=1, minute=30),
+    )
+    older_inherited_workspace_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Older inherited workspace item after query filtering",
+        metadata={"kind": "older-workspace-item"},
+        created_at=created_at.replace(hour=0),
+        updated_at=created_at.replace(hour=0),
+    )
+    filtered_episode_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=filtered_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Filtered episode memory item that should not remain visible",
+        metadata={"kind": "filtered-memory-item"},
+        created_at=created_at.replace(hour=4),
+        updated_at=created_at.replace(hour=4),
+    )
+    memory_item_repository.create(direct_memory_item)
+    memory_item_repository.create(newer_inherited_workspace_item)
+    memory_item_repository.create(older_inherited_workspace_item)
+    memory_item_repository.create(filtered_episode_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-WORKSPACE-LIMIT-QUERY-FILTER",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            query="survives workspace-limit query",
+            workflow_instance_id=str(workflow_id),
+            limit=1,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert [episode.summary for episode in response.episodes] == [
+        "Episode survives workspace-limit query"
+    ]
+    assert response.details["query_filter_applied"] is True
+    assert response.details["episodes_before_query_filter"] == 1
+    assert response.details["matched_episode_count"] == 1
+    assert response.details["episodes_returned"] == 1
+    assert response.details["inherited_memory_items"] == [
+        {
+            "memory_id": str(newer_inherited_workspace_item.memory_id),
+            "workspace_id": workspace_id,
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Newer inherited workspace item after query filtering",
+            "metadata": {"kind": "newer-workspace-item"},
+            "created_at": newer_inherited_workspace_item.created_at.isoformat(),
+            "updated_at": newer_inherited_workspace_item.updated_at.isoformat(),
+        }
+    ]
+    assert response.details["retrieval_routes_present"] == [
+        "episode_direct",
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "episode_direct",
+    ]
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_presence"] == {
+        "summary_first": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "episode_direct": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "workspace_inherited_auxiliary": {
+            "group_present": True,
+            "item_present": True,
+        },
+        "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+    }
+    assert response.details["retrieval_route_scope_counts"] == {
+        "summary_first": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "episode_direct": {
+            "summary": 0,
+            "episode": 1,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "workspace_inherited_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 1,
+            "relation": 0,
+        },
+        "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+    }
+    assert response.details["retrieval_route_scope_item_counts"] == {
+        "summary_first": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "episode_direct": {
+            "summary": 0,
+            "episode": 1,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "workspace_inherited_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 1,
+            "relation": 0,
+        },
+        "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+    }
+    assert response.details["retrieval_route_scopes_present"] == {
+        "summary_first": [],
+        "episode_direct": [
+            "episode",
+        ],
+        "workspace_inherited_auxiliary": [
+            "workspace",
+        ],
+        "relation_supports_auxiliary": [],
+    }
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "episode",
+            "scope_id": str(matching_episode.episode_id),
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "parent_group_scope": None,
+            "parent_group_id": None,
+            "selection_kind": "direct_episode",
+            "selection_route": "episode_direct",
+            "selected_via_summary_first": False,
+            "memory_items": [
+                {
+                    "memory_id": str(direct_memory_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": str(matching_episode.episode_id),
+                    "type": "episode_note",
+                    "provenance": "episode",
+                    "content": "Direct memory item for query-filtered workspace shaping",
+                    "metadata": {"kind": "direct-memory-item"},
+                    "created_at": direct_memory_item.created_at.isoformat(),
+                    "updated_at": direct_memory_item.updated_at.isoformat(),
+                }
+            ],
+            "related_memory_items": [],
+            "related_memory_item_provenance": [],
+            "related_memory_relation_edges": [],
+        },
+        {
+            "scope": "workspace",
+            "scope_id": workspace_id,
+            "parent_scope": None,
+            "parent_scope_id": None,
+            "parent_group_scope": None,
+            "parent_group_id": None,
+            "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
+            "memory_items": [
+                {
+                    "memory_id": str(newer_inherited_workspace_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": None,
+                    "type": "workspace_note",
+                    "provenance": "workspace",
+                    "content": "Newer inherited workspace item after query filtering",
+                    "metadata": {"kind": "newer-workspace-item"},
+                    "created_at": newer_inherited_workspace_item.created_at.isoformat(),
+                    "updated_at": newer_inherited_workspace_item.updated_at.isoformat(),
+                }
+            ],
+        },
+    ]
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(matching_episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": True,
+            "explanation_basis": "query_match_evaluation",
+            "matched_summary": True,
+            "matched_metadata_values": [],
+        }
+    ]
+
+
 def test_memory_get_context_includes_episode_explanations_without_query_filter() -> (
     None
 ):
