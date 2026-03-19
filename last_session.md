@@ -2,124 +2,175 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **workspace inherited auxiliary limit/truncation reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed several small, focused behavior-coverage slices around the current constrained grouped reading of `memory_get_context`.
 
-This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or add a new response field.
+These recent slices did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or redesign the response shape.
 
-Instead, it fixed and validated how the current workspace inherited auxiliary surface behaves when multiple inherited workspace items exist but the request `limit` truncates the emitted auxiliary item set.
+Instead, they tightened the current contract by validating important behavior branches that were already implied by the implementation:
 
-The current response is now clearer that:
+- summary-first child-set behavior under query filtering
+- constrained relation auxiliary behavior when memory items are disabled
+- `include_episodes = false` episode-less shaping behavior
+- summaries-disabled primary-path behavior
+- workspace inherited auxiliary limit / truncation behavior
 
-- workspace inherited context remains an auxiliary sibling surface
-- workspace inherited auxiliary output remains distinct from the primary episode path
-- the emitted inherited workspace auxiliary item set is currently shaped by the request `limit`
-- top-level `inherited_memory_items`, workspace-scoped grouped output, and route item counts should all stay aligned to that emitted truncated inherited set
-- this is the current auxiliary emission behavior, not broader selection semantics
-
-This means the current workspace inherited auxiliary reading is now better fixed by behavior coverage rather than by inference alone.
+Taken together, these slices make the current `0.6.0` grouped/details reading much more concretely test-backed.
 
 ---
 
 ## What was completed
 
-### Small workspace inherited auxiliary limit coverage slice implemented
+### 1. Summary-first query-filter surviving-child-set behavior is now covered
 
-A new focused test slice now covers the case where:
+A focused test now fixes the current behavior when:
 
-- a workflow has an episode
-- an episode-side memory item exists
-- multiple inherited workspace-scoped memory items exist
-- the request uses:
-  - `include_episodes = true`
-  - `include_memory_items = true`
-  - `include_summaries = false`
-  - `limit = 1`
+- multiple candidate episodes exist
+- summary-first selection is active
+- query filtering leaves only a subset of those episodes visible
 
-The current intended result in that case is:
+The current intended reading is:
 
-- the returned episode path still remains visible
-- the workspace inherited auxiliary surface still remains visible
-- `inherited_memory_items` contains only the currently emitted truncated inherited item set
-- the workspace-scoped grouped auxiliary entry contains only that same truncated inherited item set
-- `retrieval_route_item_counts["workspace_inherited_auxiliary"]` matches that emitted inherited item count
+- returned `episodes` reflect the surviving post-filter primary set
+- top-level summary-first child metadata reflects that same surviving set
+- grouped summary `child_episode_ids` / `child_episode_count` reflect that same surviving set
+- grouped episode-scoped output also reflects that same surviving set
 
-### Current intended reading of this behavior
+In other words, the current summary-first child set is read from the **post-query-filter visible primary path**, not from the pre-filter candidate set.
 
-Grouped and details consumers should currently understand this case like this:
+### 2. Constrained relation auxiliary output is disabled when memory items are off
 
-1. episode collection still follows the current primary path rules
-2. inherited workspace auxiliary context is still emitted as a sibling auxiliary surface
-3. the request `limit` constrains the inherited workspace auxiliary emission set in the current implementation
-4. the current emitted inherited set should therefore be read consistently across:
-   - top-level `inherited_memory_items`
-   - workspace-scoped `memory_context_groups` auxiliary output
-   - retrieval-route item counts
+A focused test now fixes the current behavior when:
 
-This should **not** be read as:
+- valid `supports` relations exist in storage
+- but `include_memory_items = false`
 
-- a broader workspace-first selection path
-- stronger parentage between workspace auxiliary context and the primary summary/episode chain
-- graph-backed semantics
-- auxiliary context being reclassified as primary episode selection
+The current intended reading is:
 
-It should be read as:
+- the constrained relation auxiliary path is **not surfaced**
+- no relation auxiliary route is present
+- no relation-scoped grouped output is emitted
+- relation-oriented details remain inactive
 
-- current auxiliary emission shaping for the workspace inherited surface
+This should be read as current source-path shaping behavior:
 
-### Why this slice is useful
+- episode-side memory-item-shaped context is required first
+- constrained relation auxiliary derivation depends on that source path
+- disabling memory items disables that constrained relation path
 
-This slice improves confidence in the current auxiliary reading without broadening behavior.
+### 3. `include_episodes = false` episode-less shaping behavior is now covered
 
-It verifies that the current system behaves consistently when the inherited workspace auxiliary surface is truncated by limit:
+A focused test now fixes the current behavior when:
 
-- the emitted inherited item set is consistent across top-level and grouped output
-- route counts match the emitted auxiliary set
-- the workspace auxiliary surface remains sibling-positioned and auxiliary
+- `include_episodes = false`
+- episode-side memory exists
+- workspace auxiliary context is also available
 
-This makes the current workspace inherited limit behavior explicit rather than leaving it to be reconstructed from multiple indirect signals.
+The current intended reading is:
 
-### Tests added/updated
+- the response is episode-less at the top level
+- no summary-scoped grouped output is returned
+- no episode-scoped grouped output is returned
+- workspace-scoped auxiliary grouped output may still remain visible
+- grouped retrieval routes can therefore become auxiliary-only in that branch
 
-The response-shaping / auxiliary test coverage now explicitly checks the case where multiple inherited workspace items exist but `limit = 1`.
+This is a current shaping branch, not a contradiction in the grouped route model.
 
-The expected current result is:
+### 4. Summaries-disabled primary-path behavior is now covered
 
-- one inherited workspace item emitted
-- one workspace-scoped auxiliary group item emitted
-- `retrieval_route_item_counts["workspace_inherited_auxiliary"] == 1`
-- the emitted inherited item is the currently surfaced inherited item in both top-level and grouped output
+A focused test now fixes the current behavior when:
 
-### Validation completed
+- `include_episodes = true`
+- `include_memory_items = true`
+- `include_summaries = false`
 
-Validated the slice with:
+The current intended reading is:
 
-- `pytest tests/memory/test_service_context_details.py`
+- summaries are disabled
+- summary-first is inactive
+- no summary-scoped grouped output is emitted
+- top-level summary-first metadata remains inactive
+- the primary path remains visible through `episode_direct`
+- episode-scoped grouped output still remains visible
 
-Result at completion time:
+This confirms that disabling summaries does **not** disable the primary episode path.
 
-- `23 passed`
+### 5. Workspace inherited auxiliary limit / truncation behavior is now covered
+
+A focused test now fixes the current behavior when:
+
+- multiple inherited workspace items exist
+- the request `limit` truncates the currently emitted inherited set
+
+The current intended reading is:
+
+- top-level `inherited_memory_items`
+- workspace-scoped grouped auxiliary `memory_items`
+- and `workspace_inherited_auxiliary` route item counts
+
+all reflect the same currently emitted truncated inherited workspace item set.
+
+This confirms that the inherited auxiliary surface remains sibling-positioned and that its emitted shape stays internally consistent under limit pressure.
+
+---
+
+## Previously established behavior that still matters
+
+The recent work should be read together with the already-established current `0.6.0` behavior:
+
+### Primary summary / episode path
+- `memory_context_groups` remains the primary grouped hierarchy-aware surface
+- summary-first explainability is explicit enough for the current stage
+- top-level summary-first child identity / cardinality are directly readable
+- summary-first query-filter surviving-child-set behavior is now covered
+
+### Workspace auxiliary path
+- workspace auxiliary groups remain top-level sibling auxiliaries
+- no-episode-match survival is intentional support preservation
+- auxiliary-only-after-filter reading is explicit
+- low-limit inherited auxiliary emission is now covered
+
+### Constrained relation auxiliary path
+- relation auxiliary groups remain top-level sibling auxiliaries
+- one hop only
+- `supports` only
+- auxiliary only
+- source linkage is explicit enough
+- top-level source-episode cardinality is readable
+- multi-source aggregation is covered
+- first-seen distinct-target ordering is covered
+- low-limit truncation over that emitted distinct-target sequence is covered
+- relation auxiliary output is not surfaced when `include_memory_items = false`
+
+---
+
+## Why this matters
+
+The current grouped/details surface is no longer just documented by interpretation; it is now backed by focused behavior coverage across multiple important branches:
+
+- positive path
+- negative path
+- shaping branches
+- filtering branches
+- truncation branches
+- multi-source aggregation branches
+
+That gives the current `0.6.0` slice a much firmer contract footing without broadening behavior.
 
 ---
 
 ## What did not change
 
-This slice intentionally did **not** do any of the following:
+These recent slices intentionally did **not** do any of the following:
 
 - broaden relation traversal beyond one outgoing hop
 - include relation types beyond `supports`
-- change workspace auxiliary positioning
-- change constrained relation auxiliary positioning
+- make relation-derived support context part of the primary summary/episode path
+- nest auxiliary groups into the primary summary/episode chain
 - introduce graph-backed selection semantics
 - add broader response-shape expansion
-- change the current primary summary/episode interpretation
-- make workspace auxiliary context part of the primary grouped chain
+- reclassify auxiliary surfaces as primary selection paths
 
-The current grouped interpretation remains:
-
-- `memory_context_groups` is still the primary grouped hierarchy-aware surface
-- primary summary/episode explainability remains explicit enough for the current stage
-- workspace/relation auxiliary groups remain top-level sibling auxiliary surfaces
-- constrained relation auxiliary reading remains explicit enough for the current stage
+The current reading remains conservative and relational-first.
 
 ---
 
@@ -147,9 +198,10 @@ Recent relevant validation includes:
 - `pytest tests/memory/test_service_context_details.py`
 - `pytest tests/memory/test_memory_context_related_items.py`
 
-Recent validation result for this slice:
+Recent validation results at completion time:
 
-- `23 passed` in `tests/memory/test_service_context_details.py`
+- `22 passed` in `tests/memory/test_service_context_details.py`
+- `5 passed` in `tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -163,14 +215,14 @@ The current `0.6.0` state should now be read as:
 - still not Apache AGE behavior expansion yet
 - `memory_context_groups` remains the primary grouped hierarchy-aware surface
 - primary summary/episode explainability remains explicit enough for the current stage
-- top-level summary-first selection identity/cardinality is directly readable
+- top-level summary-first selection identity / cardinality are directly readable
 - summary-first query-filter surviving-child-set behavior is explicitly covered by behavior
 - summaries-disabled primary-path behavior is explicitly covered by behavior
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
-- workspace inherited auxiliary limit/truncation behavior is now explicitly covered by behavior
+- workspace inherited auxiliary limit / truncation behavior is explicitly covered by behavior
 - constrained relation `supports` auxiliary grouped output remains explicit enough to correlate back to returned episode-side context
 - constrained relation auxiliary aggregation across multiple returned source episodes is explicitly covered by behavior
-- constrained relation auxiliary `memory_items` ordering is currently best read as first-seen distinct target order under the present source-side traversal
+- constrained relation auxiliary `memory_items` ordering is currently best read as first-seen distinct-target order under the present source-side traversal
 - constrained relation auxiliary low-limit truncation is currently best read as truncation over that first-seen distinct-target sequence
 - constrained relation auxiliary output is currently disabled when `include_memory_items = false`
 - `include_episodes = false` now has explicit shaping coverage for the returned episode-less branch
@@ -182,17 +234,17 @@ In practice:
 - primary-chain grouped reading is explicit enough
 - summary-first query-filter interaction is better anchored by behavior coverage
 - summaries-disabled primary-path behavior is better anchored by behavior coverage
-- workspace inherited auxiliary emission shaping is now also better anchored by behavior coverage
+- workspace inherited auxiliary emission shaping is better anchored by behavior coverage
 - constrained relation grouped reading is explicit enough
 - constrained relation negative-path behavior is better anchored by behavior coverage
 - current episode-less shaping behavior is also better anchored by behavior coverage
-- another tiny grouped/detail helper field is still probably not the best next use of effort unless a clear behavior gap appears
+- another tiny grouped/details helper field is probably not the best next use of effort unless a clear behavior gap appears
 
 ---
 
 ## Key conclusion
 
-The current workspace inherited auxiliary limit/truncation coverage slice is complete enough.
+The current constrained `memory_get_context` model is now **substantially better fixed by behavior coverage**.
 
 The next step should still avoid:
 
@@ -213,16 +265,21 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current workspace inherited auxiliary limit/truncation reading as sufficiently fixed for the current stage.
+Treat the current constrained grouped/details reading as sufficiently fixed for the current stage across:
+
+- primary summary/episode behavior
+- shaping branches
+- workspace auxiliary behavior
+- constrained relation auxiliary behavior
 
 ### Recommended target
-Choose the next small behavior or contract step without continuing the pattern of ever-finer details/grouped mirror metadata unless clearly justified.
+Choose the next small behavior or contract step without continuing the pattern of ever-finer details / grouped mirror metadata unless clearly justified.
 
 ### Recommended focus
 Proceed in this order:
 
 1. preserve the current primary summary/episode interpretation as stable enough for the current stage
-2. preserve workspace/relation auxiliary groups as sibling auxiliaries
+2. preserve workspace / relation auxiliary groups as sibling auxiliaries
 3. preserve the constrained relation-aware scope:
    - one hop
    - `supports` only
@@ -231,7 +288,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that workspace inherited auxiliary limit/truncation behavior is explicitly covered?
+> What is the next smallest useful grouped-selection or contract improvement now that the current constrained primary / shaping / auxiliary behaviors are all better fixed by focused behavior coverage?
 
 ---
 
@@ -256,7 +313,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest workspace inherited limit/truncation slice:
+Recent relevant commits before these latest coverage slices:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -279,6 +336,8 @@ Recent relevant commits before the latest workspace inherited limit/truncation s
 - `2487359` — `Add relation source episode count`
 - `5047c97` — `Add primary episode group presence after filter`
 - `2eeb3bd` — `Add auxiliary-only-after-filter flag`
+
+### Recent coverage-oriented commits to remember
 - `db06003` — `Cover multi-source relation aggregation`
 - `b98b83a` — `Clarify relation aggregation ordering`
 - `e94b9fc` — `Cover relation aggregation limit behavior`
@@ -286,13 +345,7 @@ Recent relevant commits before the latest workspace inherited limit/truncation s
 - `4926491` — `Cover relation memory-items-disabled case`
 - `c14067d` — `Cover include-episodes false shaping`
 - `f04aad2` — `Cover summaries-disabled primary path`
-
-### Recent just-completed slice to remember conceptually
-
-- workspace inherited auxiliary limit/truncation behavior covered by test
-- emitted inherited item set aligned across top-level and grouped auxiliary surfaces
-- workspace auxiliary route item counts aligned with the emitted inherited item set
-- validated with `pytest tests/memory/test_service_context_details.py`
+- `194c76a` — `Cover workspace inherited limit behavior`
 
 ### Conceptual summary of the completed loops
 
@@ -303,15 +356,15 @@ The recent loops established that the current grouped/details surface now explic
 - top-level summary-first selection cardinality
 - summary-first query-filter surviving-child-set behavior
 - summaries-disabled primary-path behavior
+- `include_episodes = false` episode-less shaping behavior
 - workspace auxiliary no-episode-match visibility reading
-- workspace inherited auxiliary limit/truncation behavior
+- workspace inherited auxiliary limit / truncation behavior
 - constrained relation auxiliary linkage back to returned episode-side context
 - top-level constrained relation source-episode cardinality
 - constrained relation auxiliary aggregation across multiple returned source episodes
-- constrained relation auxiliary first-seen ordering reading
-- constrained relation auxiliary low-limit truncation reading
+- constrained relation auxiliary first-seen distinct-target ordering
+- constrained relation auxiliary low-limit truncation
 - constrained relation auxiliary memory-items-disabled reading
-- `include_episodes = false` episode-less shaping behavior
 
 That is a good enough stopping point for the current stage without widening behavior.
 
@@ -324,17 +377,18 @@ If work resumes from here, do **not** start by adding another tiny explainabilit
 Start from the current stable reading:
 
 - primary summary/episode explainability is explicit enough
-- top-level summary-first child identity/cardinality is directly readable
+- top-level summary-first child identity / cardinality are directly readable
 - summary-first query-filter surviving-child-set behavior is fixed by coverage
 - summaries-disabled primary-path behavior is fixed by coverage
+- `include_episodes = false` episode-less shaping behavior is fixed by coverage
 - workspace auxiliary no-episode-match visibility is intentional support preservation
-- workspace inherited auxiliary limit/truncation behavior is fixed by coverage
+- workspace inherited auxiliary limit / truncation behavior is fixed by coverage
 - constrained relation `supports` auxiliary grouped output remains top-level and sibling-positioned
 - relation auxiliary grouped output is explicit enough to correlate back to returned episode-side context
 - constrained multi-source relation aggregation is covered by behavior
-- current constrained relation aggregation ordering is best read as first-seen distinct target order under the present source-side traversal
+- current constrained relation aggregation ordering is best read as first-seen distinct-target order under the present source-side traversal
 - current constrained relation aggregation truncation is best read as truncation over that first-seen distinct-target sequence
 - constrained relation auxiliary output is not surfaced when `include_memory_items = false`
-- `include_episodes = false` keeps the visible response episode-less while still allowing current auxiliary workspace visibility
+- auxiliary surfaces remain auxiliary rather than newly reclassified primary selection paths
 
 Use that clearer base to choose the next genuinely useful small behavior or contract step.
