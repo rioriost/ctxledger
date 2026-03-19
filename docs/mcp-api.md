@@ -1384,12 +1384,14 @@ That means:
   - no summary-scoped grouped marker is returned
 - inherited workspace-scoped memory may still be returned as auxiliary context when memory items are enabled
 - inherited workspace-scoped memory may also be returned even when no episode survives query filtering
+- in that no-episode-match case, grouped consumers should currently read the remaining workspace-scoped auxiliary visibility as preservation of auxiliary support context rather than as revival of filtered primary episode selection
 - `all_episodes_filtered_out_by_query` explicitly marks the all-filtered case
 - `episode_explanations` can still retain filtered-out episode diagnostics even when `episodes` becomes empty after filtering
 - `inherited_context_is_auxiliary` makes that support-role explicit
 - `inherited_context_returned_without_episode_matches` makes the no-matching-episodes case explicit
 - `inherited_context_returned_as_auxiliary_without_episode_matches` explicitly states that the inherited workspace context remained visible in that no-matching-episodes case because it is auxiliary
 - this should currently be interpreted as intentional auxiliary-context behavior rather than as evidence that inherited workspace items participate in episode matching
+- in other words, the current contract should treat the workspace auxiliary path as surviving query-filter loss of episode matches without reclassifying that auxiliary context as newly matched primary episode context
 - `related_memory_items` is currently narrower than general relation-aware retrieval:
   - it starts from returned episode memory items only
   - it follows one outgoing hop only

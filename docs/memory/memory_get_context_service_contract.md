@@ -329,6 +329,32 @@ When inherited workspace items are available, the response may include a workspa
 
 This is currently auxiliary support context.
 
+At the current stage, grouped consumers should also read this workspace-scoped
+auxiliary surface conservatively in no-episode-match cases.
+
+In particular:
+
+- inherited workspace auxiliary context may remain visible even when no episode
+  survives query filtering
+- this is an intentional auxiliary-context behavior of the current contract
+- it should not be read as reviving filtered primary episode selection
+- it should not be read as evidence that inherited workspace items themselves
+  participated in episode matching
+
+The current details-layer fields that make this reading explicit include:
+
+- `all_episodes_filtered_out_by_query`
+- `inherited_context_is_auxiliary`
+- `inherited_context_returned_without_episode_matches`
+- `inherited_context_returned_as_auxiliary_without_episode_matches`
+
+Taken together, these fields mean the current contract distinguishes between:
+
+- primary episode selection visibility
+- auxiliary workspace-context visibility
+
+That distinction is intentional for the current `0.6.0` slice.
+
 ### 4. Relation-scoped output
 
 When constrained relation-derived support context is available, the response may include a relation group with:
@@ -339,6 +365,34 @@ When constrained relation-derived support context is available, the response may
 - `selection_route = "relation_supports_auxiliary"`
 
 This is currently the primary grouped structured surface for relation-derived supporting context.
+
+### Auxiliary visibility without episode matches
+
+The current contract should also be read as allowing inherited workspace
+auxiliary context to remain visible when the primary episode path becomes empty
+after query filtering.
+
+That means a response may currently have all of the following at once:
+
+- no returned episodes after query filtering
+- `all_episodes_filtered_out_by_query = true`
+- inherited workspace auxiliary context still present
+- workspace-scoped grouped output still present through
+  `selection_route = "workspace_inherited_auxiliary"`
+
+This should currently be interpreted as:
+
+- preserved auxiliary support visibility
+
+not as:
+
+- recovered episode matching
+- widened selection semantics
+- inherited workspace items driving primary episode selection
+
+This distinction matters for the current grouped reading because auxiliary
+workspace visibility remains a sibling auxiliary surface, not part of the
+primary episode-matching path.
 
 ---
 

@@ -2,97 +2,73 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a consolidation loop around the current **primary summary/episode grouped explainability surface** of `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and started a small consolidation loop around the current **workspace inherited auxiliary behavior when no episode survives query filtering** in `memory_get_context`.
 
-This loop did **not** widen relation traversal, change auxiliary-group positioning, or introduce broader graph semantics.
+This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or add new auxiliary response fields.
 
-Instead, it records that the current primary-chain explainability surface is now explicit enough for the current stage.
+Instead, it clarified the intended reading of the current no-episode-match auxiliary case:
 
-At this point, the grouped response is much clearer about:
+- inherited workspace auxiliary context may remain visible even when query filtering removes all returned episodes
+- this should be read as intentional preservation of auxiliary support context
+- this should **not** be read as revival of filtered primary episode selection
+- this should **not** be read as evidence that inherited workspace items themselves participated in episode matching
 
-- whether summary-first selection is active
-- whether the current primary grouped reading is `summary -> episode` or summary-only
-- how many child episodes the summary group represents
-- how to read the ordering of the summary group's child episode references
-- whether corresponding episode-scoped groups were emitted
-- why those episode-scoped groups were or were not emitted
+This means the next work can build on a clearer distinction between:
 
-This means the recent loop of small primary-chain explainability refinements is now complete enough.
+- primary episode selection visibility
+- auxiliary workspace-context visibility
 
 ---
 
 ## What was completed
 
-### Primary grouped explainability surface is now explicit enough
+### Auxiliary no-episode-match contract clarification started
 
-The current summary-scoped `memory_context_groups` entry now has enough explicit metadata that grouped consumers no longer need to infer the main primary-chain reading from multiple indirect clues.
+The current contract/docs direction was refined so that the inherited workspace auxiliary path is now more explicitly described in no-episode-match cases.
 
-The current primary summary-group explainability surface includes:
+The intended current reading is:
 
-- `child_episode_ids`
-- `child_episode_count`
-- `child_episode_ordering`
-- `child_episode_groups_emitted`
-- `child_episode_groups_emission_reason`
+- `all_episodes_filtered_out_by_query = true` may coexist with visible inherited workspace auxiliary context
+- `inherited_context_is_auxiliary = true` continues to describe that support-role explicitly
+- `inherited_context_returned_without_episode_matches = true` makes the no-matching-episodes case explicit
+- `inherited_context_returned_as_auxiliary_without_episode_matches = true` makes it explicit that this remaining visibility is due to auxiliary behavior rather than episode matching
 
-At the top-level details layer, the current response also includes:
+### Current intended interpretation
 
-- `summary_first_has_episode_groups`
-- `summary_first_is_summary_only`
+Grouped and contract consumers should currently read the no-episode-match inherited workspace case like this:
 
-Together, these fields now make the current summary-first grouped reading explicit enough for the current stage.
+1. query filtering can remove all episode matches from the primary path
+2. inherited workspace auxiliary context can still remain visible
+3. that remaining visibility is an intentional auxiliary-context behavior
+4. the current system is **not** reclassifying workspace auxiliary context as primary matched episode context
 
-### Current intended reading
+### Docs direction updated
 
-Grouped consumers should currently understand the primary summary/episode chain like this:
+The current docs direction should now explicitly support this reading in:
 
-1. **summary-first activation / mode**
-   - `summary_first_has_episode_groups`
-   - `summary_first_is_summary_only`
+- `docs/memory/memory_get_context_service_contract.md`
+- `docs/mcp-api.md`
 
-2. **summary-group child references**
-   - `child_episode_ids`
-   - `child_episode_count`
+The emphasis is:
 
-3. **summary-group child ordering**
-   - `child_episode_ordering = "returned_episode_order"`
-
-4. **summary-group emittedness**
-   - `child_episode_groups_emitted`
-
-5. **summary-group emittedness reason**
-   - `child_episode_groups_emission_reason`
-
-This is enough to answer the main current questions without adding still more narrow summary-group fields.
-
-### What this means practically
-
-The current grouped contract can now tell a consumer:
-
-- whether the grouped path is currently summary-only or `summary -> episode`
-- how many child episodes the summary group represents
-- what order those child episode references follow
-- whether corresponding episode-scoped grouped entries are present
-- why those episode-scoped grouped entries are present or absent in the current response shape
-
-That is now a sufficiently explicit primary-chain explainability surface for the current `0.6.0` stage.
+- preserved auxiliary support visibility
+- not recovered episode matching
+- not widened selection semantics
+- not inherited workspace items driving primary episode selection
 
 ---
 
 ## What did not change
 
-This consolidation loop intentionally did **not** do any of the following:
+This consolidation step intentionally did **not** do any of the following:
 
-- add another new summary-group metadata field
-- change the grouped response shape in a broader way
+- add a new workspace-group metadata field
+- change the grouped response shape
 - change auxiliary group positioning
-- nest workspace auxiliary groups into the summary/episode chain
-- nest relation auxiliary groups into the summary/episode chain
+- make workspace auxiliary groups children of summary or episode groups
 - expand relation traversal beyond the current constrained `supports` slice
 - introduce broader graph semantics
-- rename `summary_first`
-- add new retrieval routes
-- broadly refactor grouped projection helpers again
+- turn auxiliary visibility into relation-driven or workspace-driven primary selection
 
 The current auxiliary-group interpretation remains:
 
@@ -108,6 +84,7 @@ The current auxiliary-group interpretation remains:
 
 ### Tests
 - `tests/memory/test_service_context_details.py`
+- `tests/memory/test_memory_context_related_items.py`
 
 ### Design and contract docs
 - `docs/memory/memory_get_context_service_contract.md`
@@ -119,13 +96,11 @@ The current auxiliary-group interpretation remains:
 
 ## Validation status
 
-The recent primary-chain explainability slices were validated with:
+The recent primary-chain explainability slices were previously validated with:
 
 - `pytest tests/memory/test_service_context_details.py`
 
-Recent validation result at completion time:
-
-- `19 passed`
+This auxiliary no-episode-match consolidation step is currently best understood as a docs/interpretation clarification step, not a new retrieval-behavior expansion step.
 
 ---
 
@@ -137,51 +112,55 @@ The current `0.6.0` state should now be read as:
 - still constrained on relation-aware behavior
 - still not broader graph traversal
 - still not Apache AGE behavior expansion yet
-- clearer that `memory_context_groups` is the primary grouped hierarchy-aware surface
-- clearer that auxiliary workspace/relation groups remain sibling auxiliary surfaces
-- clearer that the current summary-first primary chain now has an explicit enough explainability surface for the current stage
+- `memory_context_groups` remains the primary grouped hierarchy-aware surface
+- primary summary/episode explainability is explicit enough for the current stage
+- auxiliary workspace/relation groups remain sibling auxiliary surfaces
+- inherited workspace auxiliary visibility without episode matches is intentional current behavior
+- that no-episode-match auxiliary visibility should not be read as restored primary episode matching
 
 In practice:
 
 - repository primitives are still good enough for the current slice
 - service projection structure is still good enough for the current slice
-- grouped surface interpretation is now explicit enough on the primary summary-first path
-- another tiny summary-group explainability field is probably not the best next use of effort
+- primary-chain explainability is explicit enough for now
+- the current useful clarification work has shifted toward auxiliary-context interpretation rather than more tiny summary-group metadata additions
 
 ---
 
 ## Key conclusion
 
-The current **primary summary/episode explainability refinement loop is complete enough**.
+The primary summary/episode explainability refinement loop is still complete enough.
 
-The next step should **not** be to keep adding more tiny summary-group metadata fields unless a genuinely missing behavior or ambiguity is discovered.
+The current next useful step is a **small auxiliary-context consolidation step**, especially around inherited workspace auxiliary visibility when no episode survives query filtering.
 
-The next useful step should instead be one of:
+The next step should still **not** be:
 
-1. a small contract-consolidation / interpretation step
-2. a different small grouped-selection behavior choice
-3. only later, broader relation/group behavior
+- another tiny summary-group metadata addition
+- broad relation expansion
+- auxiliary-group nesting
+- graph-first behavior expansion
 
 ---
 
 ## Explicit next step
 
 ### Next step
-Treat the current primary summary/episode grouped explainability surface as sufficiently explicit for now.
+Continue the auxiliary-context consolidation step around inherited workspace visibility in no-episode-match cases.
 
 ### Recommended target
-Choose the next small behavior or contract step **without** continuing the pattern of adding ever-finer summary-group metadata unless clearly justified.
+Clarify the current intended reading of inherited workspace auxiliary visibility when query filtering removes all returned episodes.
 
 ### Recommended focus
 Proceed in this order:
 
-1. preserve the current primary grouped interpretation as stable enough for the current stage
-2. avoid more tiny summary-group explainability additions by default
-3. keep workspace/relation auxiliary groups as sibling auxiliaries unless stronger retrieval semantics justify deeper parentage
-4. still avoid broad graph semantics or broad relation expansion
+1. preserve the current primary summary/episode interpretation as stable enough for the current stage
+2. clarify auxiliary visibility without episode matches as intentional support-context behavior
+3. keep workspace/relation auxiliary groups as sibling auxiliaries
+4. avoid new auxiliary response fields unless a real behavior gap appears
+5. still avoid broad graph semantics or broad relation expansion
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that the primary summary/episode explainability surface is explicit enough for the current stage?
+> What is the next smallest contract or interpretation improvement that makes the current workspace inherited auxiliary behavior easier to read when no episode survives query filtering?
 
 ---
 
@@ -189,8 +168,8 @@ Proceed in this order:
 
 Prefer one of these, in order:
 
-1. a small consolidation / interpretation step built on the now-explicit primary-chain surface
-2. a different small grouped-selection behavior choice that is not just another tiny summary-group metadata field
+1. continue the auxiliary no-episode-match consolidation / interpretation step
+2. choose a different small grouped-selection behavior that is not just another tiny summary-group metadata field
 3. only later, broader relation/group behavior
 
 Avoid next session work that is primarily:
@@ -223,8 +202,9 @@ Recent primary-chain explainability commits to remember:
 - `f72a774` — `Add summary group child ordering metadata`
 - `c74d9ef` — `Add summary group emittedness metadata`
 - `7c6b5a6` — `Add summary group emission reason metadata`
+- `73ee2b5` — `Consolidate primary chain explainability notes`
 
-### Conceptual summary of the completed loop
+### Conceptual summary of the completed primary-chain loop
 
 The recent primary-chain explainability loop established that the current grouped surface now explicitly covers:
 
@@ -236,13 +216,22 @@ The recent primary-chain explainability loop established that the current groupe
 
 That is enough for the current stage.
 
+### Conceptual summary of the current auxiliary consolidation direction
+
+The current auxiliary consolidation direction is:
+
+- preserve the primary-chain interpretation already established
+- clarify workspace auxiliary survival in no-episode-match cases
+- keep auxiliary visibility conceptually separate from primary episode matching
+- avoid turning this clarification step into broader retrieval-semantics expansion
+
 ---
 
 ## Short handoff note
 
 If work resumes from here, do **not** start by adding yet another tiny summary-group explainability field.
 
-Start from the now-explicit primary summary/episode grouped interpretation:
+Start from the now-explicit primary summary/episode grouped interpretation and use that stable base to clarify the current auxiliary reading:
 
 - summary-first mode is explicit
 - summary-group child cardinality is explicit
@@ -250,5 +239,7 @@ Start from the now-explicit primary summary/episode grouped interpretation:
 - summary-group emittedness is explicit
 - summary-group emittedness reason is explicit
 - auxiliary workspace/relation groups remain top-level sibling auxiliary surfaces
+- inherited workspace auxiliary visibility can remain when no episode survives query filtering
+- that auxiliary survival should be read as preserved support visibility, not revived primary episode matching
 
-Use that clearer base to choose the next genuinely useful small behavior or contract step.
+Use that clearer base to choose the next genuinely useful small contract or behavior step.
