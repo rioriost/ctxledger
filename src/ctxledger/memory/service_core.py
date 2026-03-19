@@ -1742,6 +1742,11 @@ class MemoryService:
                     "child_episode_groups_emitted": bool(
                         include_memory_items and memory_item_details
                     ),
+                    "child_episode_groups_emission_reason": (
+                        "memory_items_enabled"
+                        if include_memory_items and memory_item_details
+                        else "memory_items_disabled"
+                    ),
                     "summaries": list(summaries),
                 }
             )

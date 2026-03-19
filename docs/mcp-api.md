@@ -1353,16 +1353,22 @@ That means:
     - `child_episode_count = {number of child episode ids represented by the summary group}`
     - `child_episode_ordering = "returned_episode_order"`
     - `child_episode_groups_emitted = {true|false}`
+    - `child_episode_groups_emission_reason = "memory_items_enabled" | "memory_items_disabled"`
     - `summaries = [...]`
   - `child_episode_count` should currently be read as explicit summary-group child cardinality metadata for grouped consumers, so they do not need to infer child count only by measuring `child_episode_ids`
   - `child_episode_ordering = "returned_episode_order"` should currently be read as explicit summary-group ordering metadata for grouped consumers, so they do not need to infer whether `child_episode_ids` follows returned episode ordering
   - `child_episode_groups_emitted = true` should currently be read as explicit summary-group emittedness metadata for grouped consumers, so they do not need to infer whether corresponding episode-scoped groups were emitted only from broader response-shaping clues
+  - `child_episode_groups_emission_reason` should currently be read as explicit summary-group emittedness-reason metadata for grouped consumers, so they do not need to infer the current emittedness reason only from broader response-shaping clues
   - when `summary_first_has_episode_groups = true`, grouped consumers should read the current primary grouped chain as `summary -> episode`
   - when `summary_first_is_summary_only = true`, grouped consumers should read the current primary grouped chain as summary-only for that response shape
   - the summary-only case is expected in narrow shaping scenarios such as `include_memory_items = false`
   - `child_episode_count` remains meaningful in both summary-only and summary-plus-episode cases because it describes selected child episode cardinality, not whether episode-scoped grouped entries were emitted
   - `child_episode_ordering = "returned_episode_order"` remains meaningful in both summary-only and summary-plus-episode cases because it describes the ordering semantics of the summary group's child episode references, not whether episode-scoped grouped entries were emitted
   - `child_episode_groups_emitted` remains meaningful in both summary-only and summary-plus-episode cases because it describes whether corresponding episode-scoped grouped entries were emitted for the current response shape, not how many child episodes the summary group represents
+  - `child_episode_groups_emission_reason` remains meaningful in both summary-only and summary-plus-episode cases because it describes the current reason for emittedness or non-emittedness, not child cardinality or child ordering semantics
+  - at the current stage, grouped consumers should read:
+    - `child_episode_groups_emission_reason = "memory_items_enabled"` when corresponding episode-scoped grouped entries are emitted because memory items are enabled for the current response shape
+    - `child_episode_groups_emission_reason = "memory_items_disabled"` when corresponding episode-scoped grouped entries are not emitted because memory items are disabled for the current response shape
   - when grouped output is present in this current stage, ordering should be treated as a small compatibility commitment for grouped consumers rather than as incidental formatting:
     - the summary-oriented group appears first when present
     - episode-scoped groups follow in the same order as returned `episodes`

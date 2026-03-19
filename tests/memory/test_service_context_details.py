@@ -664,6 +664,7 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "child_episode_count": 2,
             "child_episode_ordering": "returned_episode_order",
             "child_episode_groups_emitted": True,
+            "child_episode_groups_emission_reason": "memory_items_enabled",
             "summaries": [
                 {
                     "episode_id": str(first_episode.episode_id),
@@ -916,6 +917,7 @@ def test_memory_get_context_includes_only_summaries_when_memory_items_disabled()
             "child_episode_count": 1,
             "child_episode_ordering": "returned_episode_order",
             "child_episode_groups_emitted": False,
+            "child_episode_groups_emission_reason": "memory_items_disabled",
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -1168,6 +1170,7 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
             "child_episode_count": 1,
             "child_episode_ordering": "returned_episode_order",
             "child_episode_groups_emitted": True,
+            "child_episode_groups_emission_reason": "memory_items_enabled",
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -1342,6 +1345,7 @@ def test_memory_get_context_omits_inherited_workspace_items_when_memory_items_di
             "child_episode_count": 1,
             "child_episode_ordering": "returned_episode_order",
             "child_episode_groups_emitted": False,
+            "child_episode_groups_emission_reason": "memory_items_disabled",
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -1470,6 +1474,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "child_episode_count": 1,
             "child_episode_ordering": "returned_episode_order",
             "child_episode_groups_emitted": True,
+            "child_episode_groups_emission_reason": "memory_items_enabled",
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),
@@ -2485,6 +2490,7 @@ def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_work
             "child_episode_count": 2,
             "child_episode_ordering": "returned_episode_order",
             "child_episode_groups_emitted": False,
+            "child_episode_groups_emission_reason": "memory_items_disabled",
             "summaries": [
                 {
                     "episode_id": str(first_episode.episode_id),
@@ -2704,6 +2710,7 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
         "child_episode_count": 2,
         "child_episode_ordering": "returned_episode_order",
         "child_episode_groups_emitted": True,
+        "child_episode_groups_emission_reason": "memory_items_enabled",
         "summaries": [
             {
                 "episode_id": str(newer_episode.episode_id),
@@ -3120,6 +3127,7 @@ def test_memory_get_context_group_ordering_summary_only_has_no_placeholder_group
             "child_episode_count": 1,
             "child_episode_ordering": "returned_episode_order",
             "child_episode_groups_emitted": False,
+            "child_episode_groups_emission_reason": "memory_items_disabled",
             "summaries": [
                 {
                     "episode_id": str(episode.episode_id),

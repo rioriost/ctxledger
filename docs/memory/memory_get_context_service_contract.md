@@ -109,6 +109,7 @@ Representative route metadata includes:
 - `child_episode_count`
 - `child_episode_ordering`
 - `child_episode_groups_emitted`
+- `child_episode_groups_emission_reason`
 
 This metadata exists to help consumers and operators understand **what was returned** and **why**.
 
@@ -159,6 +160,7 @@ When summaries are enabled and returned, the response may include a grouped summ
 - `child_episode_count = N`
 - `child_episode_ordering = "returned_episode_order"`
 - `child_episode_groups_emitted = true | false`
+- `child_episode_groups_emission_reason = "memory_items_enabled" | "memory_items_disabled"`
 
 This is a grouped summary-oriented surface, not a replacement for raw memory items.
 
@@ -215,6 +217,26 @@ This is intentionally distinct from child cardinality and child ordering
 metadata. It does not change selection behavior. It only makes explicit whether
 the summary group's child episode references are accompanied by emitted
 episode-scoped grouped entries.
+
+The grouped summary entry should also make the current emittedness reason
+explicit through:
+
+- `child_episode_groups_emission_reason = "memory_items_enabled" | "memory_items_disabled"`
+
+At the current stage, this field should be read as additive explainability
+metadata for why the summary group's child episode-scoped grouped entries were
+or were not emitted in the current response shape:
+
+- `"memory_items_enabled"` means the current response shape permits emitted
+  episode-scoped grouped entries for the summary group's child episodes
+- `"memory_items_disabled"` means the current response shape does not emit those
+  episode-scoped grouped entries because memory-item-shaped episode output is
+  disabled
+
+This emittedness-reason metadata is intentionally narrow and current-state
+specific. It does not introduce a new retrieval route, a broader selection
+policy, or a stronger parentage claim. It only makes the current emittedness
+reason explicit for grouped consumers.
 
 ### 2. Episode-scoped output
 
