@@ -2,38 +2,38 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **workspace-only query-filter summary-first surviving-child-set reading** in `memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work and completed a small grouped-selection behavior slice around the current **ticket-only query-filter summary-first surviving-child-set reading** in `memory_get_context`.
 
 This loop did **not** widen relation traversal, change auxiliary-group positioning, introduce broader graph semantics, or redesign the grouped response shape.
 
 Instead, it fixed and validated the current behavior when:
 
-- multiple workflows are resolved through **workspace-only** lookup
+- multiple workflows are resolved through **ticket-only** lookup
 - summaries are enabled
 - memory items are enabled
 - query filtering leaves only a subset of the cross-workflow episode set visible on the primary path
 
 The current response is now clearer that:
 
-- workspace-only summary-first grouped reading can begin from a cross-workflow candidate episode set
+- ticket-only summary-first grouped reading can begin from a cross-workflow candidate episode set
 - query filtering narrows that visible primary set before the current summary-first child set is read
 - the top-level summary-first child ids/count follow the **surviving post-filter set**
 - the grouped summary child ids/count follow that same surviving post-filter set
 - grouped episode-scoped output follows that same surviving post-filter set
 - `parent_scope_id` on the summary group remains `null` in this cross-workflow summary-first case
-- workspace inherited auxiliary coexistence is still **not assumed** in this workspace-only multi-workflow summary-first case unless it is actually emitted
+- auxiliary coexistence is still **not assumed** in this ticket-only multi-workflow summary-first case unless it is actually emitted
 
-This means the current workspace-only query-filter summary-first reading is now better fixed by behavior coverage rather than by inference alone.
+This means the current ticket-only query-filter summary-first reading is now better fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small workspace-only query-filter summary-first coverage slice implemented
+### Small ticket-only query-filter summary-first coverage slice implemented
 
 A focused test slice now covers the case where:
 
-- two workflows resolve through **workspace-only** lookup
+- two workflows resolve through **ticket-only** lookup
 - each workflow contributes an episode
 - only one of those episode summaries matches the current query
 - summaries are enabled
@@ -41,7 +41,7 @@ A focused test slice now covers the case where:
 
 The current intended result in that case is:
 
-- `lookup_scope == "workspace"`
+- `lookup_scope == "ticket"`
 - both workflows are still resolved
 - `episodes_before_query_filter == 2`
 - `matched_episode_count == 1`
@@ -57,49 +57,48 @@ The current intended result in that case is:
   - has `parent_scope_id = null`
   - contains the same surviving child episode id/count
 - grouped episode-scoped output contains only the surviving emitted episode group
-- `inherited_memory_items == []`
-- no `workspace_inherited_auxiliary` route is present in the current observed behavior
+- no auxiliary grouped route is assumed unless actually emitted
 
 ### Current intended reading of this behavior
 
 Grouped and details consumers should currently understand this case like this:
 
-1. multiple workflows may contribute candidate episodes to the current workspace-scoped response
+1. multiple workflows may contribute candidate episodes to the current ticket-scoped response
 2. query filtering narrows that cross-workflow candidate set to a surviving visible subset
 3. summary-first grouped reading is then formed from that surviving visible primary set
 4. top-level summary-first child metadata follows that same surviving set
 5. grouped summary child metadata follows that same surviving set
 6. grouped episode-scoped output follows that same surviving set
-7. workspace inherited auxiliary coexistence should **not** be assumed unless it is actually emitted
+7. auxiliary coexistence should **not** be assumed unless it is actually emitted
 
 This should **not** be read as:
 
 - a pre-filter summary snapshot that remains structurally visible after filtering
 - filtered-out cross-workflow child episodes still belonging to the visible summary-first child set
-- hidden workspace auxiliary coexistence that is not actually emitted
+- hidden auxiliary coexistence that is not actually emitted
 - broader graph-backed hierarchy semantics
 
 It should be read as:
 
-- the current constrained workspace-only summary-first grouped reading
+- the current constrained ticket-only summary-first grouped reading
 - with the visible child set taken from the surviving post-query-filter primary path
 - and with conservative cross-workflow summary-group parentage (`parent_scope_id = null`)
 
 ### Why this slice is useful
 
-This slice improves confidence in the current workspace-only summary-first reading without broadening behavior.
+This slice improves confidence in the current ticket-only summary-first reading without broadening behavior.
 
 It verifies that the current system behaves consistently when:
 
-- workspace-only resolution yields multiple candidate workflows
+- ticket-only resolution yields multiple candidate workflows
 - query filtering removes part of the cross-workflow candidate episode set
 - summary-first grouped reading must then reflect only the visible surviving primary set
 
-This makes the current workspace-only query interaction explicit rather than leaving it to be reconstructed from assumptions imported from single-workflow or ticket-only cases.
+This makes the current ticket-only query interaction explicit rather than leaving it to be reconstructed from assumptions imported from single-workflow or workspace-only cases.
 
 ### Tests added/updated
 
-The summary-first grouped/details test coverage now explicitly checks the workspace-only multi-workflow, query-filtered, memory-items-enabled case.
+The summary-first grouped/details test coverage now explicitly checks the ticket-only multi-workflow, query-filtered, memory-items-enabled case.
 
 The expected current result is:
 
@@ -109,7 +108,6 @@ The expected current result is:
 - grouped summary child ids/count aligned with the same surviving emitted episode
 - grouped episode output aligned with the same surviving emitted episode
 - grouped summary `parent_scope_id == null`
-- no emitted workspace inherited auxiliary route/group in the current observed behavior
 
 ### Validation completed
 
@@ -119,7 +117,7 @@ Validated this slice with:
 
 Result at completion time:
 
-- `27 passed`
+- `28 passed`
 
 ---
 
@@ -129,12 +127,12 @@ This slice intentionally did **not** do any of the following:
 
 - broaden relation traversal beyond one outgoing hop
 - include relation types beyond `supports`
-- change workspace auxiliary positioning globally
+- change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
 - introduce graph-backed selection semantics
 - add broader response-shape expansion
 - make filtered-out cross-workflow episodes remain in the visible summary-first child set
-- force workspace auxiliary coexistence into the workspace-only query-filter summary-first case
+- force auxiliary coexistence into the ticket-only query-filter summary-first case
 
 The current grouped interpretation remains:
 
@@ -171,7 +169,7 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `27 passed` in `tests/memory/test_service_context_details.py`
+- `28 passed` in `tests/memory/test_service_context_details.py`
 
 ---
 
@@ -192,7 +190,8 @@ The current `0.6.0` state should now be read as:
 - ticket-only multi-workflow summary-first memory-items behavior is explicitly covered by behavior
 - low-limit ticket-only multi-workflow summary-first behavior is explicitly covered by behavior
 - workspace-only multi-workflow summary-first behavior is explicitly covered by behavior
-- workspace-only query-filter summary-first surviving-child-set behavior is now explicitly covered by behavior
+- workspace-only query-filter summary-first surviving-child-set behavior is explicitly covered by behavior
+- ticket-only query-filter summary-first surviving-child-set behavior is explicitly covered by behavior
 - current workspace-only multi-workflow summary-first reading does not currently show sibling workspace auxiliary coexistence
 - workspace auxiliary no-episode-match visibility remains intentional support preservation
 - workspace inherited auxiliary limit/truncation behavior is explicitly covered by behavior
@@ -214,7 +213,8 @@ In practice:
 - ticket-only multi-workflow summary-first memory-items behavior is better anchored by behavior coverage
 - low-limit ticket-only multi-workflow summary-first behavior is better anchored by behavior coverage
 - workspace-only multi-workflow summary-first behavior is better anchored by behavior coverage
-- workspace-only query-filter summary-first behavior is now also better anchored by behavior coverage
+- workspace-only query-filter summary-first behavior is better anchored by behavior coverage
+- ticket-only query-filter summary-first behavior is now also better anchored by behavior coverage
 - workspace inherited auxiliary emission shaping is better anchored by behavior coverage
 - constrained relation grouped reading is explicit enough
 - constrained relation negative-path behavior is better anchored by behavior coverage
@@ -225,7 +225,7 @@ In practice:
 
 ## Key conclusion
 
-The current workspace-only query-filter summary-first coverage slice is complete enough.
+The current ticket-only query-filter summary-first coverage slice is complete enough.
 
 The next step should still avoid:
 
@@ -246,7 +246,7 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current workspace-only query-filter summary-first reading as sufficiently fixed for the current stage.
+Treat the current ticket-only query-filter summary-first reading as sufficiently fixed for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without continuing the pattern of ever-finer details / grouped mirror metadata unless clearly justified.
@@ -264,7 +264,7 @@ Proceed in this order:
 5. still avoid broad graph semantics or relation-driven primary selection
 
 ### Concrete next question to answer
-> What is the next smallest useful grouped-selection or contract improvement now that workspace-only query-filter summary-first surviving-child-set behavior is explicitly covered?
+> What is the next smallest useful grouped-selection or contract improvement now that ticket-only query-filter summary-first surviving-child-set behavior is explicitly covered?
 
 ---
 
@@ -289,7 +289,7 @@ Avoid next session work that is primarily:
 
 ## Commit trail to remember
 
-Recent relevant commits before the latest workspace-only query-filter slice:
+Recent relevant commits before the latest ticket-only query-filter slice:
 
 - `ac54a63` — `Add hierarchy primitive design note`
 - `dfac5fa` — `Add bulk episode memory item lookup`
@@ -329,10 +329,11 @@ Recent relevant commits before the latest workspace-only query-filter slice:
 
 ### Recent just-completed slice to remember conceptually
 
-- workspace-only query-filter summary-first surviving-child-set behavior covered by test
+- ticket-only query-filter summary-first surviving-child-set behavior covered by test
 - top-level summary-first child ids/count aligned with the surviving post-filter visible episode set
 - grouped summary child ids/count aligned with the same surviving post-filter visible episode set
-- no workspace auxiliary coexistence assumed unless it is actually emitted
+- grouped episode output aligned with the same surviving post-filter visible episode set
+- no auxiliary coexistence assumed unless it is actually emitted
 - validated with `pytest tests/memory/test_service_context_details.py`
 
 ### Conceptual summary of the completed loops
@@ -349,6 +350,7 @@ The recent coverage work established that the current grouped/details surface no
 - low-limit ticket-only multi-workflow summary-first behavior
 - workspace-only multi-workflow summary-first behavior
 - workspace-only query-filter summary-first surviving-child-set behavior
+- ticket-only query-filter summary-first surviving-child-set behavior
 - workspace auxiliary no-episode-match visibility reading
 - workspace inherited auxiliary limit / truncation behavior
 - constrained relation auxiliary linkage back to returned episode-side context
@@ -378,6 +380,7 @@ Start from the current stable reading:
 - low-limit ticket-only multi-workflow summary-first behavior is fixed by coverage
 - workspace-only multi-workflow summary-first behavior is fixed by coverage
 - workspace-only query-filter summary-first behavior is fixed by coverage
+- ticket-only query-filter summary-first behavior is fixed by coverage
 - workspace-only multi-workflow summary-first should not currently be assumed to co-emit workspace inherited auxiliary output
 - workspace auxiliary no-episode-match visibility is intentional support preservation
 - workspace inherited auxiliary limit / truncation behavior is fixed by coverage
