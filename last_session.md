@@ -3,7 +3,7 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-focused **behavior-coverage** slice for the current
+**contract-consolidation** slice for the current
 **include_episodes = false + low-limit + query-filter + summaries-enabled**
 reading in `memory_get_context`.
 
@@ -11,174 +11,114 @@ This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
-Instead, it fixed and validated the current behavior when:
+Instead, it consolidated the documented reading for the already-covered
+episode-less low-limit query behavior, especially where query presence,
+summary-first expectations, low-limit shaping, and visible grouped-route
+interpretation can be misread.
 
-- `include_episodes = false`
-- a query is provided
-- summaries are enabled
-- memory items are enabled
-- a workflow would otherwise have matching and filtered episodes
-- a low `limit` is applied
-- workspace-root inherited auxiliary context is still available
-
-The current behavior is now clearer that:
+The current docs now more explicitly state that:
 
 - when `include_episodes = false`, the response remains intentionally
   **episode-less**
-- query filtering is not surfaced as active in this current shaping path
-- low-limit shaping still applies to the actually emitted auxiliary route
-- no summary-first grouped output is surfaced in this response shape
-- no direct episode-scoped grouped output is surfaced in this response shape
-- no episode explanations are surfaced in this response shape
-- summary-first selection is not surfaced in this response shape
-- workspace inherited auxiliary context may still remain visible
-- that visible workspace auxiliary output still follows the current low-limit
-  truncation behavior
-- the visible grouped route in this shape is currently the workspace auxiliary
-  route only
+- this episode-less shaping path is narrower than both summary-plus-episode and
+  summary-only primary grouped shaping
+- the current response does **not** surface summary-first grouped output in this
+  shape
+- the current response does **not** surface direct episode-scoped grouped output
+  in this shape
+- the current response does **not** surface summary-selection metadata in this
+  shape even when a query is present and summaries are enabled
+- query-filter activity is not currently surfaced as active in this shape
+- visible grouped output should currently be read from the actually surfaced
+  response only rather than from a hypothetical summary-first route that would
+  have been visible under episode-oriented shaping
+- when low-limit shaping also applies in that same episode-less path, it still
+  operates only over the actually emitted auxiliary grouped output
+- workspace auxiliary grouped visibility may still remain visible where
+  currently supported
+- low-limit truncation may therefore still apply to the actually emitted
+  workspace auxiliary route without reviving hidden episode-oriented primary
+  output
 
 This means the current include-episodes-false low-limit query-filter
-interpretation is now better fixed by behavior coverage rather than by
-inference alone.
+interpretation is now better anchored in the docs rather than only in recent
+behavior tests.
 
 ---
 
 ## What was completed
 
-### Small include-episodes-false low-limit query-filter coverage slice implemented
+### Small include-episodes-false low-limit query-filter contract consolidation slice implemented
 
-A focused test slice now covers the case where:
+A focused documentation pass was completed to align the current service-contract
+and MCP API wording around the already-covered `include_episodes = false` +
+low-limit + query-present + summaries-enabled behavior.
 
-- one workflow is resolved
-- two episodes exist
-- one episode summary would match the query
-- one episode would be filtered out by the query
-- two workspace-root inherited items exist
-- `include_episodes = false`
-- `include_memory_items = true`
-- `include_summaries = true`
-- `limit = 1`
+The clarified current reading is:
 
-The current intended result in that case is:
+- candidate episodes may exist and a query may be present
+- but `include_episodes = false` takes the response down a narrower
+  episode-less shaping path
+- the current visible response does not surface summary-first grouped output
+- the current visible response does not surface direct episode-scoped grouped
+  output
+- the current visible response does not surface summary-selection metadata
+- query tokens may still be recorded, but query-filter activity is not currently
+  surfaced as active in this shaping path
+- low-limit shaping may still apply to the actually emitted auxiliary grouped
+  output
+- visible grouped output should therefore currently be read from the actually
+  surfaced response only
+- workspace auxiliary grouped visibility may still remain where currently
+  supported
 
-- `episodes == ()`
-- `lookup_scope == "workflow_instance"`
-- `resolved_workflow_count == 1`
-- `query_tokens == ["hidden", "low", "limit"]`
-- `query_filter_applied == false`
-- `episodes_before_query_filter == 0`
-- `matched_episode_count == 0`
-- `episodes_returned == 0`
-- `episode_explanations == []`
-- `memory_items == []`
-- `memory_item_counts_by_episode == {}`
-- `summaries == []`
-- `summary_selection_applied == false`
-- `summary_selection_kind == null`
-- no summary-first grouped output is emitted
-- no episode-direct grouped output is emitted
-- only workspace inherited auxiliary grouped output remains visible
-- low-limit truncation still applies to that workspace auxiliary route
-- only the newest inherited workspace item remains visible
+### Docs updated
 
-### Test added
+The current interpretation was clarified in:
 
-Added a new focused regression test covering the combined case:
+- `docs/memory/memory_get_context_service_contract.md`
+- `docs/mcp-api.md`
 
-- `include_episodes = false`
-- query present
-- summaries enabled
-- memory items enabled
-- low-limit shaping
-- one otherwise-matching episode
-- one otherwise-filtered episode
-- inherited workspace auxiliary context still visible
-- inherited workspace auxiliary still truncated to the current low-limit behavior
+The updates make explicit that the current docs should **not** be read as if:
 
-The added test is:
+- summary-first grouped output remains visible but merely hidden from
+  `episodes`
+- direct episode-scoped grouped output remains visible under
+  `include_episodes = false`
+- summary-selection metadata is still surfaced just because summaries are
+  enabled
+- a query-present episode-less response should still be interpreted through a
+  hypothetical summary-first route that is not actually emitted
+- low-limit shaping restores or partially reveals hidden episode-oriented
+  primary output
 
-- `test_memory_get_context_include_episodes_false_low_limit_query_keeps_response_episode_less`
+They also make explicit that:
 
-### Current intended reading of this behavior
-
-Grouped and details consumers should currently understand this case like this:
-
-1. `include_episodes = false` suppresses episode-oriented primary shaping from
-   the visible response
-2. the visible response remains episode-less
-3. the current response does not surface summary-first grouped output in this
-   shape
-4. the current response does not surface episode-direct grouped output in this
-   shape
-5. query tokens may still be recorded
-6. but query-filter activity is not surfaced as active in this current shaping
-   path
-7. workspace-root inherited auxiliary context may still remain visible when
-   memory items are enabled
-8. low-limit truncation still applies to that actually surfaced auxiliary route
-
-This should **not** be read as:
-
-- summary-first output remaining visible but merely hidden in `episodes`
-- direct episode groups remaining visible despite `include_episodes = false`
-- query-filter diagnostics remaining surfaced the same way as in episode-visible
-  responses
-- the current response still exposing the surviving summary-first child set
-- the current response surfacing summary selection just because
-  `include_summaries = true`
-- low-limit shaping reviving hidden episode-oriented output
-
-It should be read as:
-
-- the current constrained episode-less shaping path
-- with summary-first and direct-episode visible routing both absent
-- and with workspace auxiliary visibility preserved where currently supported
-- with low-limit shaping still applied to the actually emitted auxiliary route
+- the current episode-less shaping path is narrower than normal
+  episode-oriented primary shaping
+- visible grouped output should be interpreted from what is actually surfaced
+- auxiliary grouped visibility may remain even while episode-oriented primary
+  grouped output is suppressed
+- low-limit shaping still applies only to the actually emitted auxiliary route
 
 ### Why this slice is useful
 
-This slice improves confidence in the current response shaping without
-broadening behavior.
+This slice improves continuity and interpretation quality without broadening
+behavior.
 
-It verifies that the current system behaves consistently when:
+It reduces ambiguity around the current meaning of:
 
-- a query is present
-- summaries are enabled
-- memory items are enabled
-- `include_episodes = false` intentionally suppresses episode-facing output
-- low-limit shaping is also applied
+- `include_episodes = false`
+- `query_filter_applied`
+- `summary_selection_applied`
+- `summary_selection_kind`
+- `memory_context_groups`
+- `primary_episode_groups_present_after_query_filter`
+- `auxiliary_only_after_query_filter`
+- low-limit shaping under the current episode-less path
 
-This makes the current low-limit + query + episode-less shaping interaction
-explicit rather than leaving it to be reconstructed from separate
-include-episodes-false, low-limit, and query-filtered cases.
-
-### Tests added/updated
-
-The summary/details shaping coverage now explicitly checks the episode-less,
-low-limit, query-present, summaries-enabled, memory-items-enabled case.
-
-The expected current result is:
-
-- episode-less response
-- no surfaced summary-first grouped output
-- no surfaced episode-direct grouped output
-- no surfaced summary selection
-- no surfaced query-filter activation
-- workspace auxiliary grouped output still visible
-- workspace auxiliary output still truncated to one visible item
-- only the newest inherited workspace item remains visible
-
-### Validation completed
-
-Validated this slice with:
-
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
-
-Result at completion time:
-
-- `38 passed` in `tests/memory/test_service_context_details.py`
-- `45 passed` in the focused combined memory test run
+That is useful because these response shapes are now covered by behavior, and
+the docs should say the same thing the tests already establish.
 
 ---
 
@@ -186,12 +126,14 @@ Result at completion time:
 
 This slice intentionally did **not** do any of the following:
 
+- change `memory_get_context` service behavior
+- add new grouped metadata fields
+- add new retrieval routes
 - broaden relation traversal beyond the current constrained shape
 - include relation types beyond `supports`
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
-- introduce broader graph-backed selection semantics
-- add broader response-shape expansion
+- redesign grouped response structure
 - surface summary-first grouped output under `include_episodes = false`
 - surface direct episode groups under `include_episodes = false`
 - reinterpret the current episode-less shaping path as a partially visible
@@ -206,6 +148,19 @@ The current grouped interpretation remains:
 - workspace and relation outputs remain top-level sibling auxiliary grouped
   surfaces where currently emitted
 - broader graph semantics remain intentionally deferred
+
+---
+
+## Validation completed
+
+Validated this docs-consolidation slice with:
+
+- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
+
+Result at completion time:
+
+- `45 passed`
 
 ---
 
@@ -224,20 +179,6 @@ The current grouped interpretation remains:
 - `docs/memory-model.md`
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
-
----
-
-## Validation status
-
-Recent relevant validation includes:
-
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_memory_context_related_items.py`
-
-Recent validation result for this slice:
-
-- `38 passed` in `tests/memory/test_service_context_details.py`
-- `45 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -343,8 +284,8 @@ The current `0.6.0` state should now be read as:
 
 ## Key conclusion
 
-The current summary-only low-limit query-filter contract docs are now better
-aligned with the existing behavior coverage.
+The current include-episodes-false low-limit query-filter contract docs are now
+better aligned with the existing behavior coverage.
 
 The next step should still avoid:
 
@@ -360,3 +301,32 @@ The next useful step should instead be one of:
 2. a broader contract-consolidation / interpretation step in another part of the
    current response model
 3. only later, broader relation/group behavior
+
+---
+
+## Explicit next step
+
+### Next step
+Treat the current include-episodes-false low-limit query-filter reading as
+documented well enough for the current stage.
+
+### Recommended target
+Choose the next small behavior or contract step without returning to another tiny
+episode-less explainability addition unless a clear behavior gap appears.
+
+### Recommended focus
+Proceed in this order:
+
+1. preserve the current primary summary/episode interpretation as stable enough
+   for the current stage when episode-oriented shaping is active
+2. preserve workspace/relation auxiliary groups as sibling auxiliaries where they
+   are currently emitted
+3. preserve the constrained relation-aware scope:
+   - one hop
+   - `supports` only
+   - current auxiliary-group placement
+4. prefer either:
+   - one genuinely different grouped-selection behavior slice, or
+   - one contract/documentation consolidation step elsewhere in the current
+     surface
+5. keep the next change semantically small and easy to validate

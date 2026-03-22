@@ -198,6 +198,12 @@ In that shape, this field should be read from the currently surfaced grouped
 response only, not from a hypothetical summary-first route that would have been
 visible under episode-oriented shaping.
 
+This same current reading still applies when low-limit shaping also applies to an
+episode-less response:
+low-limit shaping may still truncate the actually emitted auxiliary grouped
+output, but it does not currently restore visible summary-first grouped output,
+direct episode-scoped grouped output, or summary-selection metadata.
+
 ---
 
 ## Current grouped output interpretation
@@ -452,6 +458,12 @@ parallel.
 Instead, the current episode-less shaping path suppresses visible
 episode-oriented primary grouped output and may leave only auxiliary grouped
 visibility where otherwise supported.
+
+When low-limit shaping also applies in that episode-less path, the current
+reading is still based on what is actually emitted:
+the visible grouped route remains auxiliary-only, and low-limit truncation still
+applies to that actually emitted auxiliary route rather than reviving hidden
+episode-oriented primary output.
 
 In summary-first cases, episode-scoped groups should still be read with `selection_kind = "direct_episode"` as the scope-level kind of the group itself.
 
@@ -866,6 +878,10 @@ surfaced.
 When `include_episodes = false`, the current episode-less shaping path does not
 currently surface summary-first grouped output or summary-selection metadata even
 when a query is present and summaries are enabled.
+When low-limit shaping also applies in that same episode-less path, it still
+operates only over the actually emitted auxiliary grouped output rather than
+causing summary-first grouped output or summary-selection metadata to become
+visible.
 
 - direct, inherited, and related outputs
   - `memory_items`

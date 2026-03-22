@@ -1403,6 +1403,7 @@ That means:
   - the response does not currently surface direct episode-scoped grouped output
   - the response does not currently surface summary-selection metadata even when a query is present and summaries are enabled
   - in that shape, visible grouped output should currently be read from the actually surfaced response only rather than from a hypothetical summary-first route that would have been visible under episode-oriented shaping
+  - when low-limit shaping also applies in that same episode-less path, it still operates only over the actually emitted auxiliary grouped output rather than causing summary-first grouped output or summary-selection metadata to become visible
 - inherited workspace-scoped memory may still be returned as auxiliary context when memory items are enabled
 - inherited workspace-scoped memory may also be returned even when no episode survives query filtering
 - in that no-episode-match case, grouped consumers should currently read the remaining workspace-scoped auxiliary visibility as preservation of auxiliary support context rather than as revival of filtered primary episode selection
@@ -1439,6 +1440,7 @@ That means:
   - summary-first grouped output is not currently surfaced
   - direct episode-scoped grouped output is not currently surfaced
   - the remaining visible grouped route may therefore currently be auxiliary-only even when a query is present and summaries are enabled
+  - when low-limit shaping also applies in that episode-less path, low-limit truncation still applies to the actually emitted auxiliary grouped route rather than reviving hidden episode-oriented primary output
 - top-level details consumers should currently read `summary_first_child_episode_count` as:
   - `0` when summary-first selection is not active
   - `{N}` when summary-first selection is active and the current summary-first grouped reading represents `N` child episodes
