@@ -4,7 +4,8 @@
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
 focused **behavior-coverage** slice for the current
-**workspace-only no-match auxiliary shaping** reading in `memory_get_context`.
+**ticket-only multi-workflow no-match shaping** reading in
+`memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
@@ -12,8 +13,8 @@ new response field.
 
 Instead, it fixed and validated the current behavior when:
 
-- lookup is `workspace_id` only
-- multiple workflows are associated with the same workspace
+- lookup is `ticket_id` only
+- multiple workflows are associated with the same ticket
 - a query is provided
 - all episodes are filtered out by the query
 - memory items are enabled
@@ -21,10 +22,10 @@ Instead, it fixed and validated the current behavior when:
 
 The current behavior is now clearer that:
 
-- query filtering may remove all returned episodes in this workspace-only shape
-- the current response does **not** necessarily keep workspace auxiliary
-  visibility merely because the lookup is workspace-scoped
-- in this current workspace-only no-match shape, the visible grouped routes may
+- query filtering may remove all returned episodes in this ticket-only shape
+- the current response does **not** necessarily keep any grouped route visible
+  merely because the lookup is ticket-scoped
+- in this current ticket-only no-match shape, the visible grouped routes may
   collapse all the way to **none**
 - `retrieval_routes_present == []`
 - `primary_retrieval_routes_present == []`
@@ -37,23 +38,22 @@ The current behavior is now clearer that:
 - `all_episodes_filtered_out_by_query == true`
 - filtered episode diagnostics still remain available in `episode_explanations`
 
-This means the current workspace-only no-match auxiliary-shaping interpretation
-is now better fixed by behavior coverage rather than by inference alone.
+This means the current ticket-only no-match shaping interpretation is now better
+fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small workspace-only no-match auxiliary-shaping coverage slice implemented
+### Small ticket-only no-match shaping coverage slice implemented
 
 A focused test slice now covers the case where:
 
-- `lookup_scope == "workspace"`
-- two workflows are associated with the same workspace
+- `lookup_scope == "ticket"`
+- two workflows are associated with the same ticket
 - two episodes exist
 - both episodes are filtered out by the query
 - direct episode memory items exist
-- one inherited workspace-root item exists
 - `include_episodes = true`
 - `include_memory_items = true`
 - `include_summaries = false`
@@ -90,67 +90,65 @@ The current intended result in that case is:
 
 Added a new focused regression test covering the combined case:
 
-- workspace-only multi-workflow lookup
+- ticket-only multi-workflow lookup
 - query present
 - all visible episodes filtered out
-- inherited workspace item exists in storage
 - memory items enabled
 - summaries disabled
 - no visible grouped route survives in the current response shape
 
 The added test is:
 
-- `test_memory_get_context_workspace_only_query_filter_may_leave_only_workspace_auxiliary_visible`
+- `test_memory_get_context_ticket_only_query_filter_may_leave_no_visible_grouped_routes`
 
 ### Current intended reading of this behavior
 
 Grouped and details consumers should currently understand this case like this:
 
-1. candidate episodes are collected from the workspace-resolved workflow set
+1. candidate episodes are collected from the ticket-resolved workflow set
 2. query filtering removes all episodes from the returned primary path
-3. even though inherited workspace-root memory exists, the current response does
-   not necessarily preserve visible workspace auxiliary grouped output in this
-   workspace-only shape
+3. even though ticket-associated workflow and memory state exists, the current
+   response does not necessarily preserve any visible grouped route in this
+   ticket-only shape
 4. the current visible grouped routes may therefore become empty
 5. filtered episode diagnostics may still remain in `episode_explanations`
 
 This should **not** be read as:
 
-- workspace-scoped lookup always preserving inherited auxiliary visibility after
+- ticket-scoped lookup always preserving some grouped auxiliary visibility after
   all episodes are filtered out
-- `workspace_inherited_auxiliary` being guaranteed whenever workspace-root items
-  exist in storage
+- `workspace_inherited_auxiliary` being guaranteed merely because ticket-linked
+  workflows exist
 - `auxiliary_only_after_query_filter = false` meaning some grouped auxiliary
   route must still be visible
-- stored inherited workspace items being equivalent to emitted auxiliary grouped
-  output
+- stored ticket-linked memory being equivalent to emitted grouped output
 
 It should be read as:
 
-- the current constrained workspace-only no-match shaping
+- the current constrained ticket-only no-match shaping
 - with no visible primary grouped path
 - with no visible auxiliary grouped path
 - and with filtered episode diagnostics still preserved separately
 
 ### Why this slice is useful
 
-This slice improves confidence in the current workspace-only auxiliary shaping
+This slice improves confidence in the current ticket-only auxiliary shaping
 without broadening behavior.
 
 It verifies that the current system behaves consistently when:
 
-- workspace-only lookup spans multiple workflows
+- ticket-only lookup spans multiple workflows
 - query filtering removes the entire visible episode path
-- inherited workspace memory exists but is not necessarily surfaced
+- stored memory may exist but is not necessarily surfaced
 - filtered episode diagnostics still remain inspectable
 
-This makes the current workspace-only no-match interaction explicit rather than
-leaving it to be reconstructed from separate workspace auxiliary and no-match
-cases that currently behave differently in other shapes.
+This makes the current ticket-only no-match interaction explicit rather than
+leaving it to be reconstructed from separate ticket-only and no-match cases that
+currently behave differently in other shapes.
 
 ### Tests added/updated
 
-The summary/details shaping coverage now explicitly checks the workspace-only,
+The summary/details shaping coverage now explicitly checks the ticket-only,
 query-filtered, no-surviving-episode case.
 
 The expected current result is:
@@ -171,8 +169,8 @@ Validated this slice with:
 
 Result at completion time:
 
-- `42 passed` in `tests/memory/test_service_context_details.py`
-- `50 passed` in the focused combined memory test run
+- `43 passed` in `tests/memory/test_service_context_details.py`
+- `51 passed` in the focused combined memory test run
 
 ---
 
@@ -186,7 +184,7 @@ This slice intentionally did **not** do any of the following:
 - change constrained relation auxiliary positioning
 - introduce broader graph-backed selection semantics
 - add broader response-shape expansion
-- force workspace auxiliary visibility to survive in this no-match case
+- force some grouped route to remain visible in this no-match case
 - revive summary-first grouped output after all episodes are filtered out
 - revive relation-derived grouped output after all episodes are filtered out
 
@@ -228,8 +226,8 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `42 passed` in `tests/memory/test_service_context_details.py`
-- `50 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
+- `43 passed` in `tests/memory/test_service_context_details.py`
+- `51 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -279,6 +277,8 @@ The current `0.6.0` state should now be read as:
   query filtering in some current shapes
 - but workspace-only multi-workflow no-match shaping is not currently guaranteed
   to preserve that auxiliary visibility
+- ticket-only multi-workflow no-match shaping is also not currently guaranteed
+  to preserve any visible grouped route
 - constrained relation `supports` auxiliary grouped output remains explicit
   enough to correlate back to returned episode-side context
 - constrained relation auxiliary aggregation across multiple returned source
@@ -309,13 +309,18 @@ The current `0.6.0` state should now be read as:
   - no relation-scoped grouped output remains visible
   - workspace auxiliary grouped output may still remain visible where currently
     supported
-- workspace-vs-relation negative interaction is now also explicit:
-  - relation-derived output disappears when query filtering removes all returned
-    episodes
-  - workspace auxiliary visibility may still remain independently
-  - still-visible workspace items should not be re-read as surviving
-    relation-derived output merely because they had previously also been
-    reachable through filtered-out `supports` paths
+- constrained relation auxiliary remains fully disabled when memory items are
+  disabled, even when:
+  - query filtering leaves one surviving episode visible
+  - low-limit shaping also applies
+  - underlying `supports` relation data exists
+- in that memory-items-disabled + low-limit + query-filter relation case:
+  - `related_context_is_auxiliary == false`
+  - `related_context_relation_types == []`
+  - `related_memory_items == []`
+  - `related_memory_items_by_episode == {}`
+  - `relation_supports_source_episode_count == 0`
+  - `relation_supports_auxiliary` remains absent from visible grouped routes
 - `include_episodes = false` now has explicit shaping coverage for:
   - the baseline episode-less branch
   - the query-present / summaries-enabled episode-less branch
@@ -326,5 +331,34 @@ The current `0.6.0` state should now be read as:
   - direct episode-scoped grouped output is not currently surfaced
   - summary-selection metadata is not currently surfaced
   - visible grouped output should be read from the actually emitted response
+    only
   - low-limit shaping still applies to the actually emitted workspace auxiliary
     route
+- workspace auxiliary no-match low-limit shaping may still leave
+  `workspace_inherited_auxiliary` as the only visible grouped route
+- low-limit truncation still applies to that surviving workspace auxiliary route
+- still-visible workspace items should not currently be reclassified as
+  surviving relation-derived output merely because they had previously also been
+  reachable through filtered-out `supports` paths
+
+---
+
+## Key conclusion
+
+The current workspace-only no-match auxiliary-shaping behavior slice is now
+covered well enough for the current stage.
+
+The next step should still avoid:
+
+- another hyper-narrow metadata addition without a clear missing behavior
+- broad relation expansion
+- graph-first behavior expansion
+- auxiliary-group nesting without stronger retrieval semantics
+- generic cleanup for its own sake
+
+The next useful step should instead be one of:
+
+1. a genuinely different grouped-selection behavior choice
+2. a broader contract-consolidation / interpretation step in another part of the
+   current response model
+3. only later, broader relation/group behavior

@@ -5356,6 +5356,152 @@ def test_memory_get_context_workspace_only_query_filter_may_leave_only_workspace
     ]
 
 
+def test_memory_get_context_ticket_only_query_filter_may_leave_no_visible_grouped_routes() -> None:
+    first_workflow_id = uuid4()
+    second_workflow_id = uuid4()
+    first_workspace_id = "00000000-0000-0000-0000-000000000057"
+    second_workspace_id = "00000000-0000-0000-0000-000000000058"
+    created_at = datetime(2024, 10, 30, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    first_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=first_workflow_id,
+        summary="First ticket-only episode filtered out before no-match shaping",
+        metadata={"kind": "ticket-only-no-match-first"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    second_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=second_workflow_id,
+        summary="Second ticket-only episode filtered out before no-match shaping",
+        metadata={"kind": "ticket-only-no-match-second"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    episode_repository.create(first_episode)
+    episode_repository.create(second_episode)
+
+    first_direct_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(first_workspace_id),
+        episode_id=first_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="First ticket-only direct memory item hidden after query filtering",
+        metadata={"kind": "first-direct-memory"},
+        created_at=created_at.replace(hour=3),
+        updated_at=created_at.replace(hour=3),
+    )
+    second_direct_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(second_workspace_id),
+        episode_id=second_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Second ticket-only direct memory item hidden after query filtering",
+        metadata={"kind": "second-direct-memory"},
+        created_at=created_at.replace(hour=4),
+        updated_at=created_at.replace(hour=4),
+    )
+    memory_item_repository.create(first_direct_memory_item)
+    memory_item_repository.create(second_direct_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                first_workflow_id: {
+                    "workspace_id": first_workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-TICKET-ONLY-NO-MATCH-SHAPING",
+                },
+                second_workflow_id: {
+                    "workspace_id": second_workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-TICKET-ONLY-NO-MATCH-SHAPING",
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            query="ticket-only absent token",
+            ticket_id="TICKET-CONTEXT-TICKET-ONLY-NO-MATCH-SHAPING",
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert response.episodes == ()
+    assert response.details["lookup_scope"] == "ticket"
+    assert response.details["resolved_workflow_count"] == 2
+    assert response.details["resolved_workflow_ids"] == [
+        str(first_workflow_id),
+        str(second_workflow_id),
+    ]
+    assert response.details["query_filter_applied"] is True
+    assert response.details["episodes_before_query_filter"] == 2
+    assert response.details["matched_episode_count"] == 0
+    assert response.details["episodes_returned"] == 0
+    assert response.details["all_episodes_filtered_out_by_query"] is True
+    assert response.details["summary_selection_applied"] is False
+    assert response.details["summary_selection_kind"] is None
+    assert response.details["primary_episode_groups_present_after_query_filter"] is False
+    assert response.details["auxiliary_only_after_query_filter"] is False
+    assert response.details["retrieval_routes_present"] == []
+    assert response.details["primary_retrieval_routes_present"] == []
+    assert response.details["auxiliary_retrieval_routes_present"] == []
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_scopes_present"] == {
+        "summary_first": [],
+        "episode_direct": [],
+        "workspace_inherited_auxiliary": [],
+        "relation_supports_auxiliary": [],
+    }
+    assert response.details["hierarchy_applied"] is False
+    assert response.details["inherited_context_is_auxiliary"] is False
+    assert response.details["inherited_context_returned_without_episode_matches"] is False
+    assert (
+        response.details["inherited_context_returned_as_auxiliary_without_episode_matches"] is False
+    )
+    assert response.details["memory_context_groups"] == []
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(first_episode.episode_id),
+            "workflow_instance_id": str(first_workflow_id),
+            "matched": False,
+            "explanation_basis": "query_filtered_out",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        },
+        {
+            "episode_id": str(second_episode.episode_id),
+            "workflow_instance_id": str(second_workflow_id),
+            "matched": False,
+            "explanation_basis": "query_filtered_out",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        },
+    ]
+
+
 def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent() -> None:
     workflow_id = uuid4()
     workspace_id = "00000000-0000-0000-0000-000000000039"
