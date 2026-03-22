@@ -3,131 +3,177 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-**contract-consolidation** slice for the current
-**multi-workflow summary-first + low-limit + query-filter + memory-items-disabled**
+focused **behavior-coverage** slice for the current
+**workspace auxiliary survives while relation auxiliary does not under query-filter no-match**
 reading in `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
-Instead, it consolidated the documented reading for the already-covered
-summary-only low-limit query-filter behavior in the **multi-workflow**
-workspace/ticket cases, especially where surviving child-set identity,
-summary-only grouped shaping, low-limit shaping, and grouped summary parentage
-can be misread.
+Instead, it fixed and validated the current behavior when:
 
-The current docs now more explicitly state that:
+- one workflow is resolved
+- a query is provided
+- all episodes are filtered out by the query
+- a `supports` relation exists from episode-side memory to a workspace-root target
+- workspace-root inherited auxiliary context is also available
+- memory items are enabled
+- summaries are disabled
 
-- query filtering still narrows the visible summary-first child set to the
-  **surviving post-filter primary episode set**
-- low-limit shaping may still apply while that same surviving primary child set
-  remains visible
-- the top-level `summary_first_child_episode_*` metadata follows that surviving
-  post-filter set
-- grouped summary `child_episode_*` metadata follows that same surviving
-  post-filter set
-- the grouped response may remain **summary-only** when memory items are
-  disabled
-- this summary-only grouped route can still be the surviving **primary**
-  summary-first route after query filtering
-- `primary_episode_groups_present_after_query_filter = false` does **not** by
-  itself imply auxiliary-only output
-- `auxiliary_only_after_query_filter = false` remains the correct reading when
-  the surviving visible route is still the primary summary-first grouped surface
-  in summary-only shape
-- `"memory_items_disabled"` explains response shaping in this case, not a
-  different child-set rule and not an auxiliary-only interpretation
-- in multi-workflow workspace- or ticket-resolved cases, grouped summary
-  `parent_scope_id` still remains `null` even when low-limit shaping and query
-  filtering leave only one visible episode
+The current behavior is now clearer that:
 
-This means the current multi-workflow summary-only low-limit query-filter
-interpretation is now better anchored in the docs rather than only in recent
-behavior tests.
+- when query filtering removes all returned episodes, constrained
+  `supports`-derived relation auxiliary context does **not** survive
+- this is because the current relation auxiliary path is still derived only from
+  returned episode memory items
+- `related_context_is_auxiliary = false` remains the current reading in this
+  no-match case because no related context is actually returned
+- `related_context_relation_types == []`
+- `related_memory_items == []`
+- `related_memory_items_by_episode == {}`
+- `relation_supports_auxiliary` is absent from the visible grouped routes
+- workspace inherited auxiliary context may still remain visible
+- the visible grouped route in this shape is currently the workspace auxiliary
+  route only
+- the workspace auxiliary route may still include items that were also potential
+  relation targets, but that does **not** mean the relation-derived route itself
+  survived
+
+This means the current workspace-vs-relation negative interaction is now better
+fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small multi-workflow summary-only low-limit query-filter contract consolidation slice implemented
+### Small workspace-relation negative interaction coverage slice implemented
 
-A focused documentation pass was completed to align the current service-contract
-and MCP API wording around the already-covered summary-first + low-limit +
-query-filter + memory-items-disabled behavior in multi-workflow workspace/ticket
-resolution cases.
+A focused test slice now covers the case where:
 
-The clarified current reading is:
+- one workflow is resolved
+- one episode exists
+- one episode-side memory item has a `supports` relation to a workspace-root item
+- a separate workspace-root inherited item also exists
+- the query filters out the episode
+- `include_episodes = true`
+- `include_memory_items = true`
+- `include_summaries = false`
 
-- candidate episodes may first be collected from one or more resolved workflows
-- lightweight query filtering may narrow that candidate set
-- low-limit shaping may still apply to the visible response
-- the current visible summary-first child set should then be read from that
-  **surviving post-filter primary episode set**
-- grouped summary child ids/count and top-level summary-first child ids/count
-  should currently align to that same surviving set
-- when memory items are disabled, the grouped response may remain summary-only
-  while still representing that same surviving primary child set
-- in that shape, `primary_episode_groups_present_after_query_filter = false`
-  means episode-scoped grouped output is absent, not that the surviving response
-  is necessarily auxiliary-only
-- `auxiliary_only_after_query_filter = false` remains the correct reading when
-  the remaining visible grouped route is still the primary summary-first route
-- in multi-workflow workspace/ticket resolution cases, grouped summary
-  `parent_scope_id` should still currently be read as `null` even when one
-  visible episode remains after the combined low-limit and query-filter shaping
+The current intended result in that case is:
 
-### Docs updated
+- `episodes == ()`
+- `query_filter_applied == true`
+- `episodes_before_query_filter == 1`
+- `matched_episode_count == 0`
+- `episodes_returned == 0`
+- `all_episodes_filtered_out_by_query == true`
+- `inherited_context_is_auxiliary == true`
+- `inherited_context_returned_without_episode_matches == true`
+- `related_context_is_auxiliary == false`
+- `related_context_relation_types == []`
+- `related_context_returned_without_episode_matches == false`
+- `related_memory_items == []`
+- `related_memory_items_by_episode == {}`
+- `retrieval_routes_present == ["workspace_inherited_auxiliary"]`
+- `primary_retrieval_routes_present == []`
+- `auxiliary_retrieval_routes_present == ["workspace_inherited_auxiliary"]`
+- `retrieval_route_group_counts["relation_supports_auxiliary"] == 0`
+- `retrieval_route_item_counts["relation_supports_auxiliary"] == 0`
+- `retrieval_route_scopes_present["relation_supports_auxiliary"] == []`
+- `memory_context_groups` contains only the workspace inherited auxiliary group
+- `episode_explanations` retains the filtered episode with
+  `explanation_basis = "query_filtered_out"`
 
-The current interpretation was clarified in:
+### Test added
 
-- `docs/memory/memory_get_context_service_contract.md`
-- `docs/mcp-api.md`
+Added a new focused regression test covering the combined case:
 
-The updates make explicit that the current docs should **not** be read as if:
+- query present
+- all episodes filtered out
+- no returned primary episode path remains visible
+- workspace inherited auxiliary context still remains visible
+- relation-derived `supports` context does not remain visible
+- one workspace item may still be visible through the auxiliary workspace route
+  even though the relation-derived route is gone
 
-- summary-only grouped output after query filtering is merely an auxiliary
-  fallback
-- `primary_episode_groups_present_after_query_filter = false` always means no
-  primary grouped route remains visible
-- disabling memory items changes the surviving child-set rule
-- low-limit shaping changes the surviving child-set rule
-- `"memory_items_disabled"` means something broader than current response-shape
-  emittedness
-- one surviving visible episode implies stronger single-workflow grouped summary
-  parentage in multi-workflow workspace/ticket cases
+The added test is:
 
-They also make explicit that:
+- `test_memory_get_context_workspace_auxiliary_may_survive_query_filter_while_relation_auxiliary_does_not`
 
-- summary-only grouped output can remain the current primary summary-first route
-- the surviving child set is still read from the same post-filter primary
-  episode set
-- low-limit shaping does not currently change that child-set rule
-- absence of episode-scoped grouped output is narrower than loss of all primary
-  grouped visibility
-- grouped summary `parent_scope_id` still remains `null` in the current
-  multi-workflow workspace/ticket summary-only low-limit query-filter reading
+### Current intended reading of this behavior
+
+Grouped and details consumers should currently understand this case like this:
+
+1. candidate episodes are collected for the resolved workflow
+2. query filtering removes all episodes from the returned primary path
+3. because the current relation auxiliary path is derived from returned episode
+   memory items only, no `supports`-derived relation auxiliary output remains
+4. workspace-root inherited auxiliary context may still remain visible
+5. the current visible grouped route is therefore workspace auxiliary only
+6. workspace-visible items should not be reclassified as surviving relation
+   output merely because a `supports` edge had existed before filtering
+
+This should **not** be read as:
+
+- relation auxiliary surviving independently of returned episode-side context
+- `supports` targets remaining visible as relation-derived output just because
+  relation edges existed before filtering
+- `related_context_is_auxiliary = false` meaning relation-derived context became
+  primary
+- workspace auxiliary visibility proving relation auxiliary coexistence in the
+  no-match case
+
+It should be read as:
+
+- the current constrained relation auxiliary path being gated by returned
+  episode-side context
+- with relation-derived context disappearing when query filtering removes all
+  returned episodes
+- and with workspace auxiliary visibility preserved where currently supported
 
 ### Why this slice is useful
 
-This slice improves continuity and interpretation quality without broadening
-behavior.
+This slice improves confidence in the current auxiliary-surface interaction
+without broadening behavior.
 
-It reduces ambiguity around the current meaning of:
+It verifies that the current system behaves consistently when:
 
-- `summary_first_has_episode_groups`
-- `summary_first_is_summary_only`
-- `summary_first_child_episode_count`
-- `summary_first_child_episode_ids`
-- grouped summary `child_episode_count`
-- grouped summary `child_episode_ids`
-- grouped summary `parent_scope_id`
-- `child_episode_groups_emission_reason`
-- `primary_episode_groups_present_after_query_filter`
-- `auxiliary_only_after_query_filter`
+- a query removes all returned episodes
+- relation-derived support context depends on returned episode memory items
+- workspace auxiliary context may still remain visible independently
+- workspace-visible items are not thereby reclassified as surviving
+  relation-derived output
 
-That is useful because these fields and response shapes are now covered by
-behavior, and the docs should say the same thing the tests already establish.
+This makes the current workspace-vs-relation negative interaction explicit
+rather than leaving it to be reconstructed from separate relation-auxiliary and
+workspace-auxiliary cases.
+
+### Tests added/updated
+
+The relation-aware coverage now explicitly checks the no-surviving-episode,
+query-filtered, workspace-vs-relation negative interaction case.
+
+The expected current result is:
+
+- no returned episodes
+- no returned relation auxiliary context
+- no visible relation-scoped grouped output
+- workspace auxiliary grouped output still visible
+- filtered episode diagnostics still preserved in `episode_explanations`
+- combined focused memory test run passes
+
+### Validation completed
+
+Validated this slice with:
+
+- `pytest tests/memory/test_memory_context_related_items.py`
+- `pytest tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
+
+Result at completion time:
+
+- `8 passed` in `tests/memory/test_memory_context_related_items.py`
+- `49 passed` in the focused combined memory test run
 
 ---
 
@@ -135,20 +181,15 @@ behavior, and the docs should say the same thing the tests already establish.
 
 This slice intentionally did **not** do any of the following:
 
-- change `memory_get_context` service behavior
-- add new grouped metadata fields
-- add new retrieval routes
 - broaden relation traversal beyond the current constrained shape
 - include relation types beyond `supports`
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
-- redesign grouped response structure
-- emit episode-scoped grouped entries when memory items are disabled
-- reclassify summary-only grouped output as auxiliary-only
-- make filtered-out episodes remain visible in the current grouped child set
-- change low-limit shaping into a different child-set rule
-- strengthen grouped summary parentage in multi-workflow workspace/ticket cases
-  just because one visible episode remains
+- introduce broader graph-backed selection semantics
+- add broader response-shape expansion
+- make relation auxiliary survive independently of returned episode memory items
+- reclassify workspace auxiliary visibility as surviving relation-derived output
+- change grouped response structure to merge auxiliary surfaces
 
 The current grouped interpretation remains:
 
@@ -158,19 +199,6 @@ The current grouped interpretation remains:
 - workspace and relation outputs remain top-level sibling auxiliary grouped
   surfaces where currently emitted
 - broader graph semantics remain intentionally deferred
-
----
-
-## Validation completed
-
-Validated this docs-consolidation slice with:
-
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_memory_context_related_items.py`
-
-Result at completion time:
-
-- `49 passed`
 
 ---
 
@@ -189,6 +217,20 @@ Result at completion time:
 - `docs/memory-model.md`
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
+
+---
+
+## Validation status
+
+Recent relevant validation includes:
+
+- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
+
+Recent validation result for this slice:
+
+- `8 passed` in `tests/memory/test_memory_context_related_items.py`
+- `49 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -302,15 +344,14 @@ The current `0.6.0` state should now be read as:
   - low-limit shaping still applies to the actually emitted workspace auxiliary
     route
   - only the newest inherited workspace item remains visible under that current
-    low-limit shaping
+  low-limit shaping
 - workspace auxiliary no-match low-limit shaping now also has explicit behavior
   coverage:
   - when query filtering removes all returned episodes, `workspace_inherited_auxiliary`
     may remain as the only visible grouped route
   - low-limit truncation still applies to that surviving auxiliary route
   - only the newest inherited workspace item remains visible
-  - filtered episode diagnostics still remain preserved in
-    `episode_explanations`
+  - filtered episode diagnostics still remain preserved in `episode_explanations`
 
 ---
 
@@ -329,7 +370,7 @@ The next step should still avoid:
 
 The next useful step should instead be one of:
 
-1. a genuinely new small grouped-selection behavior choice
+1. a genuinely different grouped-selection behavior choice
 2. a broader contract-consolidation / interpretation step in another part of the
    current response model
 3. only later, broader relation/group behavior
