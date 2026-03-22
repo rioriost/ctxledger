@@ -4704,6 +4704,176 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
     ]
 
 
+def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output_when_query_filters_out_all_episodes() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000055"
+    created_at = datetime(2024, 10, 28, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode filtered out before low-limit inherited workspace shaping",
+        metadata={"kind": "workspace-no-match-low-limit"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    episode_repository.create(episode)
+
+    direct_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Direct memory item hidden after no-match low-limit shaping",
+        metadata={"kind": "direct-memory-item"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    newer_inherited_workspace_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Newer inherited workspace item survives low-limit no-match shaping",
+        metadata={"kind": "newer-workspace-item"},
+        created_at=created_at.replace(hour=1, minute=30),
+        updated_at=created_at.replace(hour=1, minute=30),
+    )
+    older_inherited_workspace_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Older inherited workspace item hidden by low-limit no-match shaping",
+        metadata={"kind": "older-workspace-item"},
+        created_at=created_at.replace(hour=0),
+        updated_at=created_at.replace(hour=0),
+    )
+    memory_item_repository.create(direct_memory_item)
+    memory_item_repository.create(newer_inherited_workspace_item)
+    memory_item_repository.create(older_inherited_workspace_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-WORKSPACE-NO-MATCH-LIMIT",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            query="inherited-only token",
+            workflow_instance_id=str(workflow_id),
+            limit=1,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert response.episodes == ()
+    assert response.details["query_filter_applied"] is True
+    assert response.details["episodes_before_query_filter"] == 1
+    assert response.details["matched_episode_count"] == 0
+    assert response.details["episodes_returned"] == 0
+    assert response.details["all_episodes_filtered_out_by_query"] is True
+    assert response.details["retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == []
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 0,
+        "workspace_inherited_auxiliary": 1,
+        "relation_supports_auxiliary": 0,
+    }
+    assert response.details["retrieval_route_scopes_present"] == {
+        "summary_first": [],
+        "episode_direct": [],
+        "workspace_inherited_auxiliary": [
+            "workspace",
+        ],
+        "relation_supports_auxiliary": [],
+    }
+    assert response.details["hierarchy_applied"] is True
+    assert response.details["inherited_context_is_auxiliary"] is True
+    assert response.details["inherited_context_returned_without_episode_matches"] is True
+    assert (
+        response.details["inherited_context_returned_as_auxiliary_without_episode_matches"] is True
+    )
+    assert response.details["episode_explanations"] == [
+        {
+            "episode_id": str(episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "matched": False,
+            "explanation_basis": "query_filtered_out",
+            "matched_summary": False,
+            "matched_metadata_values": [],
+        }
+    ]
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "workspace",
+            "scope_id": workspace_id,
+            "parent_scope": None,
+            "parent_scope_id": None,
+            "parent_group_scope": None,
+            "parent_group_id": None,
+            "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
+            "memory_items": [
+                {
+                    "memory_id": str(newer_inherited_workspace_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": None,
+                    "type": "workspace_note",
+                    "provenance": "workspace",
+                    "content": "Newer inherited workspace item survives low-limit no-match shaping",
+                    "metadata": {"kind": "newer-workspace-item"},
+                    "created_at": newer_inherited_workspace_item.created_at.isoformat(),
+                    "updated_at": newer_inherited_workspace_item.updated_at.isoformat(),
+                }
+            ],
+        }
+    ]
+    assert response.details["inherited_memory_items"] == [
+        {
+            "memory_id": str(newer_inherited_workspace_item.memory_id),
+            "workspace_id": workspace_id,
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Newer inherited workspace item survives low-limit no-match shaping",
+            "metadata": {"kind": "newer-workspace-item"},
+            "created_at": newer_inherited_workspace_item.created_at.isoformat(),
+            "updated_at": newer_inherited_workspace_item.updated_at.isoformat(),
+        }
+    ]
+
+
 def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent() -> None:
     workflow_id = uuid4()
     workspace_id = "00000000-0000-0000-0000-000000000039"
