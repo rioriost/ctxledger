@@ -550,6 +550,23 @@ workspace auxiliary visibility may survive after query filtering removes the
 primary episode path, and low-limit truncation still applies to that surviving
 auxiliary route rather than being bypassed by the no-match case.
 
+But this still should not currently be generalized into a stronger invariant
+such as "no-match workflow expansion always preserves a visible workspace
+auxiliary route."
+
+The current behavior coverage now fixes a narrower reading:
+
+- preserved workspace auxiliary visibility is intentional in some no-match shapes
+- yet some workspace-only or ticket-only multi-workflow no-match shapes may
+  still end up with **no visible grouped routes**
+- in those cases, `all_episodes_filtered_out_by_query` and
+  `episode_explanations` may still preserve the filtered-episode diagnostics
+  even though neither primary nor auxiliary grouped output remains visible
+
+So the current contract should treat no-match auxiliary survival as
+shape-dependent current behavior rather than as a universal grouped-output
+guarantee for every workflow-expansion mode.
+
 ### 4. Relation-scoped output
 
 When constrained relation-derived support context is available, the response may include a relation group with:
@@ -705,6 +722,30 @@ not as:
 This distinction matters for the current grouped reading because auxiliary
 workspace visibility remains a sibling auxiliary surface, not part of the
 primary episode-matching path.
+
+However, this should still be read narrowly as a current-shape behavior rather
+than as a guaranteed rule across every no-match workflow-expansion mode.
+
+In particular, the current coverage now distinguishes at least two no-match
+readings:
+
+- some workflow-scoped no-match shapes may still keep visible
+  `workspace_inherited_auxiliary` grouped output
+- some workspace-only or ticket-only multi-workflow no-match shapes may instead
+  collapse to **no visible grouped routes at all** even when workspace- or
+  workflow-linked memory still exists in storage
+
+That means consumers should not currently assume that:
+
+- workspace-scoped lookup always preserves inherited auxiliary grouped
+  visibility after all episodes are filtered out
+- ticket-scoped lookup always preserves some grouped auxiliary visibility after
+  all episodes are filtered out
+- stored inherited workspace items are equivalent to emitted auxiliary grouped
+  output in every no-match workflow-expansion shape
+
+They should instead read the current no-match response from the grouped routes
+and grouped outputs that are actually emitted.
 
 ---
 

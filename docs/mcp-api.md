@@ -1451,9 +1451,12 @@ That means:
   - when low-limit shaping also applies in that episode-less path, low-limit truncation still applies to the actually emitted auxiliary grouped route rather than reviving hidden episode-oriented primary output
 - when query filtering removes all returned episodes but `include_episodes = true`, the current no-match workspace auxiliary reading is different from that episode-less path:
   - `all_episodes_filtered_out_by_query = true` explicitly marks the no-match case
-  - workspace auxiliary grouped visibility may still remain as the only visible grouped route
+  - workspace auxiliary grouped visibility may still remain as the only visible grouped route in some current shapes
   - when low-limit shaping also applies, truncation still applies to that surviving workspace auxiliary route
   - low-limit shaping should not currently be read as bypassed just because all episodes were filtered out
+  - but this should not currently be generalized into a stronger invariant that every workspace- or ticket-resolved no-match shape preserves some visible auxiliary grouped route
+  - some workspace-only or ticket-only multi-workflow no-match shapes may instead collapse to no visible grouped routes at all even when workflow-linked memory still exists in storage
+  - in those shapes, the current response should still be read from the grouped routes and grouped outputs that are actually emitted rather than from a hidden auxiliary route inferred only from stored memory presence
 - top-level details consumers should currently read `summary_first_child_episode_count` as:
   - `0` when summary-first selection is not active
   - `{N}` when summary-first selection is active and the current summary-first grouped reading represents `N` child episodes
