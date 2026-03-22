@@ -4,7 +4,7 @@
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
 focused **behavior-coverage** slice for the current
-**workspace auxiliary limit + query-filter** reading in `memory_get_context`.
+**relation auxiliary limit + query-filter** reading in `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
@@ -12,10 +12,11 @@ new response field.
 
 Instead, it fixed and validated the current behavior when:
 
-- one workflow is resolved
+- constrained relation-aware context is enabled through the current `supports`
+  slice
 - a query is provided
 - one episode survives the query
-- workspace-root inherited auxiliary context remains available
+- one episode is filtered out by the query
 - a low `limit` is applied
 - memory items are enabled
 - summaries are disabled
@@ -23,36 +24,38 @@ Instead, it fixed and validated the current behavior when:
 The current behavior is now clearer that:
 
 - query filtering may narrow the visible primary episode set before the current
-  low-limit workspace auxiliary slice is read
+  low-limit relation auxiliary slice is read
 - the current visible primary path still remains `episode_direct`
-- the workspace inherited auxiliary route still remains visible alongside that
+- the constrained relation auxiliary route still remains visible alongside that
   primary path
-- workspace inherited auxiliary truncation still applies in this query-filtered
-  case
-- the current returned inherited workspace item is still the newest visible
-  inherited workspace item under the present low-limit shaping
-- the filtered-out episode's episode-scoped memory item does not remain visible
-  on the current primary path
+- constrained relation distinct-target truncation still applies in this
+  query-filtered case
+- the current visible relation target is still the **first-seen** target under
+  the present source-side traversal path
+- a filtered-out episode's source memory item does not remain visible as a
+  contributing relation source
 - the current `episodes_before_query_filter` reading in this case is **1**
   rather than a broader pre-filter episode candidate count of 2
 
-This means the current workspace-limit query-filter interpretation is now better
+This means the current relation-limit query-filter interpretation is now better
 fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small workspace auxiliary limit + query-filter coverage slice implemented
+### Small relation auxiliary limit + query-filter coverage slice implemented
 
 A focused test slice now covers the case where:
 
 - one workflow is resolved
 - two episodes exist
 - only one episode survives the query
-- one direct memory item belongs to the surviving episode
-- one direct memory item belongs to the filtered episode
-- two inherited workspace-root items exist
+- one source memory item belongs to the surviving episode
+- one source memory item belongs to the filtered episode
+- two visible `supports` targets exist off the surviving source memory item
+- one separate `supports` edge exists from the filtered source memory item
+- one workspace-root inherited item exists
 - `limit = 1`
 - `include_episodes = true`
 - `include_memory_items = true`
@@ -64,30 +67,39 @@ The current intended result in that case is:
 - `episodes_before_query_filter == 1`
 - `matched_episode_count == 1`
 - `episodes_returned == 1`
-- `inherited_memory_items` contains only the newest inherited workspace item
-- `retrieval_routes_present == ["episode_direct", "workspace_inherited_auxiliary"]`
+- `related_context_is_auxiliary == true`
+- `related_context_relation_types == ["supports"]`
+- `related_context_selection_route == "relation_supports_auxiliary"`
+- `relation_supports_source_episode_count == 1`
+- `retrieval_routes_present == ["episode_direct", "workspace_inherited_auxiliary", "relation_supports_auxiliary"]`
 - `primary_retrieval_routes_present == ["episode_direct"]`
-- `auxiliary_retrieval_routes_present == ["workspace_inherited_auxiliary"]`
-- `retrieval_route_group_counts["workspace_inherited_auxiliary"] == 1`
-- `retrieval_route_item_counts["workspace_inherited_auxiliary"] == 1`
+- `auxiliary_retrieval_routes_present == ["workspace_inherited_auxiliary", "relation_supports_auxiliary"]`
+- `retrieval_route_group_counts["relation_supports_auxiliary"] == 1`
+- `retrieval_route_item_counts["relation_supports_auxiliary"] == 1`
 - `memory_context_groups` contains:
   - one surviving episode-scoped group
-  - one truncated workspace-scoped inherited group
+  - one workspace-scoped inherited group
+  - one truncated relation-scoped auxiliary group
+- the visible relation group references only the surviving episode/source memory
+- the visible relation target is the first-seen target under the current
+  query-filtered surviving source path
 - `episode_explanations` contains only the surviving matched episode
 
 ### Test added
 
 Added a new focused regression test covering the combined case:
 
-- low-limit workspace auxiliary shaping
+- low-limit constrained relation auxiliary shaping
 - lightweight query filtering
 - one surviving visible episode
-- inherited workspace auxiliary still visible
-- inherited workspace auxiliary still truncated to the current limit behavior
+- one surviving visible source-side relation path
+- relation auxiliary still visible
+- relation auxiliary still truncated to the current distinct-target limit
+  behavior
 
 The added test is:
 
-- `test_memory_get_context_query_filter_keeps_workspace_inherited_auxiliary_limit_truncation`
+- `test_memory_get_context_limit_truncates_constrained_relation_aggregation_after_distinct_first_seen_targets_under_query_filter`
 
 ### Current intended reading of this behavior
 
@@ -96,72 +108,72 @@ Grouped and details consumers should currently understand this case like this:
 1. candidate episodes are collected for the resolved workflow
 2. query filtering narrows that set to the current surviving visible episode
 3. the current primary grouped path remains the surviving episode-direct route
-4. workspace inherited auxiliary visibility may still remain alongside that
+4. constrained relation auxiliary visibility may still remain alongside that
    primary path
-5. low-limit truncation still applies to the workspace auxiliary route in that
-   shape
-6. the currently visible inherited workspace item is the newest one under the
-   present low-limit auxiliary shaping
-7. filtered-out episode memory does not remain visible on the current primary
-   path
+5. low-limit truncation still applies to the constrained relation auxiliary
+   route in that shape
+6. the currently visible relation target is the first-seen target under the
+   surviving source-side traversal path
+7. filtered-out episode-side source memory does not remain visible as a
+   contributing relation source
 
 This should **not** be read as:
 
-- workspace auxiliary truncation being bypassed just because query filtering was
-  applied
-- filtered-out episode memory items remaining visible on the current episode
-  path
+- constrained relation truncation being bypassed just because query filtering
+  was applied
+- filtered-out episode source memory items remaining visible in the current
+  relation auxiliary source set
 - `episodes_before_query_filter` necessarily reflecting a broader two-episode
   candidate snapshot in this current shape
-- workspace auxiliary becoming the primary route in this case
+- constrained relation auxiliary becoming the primary route in this case
 
 It should be read as:
 
-- the current constrained low-limit workspace auxiliary reading
+- the current constrained low-limit relation auxiliary reading
 - with the visible primary episode path narrowed by query filtering
-- and with workspace auxiliary truncation still applied alongside that
-  surviving primary path
+- and with distinct-target truncation still applied alongside that surviving
+  primary path
 
 ### Why this slice is useful
 
-This slice improves confidence in the current workspace auxiliary shaping
-without broadening behavior.
+This slice improves confidence in the current relation auxiliary shaping without
+broadening behavior.
 
 It verifies that the current system behaves consistently when:
 
 - query filtering narrows the visible primary episode path
-- workspace inherited auxiliary context still remains visible
-- low-limit truncation still applies to that auxiliary route
+- constrained relation auxiliary context still remains visible
+- low-limit distinct-target truncation still applies to that auxiliary route
 
-This makes the current workspace-limit + query-filter interaction explicit
-rather than leaving it to be reconstructed from separate low-limit workspace
+This makes the current relation-limit + query-filter interaction explicit
+rather than leaving it to be reconstructed from separate low-limit relation
 auxiliary and query-filtered primary-path cases.
 
 ### Tests added/updated
 
-The summary/details shaping coverage now explicitly checks the low-limit,
-query-filtered, workspace-auxiliary coexistence case.
+The relation-aware coverage now explicitly checks the low-limit,
+query-filtered, relation-auxiliary coexistence case.
 
 The expected current result is:
 
 - one surviving returned episode
 - one surviving episode-direct grouped entry
-- one inherited workspace grouped entry
-- inherited workspace items truncated to one visible item
-- only the newest inherited workspace item remains visible
+- one surviving relation-scoped grouped entry
+- relation auxiliary targets truncated to one visible item
+- only the first-seen surviving relation target remains visible
 - combined focused memory test run passes
 
 ### Validation completed
 
 Validated this slice with:
 
-- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
 - `pytest tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 Result at completion time:
 
-- `34 passed` in `tests/memory/test_service_context_details.py`
-- `40 passed` in the focused combined memory test run
+- `7 passed` in `tests/memory/test_memory_context_related_items.py`
+- `41 passed` in the focused combined memory test run
 
 ---
 
@@ -175,9 +187,10 @@ This slice intentionally did **not** do any of the following:
 - change constrained relation auxiliary positioning
 - introduce broader graph-backed selection semantics
 - add broader response-shape expansion
-- make filtered-out episode memory remain visible on the current primary path
-- bypass low-limit truncation for workspace auxiliary output
-- reclassify workspace auxiliary output as primary in this case
+- make filtered-out episode-side source memory remain visible in the current
+  relation source set
+- bypass low-limit truncation for constrained relation auxiliary output
+- reclassify constrained relation auxiliary output as primary in this case
 
 The current grouped interpretation remains:
 
@@ -217,8 +230,8 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `34 passed` in `tests/memory/test_service_context_details.py`
-- `40 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
+- `7 passed` in `tests/memory/test_memory_context_related_items.py`
+- `41 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -320,13 +333,27 @@ The current `0.6.0` state should now be read as:
     low-limit shaping
   - the filtered-out episode memory item does not remain visible on the current
     primary path
-  - `episodes_before_query_filter` currently reads as `1` in this response shape
+  - `episodes_before_query_filter` currently reads as `1` in this response
+    shape
+- low-limit constrained relation auxiliary shaping also still applies under the
+  current query-filtered surviving-primary-path case
+- in that low-limit relation/query case:
+  - the primary route remains `episode_direct`
+  - the auxiliary routes remain `workspace_inherited_auxiliary` and
+    `relation_supports_auxiliary`
+  - constrained relation distinct-target truncation still applies
+  - only the first-seen surviving relation target remains visible under the
+    current low-limit shaping
+  - the filtered-out episode-side source memory item does not remain visible as
+    a contributing relation source
+  - `episodes_before_query_filter` currently reads as `1` in this response
+    shape
 
 ---
 
 ## Key conclusion
 
-The current workspace auxiliary limit + query-filter behavior slice is now
+The current relation auxiliary limit + query-filter behavior slice is now
 covered well enough for the current stage.
 
 The next step should still avoid:
