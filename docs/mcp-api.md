@@ -1457,6 +1457,10 @@ That means:
   - `related_memory_items_by_episode = {}`
   - `relation_supports_auxiliary` is absent from the visible grouped routes
   - workspace auxiliary grouped output may still remain visible where currently supported
+- when query filtering still leaves one or more returned episodes visible, this same constrained relation auxiliary surface may still remain visible alongside the surviving primary episode path
+- in that surviving-primary-path case, low-limit distinct-target truncation still applies to the relation auxiliary route
+- the currently visible relation target set should therefore still be read from the surviving returned episode-side traversal path rather than from a broader pre-filter source set
+- filtered-out episode-side source memory should not currently be read as remaining visible in the constrained relation source set
 - relation-scoped grouped entries may now also expose:
   - `source_episode_ids`
   - `source_memory_ids`

@@ -3,177 +3,101 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-focused **behavior-coverage** slice for the current
+**contract-consolidation** slice for the current
 **relation auxiliary limit + query-filter** reading in `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
-Instead, it fixed and validated the current behavior when:
+Instead, it consolidated the documented reading for the already-covered
+constrained relation low-limit query-filter behavior, especially where
+surviving-source-path visibility, distinct-target truncation, and filtered-source
+non-visibility can be misread.
 
-- constrained relation-aware context is enabled through the current `supports`
-  slice
-- a query is provided
-- one episode survives the query
-- one episode is filtered out by the query
-- a low `limit` is applied
-- memory items are enabled
-- summaries are disabled
+The current docs now more explicitly state that:
 
-The current behavior is now clearer that:
-
-- query filtering may narrow the visible primary episode set before the current
-  low-limit relation auxiliary slice is read
-- the current visible primary path still remains `episode_direct`
-- the constrained relation auxiliary route still remains visible alongside that
-  primary path
-- constrained relation distinct-target truncation still applies in this
-  query-filtered case
-- the current visible relation target is still the **first-seen** target under
-  the present source-side traversal path
-- a filtered-out episode's source memory item does not remain visible as a
-  contributing relation source
-- the current `episodes_before_query_filter` reading in this case is **1**
-  rather than a broader pre-filter episode candidate count of 2
+- when query filtering still leaves one or more returned episodes visible,
+  constrained `supports`-derived relation auxiliary context may still remain
+  visible alongside that surviving primary episode path
+- low-limit distinct-target truncation still applies in that query-filtered
+  surviving-primary-path case
+- the visible relation target set should currently be read from the surviving
+  returned episode-side traversal path rather than from a broader pre-filter
+  source set
+- filtered-out episode-side source memory should **not** currently be read as
+  remaining visible in the constrained relation source set
+- the current constrained relation auxiliary slice is still derived from returned
+  episode memory items only
 
 This means the current relation-limit query-filter interpretation is now better
-fixed by behavior coverage rather than by inference alone.
+anchored in the docs rather than only in recent behavior tests.
 
 ---
 
 ## What was completed
 
-### Small relation auxiliary limit + query-filter coverage slice implemented
+### Small relation auxiliary limit + query-filter contract consolidation slice implemented
 
-A focused test slice now covers the case where:
+A focused documentation pass was completed to align the current service-contract
+and MCP API wording around the already-covered low-limit constrained
+`supports`-relation behavior under query filtering.
 
-- one workflow is resolved
-- two episodes exist
-- only one episode survives the query
-- one source memory item belongs to the surviving episode
-- one source memory item belongs to the filtered episode
-- two visible `supports` targets exist off the surviving source memory item
-- one separate `supports` edge exists from the filtered source memory item
-- one workspace-root inherited item exists
-- `limit = 1`
-- `include_episodes = true`
-- `include_memory_items = true`
-- `include_summaries = false`
+The clarified current reading is:
 
-The current intended result in that case is:
+- candidate episodes may first be collected for the resolved workflow
+- lightweight query filtering may narrow that set to one or more surviving
+  returned episodes
+- because the current constrained relation auxiliary path is derived only from
+  returned episode memory items, the visible relation-derived route is computed
+  from that surviving returned episode-side path only
+- low-limit distinct-target truncation still applies within that surviving path
+- filtered-out episode-side source memory does not remain visible as a
+  contributing constrained relation source in this shape
 
-- `query_filter_applied == true`
-- `episodes_before_query_filter == 1`
-- `matched_episode_count == 1`
-- `episodes_returned == 1`
-- `related_context_is_auxiliary == true`
-- `related_context_relation_types == ["supports"]`
-- `related_context_selection_route == "relation_supports_auxiliary"`
-- `relation_supports_source_episode_count == 1`
-- `retrieval_routes_present == ["episode_direct", "workspace_inherited_auxiliary", "relation_supports_auxiliary"]`
-- `primary_retrieval_routes_present == ["episode_direct"]`
-- `auxiliary_retrieval_routes_present == ["workspace_inherited_auxiliary", "relation_supports_auxiliary"]`
-- `retrieval_route_group_counts["relation_supports_auxiliary"] == 1`
-- `retrieval_route_item_counts["relation_supports_auxiliary"] == 1`
-- `memory_context_groups` contains:
-  - one surviving episode-scoped group
-  - one workspace-scoped inherited group
-  - one truncated relation-scoped auxiliary group
-- the visible relation group references only the surviving episode/source memory
-- the visible relation target is the first-seen target under the current
-  query-filtered surviving source path
-- `episode_explanations` contains only the surviving matched episode
+### Docs updated
 
-### Test added
+The current interpretation was clarified in:
 
-Added a new focused regression test covering the combined case:
+- `docs/memory/memory_get_context_service_contract.md`
+- `docs/mcp-api.md`
 
-- low-limit constrained relation auxiliary shaping
-- lightweight query filtering
-- one surviving visible episode
-- one surviving visible source-side relation path
-- relation auxiliary still visible
-- relation auxiliary still truncated to the current distinct-target limit
-  behavior
+The updates make explicit that the current docs should **not** be read as if:
 
-The added test is:
+- relation auxiliary truncation is bypassed just because query filtering was
+  applied
+- filtered-out episode-side source memory still contributes to the visible
+  relation source set
+- the visible relation target set should be reconstructed from a broader
+  pre-filter source snapshot
+- the surviving relation auxiliary route is computed independently of the
+  surviving returned episode-side path
 
-- `test_memory_get_context_limit_truncates_constrained_relation_aggregation_after_distinct_first_seen_targets_under_query_filter`
+They also make explicit that:
 
-### Current intended reading of this behavior
-
-Grouped and details consumers should currently understand this case like this:
-
-1. candidate episodes are collected for the resolved workflow
-2. query filtering narrows that set to the current surviving visible episode
-3. the current primary grouped path remains the surviving episode-direct route
-4. constrained relation auxiliary visibility may still remain alongside that
-   primary path
-5. low-limit truncation still applies to the constrained relation auxiliary
-   route in that shape
-6. the currently visible relation target is the first-seen target under the
-   surviving source-side traversal path
-7. filtered-out episode-side source memory does not remain visible as a
-   contributing relation source
-
-This should **not** be read as:
-
-- constrained relation truncation being bypassed just because query filtering
-  was applied
-- filtered-out episode source memory items remaining visible in the current
-  relation auxiliary source set
-- `episodes_before_query_filter` necessarily reflecting a broader two-episode
-  candidate snapshot in this current shape
-- constrained relation auxiliary becoming the primary route in this case
-
-It should be read as:
-
-- the current constrained low-limit relation auxiliary reading
-- with the visible primary episode path narrowed by query filtering
-- and with distinct-target truncation still applied alongside that surviving
-  primary path
+- the current constrained relation auxiliary slice is still gated by returned
+  episode memory items
+- low-limit distinct-target truncation still applies when the surviving primary
+  path remains visible
+- only the first-seen surviving target remains visible when the current
+  distinct-target limit is `1`
 
 ### Why this slice is useful
 
-This slice improves confidence in the current relation auxiliary shaping without
-broadening behavior.
+This slice improves continuity and interpretation quality without broadening
+behavior.
 
-It verifies that the current system behaves consistently when:
+It reduces ambiguity around the current meaning of:
 
-- query filtering narrows the visible primary episode path
-- constrained relation auxiliary context still remains visible
-- low-limit distinct-target truncation still applies to that auxiliary route
+- `relation_supports_auxiliary`
+- relation-scoped `memory_context_groups`
+- `source_episode_ids`
+- `source_memory_ids`
+- low-limit distinct-target truncation under query filtering
+- filtered-source non-visibility under query filtering
 
-This makes the current relation-limit + query-filter interaction explicit
-rather than leaving it to be reconstructed from separate low-limit relation
-auxiliary and query-filtered primary-path cases.
-
-### Tests added/updated
-
-The relation-aware coverage now explicitly checks the low-limit,
-query-filtered, relation-auxiliary coexistence case.
-
-The expected current result is:
-
-- one surviving returned episode
-- one surviving episode-direct grouped entry
-- one surviving relation-scoped grouped entry
-- relation auxiliary targets truncated to one visible item
-- only the first-seen surviving relation target remains visible
-- combined focused memory test run passes
-
-### Validation completed
-
-Validated this slice with:
-
-- `pytest tests/memory/test_memory_context_related_items.py`
-- `pytest tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
-
-Result at completion time:
-
-- `7 passed` in `tests/memory/test_memory_context_related_items.py`
-- `41 passed` in the focused combined memory test run
+That is useful because these response shapes are now covered by behavior, and
+the docs should say the same thing the tests already establish.
 
 ---
 
@@ -181,14 +105,16 @@ Result at completion time:
 
 This slice intentionally did **not** do any of the following:
 
+- change `memory_get_context` service behavior
+- add new grouped metadata fields
+- add new retrieval routes
 - broaden relation traversal beyond the current constrained shape
 - include relation types beyond `supports`
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
-- introduce broader graph-backed selection semantics
-- add broader response-shape expansion
+- redesign grouped response structure
 - make filtered-out episode-side source memory remain visible in the current
-  relation source set
+  constrained relation source set
 - bypass low-limit truncation for constrained relation auxiliary output
 - reclassify constrained relation auxiliary output as primary in this case
 
@@ -200,6 +126,19 @@ The current grouped interpretation remains:
 - workspace and relation outputs remain top-level sibling auxiliary grouped
   surfaces where currently emitted
 - broader graph semantics remain intentionally deferred
+
+---
+
+## Validation completed
+
+Validated this docs-consolidation slice with:
+
+- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
+
+Result at completion time:
+
+- `41 passed`
 
 ---
 
@@ -218,20 +157,6 @@ The current grouped interpretation remains:
 - `docs/memory-model.md`
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
-
----
-
-## Validation status
-
-Recent relevant validation includes:
-
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_memory_context_related_items.py`
-
-Recent validation result for this slice:
-
-- `7 passed` in `tests/memory/test_memory_context_related_items.py`
-- `41 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -353,8 +278,8 @@ The current `0.6.0` state should now be read as:
 
 ## Key conclusion
 
-The current relation auxiliary limit + query-filter behavior slice is now
-covered well enough for the current stage.
+The current relation auxiliary limit + query-filter contract docs are now better
+aligned with the existing behavior coverage.
 
 The next step should still avoid:
 
@@ -370,3 +295,32 @@ The next useful step should instead be one of:
 2. a broader contract-consolidation / interpretation step in another part of the
    current response model
 3. only later, broader relation/group behavior
+
+---
+
+## Explicit next step
+
+### Next step
+Treat the current relation auxiliary limit + query-filter reading as documented
+well enough for the current stage.
+
+### Recommended target
+Choose the next small behavior or contract step without returning to another tiny
+relation-group explainability addition unless a clear behavior gap appears.
+
+### Recommended focus
+Proceed in this order:
+
+1. preserve the current primary summary/episode interpretation as stable enough
+   for the current stage when episode-oriented shaping is active
+2. preserve workspace/relation auxiliary groups as sibling auxiliaries where they
+   are currently emitted
+3. preserve the constrained relation-aware scope:
+   - one hop
+   - `supports` only
+   - current auxiliary-group placement
+4. prefer either:
+   - one genuinely different grouped-selection behavior slice, or
+   - one contract/documentation consolidation step elsewhere in the current
+     surface
+5. keep the next change semantically small and easy to validate

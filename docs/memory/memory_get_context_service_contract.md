@@ -525,6 +525,16 @@ conservatively as:
   - `relation_supports_auxiliary` is absent from the visible grouped routes
   - workspace auxiliary grouped output may still remain visible where currently
     supported
+- when query filtering leaves one or more returned episodes visible, this same
+  constrained relation auxiliary surface may still remain visible alongside the
+  surviving primary episode path
+- in that surviving-primary-path case, low-limit distinct-target truncation
+  still applies to the relation auxiliary route
+- the currently visible relation target set should therefore still be read from
+  the surviving returned episode-side traversal path rather than from a broader
+  pre-filter source set
+- filtered-out episode-side source memory should not currently be read as
+  remaining visible in the constrained relation source set
 - when multiple source-side contexts surface multiple constrained `supports`
   targets, the current relation-group `memory_items` ordering should be read as
   first-seen target ordering under the current source-side traversal path rather
@@ -683,6 +693,13 @@ the present constrained aggregation behavior:
   relation-aware slice currently leaves no visible relation-derived output,
   because there is no longer any returned episode-side memory context from which
   to derive it
+- when query filtering still leaves a surviving returned episode path visible,
+  that same constrained relation-aware slice may still remain visible and low-limit
+  distinct-target truncation still applies within that surviving source-side path
+- in that current query-filtered low-limit shape, only the first-seen surviving
+  target remains visible when the distinct-target limit is `1`
+- filtered-out episode-side source memory does not currently remain visible as a
+  contributing constrained relation source in that shape
 
 In practical terms, the next work should not default to adding yet another small
 relation-group explanation field unless a clearer behavior gap appears.
@@ -728,6 +745,10 @@ Current constraints include:
 - relation-derived context is currently derived only from returned episode memory
   items, so it does not remain visible when query filtering removes all returned
   episodes
+- when query filtering still leaves a surviving returned episode path visible,
+  constrained relation visibility and low-limit truncation are both currently
+  computed from that surviving path rather than from a broader pre-filter source
+  set
 
 This keeps the retrieval path understandable while the broader hierarchy work is still in progress.
 
