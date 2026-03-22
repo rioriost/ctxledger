@@ -1407,6 +1407,8 @@ That means:
 - inherited workspace-scoped memory may still be returned as auxiliary context when memory items are enabled
 - inherited workspace-scoped memory may also be returned even when no episode survives query filtering
 - in that no-episode-match case, grouped consumers should currently read the remaining workspace-scoped auxiliary visibility as preservation of auxiliary support context rather than as revival of filtered primary episode selection
+- when low-limit shaping also applies in that same no-episode-match case, low-limit truncation still applies to the surviving workspace auxiliary route
+- in that shape, only the newest inherited workspace items up to the current limit remain visible
 - `all_episodes_filtered_out_by_query` explicitly marks the all-filtered case
 - `episode_explanations` can still retain filtered-out episode diagnostics even when `episodes` becomes empty after filtering
 - `inherited_context_is_auxiliary` makes that support-role explicit
@@ -1415,6 +1417,9 @@ That means:
 - this should currently be interpreted as intentional auxiliary-context behavior rather than as evidence that inherited workspace items participate in episode matching
 - this should also not be read as inherited workspace items driving primary episode selection or participating in the lightweight episode query filter
 - in other words, the current contract should treat the workspace auxiliary path as surviving query-filter loss of episode matches without reclassifying that auxiliary context as newly matched primary episode context
+- when low-limit shaping also applies in that no-episode-match case, that current reading still operates over the actually emitted auxiliary route:
+  - workspace auxiliary visibility may survive after query filtering removes the primary episode path
+  - low-limit truncation still applies to that surviving auxiliary route rather than being bypassed by the no-match case
 - top-level details consumers should currently read `primary_episode_groups_present_after_query_filter` as:
   - `false` when no primary episode-scoped grouped output remains after query filtering
   - `true` when primary episode-scoped grouped output still remains after query filtering
@@ -1441,6 +1446,11 @@ That means:
   - direct episode-scoped grouped output is not currently surfaced
   - the remaining visible grouped route may therefore currently be auxiliary-only even when a query is present and summaries are enabled
   - when low-limit shaping also applies in that episode-less path, low-limit truncation still applies to the actually emitted auxiliary grouped route rather than reviving hidden episode-oriented primary output
+- when query filtering removes all returned episodes but `include_episodes = true`, the current no-match workspace auxiliary reading is different from that episode-less path:
+  - `all_episodes_filtered_out_by_query = true` explicitly marks the no-match case
+  - workspace auxiliary grouped visibility may still remain as the only visible grouped route
+  - when low-limit shaping also applies, truncation still applies to that surviving workspace auxiliary route
+  - low-limit shaping should not currently be read as bypassed just because all episodes were filtered out
 - top-level details consumers should currently read `summary_first_child_episode_count` as:
   - `0` when summary-first selection is not active
   - `{N}` when summary-first selection is active and the current summary-first grouped reading represents `N` child episodes

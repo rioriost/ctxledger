@@ -503,6 +503,10 @@ In particular:
   participated in episode matching
 - it should not be read as inherited workspace items contributing to the
   lightweight episode query filter at all
+- when low-limit shaping also applies in that no-episode-match case, low-limit
+  truncation still applies to the surviving workspace auxiliary route
+- in that shape, only the newest inherited workspace items up to the current
+  limit remain visible
 
 The current details-layer fields that make this reading explicit include:
 
@@ -523,6 +527,12 @@ Taken together, these fields mean the current contract distinguishes between:
   episode path is empty
 
 That distinction is intentional for the current `0.6.0` slice.
+
+When low-limit shaping also applies, this current reading is still based on the
+actually emitted auxiliary route:
+workspace auxiliary visibility may survive after query filtering removes the
+primary episode path, and low-limit truncation still applies to that surviving
+auxiliary route rather than being bypassed by the no-match case.
 
 ### 4. Relation-scoped output
 
@@ -645,6 +655,8 @@ This should currently be interpreted as:
 - preserved auxiliary support visibility
 - auxiliary context that remained visible after the primary episode path was
   emptied by query filtering
+- low-limit shaping still applying to that surviving auxiliary route when a low
+  `limit` is present
 
 not as:
 
@@ -652,6 +664,7 @@ not as:
 - widened selection semantics
 - inherited workspace items driving primary episode selection
 - inherited workspace items participating in the lightweight episode query filter
+- low-limit shaping being bypassed just because all episodes were filtered out
 
 This distinction matters for the current grouped reading because auxiliary
 workspace visibility remains a sibling auxiliary surface, not part of the

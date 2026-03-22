@@ -3,162 +3,98 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-focused **behavior-coverage** slice for the current
+**contract-consolidation** slice for the current
 **workspace auxiliary no-match + low-limit** reading in `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
-Instead, it fixed and validated the current behavior when:
+Instead, it consolidated the documented reading for the already-covered
+workspace auxiliary no-match low-limit behavior, especially where no-match
+auxiliary visibility, low-limit truncation, and visible grouped-route
+interpretation can be misread.
 
-- one workflow is resolved
-- a query is provided
-- all episodes are filtered out by the query
-- workspace-root inherited auxiliary context remains available
-- a low `limit` is applied
-- memory items are enabled
-- summaries are disabled
-
-The current behavior is now clearer that:
+The current docs now more explicitly state that:
 
 - when query filtering removes all returned episodes, workspace inherited
   auxiliary context may still remain visible
 - that surviving auxiliary route is still the current
   `workspace_inherited_auxiliary` route only
 - low-limit truncation still applies to that surviving auxiliary route
-- only the newest inherited workspace item remains visible under the current
-  low-limit no-match shaping
-- filtered episode-side memory does not remain visible on the current primary
-  path
-- `all_episodes_filtered_out_by_query = true`
-- `inherited_context_is_auxiliary = true`
-- `inherited_context_returned_without_episode_matches = true`
-- `inherited_context_returned_as_auxiliary_without_episode_matches = true`
+- only the newest inherited workspace items up to the current limit remain
+  visible
+- this should not be read as low-limit shaping being bypassed just because all
+  episodes were filtered out
+- this should not be read as workspace auxiliary visibility reviving filtered
+  primary episode selection
 
 This means the current workspace auxiliary no-match low-limit interpretation is
-now better fixed by behavior coverage rather than by inference alone.
+now better anchored in the docs rather than only in recent behavior tests.
 
 ---
 
 ## What was completed
 
-### Small workspace auxiliary no-match low-limit coverage slice implemented
+### Small workspace auxiliary no-match low-limit contract consolidation slice implemented
 
-A focused test slice now covers the case where:
+A focused documentation pass was completed to align the current service-contract
+and MCP API wording around the already-covered no-surviving-episode, inherited
+workspace auxiliary low-limit behavior.
 
-- one workflow is resolved
-- one episode exists
-- the query filters that episode out
-- one direct episode memory item exists
-- two inherited workspace-root items exist
-- `limit = 1`
-- `include_episodes = true`
-- `include_memory_items = true`
-- `include_summaries = false`
+The clarified current reading is:
 
-The current intended result in that case is:
+- candidate episodes may first be collected for the resolved workflow
+- lightweight query filtering may remove all returned episodes from the visible
+  primary path
+- workspace-root inherited auxiliary context may still remain visible
+- the visible grouped route may therefore become workspace auxiliary only
+- when low-limit shaping also applies, truncation still applies to that
+  surviving auxiliary route
+- only the newest inherited workspace items up to the current limit remain
+  visible
+- filtered episode-side memory does not return on the current primary path
 
-- `episodes == ()`
-- `query_filter_applied == true`
-- `episodes_before_query_filter == 1`
-- `matched_episode_count == 0`
-- `episodes_returned == 0`
-- `all_episodes_filtered_out_by_query == true`
-- `retrieval_routes_present == ["workspace_inherited_auxiliary"]`
-- `primary_retrieval_routes_present == []`
-- `auxiliary_retrieval_routes_present == ["workspace_inherited_auxiliary"]`
-- `retrieval_route_group_counts["workspace_inherited_auxiliary"] == 1`
-- `retrieval_route_item_counts["workspace_inherited_auxiliary"] == 1`
-- `retrieval_route_scopes_present["workspace_inherited_auxiliary"] == ["workspace"]`
-- `hierarchy_applied == true`
-- `inherited_context_is_auxiliary == true`
-- `inherited_context_returned_without_episode_matches == true`
-- `inherited_context_returned_as_auxiliary_without_episode_matches == true`
-- `memory_context_groups` contains only the workspace inherited auxiliary group
-- `inherited_memory_items` contains only the newest inherited workspace item
-- `episode_explanations` retains the filtered episode with
-  `explanation_basis = "query_filtered_out"`
+### Docs updated
 
-### Test added
+The current interpretation was clarified in:
 
-Added a new focused regression test covering the combined case:
+- `docs/memory/memory_get_context_service_contract.md`
+- `docs/mcp-api.md`
 
-- query present
-- all episodes filtered out
-- no returned primary episode path remains visible
-- inherited workspace auxiliary context still remains visible
+The updates make explicit that the current docs should **not** be read as if:
+
+- low-limit shaping is bypassed just because all episodes were filtered out
+- workspace auxiliary visibility becomes primary episode selection in the no-match
+  case
+- no-match auxiliary visibility revives filtered primary episodes
+- the surviving grouped route should be reconstructed from a hidden primary path
+  instead of from the actually emitted auxiliary route
+
+They also make explicit that:
+
+- the current no-match workspace auxiliary reading still operates over the
+  actually emitted auxiliary route
+- workspace auxiliary visibility may survive after query filtering removes the
+  primary episode path
 - low-limit truncation still applies to that surviving auxiliary route
-
-The added test is:
-
-- `test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output_when_query_filters_out_all_episodes`
-
-### Current intended reading of this behavior
-
-Grouped and details consumers should currently understand this case like this:
-
-1. candidate episodes are collected for the resolved workflow
-2. query filtering removes all episodes from the returned primary path
-3. workspace-root inherited auxiliary context may still remain visible
-4. the current visible grouped route is therefore workspace auxiliary only
-5. low-limit truncation still applies to that surviving auxiliary route
-6. only the newest inherited workspace item remains visible under the current
-   low-limit no-match shaping
-
-This should **not** be read as:
-
-- low-limit shaping being bypassed just because all episodes were filtered out
-- filtered episode-side memory remaining visible on the current primary path
-- workspace auxiliary visibility becoming primary episode selection
-- no-match auxiliary visibility reviving filtered primary episodes
-
-It should be read as:
-
-- the current constrained workspace auxiliary no-match reading
-- with preserved auxiliary visibility after the primary episode path is gone
-- and with low-limit truncation still applied to that surviving auxiliary route
 
 ### Why this slice is useful
 
-This slice improves confidence in the current workspace auxiliary shaping
-without broadening behavior.
+This slice improves continuity and interpretation quality without broadening
+behavior.
 
-It verifies that the current system behaves consistently when:
+It reduces ambiguity around the current meaning of:
 
-- query filtering removes all returned episodes
-- workspace auxiliary visibility still remains
-- low-limit truncation still applies to that surviving auxiliary route
+- `all_episodes_filtered_out_by_query`
+- `inherited_context_is_auxiliary`
+- `inherited_context_returned_without_episode_matches`
+- `inherited_context_returned_as_auxiliary_without_episode_matches`
+- `workspace_inherited_auxiliary`
+- low-limit truncation under the current no-match workspace-auxiliary route
 
-This makes the current workspace no-match + low-limit interaction explicit
-rather than leaving it to be reconstructed from separate no-match auxiliary and
-low-limit workspace cases.
-
-### Tests added/updated
-
-The summary/details shaping coverage now explicitly checks the no-match,
-low-limit, workspace-auxiliary-only case.
-
-The expected current result is:
-
-- no returned episodes
-- one surviving workspace auxiliary grouped entry
-- inherited workspace items truncated to one visible item
-- only the newest inherited workspace item remains visible
-- filtered episode diagnostics still preserved in `episode_explanations`
-- combined focused memory test run passes
-
-### Validation completed
-
-Validated this slice with:
-
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
-
-Result at completion time:
-
-- `39 passed` in `tests/memory/test_service_context_details.py`
-- `46 passed` in the focused combined memory test run
+That is useful because these response shapes are now covered by behavior, and
+the docs should say the same thing the tests already establish.
 
 ---
 
@@ -166,12 +102,14 @@ Result at completion time:
 
 This slice intentionally did **not** do any of the following:
 
+- change `memory_get_context` service behavior
+- add new grouped metadata fields
+- add new retrieval routes
 - broaden relation traversal beyond the current constrained shape
 - include relation types beyond `supports`
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
-- introduce broader graph-backed selection semantics
-- add broader response-shape expansion
+- redesign grouped response structure
 - bypass low-limit truncation for workspace auxiliary output
 - make filtered episode-side memory remain visible on the current primary path
 - reclassify workspace auxiliary output as primary in this no-match case
@@ -184,6 +122,19 @@ The current grouped interpretation remains:
 - workspace and relation outputs remain top-level sibling auxiliary grouped
   surfaces where currently emitted
 - broader graph semantics remain intentionally deferred
+
+---
+
+## Validation completed
+
+Validated this docs-consolidation slice with:
+
+- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
+
+Result at completion time:
+
+- `46 passed`
 
 ---
 
@@ -202,20 +153,6 @@ The current grouped interpretation remains:
 - `docs/memory-model.md`
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
-
----
-
-## Validation status
-
-Recent relevant validation includes:
-
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_memory_context_related_items.py`
-
-Recent validation result for this slice:
-
-- `39 passed` in `tests/memory/test_service_context_details.py`
-- `46 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -316,13 +253,20 @@ The current `0.6.0` state should now be read as:
     route
   - only the newest inherited workspace item remains visible under that current
     low-limit shaping
+- workspace auxiliary no-match low-limit shaping now also has explicit behavior
+  coverage:
+  - when query filtering removes all returned episodes, `workspace_inherited_auxiliary`
+    may remain as the only visible grouped route
+  - low-limit truncation still applies to that surviving auxiliary route
+  - only the newest inherited workspace item remains visible
+  - filtered episode diagnostics still remain preserved in `episode_explanations`
 
 ---
 
 ## Key conclusion
 
-The current include-episodes-false low-limit query-filter contract docs are now
-better aligned with the existing behavior coverage.
+The current workspace auxiliary no-match low-limit behavior slice is now covered
+well enough for the current stage.
 
 The next step should still avoid:
 
