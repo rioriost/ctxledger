@@ -568,7 +568,7 @@ conservatively as:
   - `relation_supports_auxiliary` is absent from the visible grouped routes
   - workspace auxiliary grouped output may still remain visible where currently
     supported
-- when query filtering leaves one or more returned episodes visible, this same
+- when query filtering still leaves one or more returned episodes visible, this same
   constrained relation auxiliary surface may still remain visible alongside the
   surviving primary episode path
 - in that surviving-primary-path case, low-limit distinct-target truncation
@@ -578,6 +578,20 @@ conservatively as:
   pre-filter source set
 - filtered-out episode-side source memory should not currently be read as
   remaining visible in the constrained relation source set
+- when memory items are disabled, this same constrained relation-aware path
+  remains fully off even if:
+  - query filtering still leaves a surviving returned episode visible
+  - low-limit shaping also applies
+  - constrained `supports` relation data exists in storage
+- in that memory-items-disabled + low-limit + query-filter case:
+  - `related_context_is_auxiliary = false`
+  - `related_context_relation_types = []`
+  - `related_memory_items = []`
+  - `related_memory_items_by_episode = {}`
+  - `relation_supports_source_episode_count = 0`
+  - `relation_supports_auxiliary` remains absent from the visible grouped routes
+  - no grouped, compatibility, or convenience relation output is currently
+    surfaced
 - when multiple source-side contexts surface multiple constrained `supports`
   targets, the current relation-group `memory_items` ordering should be read as
   first-seen target ordering under the current source-side traversal path rather
@@ -746,6 +760,13 @@ the present constrained aggregation behavior:
   target remains visible when the distinct-target limit is `1`
 - filtered-out episode-side source memory does not currently remain visible as a
   contributing constrained relation source in that shape
+- when memory items are disabled, that same constrained relation-aware slice
+  currently remains fully disabled even under:
+  - a surviving query-filtered episode path
+  - low-limit shaping
+  - existing stored `supports` relations
+- in that shape, no grouped relation output, flat compatibility relation output,
+  or per-episode related compatibility output is currently surfaced
 
 In practical terms, the next work should not default to adding yet another small
 relation-group explanation field unless a clearer behavior gap appears.
@@ -795,6 +816,9 @@ Current constraints include:
   constrained relation visibility and low-limit truncation are both currently
   computed from that surviving path rather than from a broader pre-filter source
   set
+- when memory items are disabled, constrained relation visibility is currently
+  disabled altogether, so low-limit shaping and query filtering do not revive a
+  partially visible relation-derived route
 
 This keeps the retrieval path understandable while the broader hierarchy work is still in progress.
 

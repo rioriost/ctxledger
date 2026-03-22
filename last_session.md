@@ -3,7 +3,7 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-focused **behavior-coverage** slice for the current
+**contract-consolidation** slice for the current
 **relation auxiliary + memory-items-disabled + low-limit + query-filter**
 reading in `memory_get_context`.
 
@@ -11,169 +11,98 @@ This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
-Instead, it fixed and validated the current behavior when:
+Instead, it consolidated the documented reading for the already-covered
+constrained relation memory-off low-limit query-filter behavior, especially
+where surviving primary-path visibility, disabled relation output, and low-limit
+shaping can be misread.
 
-- constrained relation-aware context is enabled through the current `supports`
-  slice
-- a query is provided
-- one episode survives the query
-- one episode is filtered out by the query
-- a low `limit` is applied
-- memory items are disabled
-- summaries are disabled
+The current docs now more explicitly state that:
 
-The current behavior is now clearer that:
-
-- query filtering may narrow the visible primary episode set before the current
-  low-limit relation-aware slice is read
-- the current visible primary path still remains the surviving episode list
-- constrained relation auxiliary remains **fully disabled** in this response
-  shape because memory items are disabled
-- low-limit shaping does **not** revive relation-derived output in this case
-- filtered-out episode-side source memory does not remain visible as a
-  contributing relation source
-- surviving episode-side source memory also does not surface relation-derived
-  output in this shape
+- when `include_memory_items = false`, the constrained relation-aware path
+  remains fully **disabled**
+- this remains true even when query filtering still leaves one surviving
+  returned episode visible
+- this remains true even when low-limit shaping also applies
+- this remains true even when constrained `supports` relation data exists in
+  storage
 - `related_context_is_auxiliary = false`
 - `related_context_relation_types == []`
 - `related_memory_items == []`
 - `related_memory_items_by_episode == {}`
-- `relation_supports_auxiliary` is absent from visible grouped routes
-- the current `episodes_before_query_filter` reading in this case is **1**
-  rather than a broader pre-filter episode candidate count of 2
+- `relation_supports_source_episode_count == 0`
+- `relation_supports_auxiliary` remains absent from visible grouped routes
+- no grouped, compatibility, or convenience relation output is surfaced in this
+  shape
 
 This means the current relation-memory-off low-limit query-filter
-interpretation is now better fixed by behavior coverage rather than by
-inference alone.
+interpretation is now better anchored in the docs rather than only in recent
+behavior tests.
 
 ---
 
 ## What was completed
 
-### Small relation memory-off low-limit query-filter coverage slice implemented
+### Small relation memory-off low-limit query-filter contract consolidation slice implemented
 
-A focused test slice now covers the case where:
+A focused documentation pass was completed to align the current service-contract
+and MCP API wording around the already-covered constrained relation behavior
+when memory items are disabled under low-limit and query-filter shaping.
 
-- one workflow is resolved
-- two episodes exist
-- only one episode survives the query
-- one source memory item belongs to the surviving episode
-- one source memory item belongs to the filtered episode
-- visible `supports` relations exist
-- `limit = 1`
-- `include_episodes = true`
-- `include_memory_items = false`
-- `include_summaries = false`
+The clarified current reading is:
 
-The current intended result in that case is:
+- candidate episodes may first be collected for the resolved workflow
+- lightweight query filtering may narrow that set to one or more surviving
+  returned episodes
+- low-limit shaping may also apply to the response
+- but when `include_memory_items = false`, the current constrained
+  relation-aware slice remains fully disabled
+- no grouped relation output is surfaced
+- no flat compatibility relation output is surfaced
+- no per-episode related compatibility output is surfaced
+- no relation-derived convenience output is surfaced
 
-- `query_filter_applied == true`
-- `episodes_before_query_filter == 1`
-- `matched_episode_count == 1`
-- `episodes_returned == 1`
-- `memory_items == []`
-- `related_memory_items == []`
-- `related_memory_items_by_episode == {}`
-- `related_context_is_auxiliary == false`
-- `related_context_relation_types == []`
-- `related_context_selection_route == null`
-- `relation_supports_source_episode_count == 0`
-- `primary_retrieval_routes_present == []`
-- `auxiliary_retrieval_routes_present == []`
-- `retrieval_routes_present == []`
-- `retrieval_route_group_counts["relation_supports_auxiliary"] == 0`
-- `retrieval_route_item_counts["relation_supports_auxiliary"] == 0`
-- `retrieval_route_scopes_present["relation_supports_auxiliary"] == []`
-- `memory_context_groups == []`
-- `episode_explanations` contains only the surviving matched episode
+### Docs updated
 
-### Test added
+The current interpretation was clarified in:
 
-Added a new focused regression test covering the combined case:
+- `docs/memory/memory_get_context_service_contract.md`
+- `docs/mcp-api.md`
 
-- constrained relation-aware context present in source data
-- memory items disabled
-- low-limit shaping
-- lightweight query filtering
-- one surviving visible episode
-- one filtered episode
-- no visible relation-derived output survives in this response shape
+The updates make explicit that the current docs should **not** be read as if:
 
-The added test is:
+- low-limit shaping partially revives constrained relation output
+- a surviving query-filtered episode still exposes hidden relation-derived
+  output when memory items are disabled
+- stored `supports` edges are enough to make relation output visible in this
+  shape
+- a hidden compatibility or convenience relation route still exists in this
+  response
 
-- `test_memory_get_context_relation_auxiliary_stays_disabled_when_memory_items_are_off_under_low_limit_query_shape`
+They also make explicit that:
 
-### Current intended reading of this behavior
-
-Grouped and details consumers should currently understand this case like this:
-
-1. candidate episodes are collected for the resolved workflow
-2. query filtering narrows that set to the current surviving visible episode
-3. low-limit shaping still applies in the current response shape
-4. because memory items are disabled, the current relation-derived route is not
-   surfaced at all
-5. the current response does not surface relation auxiliary grouped output
-6. the current response does not surface flat related-item output
-7. the current response does not surface per-episode related-item output
-
-This should **not** be read as:
-
-- low-limit shaping partially reviving constrained relation output
-- surviving episode-side source memory still surfacing hidden relation context
-- filtered source-side memory still contributing to a visible relation source
-  set
-- `related_context_is_auxiliary = false` meaning relation-derived context became
-  primary
-- relation auxiliary surviving merely because relation edges exist in storage
-
-It should be read as:
-
-- the current constrained relation-aware path remaining disabled when memory
-  items are disabled
-- with query filtering and low-limit shaping still leaving that route disabled
-- and with no visible relation-derived route in this response shape
+- the current constrained relation-aware slice remains disabled altogether when
+  memory items are disabled
+- query filtering and low-limit shaping do not change that rule
+- visible relation-derived output is absent across grouped, flat, and
+  per-episode compatibility surfaces in this shape
 
 ### Why this slice is useful
 
-This slice improves confidence in the current relation-aware behavior without
-broadening behavior.
+This slice improves continuity and interpretation quality without broadening
+behavior.
 
-It verifies that the current system behaves consistently when:
+It reduces ambiguity around the current meaning of:
 
-- constrained relation-aware source data exists
-- query filtering narrows the visible primary episode path
-- low-limit shaping is also applied
-- memory-items-disabled shaping still keeps the relation-aware route fully off
+- `related_context_is_auxiliary`
+- `related_context_relation_types`
+- `related_memory_items`
+- `related_memory_items_by_episode`
+- `relation_supports_source_episode_count`
+- `relation_supports_auxiliary`
+- low-limit + query-filter behavior when memory items are disabled
 
-This makes the current relation-memory-off low-limit + query-filter interaction
-explicit rather than leaving it to be reconstructed from separate
-memory-items-disabled relation and low-limit/query-filter cases.
-
-### Tests added/updated
-
-The relation-aware coverage now explicitly checks the low-limit,
-query-filtered, memory-items-disabled constrained relation case.
-
-The expected current result is:
-
-- one surviving returned episode
-- no visible relation-derived output
-- no visible relation-scoped grouped entry
-- no visible compatibility relation outputs
-- no visible convenience relation outputs
-- combined focused memory test run passes
-
-### Validation completed
-
-Validated this slice with:
-
-- `pytest tests/memory/test_memory_context_related_items.py`
-- `pytest tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
-
-Result at completion time:
-
-- `8 passed` in `tests/memory/test_memory_context_related_items.py`
-- `47 passed` in the focused combined memory test run
+That is useful because these response shapes are now covered by behavior, and
+the docs should say the same thing the tests already establish.
 
 ---
 
@@ -181,12 +110,14 @@ Result at completion time:
 
 This slice intentionally did **not** do any of the following:
 
+- change `memory_get_context` service behavior
+- add new grouped metadata fields
+- add new retrieval routes
 - broaden relation traversal beyond the current constrained shape
 - include relation types beyond `supports`
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
-- introduce broader graph-backed selection semantics
-- add broader response-shape expansion
+- redesign grouped response structure
 - partially revive relation auxiliary output when memory items are disabled
 - surface relation-scoped groups under `include_memory_items = false`
 - reinterpret the current disabled relation path as a hidden compatibility route
@@ -199,6 +130,19 @@ The current grouped interpretation remains:
 - workspace and relation outputs remain top-level sibling auxiliary grouped
   surfaces where currently emitted
 - broader graph semantics remain intentionally deferred
+
+---
+
+## Validation completed
+
+Validated this docs-consolidation slice with:
+
+- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
+
+Result at completion time:
+
+- `47 passed`
 
 ---
 
@@ -217,20 +161,6 @@ The current grouped interpretation remains:
 - `docs/memory-model.md`
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
-
----
-
-## Validation status
-
-Recent relevant validation includes:
-
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_memory_context_related_items.py`
-
-Recent validation result for this slice:
-
-- `8 passed` in `tests/memory/test_memory_context_related_items.py`
-- `47 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -345,18 +275,19 @@ The current `0.6.0` state should now be read as:
     low-limit shaping
 - workspace auxiliary no-match low-limit shaping now also has explicit behavior
   coverage:
-  - when query filtering removes all returned episodes, `workspace_inherited_auxiliary`
-    may remain as the only visible grouped route
+  - when query filtering removes all returned episodes,
+    `workspace_inherited_auxiliary` may remain as the only visible grouped route
   - low-limit truncation still applies to that surviving auxiliary route
   - only the newest inherited workspace item remains visible
-  - filtered episode diagnostics still remain preserved in `episode_explanations`
+  - filtered episode diagnostics still remain preserved in
+    `episode_explanations`
 
 ---
 
 ## Key conclusion
 
-The current workspace auxiliary no-match low-limit contract docs are now better
-aligned with the existing behavior coverage.
+The current relation memory-off low-limit query-filter contract docs are now
+better aligned with the existing behavior coverage.
 
 The next step should still avoid:
 
@@ -378,12 +309,12 @@ The next useful step should instead be one of:
 ## Explicit next step
 
 ### Next step
-Treat the current workspace auxiliary no-match low-limit reading as sufficiently
-fixed for the current stage.
+Treat the current relation memory-off low-limit query-filter reading as
+documented well enough for the current stage.
 
 ### Recommended target
 Choose the next small behavior or contract step without returning to another tiny
-workspace-auxiliary explainability addition unless a clear behavior gap appears.
+relation-group explainability addition unless a clear behavior gap appears.
 
 ### Recommended focus
 Proceed in this order:

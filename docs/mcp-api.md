@@ -1479,6 +1479,18 @@ That means:
 - in that surviving-primary-path case, low-limit distinct-target truncation still applies to the relation auxiliary route
 - the currently visible relation target set should therefore still be read from the surviving returned episode-side traversal path rather than from a broader pre-filter source set
 - filtered-out episode-side source memory should not currently be read as remaining visible in the constrained relation source set
+- when memory items are disabled, this same constrained relation-aware path remains fully off even if:
+  - query filtering still leaves a surviving returned episode visible
+  - low-limit shaping also applies
+  - constrained `supports` relation data exists in storage
+- in that memory-items-disabled + low-limit + query-filter case:
+  - `related_context_is_auxiliary = false`
+  - `related_context_relation_types = []`
+  - `related_memory_items = []`
+  - `related_memory_items_by_episode = {}`
+  - `relation_supports_source_episode_count = 0`
+  - `relation_supports_auxiliary` remains absent from the visible grouped routes
+  - no grouped, compatibility, or convenience relation output is currently surfaced
 - relation-scoped grouped entries may now also expose:
   - `source_episode_ids`
   - `source_memory_ids`
