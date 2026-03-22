@@ -3,106 +3,206 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-**contract-consolidation** slice for the current
-**relation auxiliary + memory-items-disabled + low-limit + query-filter**
+focused **behavior-coverage** slice for the current
+**workspace-only multi-workflow summary-first + low-limit + query-filter + memory-items-disabled**
 reading in `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
 new response field.
 
-Instead, it consolidated the documented reading for the already-covered
-constrained relation memory-off low-limit query-filter behavior, especially
-where surviving primary-path visibility, disabled relation output, and low-limit
-shaping can be misread.
+Instead, it fixed and validated the current behavior when:
 
-The current docs now more explicitly state that:
+- lookup is `workspace_id` only
+- multiple workflows are associated with the same workspace
+- a query is provided
+- only one episode survives the query
+- a low `limit` is applied
+- memory items are disabled
+- summaries remain enabled
 
-- when `include_memory_items = false`, the constrained relation-aware path
-  remains fully **disabled**
-- this remains true even when query filtering still leaves one surviving
-  returned episode visible
-- this remains true even when low-limit shaping also applies
-- this remains true even when constrained `supports` relation data exists in
-  storage
-- `related_context_is_auxiliary = false`
-- `related_context_relation_types == []`
-- `related_memory_items == []`
-- `related_memory_items_by_episode == {}`
-- `relation_supports_source_episode_count == 0`
-- `relation_supports_auxiliary` remains absent from visible grouped routes
-- no grouped, compatibility, or convenience relation output is surfaced in this
-  shape
+The current behavior is now clearer that:
 
-This means the current relation-memory-off low-limit query-filter
-interpretation is now better anchored in the docs rather than only in recent
-behavior tests.
+- query filtering narrows the visible summary-first child set to the surviving
+  post-filter primary episode set
+- the current visible primary route remains `summary_first`
+- low-limit shaping still applies in this query-filtered workspace-only case
+- the visible child set contains only the surviving episode
+- the visible grouped summary child ids/count follow that same surviving episode
+- the grouped response remains **summary-only**
+- episode-scoped grouped entries are **not** emitted in this response shape
+- `child_episode_groups_emitted = false`
+- `child_episode_groups_emission_reason = "memory_items_disabled"`
+- even in this low-limit + one-surviving-episode shape, the grouped summary
+  `parent_scope_id` still remains `null` for the workspace-only multi-workflow
+  reading
+- `primary_episode_groups_present_after_query_filter = false` does **not**
+  imply auxiliary-only output in this case, because the remaining visible route
+  is still the primary summary-first grouped surface
+- the current `episodes_before_query_filter` reading in this case is **1**
+  rather than a broader pre-filter cross-workflow candidate count of 2
+
+This means the current workspace-only summary-only low-limit query-filter
+interpretation is now better fixed by behavior coverage rather than by
+inference alone.
 
 ---
 
 ## What was completed
 
-### Small relation memory-off low-limit query-filter contract consolidation slice implemented
+### Small workspace-only summary-only low-limit query-filter coverage slice implemented
 
-A focused documentation pass was completed to align the current service-contract
-and MCP API wording around the already-covered constrained relation behavior
-when memory items are disabled under low-limit and query-filter shaping.
+A focused test slice now covers the case where:
 
-The clarified current reading is:
+- `lookup_scope == "workspace"`
+- two workflows are associated with the same workspace
+- two episodes exist
+- only one episode survives the query
+- one episode memory item belongs to the surviving episode
+- one episode memory item belongs to the filtered episode
+- `limit = 1`
+- `include_episodes = true`
+- `include_memory_items = false`
+- `include_summaries = true`
 
-- candidate episodes may first be collected for the resolved workflow
-- lightweight query filtering may narrow that set to one or more surviving
-  returned episodes
-- low-limit shaping may also apply to the response
-- but when `include_memory_items = false`, the current constrained
-  relation-aware slice remains fully disabled
-- no grouped relation output is surfaced
-- no flat compatibility relation output is surfaced
-- no per-episode related compatibility output is surfaced
-- no relation-derived convenience output is surfaced
+The current intended result in that case is:
 
-### Docs updated
+- `resolved_workflow_count == 1`
+- `resolved_workflow_ids == [{surviving_workflow_id}]`
+- `query_filter_applied == true`
+- `episodes_before_query_filter == 1`
+- `matched_episode_count == 1`
+- `episodes_returned == 1`
+- `summary_selection_applied == true`
+- `summary_selection_kind == "episode_summary_first"`
+- `summary_first_has_episode_groups == false`
+- `summary_first_is_summary_only == true`
+- `summary_first_child_episode_count == 1`
+- `summary_first_child_episode_ids == [{surviving_episode_id}]`
+- `primary_episode_groups_present_after_query_filter == false`
+- `auxiliary_only_after_query_filter == false`
+- `retrieval_routes_present == ["summary_first"]`
+- `primary_retrieval_routes_present == ["summary_first"]`
+- `auxiliary_retrieval_routes_present == []`
+- `retrieval_route_group_counts["summary_first"] == 1`
+- `retrieval_route_item_counts["summary_first"] == 1`
+- `memory_context_groups` contains only:
+  - one summary-scoped grouped entry
+- grouped summary `child_episode_ids == [{surviving_episode_id}]`
+- grouped summary `child_episode_count == 1`
+- grouped summary `child_episode_groups_emitted == false`
+- grouped summary
+  `child_episode_groups_emission_reason == "memory_items_disabled"`
+- grouped summary `parent_scope_id == null`
+- `episode_explanations` contains only the surviving matched episode
 
-The current interpretation was clarified in:
+### Test added
 
-- `docs/memory/memory_get_context_service_contract.md`
-- `docs/mcp-api.md`
+Added a new focused regression test covering the combined case:
 
-The updates make explicit that the current docs should **not** be read as if:
+- workspace-only multi-workflow lookup
+- low-limit shaping
+- lightweight query filtering
+- one surviving visible episode
+- summaries enabled
+- memory items disabled
+- summary-first grouped output remains visible only as summary-only output
+- the visible child set still follows the surviving post-filter episode
 
-- low-limit shaping partially revives constrained relation output
-- a surviving query-filtered episode still exposes hidden relation-derived
-  output when memory items are disabled
-- stored `supports` edges are enough to make relation output visible in this
-  shape
-- a hidden compatibility or convenience relation route still exists in this
-  response
+The added test is:
 
-They also make explicit that:
+- `test_memory_get_context_workspace_only_low_limit_query_filter_summary_first_keeps_surviving_child_set_when_memory_items_disabled`
 
-- the current constrained relation-aware slice remains disabled altogether when
-  memory items are disabled
-- query filtering and low-limit shaping do not change that rule
-- visible relation-derived output is absent across grouped, flat, and
-  per-episode compatibility surfaces in this shape
+### Current intended reading of this behavior
+
+Grouped and details consumers should currently understand this case like this:
+
+1. candidate episodes are collected from the workspace-resolved workflow set
+2. query filtering narrows that set to the current surviving visible episode
+3. low-limit shaping still applies in the current response shape
+4. the current primary grouped path remains the surviving summary-first route
+5. grouped summary child metadata follows that same surviving visible episode
+6. because memory items are disabled, no episode-scoped grouped entries are
+   emitted
+7. the grouped response therefore remains summary-only for this response shape
+8. even though only one workflow / episode remains visible in this shape,
+   grouped summary `parent_scope_id` still remains `null` in the current
+   workspace-only multi-workflow reading
+
+This should **not** be read as:
+
+- a broader pre-filter cross-workflow candidate snapshot remaining structurally
+  visible after filtering
+- low-limit shaping being bypassed just because query filtering was applied
+- filtered-out episodes remaining visible in the current grouped child set
+- summary-only output implying that summary-first selection was not primary
+- `primary_episode_groups_present_after_query_filter = false` implying an
+  auxiliary-only response in this case
+- one surviving visible episode implying stronger single-workflow summary
+  parentage
+- grouped summary `parent_scope_id` becoming the surviving workflow id in this
+  case
+- `episodes_before_query_filter` necessarily reflecting a broader two-episode
+  cross-workflow candidate count in this current shape
+
+It should be read as:
+
+- the current constrained workspace-only low-limit summary-first reading
+- with the visible child set taken from the surviving post-query-filter primary
+  path
+- with summary-only grouped shaping caused by `include_memory_items = false`
+- and with conservative grouped summary parentage
+  (`parent_scope_id = null`) preserved in this shape
 
 ### Why this slice is useful
 
-This slice improves continuity and interpretation quality without broadening
-behavior.
+This slice improves confidence in the current summary-first grouped reading
+without broadening behavior.
 
-It reduces ambiguity around the current meaning of:
+It verifies that the current system behaves consistently when:
 
-- `related_context_is_auxiliary`
-- `related_context_relation_types`
-- `related_memory_items`
-- `related_memory_items_by_episode`
-- `relation_supports_source_episode_count`
-- `relation_supports_auxiliary`
-- low-limit + query-filter behavior when memory items are disabled
+- workspace-only lookup spans multiple workflows
+- query filtering narrows the visible primary episode path
+- low-limit shaping is still applied
+- summary-first grouped reading must still follow the surviving visible child
+  set
+- memory-items-disabled shaping still keeps the grouped response summary-only
+- grouped summary parentage remains conservative
 
-That is useful because these response shapes are now covered by behavior, and
-the docs should say the same thing the tests already establish.
+This makes the current workspace-only summary-only low-limit + query-filter
+interaction explicit rather than leaving it to be reconstructed from separate
+workspace-only, low-limit, query-filtered, and memory-items-disabled
+summary-first cases.
+
+### Tests added/updated
+
+The summary-first grouped/details coverage now explicitly checks the
+workspace-only, low-limit, query-filtered, summaries-enabled,
+memory-items-disabled case.
+
+The expected current result is:
+
+- one surviving returned episode
+- one surviving summary-scoped grouped entry
+- no episode-scoped grouped entries
+- grouped summary child ids/count aligned with that same surviving visible
+  episode
+- grouped summary `parent_scope_id == null`
+- grouped summary emittedness metadata reflects
+  `memory_items_disabled`
+- combined focused memory test run passes
+
+### Validation completed
+
+Validated this slice with:
+
+- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
+
+Result at completion time:
+
+- `40 passed` in `tests/memory/test_service_context_details.py`
+- `48 passed` in the focused combined memory test run
 
 ---
 
@@ -110,39 +210,28 @@ the docs should say the same thing the tests already establish.
 
 This slice intentionally did **not** do any of the following:
 
-- change `memory_get_context` service behavior
-- add new grouped metadata fields
-- add new retrieval routes
 - broaden relation traversal beyond the current constrained shape
 - include relation types beyond `supports`
 - change workspace auxiliary positioning
 - change constrained relation auxiliary positioning
-- redesign grouped response structure
-- partially revive relation auxiliary output when memory items are disabled
-- surface relation-scoped groups under `include_memory_items = false`
-- reinterpret the current disabled relation path as a hidden compatibility route
+- introduce broader graph-backed selection semantics
+- add broader response-shape expansion
+- emit episode-scoped grouped entries when memory items are disabled
+- reclassify summary-only grouped output as auxiliary-only
+- make filtered-out workspace-side episodes remain visible in the current
+  grouped child set
+- strengthen grouped summary parentage in the workspace-only multi-workflow
+  reading just because one surviving visible episode remains
+- reclassify workspace-only grouped output as single-workflow in this case
 
 The current grouped interpretation remains:
 
 - `memory_context_groups` is still the primary grouped hierarchy-aware surface
 - summary-first remains one important grouped selection route within that
-  surface when episode-oriented shaping is active
+  surface
 - workspace and relation outputs remain top-level sibling auxiliary grouped
   surfaces where currently emitted
 - broader graph semantics remain intentionally deferred
-
----
-
-## Validation completed
-
-Validated this docs-consolidation slice with:
-
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_memory_context_related_items.py`
-
-Result at completion time:
-
-- `47 passed`
 
 ---
 
@@ -161,6 +250,20 @@ Result at completion time:
 - `docs/memory-model.md`
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
+
+---
+
+## Validation status
+
+Recent relevant validation includes:
+
+- `pytest tests/memory/test_service_context_details.py`
+- `pytest tests/memory/test_memory_context_related_items.py`
+
+Recent validation result for this slice:
+
+- `40 passed` in `tests/memory/test_service_context_details.py`
+- `48 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -275,8 +378,8 @@ The current `0.6.0` state should now be read as:
     low-limit shaping
 - workspace auxiliary no-match low-limit shaping now also has explicit behavior
   coverage:
-  - when query filtering removes all returned episodes,
-    `workspace_inherited_auxiliary` may remain as the only visible grouped route
+  - when query filtering removes all returned episodes, `workspace_inherited_auxiliary`
+    may remain as the only visible grouped route
   - low-limit truncation still applies to that surviving auxiliary route
   - only the newest inherited workspace item remains visible
   - filtered episode diagnostics still remain preserved in
