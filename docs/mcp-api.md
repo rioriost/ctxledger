@@ -1422,6 +1422,7 @@ That means:
 - when low-limit shaping also applies in that no-episode-match case, that current reading still operates over the actually emitted auxiliary route:
   - workspace auxiliary visibility may survive after query filtering removes the primary episode path
   - low-limit truncation still applies to that surviving auxiliary route rather than being bypassed by the no-match case
+  - surviving relation-derived output should not currently be inferred merely because one of the still-visible workspace items had previously also been reachable through a filtered-out `supports` relation path
 - top-level details consumers should currently read `primary_episode_groups_present_after_query_filter` as:
   - `false` when no primary episode-scoped grouped output remains after query filtering
   - `true` when primary episode-scoped grouped output still remains after query filtering
@@ -1477,6 +1478,7 @@ That means:
   - `related_memory_items_by_episode = {}`
   - `relation_supports_auxiliary` is absent from the visible grouped routes
   - workspace auxiliary grouped output may still remain visible where currently supported
+  - workspace-visible items should not currently be re-read as surviving relation-derived output merely because a `supports` edge had existed before filtering
 - when query filtering still leaves one or more returned episodes visible, this same constrained relation auxiliary surface may still remain visible alongside the surviving primary episode path
 - in that surviving-primary-path case, low-limit distinct-target truncation still applies to the relation auxiliary route
 - the currently visible relation target set should therefore still be read from the surviving returned episode-side traversal path rather than from a broader pre-filter source set

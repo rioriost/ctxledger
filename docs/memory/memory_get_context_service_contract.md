@@ -584,6 +584,9 @@ conservatively as:
   - `relation_supports_auxiliary` is absent from the visible grouped routes
   - workspace auxiliary grouped output may still remain visible where currently
     supported
+  - workspace-visible items should not currently be re-read as surviving
+    relation-derived output merely because a `supports` edge had existed before
+    filtering
 - when query filtering still leaves one or more returned episodes visible, this same
   constrained relation auxiliary surface may still remain visible alongside the
   surviving primary episode path
@@ -695,6 +698,9 @@ not as:
 - inherited workspace items driving primary episode selection
 - inherited workspace items participating in the lightweight episode query filter
 - low-limit shaping being bypassed just because all episodes were filtered out
+- surviving relation-derived output merely because one of the still-visible
+  workspace items had previously also been reachable through a filtered-out
+  `supports` relation path
 
 This distinction matters for the current grouped reading because auxiliary
 workspace visibility remains a sibling auxiliary surface, not part of the
