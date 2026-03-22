@@ -4,7 +4,7 @@
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
 focused **behavior-coverage** slice for the current
-**workspace-only multi-workflow summary-first + low-limit + query-filter + memory-items-disabled**
+**ticket-only multi-workflow summary-first + low-limit + query-filter + memory-items-disabled**
 reading in `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
@@ -13,8 +13,8 @@ new response field.
 
 Instead, it fixed and validated the current behavior when:
 
-- lookup is `workspace_id` only
-- multiple workflows are associated with the same workspace
+- lookup is `ticket_id` only
+- multiple workflows are associated with the same ticket
 - a query is provided
 - only one episode survives the query
 - a low `limit` is applied
@@ -26,7 +26,7 @@ The current behavior is now clearer that:
 - query filtering narrows the visible summary-first child set to the surviving
   post-filter primary episode set
 - the current visible primary route remains `summary_first`
-- low-limit shaping still applies in this query-filtered workspace-only case
+- low-limit shaping still applies in this query-filtered ticket-only case
 - the visible child set contains only the surviving episode
 - the visible grouped summary child ids/count follow that same surviving episode
 - the grouped response remains **summary-only**
@@ -34,7 +34,7 @@ The current behavior is now clearer that:
 - `child_episode_groups_emitted = false`
 - `child_episode_groups_emission_reason = "memory_items_disabled"`
 - even in this low-limit + one-surviving-episode shape, the grouped summary
-  `parent_scope_id` still remains `null` for the workspace-only multi-workflow
+  `parent_scope_id` still remains `null` for the ticket-only multi-workflow
   reading
 - `primary_episode_groups_present_after_query_filter = false` does **not**
   imply auxiliary-only output in this case, because the remaining visible route
@@ -42,7 +42,7 @@ The current behavior is now clearer that:
 - the current `episodes_before_query_filter` reading in this case is **1**
   rather than a broader pre-filter cross-workflow candidate count of 2
 
-This means the current workspace-only summary-only low-limit query-filter
+This means the current ticket-only summary-only low-limit query-filter
 interpretation is now better fixed by behavior coverage rather than by
 inference alone.
 
@@ -50,12 +50,12 @@ inference alone.
 
 ## What was completed
 
-### Small workspace-only summary-only low-limit query-filter coverage slice implemented
+### Small ticket-only summary-only low-limit query-filter coverage slice implemented
 
 A focused test slice now covers the case where:
 
-- `lookup_scope == "workspace"`
-- two workflows are associated with the same workspace
+- `lookup_scope == "ticket"`
+- two workflows are associated with the same ticket
 - two episodes exist
 - only one episode survives the query
 - one episode memory item belongs to the surviving episode
@@ -100,7 +100,7 @@ The current intended result in that case is:
 
 Added a new focused regression test covering the combined case:
 
-- workspace-only multi-workflow lookup
+- ticket-only multi-workflow lookup
 - low-limit shaping
 - lightweight query filtering
 - one surviving visible episode
@@ -111,13 +111,13 @@ Added a new focused regression test covering the combined case:
 
 The added test is:
 
-- `test_memory_get_context_workspace_only_low_limit_query_filter_summary_first_keeps_surviving_child_set_when_memory_items_disabled`
+- `test_memory_get_context_ticket_only_summary_only_low_limit_query_filter_keeps_surviving_child_set`
 
 ### Current intended reading of this behavior
 
 Grouped and details consumers should currently understand this case like this:
 
-1. candidate episodes are collected from the workspace-resolved workflow set
+1. candidate episodes are collected from the ticket-resolved workflow set
 2. query filtering narrows that set to the current surviving visible episode
 3. low-limit shaping still applies in the current response shape
 4. the current primary grouped path remains the surviving summary-first route
@@ -127,7 +127,7 @@ Grouped and details consumers should currently understand this case like this:
 7. the grouped response therefore remains summary-only for this response shape
 8. even though only one workflow / episode remains visible in this shape,
    grouped summary `parent_scope_id` still remains `null` in the current
-   workspace-only multi-workflow reading
+   ticket-only multi-workflow reading
 
 This should **not** be read as:
 
@@ -147,7 +147,7 @@ This should **not** be read as:
 
 It should be read as:
 
-- the current constrained workspace-only low-limit summary-first reading
+- the current constrained ticket-only low-limit summary-first reading
 - with the visible child set taken from the surviving post-query-filter primary
   path
 - with summary-only grouped shaping caused by `include_memory_items = false`
@@ -161,7 +161,7 @@ without broadening behavior.
 
 It verifies that the current system behaves consistently when:
 
-- workspace-only lookup spans multiple workflows
+- ticket-only lookup spans multiple workflows
 - query filtering narrows the visible primary episode path
 - low-limit shaping is still applied
 - summary-first grouped reading must still follow the surviving visible child
@@ -169,16 +169,15 @@ It verifies that the current system behaves consistently when:
 - memory-items-disabled shaping still keeps the grouped response summary-only
 - grouped summary parentage remains conservative
 
-This makes the current workspace-only summary-only low-limit + query-filter
+This makes the current ticket-only summary-only low-limit + query-filter
 interaction explicit rather than leaving it to be reconstructed from separate
-workspace-only, low-limit, query-filtered, and memory-items-disabled
-summary-first cases.
+ticket-only, low-limit, query-filtered, and memory-items-disabled summary-first
+cases.
 
 ### Tests added/updated
 
-The summary-first grouped/details coverage now explicitly checks the
-workspace-only, low-limit, query-filtered, summaries-enabled,
-memory-items-disabled case.
+The summary-first grouped/details coverage now explicitly checks the ticket-only,
+low-limit, query-filtered, summaries-enabled, memory-items-disabled case.
 
 The expected current result is:
 
@@ -201,8 +200,8 @@ Validated this slice with:
 
 Result at completion time:
 
-- `40 passed` in `tests/memory/test_service_context_details.py`
-- `48 passed` in the focused combined memory test run
+- `41 passed` in `tests/memory/test_service_context_details.py`
+- `49 passed` in the focused combined memory test run
 
 ---
 
@@ -218,11 +217,11 @@ This slice intentionally did **not** do any of the following:
 - add broader response-shape expansion
 - emit episode-scoped grouped entries when memory items are disabled
 - reclassify summary-only grouped output as auxiliary-only
-- make filtered-out workspace-side episodes remain visible in the current
-  grouped child set
-- strengthen grouped summary parentage in the workspace-only multi-workflow
+- make filtered-out ticket-side episodes remain visible in the current grouped
+  child set
+- strengthen grouped summary parentage in the ticket-only multi-workflow
   reading just because one surviving visible episode remains
-- reclassify workspace-only grouped output as single-workflow in this case
+- reclassify ticket-only grouped output as single-workflow in this case
 
 The current grouped interpretation remains:
 
@@ -262,8 +261,8 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `40 passed` in `tests/memory/test_service_context_details.py`
-- `48 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
+- `41 passed` in `tests/memory/test_service_context_details.py`
+- `49 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
