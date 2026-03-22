@@ -168,6 +168,11 @@ In particular, it should currently be read as tracking episode-scoped grouped
 presence after query filtering, not whether some other primary grouped surface
 such as a surviving summary-only summary-first route remains visible.
 
+This narrower reading also remains in effect when low-limit shaping applies:
+`primary_episode_groups_present_after_query_filter = false` may still coexist
+with a surviving primary summary-first grouped route in summary-only form when
+memory items are disabled.
+
 The current top-level details surface should also expose:
 
 - `auxiliary_only_after_query_filter`
@@ -296,6 +301,12 @@ readings:
   the grouped summary entry should still be read from the surviving post-filter
   primary episode set even though no episode-scoped grouped entries were emitted.
 
+  That same current reading still applies under low-limit shaping:
+  when query filtering and a low `limit` leave one surviving visible episode,
+  the grouped summary entry and the top-level
+  `summary_first_child_episode_*` metadata should still be read from that same
+  surviving post-filter primary episode set.
+
 The grouped summary entry now also makes summary-group child cardinality explicit
 through:
 
@@ -362,6 +373,11 @@ In the current query-filtered summary-only case, `"memory_items_disabled"`
 therefore explains response shaping, not a different surviving-child-set rule
 and not an auxiliary-only interpretation.
 
+This remains the current reading even when low-limit shaping also applies:
+low-limit shaping may reduce the visible response to one surviving episode, but
+it does not currently change the meaning of the summary-only child set or turn
+that summary-only grouped route into an auxiliary-only route.
+
 This emittedness-reason metadata is intentionally narrow and current-state
 specific. It does not introduce a new retrieval route, a broader selection
 policy, or a stronger parentage claim. It only makes the current emittedness
@@ -423,6 +439,11 @@ emitted, but that should not be read as a different child-set rule.
 In that summary-only shape, the grouped summary entry and the top-level
 `summary_first_child_episode_*` metadata should still be read from the same
 surviving post-filter primary episode set.
+
+When low-limit shaping also applies, the current reading is still the same:
+the visible summary-only child set should currently be read from the surviving
+post-filter primary episode set that remains after the present low-limit shaping,
+not from a broader pre-filter episode snapshot.
 
 When `include_episodes = false`, this episode-scoped grouped layer is also not
 emitted, but the current meaning is different again:

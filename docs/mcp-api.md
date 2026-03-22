@@ -1376,6 +1376,7 @@ That means:
   - when `summary_first_is_summary_only = true`, grouped consumers should read the current primary grouped chain as summary-only for that response shape
   - the summary-only case is expected in narrow shaping scenarios such as `include_memory_items = false`
   - in query-filtered summary-only cases, that summary-only grouped reading should still currently be read as the surviving primary summary-first route rather than as an auxiliary fallback
+  - when low-limit shaping also applies, that same summary-only grouped reading should still currently be read from the surviving post-filter primary episode set rather than from a broader pre-filter episode snapshot
   - `child_episode_count` remains meaningful in both summary-only and summary-plus-episode cases because it describes selected child episode cardinality, not whether episode-scoped grouped entries were emitted
   - `child_episode_ordering = "returned_episode_order"` remains meaningful in both summary-only and summary-plus-episode cases because it describes the ordering semantics of the summary group's child episode references, not whether episode-scoped grouped entries were emitted
   - `child_episode_groups_emitted` remains meaningful in both summary-only and summary-plus-episode cases because it describes whether corresponding episode-scoped grouped entries were emitted for the current response shape, not how many child episodes the summary group represents
@@ -1383,6 +1384,7 @@ That means:
   - at the current stage, grouped consumers should read:
     - `child_episode_groups_emission_reason = "memory_items_enabled"` when corresponding episode-scoped grouped entries are emitted because memory items are enabled for the current response shape
     - `child_episode_groups_emission_reason = "memory_items_disabled"` when corresponding episode-scoped grouped entries are not emitted because memory items are disabled for the current response shape
+  - when low-limit shaping also applies, `child_episode_groups_emission_reason = "memory_items_disabled"` should still currently be read as response-shape emittedness only, not as a different child-set rule and not as an auxiliary-only interpretation
   - the current primary summary/episode explainability surface should now be treated as explicit enough for the current stage; the next slices should prefer real behavior choices or higher-level contract consolidation over continuing to add more narrow summary-group explanation fields
   - when grouped output is present in this current stage, ordering should be treated as a small compatibility commitment for grouped consumers rather than as incidental formatting:
     - the summary-oriented group appears first when present
@@ -1428,6 +1430,10 @@ That means:
     - summary-only primary grouped output remains visible, or
     - neither the primary episode path nor any auxiliary grouped path remained visible
 - in other words, `primary_episode_groups_present_after_query_filter = false` does not currently imply auxiliary-only output by itself, because summary-first primary grouped output may still remain visible as summary-only when memory items are disabled
+- this remains the current reading when low-limit shaping also applies:
+  - low-limit shaping may reduce the visible response to one surviving episode
+  - `primary_episode_groups_present_after_query_filter = false` may still coexist with that surviving primary summary-first grouped route in summary-only form
+  - `auxiliary_only_after_query_filter = false` remains the correct current reading in that shape
 - when `include_episodes = false`, the current episode-less shaping path is narrower again:
   - query-filter activity is not currently surfaced as active
   - summary-first grouped output is not currently surfaced
