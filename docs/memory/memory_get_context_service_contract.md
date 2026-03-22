@@ -276,6 +276,10 @@ primary chain.
 - that in multi-workflow ticket- or workspace-resolved summary-first cases, the
   grouped summary entry may still conservatively keep `parent_scope_id = null`
   even when the surviving visible child set narrows to a single returned episode
+- that this same conservative `parent_scope_id = null` reading still applies in
+  summary-only low-limit query-filtered multi-workflow cases, where the visible
+  child set has already collapsed to one surviving episode but the grouped
+  summary route should not currently be re-read as single-workflow parentage
 
 This should currently be read as a good enough stopping point for the current
 primary-chain explainability loop, not as an invitation to keep adding narrowly
@@ -312,6 +316,12 @@ readings:
   the grouped summary entry and the top-level
   `summary_first_child_episode_*` metadata should still be read from that same
   surviving post-filter primary episode set.
+
+  In multi-workflow workspace- or ticket-resolved cases, that current low-limit
+  summary-only reading still does not strengthen grouped summary parentage:
+  even when one visible episode remains after the combined low-limit and
+  query-filter shaping, the grouped summary `parent_scope_id` should still
+  currently be read as `null`.
 
 The grouped summary entry now also makes summary-group child cardinality explicit
 through:
@@ -383,6 +393,12 @@ This remains the current reading even when low-limit shaping also applies:
 low-limit shaping may reduce the visible response to one surviving episode, but
 it does not currently change the meaning of the summary-only child set or turn
 that summary-only grouped route into an auxiliary-only route.
+
+In multi-workflow workspace- or ticket-resolved cases, this also means the
+combined low-limit + query-filter + memory-items-disabled shape should not be
+read as upgrading grouped summary parentage merely because one visible episode
+remains:
+the grouped summary `parent_scope_id` should still currently remain `null`.
 
 This emittedness-reason metadata is intentionally narrow and current-state
 specific. It does not introduce a new retrieval route, a broader selection
