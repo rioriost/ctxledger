@@ -4,8 +4,8 @@
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
 focused **behavior-coverage** slice for the current
-**workspace-only multi-workflow low-limit + query-filter + summary-first**
-reading in `memory_get_context`.
+**summary-first + low-limit + query-filter + memory-items-disabled** reading in
+`memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
@@ -13,128 +13,129 @@ new response field.
 
 Instead, it fixed and validated the current behavior when:
 
-- lookup is `workspace_id` only
-- multiple workflows are associated with the same workspace
+- one workflow is resolved
 - a query is provided
 - only one episode survives the query
 - a low `limit` is applied
-- memory items are enabled
-- summaries are enabled
+- memory items are disabled
+- summaries remain enabled
 
 The current behavior is now clearer that:
 
-- query filtering narrows the visible summary-first child set to the surviving
-  post-filter primary episode set
-- the current visible primary route remains `summary_first`
-- low-limit shaping still applies in this query-filtered workspace-only case
+- query filtering still narrows the visible summary-first child set to the
+  **surviving post-filter primary episode set**
+- low-limit shaping still applies in this query-filtered summary-first case
 - the visible child set contains only the surviving episode
-- the visible grouped summary child ids/count follow that same surviving episode
-- the visible grouped episode output contains only that surviving episode
-- even in this low-limit + one-surviving-episode shape, the grouped summary
-  `parent_scope_id` still remains `null` for the workspace-only multi-workflow
-  reading
+- top-level `summary_first_child_episode_*` metadata follows that surviving
+  episode
+- grouped summary `child_episode_*` metadata follows that same surviving episode
+- the grouped response remains **summary-only**
+- episode-scoped grouped entries are **not** emitted in this response shape
+- `child_episode_groups_emitted = false`
+- `child_episode_groups_emission_reason = "memory_items_disabled"`
+- `primary_episode_groups_present_after_query_filter = false` does **not**
+  imply auxiliary-only output in this case, because the remaining visible route
+  is still the primary summary-first grouped surface
 - the current `episodes_before_query_filter` reading in this case is **1**
-  rather than a broader pre-filter cross-workflow candidate count of 2
+  rather than a broader pre-filter episode candidate count of 2
 
-This means the current workspace-only low-limit query-filter interpretation is
-now better fixed by behavior coverage rather than by inference alone.
+This means the current summary-only low-limit query-filter interpretation is now
+better fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small workspace-only low-limit query-filter coverage slice implemented
+### Small summary-only low-limit query-filter coverage slice implemented
 
 A focused test slice now covers the case where:
 
-- `lookup_scope == "workspace"`
-- two workflows are associated with the same workspace
+- one workflow is resolved
 - two episodes exist
 - only one episode survives the query
-- one direct memory item belongs to the surviving episode
-- one direct memory item belongs to the filtered episode
+- one episode memory item belongs to the surviving episode
+- one episode memory item belongs to the filtered episode
 - `limit = 1`
 - `include_episodes = true`
-- `include_memory_items = true`
+- `include_memory_items = false`
 - `include_summaries = true`
 
 The current intended result in that case is:
 
-- `resolved_workflow_count == 1`
-- `resolved_workflow_ids == [{surviving_workflow_id}]`
 - `query_filter_applied == true`
 - `episodes_before_query_filter == 1`
 - `matched_episode_count == 1`
 - `episodes_returned == 1`
 - `summary_selection_applied == true`
 - `summary_selection_kind == "episode_summary_first"`
-- `summary_first_has_episode_groups == true`
-- `summary_first_is_summary_only == false`
+- `summary_first_has_episode_groups == false`
+- `summary_first_is_summary_only == true`
 - `summary_first_child_episode_count == 1`
 - `summary_first_child_episode_ids == [{surviving_episode_id}]`
+- `primary_episode_groups_present_after_query_filter == false`
+- `auxiliary_only_after_query_filter == false`
 - `retrieval_routes_present == ["summary_first"]`
 - `primary_retrieval_routes_present == ["summary_first"]`
 - `auxiliary_retrieval_routes_present == []`
 - `retrieval_route_group_counts["summary_first"] == 1`
 - `retrieval_route_item_counts["summary_first"] == 1`
-- `memory_context_groups` contains:
+- `memory_context_groups` contains only:
   - one summary-scoped grouped entry
-  - one surviving episode-scoped grouped entry
 - grouped summary `child_episode_ids == [{surviving_episode_id}]`
 - grouped summary `child_episode_count == 1`
-- grouped summary `parent_scope_id == null`
+- grouped summary `child_episode_groups_emitted == false`
+- grouped summary
+  `child_episode_groups_emission_reason == "memory_items_disabled"`
 - `episode_explanations` contains only the surviving matched episode
 
 ### Test added
 
 Added a new focused regression test covering the combined case:
 
-- workspace-only multi-workflow lookup
 - low-limit shaping
 - lightweight query filtering
 - one surviving visible episode
 - summaries enabled
-- memory items enabled
-- summary-first grouped output remains visible and follows the surviving
-  post-filter child set
+- memory items disabled
+- summary-first grouped output remains visible only as summary-only output
+- the visible child set still follows the surviving post-filter episode
 
 The added test is:
 
-- `test_memory_get_context_workspace_only_low_limit_query_filter_summary_first_keeps_surviving_child_set`
+- `test_memory_get_context_low_limit_query_filter_keeps_summary_first_child_set_when_memory_items_disabled`
 
 ### Current intended reading of this behavior
 
 Grouped and details consumers should currently understand this case like this:
 
-1. candidate episodes are collected from the workspace-resolved workflow set
+1. candidate episodes are collected for the resolved workflow
 2. query filtering narrows that set to the current surviving visible episode
 3. low-limit shaping still applies in the current response shape
 4. the current primary grouped path remains the surviving summary-first route
 5. grouped summary child metadata follows that same surviving visible episode
-6. grouped episode output follows that same surviving visible episode
-7. even though only one workflow / episode remains visible in this shape,
-   grouped summary `parent_scope_id` still remains `null` in the current
-   workspace-only multi-workflow reading
+6. because memory items are disabled, no episode-scoped grouped entries are
+   emitted
+7. the grouped response therefore remains summary-only for this response shape
 
 This should **not** be read as:
 
-- a broader pre-filter cross-workflow candidate snapshot remaining structurally
-  visible after filtering
+- a broader pre-filter episode snapshot remaining structurally visible after
+  filtering
 - low-limit shaping being bypassed just because query filtering was applied
-- one surviving visible episode implying stronger single-workflow summary
-  parentage
-- grouped summary `parent_scope_id` becoming the surviving workflow id in this
-  case
+- filtered-out episodes remaining visible in the current grouped child set
+- summary-only output implying that summary-first selection was not primary
+- `primary_episode_groups_present_after_query_filter = false` implying an
+  auxiliary-only response in this case
 - `episodes_before_query_filter` necessarily reflecting a broader two-episode
-  cross-workflow candidate count in this current shape
+  candidate count in this current shape
 
 It should be read as:
 
-- the current constrained workspace-only low-limit summary-first reading
+- the current constrained low-limit summary-first reading
 - with the visible child set taken from the surviving post-query-filter primary
   path
-- and with conservative grouped summary parentage
-  (`parent_scope_id = null`) preserved in this shape
+- and with summary-only grouped shaping preserved because
+  `include_memory_items = false`
 
 ### Why this slice is useful
 
@@ -143,31 +144,30 @@ without broadening behavior.
 
 It verifies that the current system behaves consistently when:
 
-- workspace-only lookup spans multiple workflows
-- query filtering narrows the visible primary episode path
 - low-limit shaping is still applied
+- query filtering narrows the visible primary episode path
 - summary-first grouped reading must still follow the surviving visible child
   set
-- grouped summary parentage remains conservative
+- memory-items-disabled shaping still keeps the grouped response summary-only
 
-This makes the current workspace-only low-limit + query-filter interaction
-explicit rather than leaving it to be reconstructed from separate low-limit
-workspace-only and query-filtered summary-first cases.
+This makes the current summary-only low-limit + query-filter interaction explicit
+rather than leaving it to be reconstructed from separate low-limit,
+query-filtered, and memory-items-disabled summary-first cases.
 
 ### Tests added/updated
 
-The summary-first grouped/details coverage now explicitly checks the
-workspace-only, low-limit, query-filtered, summaries-enabled,
-memory-items-enabled case.
+The summary-first grouped/details coverage now explicitly checks the low-limit,
+query-filtered, summaries-enabled, memory-items-disabled case.
 
 The expected current result is:
 
 - one surviving returned episode
-- one surviving summary-first grouped summary entry
-- one surviving summary-first episode entry
+- one surviving summary-scoped grouped entry
+- no episode-scoped grouped entries
 - grouped summary child ids/count aligned with that same surviving visible
   episode
-- grouped summary `parent_scope_id == null`
+- grouped summary emittedness metadata reflects
+  `memory_items_disabled`
 - combined focused memory test run passes
 
 ### Validation completed
@@ -179,8 +179,8 @@ Validated this slice with:
 
 Result at completion time:
 
-- `36 passed` in `tests/memory/test_service_context_details.py`
-- `43 passed` in the focused combined memory test run
+- `37 passed` in `tests/memory/test_service_context_details.py`
+- `44 passed` in the focused combined memory test run
 
 ---
 
@@ -194,11 +194,10 @@ This slice intentionally did **not** do any of the following:
 - change constrained relation auxiliary positioning
 - introduce broader graph-backed selection semantics
 - add broader response-shape expansion
-- make filtered-out workspace-side episodes remain visible in the current
-  grouped child set
-- strengthen grouped summary parentage in the workspace-only multi-workflow
-  reading just because one surviving visible episode remains
-- reclassify workspace-only grouped output as single-workflow in this case
+- emit episode-scoped grouped entries when memory items are disabled
+- reclassify summary-only grouped output as auxiliary-only
+- make filtered-out episodes remain visible in the current grouped child set
+- strengthen summary-first parentage claims beyond the current response shape
 
 The current grouped interpretation remains:
 
@@ -238,8 +237,8 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `36 passed` in `tests/memory/test_service_context_details.py`
-- `43 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
+- `37 passed` in `tests/memory/test_service_context_details.py`
+- `44 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
