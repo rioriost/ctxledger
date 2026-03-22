@@ -4,8 +4,8 @@
 
 Continued the `0.6.0` hierarchical memory retrieval work and completed a small
 focused **behavior-coverage** slice for the current
-**ticket-only multi-workflow low-limit + query-filter + summary-first** reading
-in `memory_get_context`.
+**workspace-only multi-workflow low-limit + query-filter + summary-first**
+reading in `memory_get_context`.
 
 This loop did **not** change implementation behavior, widen relation traversal,
 change auxiliary-group positioning, introduce broader graph semantics, or add a
@@ -13,8 +13,8 @@ new response field.
 
 Instead, it fixed and validated the current behavior when:
 
-- lookup is `ticket_id` only
-- multiple workflows are associated with the same ticket
+- lookup is `workspace_id` only
+- multiple workflows are associated with the same workspace
 - a query is provided
 - only one episode survives the query
 - a low `limit` is applied
@@ -26,29 +26,29 @@ The current behavior is now clearer that:
 - query filtering narrows the visible summary-first child set to the surviving
   post-filter primary episode set
 - the current visible primary route remains `summary_first`
-- low-limit shaping still applies in this query-filtered ticket-only case
+- low-limit shaping still applies in this query-filtered workspace-only case
 - the visible child set contains only the surviving episode
 - the visible grouped summary child ids/count follow that same surviving episode
 - the visible grouped episode output contains only that surviving episode
 - even in this low-limit + one-surviving-episode shape, the grouped summary
-  `parent_scope_id` still remains `null` for the ticket-only multi-workflow
+  `parent_scope_id` still remains `null` for the workspace-only multi-workflow
   reading
 - the current `episodes_before_query_filter` reading in this case is **1**
   rather than a broader pre-filter cross-workflow candidate count of 2
 
-This means the current ticket-only low-limit query-filter interpretation is now
-better fixed by behavior coverage rather than by inference alone.
+This means the current workspace-only low-limit query-filter interpretation is
+now better fixed by behavior coverage rather than by inference alone.
 
 ---
 
 ## What was completed
 
-### Small ticket-only low-limit query-filter coverage slice implemented
+### Small workspace-only low-limit query-filter coverage slice implemented
 
 A focused test slice now covers the case where:
 
-- `lookup_scope == "ticket"`
-- two workflows are associated with the same ticket
+- `lookup_scope == "workspace"`
+- two workflows are associated with the same workspace
 - two episodes exist
 - only one episode survives the query
 - one direct memory item belongs to the surviving episode
@@ -89,7 +89,7 @@ The current intended result in that case is:
 
 Added a new focused regression test covering the combined case:
 
-- ticket-only multi-workflow lookup
+- workspace-only multi-workflow lookup
 - low-limit shaping
 - lightweight query filtering
 - one surviving visible episode
@@ -100,13 +100,13 @@ Added a new focused regression test covering the combined case:
 
 The added test is:
 
-- `test_memory_get_context_ticket_only_low_limit_query_filter_summary_first_keeps_surviving_child_set`
+- `test_memory_get_context_workspace_only_low_limit_query_filter_summary_first_keeps_surviving_child_set`
 
 ### Current intended reading of this behavior
 
 Grouped and details consumers should currently understand this case like this:
 
-1. candidate episodes are collected from the ticket-resolved workflow set
+1. candidate episodes are collected from the workspace-resolved workflow set
 2. query filtering narrows that set to the current surviving visible episode
 3. low-limit shaping still applies in the current response shape
 4. the current primary grouped path remains the surviving summary-first route
@@ -114,7 +114,7 @@ Grouped and details consumers should currently understand this case like this:
 6. grouped episode output follows that same surviving visible episode
 7. even though only one workflow / episode remains visible in this shape,
    grouped summary `parent_scope_id` still remains `null` in the current
-   ticket-only multi-workflow reading
+   workspace-only multi-workflow reading
 
 This should **not** be read as:
 
@@ -130,7 +130,7 @@ This should **not** be read as:
 
 It should be read as:
 
-- the current constrained ticket-only low-limit summary-first reading
+- the current constrained workspace-only low-limit summary-first reading
 - with the visible child set taken from the surviving post-query-filter primary
   path
 - and with conservative grouped summary parentage
@@ -143,21 +143,22 @@ without broadening behavior.
 
 It verifies that the current system behaves consistently when:
 
-- ticket-only lookup spans multiple workflows
+- workspace-only lookup spans multiple workflows
 - query filtering narrows the visible primary episode path
 - low-limit shaping is still applied
 - summary-first grouped reading must still follow the surviving visible child
   set
 - grouped summary parentage remains conservative
 
-This makes the current ticket-only low-limit + query-filter interaction explicit
-rather than leaving it to be reconstructed from separate low-limit ticket-only
-and query-filtered summary-first cases.
+This makes the current workspace-only low-limit + query-filter interaction
+explicit rather than leaving it to be reconstructed from separate low-limit
+workspace-only and query-filtered summary-first cases.
 
 ### Tests added/updated
 
-The summary-first grouped/details coverage now explicitly checks the ticket-only,
-low-limit, query-filtered, summaries-enabled, memory-items-enabled case.
+The summary-first grouped/details coverage now explicitly checks the
+workspace-only, low-limit, query-filtered, summaries-enabled,
+memory-items-enabled case.
 
 The expected current result is:
 
@@ -178,8 +179,8 @@ Validated this slice with:
 
 Result at completion time:
 
-- `35 passed` in `tests/memory/test_service_context_details.py`
-- `42 passed` in the focused combined memory test run
+- `36 passed` in `tests/memory/test_service_context_details.py`
+- `43 passed` in the focused combined memory test run
 
 ---
 
@@ -193,11 +194,11 @@ This slice intentionally did **not** do any of the following:
 - change constrained relation auxiliary positioning
 - introduce broader graph-backed selection semantics
 - add broader response-shape expansion
-- make filtered-out ticket-side episodes remain visible in the current grouped
-  child set
-- strengthen grouped summary parentage in the ticket-only multi-workflow
+- make filtered-out workspace-side episodes remain visible in the current
+  grouped child set
+- strengthen grouped summary parentage in the workspace-only multi-workflow
   reading just because one surviving visible episode remains
-- reclassify ticket-only grouped output as single-workflow in this case
+- reclassify workspace-only grouped output as single-workflow in this case
 
 The current grouped interpretation remains:
 
@@ -237,8 +238,8 @@ Recent relevant validation includes:
 
 Recent validation result for this slice:
 
-- `35 passed` in `tests/memory/test_service_context_details.py`
-- `42 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
+- `36 passed` in `tests/memory/test_service_context_details.py`
+- `43 passed` in `tests/memory/test_service_context_details.py tests/memory/test_memory_context_related_items.py`
 
 ---
 
@@ -337,7 +338,7 @@ The current `0.6.0` state should now be read as:
   - the auxiliary route remains `workspace_inherited_auxiliary`
   - inherited workspace truncation still applies
   - only the newest inherited workspace item remains visible under the current
-  low-limit shaping
+    low-limit shaping
   - the filtered-out episode memory item does not remain visible on the current
     primary path
 - low-limit constrained relation auxiliary shaping also still applies under the
@@ -353,13 +354,23 @@ The current `0.6.0` state should now be read as:
     a contributing relation source
   - `episodes_before_query_filter` currently reads as `1` in this response
     shape
+- low-limit ticket-only multi-workflow summary-first shaping also still applies
+  under the current query-filtered surviving-primary-path case
+- in that low-limit ticket/query case:
+  - the primary route remains `summary_first`
+  - the visible child set collapses to the surviving post-filter episode
+  - grouped summary child ids/count follow that surviving episode
+  - grouped episode output follows that surviving episode
+  - grouped summary `parent_scope_id` still remains `null`
+  - `episodes_before_query_filter` currently reads as `1` in this response
+    shape
 
 ---
 
 ## Key conclusion
 
-The current relation auxiliary limit + query-filter contract docs are now better
-aligned with the existing behavior coverage.
+The current workspace-only low-limit query-filter behavior slice is now covered
+well enough for the current stage.
 
 The next step should still avoid:
 
@@ -375,32 +386,3 @@ The next useful step should instead be one of:
 2. a broader contract-consolidation / interpretation step in another part of the
    current response model
 3. only later, broader relation/group behavior
-
----
-
-## Explicit next step
-
-### Next step
-Treat the current relation auxiliary limit + query-filter reading as documented
-well enough for the current stage.
-
-### Recommended target
-Choose the next small behavior or contract step without returning to another tiny
-relation-group explainability addition unless a clear behavior gap appears.
-
-### Recommended focus
-Proceed in this order:
-
-1. preserve the current primary summary/episode interpretation as stable enough
-   for the current stage when episode-oriented shaping is active
-2. preserve workspace/relation auxiliary groups as sibling auxiliaries where they
-   are currently emitted
-3. preserve the constrained relation-aware scope:
-   - one hop
-   - `supports` only
-   - current auxiliary-group placement
-4. prefer either:
-   - one genuinely different grouped-selection behavior slice, or
-   - one contract/documentation consolidation step elsewhere in the current
-     surface
-5. keep the next change semantically small and easy to validate
