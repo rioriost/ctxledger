@@ -1716,6 +1716,43 @@ class PostgresMemoryRelationRepository:
             for row in rows
         )
 
+    def list_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+    ) -> tuple[MemoryRelationRecord, ...]:
+        if not source_memory_ids:
+            return ()
+
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_relation_id,
+                    source_memory_id,
+                    target_memory_id,
+                    relation_type,
+                    metadata_json,
+                    created_at
+                FROM memory_relations
+                WHERE source_memory_id = ANY(%s)
+                ORDER BY created_at DESC, memory_relation_id DESC
+                """,
+                (list(source_memory_ids),),
+            )
+            rows = cur.fetchall()
+
+        return tuple(
+            MemoryRelationRecord(
+                memory_relation_id=_to_uuid(row["memory_relation_id"]),
+                source_memory_id=_to_uuid(row["source_memory_id"]),
+                target_memory_id=_to_uuid(row["target_memory_id"]),
+                relation_type=str(row["relation_type"]),
+                metadata=_json_loads(row["metadata_json"]),
+                created_at=_to_datetime(row["created_at"]),
+            )
+            for row in rows
+        )
+
     def list_by_target_memory_id(
         self,
         target_memory_id: UUID,

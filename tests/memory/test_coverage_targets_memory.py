@@ -1044,6 +1044,64 @@ def test_in_memory_memory_relation_repository_lists_matches_by_source_memory_ids
     assert repository.list_by_source_memory_ids(()) == ()
 
 
+def test_in_memory_memory_relation_repository_lists_matches_by_source_memory_ids_in_recency_order() -> (
+    None
+):
+    repository = InMemoryMemoryRelationRepository()
+    source_memory_id = uuid4()
+    other_source_memory_id = uuid4()
+    unrelated_source_memory_id = uuid4()
+    target_memory_id = uuid4()
+    created_at = datetime(2024, 2, 1, tzinfo=UTC)
+
+    older_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=target_memory_id,
+        relation_type="supports",
+        created_at=created_at.replace(hour=1),
+    )
+    newer_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=uuid4(),
+        relation_type="supports",
+        created_at=created_at.replace(hour=2),
+    )
+    other_source_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=other_source_memory_id,
+        target_memory_id=uuid4(),
+        relation_type="references",
+        created_at=created_at.replace(hour=3),
+    )
+    unrelated_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=unrelated_source_memory_id,
+        target_memory_id=uuid4(),
+        relation_type="related_to",
+        created_at=created_at.replace(hour=4),
+    )
+
+    repository.create(older_relation)
+    repository.create(newer_relation)
+    repository.create(other_source_relation)
+    repository.create(unrelated_relation)
+
+    assert repository.list_by_source_memory_ids(
+        (
+            source_memory_id,
+            other_source_memory_id,
+        )
+    ) == (
+        other_source_relation,
+        newer_relation,
+        older_relation,
+    )
+
+    assert repository.list_by_source_memory_ids(()) == ()
+
+
 def test_memory_service_records_episodes_and_returns_search_results() -> None:
     workflow_id = uuid4()
     attempt_id = uuid4()

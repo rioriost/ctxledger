@@ -362,6 +362,60 @@ def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guar
         ),
     )
 
+    other_source_memory_id = uuid4()
+    newer_relation_row = {
+        "memory_relation_id": uuid4(),
+        "source_memory_id": source_memory_id,
+        "target_memory_id": uuid4(),
+        "relation_type": "supports",
+        "metadata_json": {"kind": "newer"},
+        "created_at": datetime(2024, 1, 13, tzinfo=UTC),
+    }
+    older_other_source_relation_row = {
+        "memory_relation_id": uuid4(),
+        "source_memory_id": other_source_memory_id,
+        "target_memory_id": uuid4(),
+        "relation_type": "references",
+        "metadata_json": {"kind": "older-other-source"},
+        "created_at": datetime(2024, 1, 11, tzinfo=UTC),
+    }
+
+    connection.fetchall_results.append(
+        [
+            newer_relation_row,
+            relation_row,
+            older_other_source_relation_row,
+        ]
+    )
+    by_sources = relation_repo.list_by_source_memory_ids((source_memory_id, other_source_memory_id))
+    assert by_sources == (
+        MemoryRelationRecord(
+            memory_relation_id=newer_relation_row["memory_relation_id"],
+            source_memory_id=source_memory_id,
+            target_memory_id=newer_relation_row["target_memory_id"],
+            relation_type="supports",
+            metadata={"kind": "newer"},
+            created_at=newer_relation_row["created_at"],
+        ),
+        MemoryRelationRecord(
+            memory_relation_id=relation_row["memory_relation_id"],
+            source_memory_id=source_memory_id,
+            target_memory_id=target_memory_id,
+            relation_type="related_to",
+            metadata={"score": 0.8},
+            created_at=relation_row["created_at"],
+        ),
+        MemoryRelationRecord(
+            memory_relation_id=older_other_source_relation_row["memory_relation_id"],
+            source_memory_id=other_source_memory_id,
+            target_memory_id=older_other_source_relation_row["target_memory_id"],
+            relation_type="references",
+            metadata={"kind": "older-other-source"},
+            created_at=older_other_source_relation_row["created_at"],
+        ),
+    )
+    assert relation_repo.list_by_source_memory_ids(()) == ()
+
     with pytest.raises(
         PersistenceError,
         match="Unsupported datetime field 'bad_field' for workflow_instances",

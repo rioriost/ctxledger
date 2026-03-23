@@ -48,6 +48,21 @@ class InMemoryMemoryRelationRepository(MemoryRelationRepository):
         matches.sort(key=lambda relation: relation.created_at, reverse=True)
         return tuple(matches)
 
+    def list_by_source_memory_ids(
+        self,
+        source_memory_ids,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        if not source_memory_ids:
+            return ()
+
+        matches = [
+            relation
+            for relation in self._relations
+            if relation.source_memory_id in source_memory_ids
+        ]
+        matches.sort(key=lambda relation: relation.created_at, reverse=True)
+        return tuple(matches)
+
     def list_by_target_memory_id(
         self,
         target_memory_id,
