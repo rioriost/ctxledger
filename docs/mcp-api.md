@@ -1435,9 +1435,11 @@ That means:
   - it means the primary episode path is gone while auxiliary context is still present
 - this field should currently be read alongside `primary_episode_groups_present_after_query_filter`:
   - `primary_episode_groups_present_after_query_filter = false` and `auxiliary_only_after_query_filter = true` means auxiliary-only survival after query filtering
+    - in the current no-match reading, this commonly corresponds to `all_episodes_filtered_out_by_query = true` plus a still-visible auxiliary grouped route such as surviving workspace inherited context
   - `primary_episode_groups_present_after_query_filter = false` and `auxiliary_only_after_query_filter = false` means either:
     - summary-only primary grouped output remains visible, or
     - neither the primary episode path nor any auxiliary grouped path remained visible
+    - in particular, this current `false` / `false` combination should not be re-read as auxiliary-only merely because no primary episode-scoped grouped output remains visible; it may instead mean the primary summary-first route still survives in summary-only form
 - in other words, `primary_episode_groups_present_after_query_filter = false` does not currently imply auxiliary-only output by itself, because summary-first primary grouped output may still remain visible as summary-only when memory items are disabled
 - this remains the current reading when low-limit shaping also applies:
   - low-limit shaping may reduce the visible response to one surviving episode
@@ -1447,6 +1449,14 @@ That means:
   - query-filter activity is not currently surfaced as active
   - summary-first grouped output is not currently surfaced
   - direct episode-scoped grouped output is not currently surfaced
+  - episode-oriented top-level details fields tied to that hidden primary path should also not currently be inferred as present in inactive form; in the current episode-less shape they may be absent from `details` rather than surfaced with falsey placeholder values
+  - this current episode-less absence reading includes fields such as:
+    - `summary_first_has_episode_groups`
+    - `summary_first_is_summary_only`
+    - `summary_first_child_episode_count`
+    - `summary_first_child_episode_ids`
+    - `primary_episode_groups_present_after_query_filter`
+    - `auxiliary_only_after_query_filter`
   - the remaining visible grouped route may therefore currently be auxiliary-only even when a query is present and summaries are enabled
   - when low-limit shaping also applies in that episode-less path, low-limit truncation still applies to the actually emitted auxiliary grouped route rather than reviving hidden episode-oriented primary output
 - when query filtering removes all returned episodes but `include_episodes = true`, the current no-match workspace auxiliary reading is different from that episode-less path:

@@ -643,5 +643,7 @@ Avoid:
 2. define the minimal hierarchical memory entity/relationship model
 3. decide the first AGE-backed graph slice
 4. identify the first `memory_get_context` hierarchical retrieval improvement
+   - for the current stage, prefer a clearly framed small behavior choice over another narrow metadata addition
+   - the current episode-less `include_episodes = false` choice is to keep that path narrow rather than surfacing a limited summary-first grouped view
 5. add focused tests before expanding scope
 6. defer Mnemis comparison and alignment decisions to `0.7.0`

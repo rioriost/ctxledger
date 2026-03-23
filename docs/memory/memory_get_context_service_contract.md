@@ -189,6 +189,22 @@ because episode-scoped grouped output is absent after query filtering if the
 remaining visible grouped route is still the primary summary-first route in its
 summary-only shape.
 
+Read together with
+`primary_episode_groups_present_after_query_filter`, the current post-filter
+interpretation is:
+
+- `primary_episode_groups_present_after_query_filter = false` and
+  `auxiliary_only_after_query_filter = false`
+  - can still mean that a summary-only primary grouped route remains visible
+  - should not be collapsed into the same reading as an auxiliary-only no-match
+    response
+
+- `primary_episode_groups_present_after_query_filter = false` and
+  `auxiliary_only_after_query_filter = true`
+  - should be read as the current auxiliary-only post-filter shape
+  - at the current stage, this is the clearer no-primary-path / surviving-
+    auxiliary-route reading
+
 When `include_episodes = false`, the current episode-less shaping path is
 narrower still:
 the response does not currently surface summary-first grouped output, direct
@@ -198,11 +214,33 @@ In that shape, this field should be read from the currently surfaced grouped
 response only, not from a hypothetical summary-first route that would have been
 visible under episode-oriented shaping.
 
+At the current stage, that narrower episode-less reading should also be taken
+literally at the top-level details layer:
+episode-oriented explanation fields that belong to the episode-shaped primary
+path are not currently surfaced there merely as falsey placeholders.
+
+In particular, consumers should not currently expect episode-less responses to
+surface fields such as:
+
+- `summary_first_has_episode_groups`
+- `summary_first_is_summary_only`
+- `summary_first_child_episode_count`
+- `summary_first_child_episode_ids`
+- `primary_episode_groups_present_after_query_filter`
+- `auxiliary_only_after_query_filter`
+
+as present-but-inactive top-level details metadata.
+Instead, the current episode-less contract should be read from the grouped routes
+and top-level details fields that are actually emitted for that narrower shape.
+
 This same current reading still applies when low-limit shaping also applies to an
 episode-less response:
 low-limit shaping may still truncate the actually emitted auxiliary grouped
 output, but it does not currently restore visible summary-first grouped output,
 direct episode-scoped grouped output, or summary-selection metadata.
+That same narrower reading also means low-limit episode-less responses should not
+currently be re-read as surfacing the episode-oriented top-level explanation
+fields listed above merely in inactive form.
 
 ---
 

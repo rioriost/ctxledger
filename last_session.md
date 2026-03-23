@@ -2,106 +2,257 @@
 
 ## Summary
 
-Continued the `0.6.0` hierarchical memory retrieval work and completed a small
-**contract-consolidation** slice for the current
-**workspace/ticket multi-workflow no-match shaping** reading in
-`memory_get_context`.
+Continued the `0.6.0` hierarchical memory retrieval work with a narrow
+**grouped-path distinction consolidation** slice, and then framed the next
+credible **real behavior choice** for the current stage.
 
-This loop did **not** change implementation behavior, widen relation traversal,
-change auxiliary-group positioning, introduce broader graph semantics, or add a
-new response field.
+This follow-up did **not** change service behavior, widen relation traversal,
+add new metadata fields, redesign grouped output, or broaden graph semantics.
 
-Instead, it consolidated the documented reading for the already-covered
-workspace-only and ticket-only multi-workflow no-match behavior, especially
-where no-match auxiliary survival, grouped-route disappearance, and stored-memory
-presence can be misread.
+Instead, it tightened the current contract and handoff reading around three
+nearby but importantly different response shapes in `memory_get_context`:
 
-The current docs now more explicitly state that:
+1. **summary-only primary grouped path**
+2. **auxiliary-only no-match path after query filtering**
+3. **episode-less `include_episodes = false` shaping path**
 
-- when query filtering removes all returned episodes, workspace auxiliary
-  visibility may still survive in **some** current shapes
-- but this should **not** be generalized into a stronger invariant that every
-  workspace- or ticket-resolved no-match shape preserves some visible auxiliary
-  grouped route
-- some workspace-only or ticket-only multi-workflow no-match shapes may instead
-  collapse to **no visible grouped routes at all**
-- this can remain true even when workflow-linked memory still exists in storage
-- in those shapes, the response should be read from the grouped routes and
-  grouped outputs that are actually emitted rather than from a hidden auxiliary
-  route inferred only from stored-memory presence
+The main outcome is that these shapes are now more explicitly separated across
+tests and docs, so the current `0.6.0` reading is less likely to collapse them
+into one another.
 
-This means the current workspace/ticket multi-workflow no-match interpretation
-is now better anchored in the docs rather than only in recent behavior tests.
+In addition, the next plausible behavior change was explicitly framed rather
+than implemented:
+
+- whether `include_episodes = false` should remain a strictly narrower
+  episode-less shaping path
+- or whether it should later surface a limited summary-first grouped view
+
+That choice was intentionally recorded as a decision point rather than folded
+into the current contract by accident.
 
 ---
 
 ## What was completed
 
-### Small workspace/ticket no-match contract consolidation slice implemented
+### 1. Added a focused test for summary-only primary path vs episode-less shaping
 
-A focused documentation pass was completed to align the current service-contract
-and MCP API wording around the already-covered multi-workflow no-surviving-episode
-behavior.
+A new test was added in:
 
-The clarified current reading is:
+- `tests/memory/test_service_context_details.py`
 
-- candidate episodes may first be collected from one or more resolved workflows
-- lightweight query filtering may remove all returned episodes from the visible
-  primary path
-- in some current shapes, inherited workspace auxiliary context may still remain
-  visible
-- but in some workspace-only or ticket-only multi-workflow no-match shapes, the
-  visible grouped routes may collapse to **none**
-- in those cases, `all_episodes_filtered_out_by_query` and
-  `episode_explanations` may still preserve the filtered-episode diagnostics
-  even though neither primary nor auxiliary grouped output remains visible
+It locks in the distinction between:
 
-### Docs updated
+- a **query-filtered summary-only primary grouped path**
+  - `include_episodes = true`
+  - `include_memory_items = false`
+  - `include_summaries = true`
+  - summary-first remains visible
+  - `summary_first_is_summary_only = true`
 
-The current interpretation was clarified in:
+and:
+
+- the narrower **episode-less shaping path**
+  - `include_episodes = false`
+  - the response does not currently surface summary-first grouped output
+  - the response should be read only from actually emitted grouped output and
+    top-level details
+  - several episode-oriented explanation fields are currently **absent** rather
+    than present with falsey placeholder values
+
+That test now makes explicit that summary-only primary-path shaping is **not**
+the same as suppressing visible episode-oriented primary output entirely.
+
+### 2. Added a focused test for summary-only primary path vs auxiliary-only no-match path
+
+Another focused test was added in:
+
+- `tests/memory/test_service_context_details.py`
+
+It locks in the distinction between:
+
+- a **summary-only surviving primary route**
+  - `query_filter_applied = true`
+  - `all_episodes_filtered_out_by_query = false`
+  - `primary_episode_groups_present_after_query_filter = false`
+  - `auxiliary_only_after_query_filter = false`
+  - `summary_first` still remains visible as the primary grouped route
+
+and:
+
+- an **auxiliary-only no-match route**
+  - `query_filter_applied = true`
+  - `all_episodes_filtered_out_by_query = true`
+  - `primary_episode_groups_present_after_query_filter = false`
+  - `auxiliary_only_after_query_filter = true`
+  - a workspace auxiliary grouped route survives as the visible response
+
+This means the current contract is now more explicitly test-backed for the fact
+that:
+
+- lack of primary **episode-scoped** grouped output does **not** by itself imply
+  auxiliary-only survival
+- the current `false / false` reading for:
+  - `primary_episode_groups_present_after_query_filter`
+  - `auxiliary_only_after_query_filter`
+  can still mean a surviving **summary-only primary route**
+- the current `false / true` reading is the clearer
+  **no-primary-path / surviving-auxiliary-route** shape
+
+### 3. Clarified episode-less absence semantics in the service contract docs
+
+Updated:
+
+- `docs/memory/memory_get_context_service_contract.md`
+
+The docs now more explicitly state that in the current
+`include_episodes = false` episode-less path, certain episode-oriented
+top-level `details` fields are currently **absent** rather than merely inactive.
+
+The clarified current reading is that consumers should not expect episode-less
+responses to surface fields such as:
+
+- `summary_first_has_episode_groups`
+- `summary_first_is_summary_only`
+- `summary_first_child_episode_count`
+- `summary_first_child_episode_ids`
+- `primary_episode_groups_present_after_query_filter`
+- `auxiliary_only_after_query_filter`
+
+as present-but-inactive placeholders.
+
+Instead, the current episode-less contract should be read from the grouped
+routes and top-level details fields that are actually emitted for that narrower
+shape.
+
+### 4. Clarified the same episode-less absence semantics in the MCP API docs
+
+Updated:
+
+- `docs/mcp-api.md`
+
+The same current interpretation was aligned there so the MCP-facing docs now
+also make explicit that the episode-less path should not be read as silently
+retaining hidden episode-oriented explanation fields in falsey form.
+
+### 5. Clarified the `false / false` vs `false / true` post-filter reading in the docs
+
+Updated:
 
 - `docs/memory/memory_get_context_service_contract.md`
 - `docs/mcp-api.md`
 
-The updates make explicit that the current docs should **not** be read as if:
+The docs now more explicitly distinguish:
 
-- workspace-scoped lookup always preserves inherited auxiliary grouped
-  visibility after all episodes are filtered out
-- ticket-scoped lookup always preserves some grouped auxiliary visibility after
-  all episodes are filtered out
-- stored inherited workspace items are equivalent to emitted auxiliary grouped
-  output in every no-match workflow-expansion shape
-- hidden auxiliary grouped output should be inferred from storage presence even
-  when no grouped route is actually emitted
+- `primary_episode_groups_present_after_query_filter = false`
+- `auxiliary_only_after_query_filter = false`
 
-They also make explicit that:
+from:
 
-- no-match auxiliary survival is current-shape-dependent behavior
-- some no-match workflow-expansion shapes may still preserve visible workspace
-  auxiliary grouped output
-- some workspace-only or ticket-only multi-workflow no-match shapes may instead
-  emit **no visible grouped routes**
-- consumers should therefore read the current no-match response from the grouped
-  routes and grouped outputs that are actually emitted
+- `primary_episode_groups_present_after_query_filter = false`
+- `auxiliary_only_after_query_filter = true`
 
-### Why this slice is useful
+The current reading now states more plainly that:
+
+- `false / false` can still mean a surviving **summary-only primary grouped
+  route**
+- `false / true` is the clearer **auxiliary-only post-filter** shape and in the
+  current no-match reading commonly corresponds to:
+  - `all_episodes_filtered_out_by_query = true`
+  - plus a still-visible auxiliary grouped route such as workspace inherited
+    context
+
+### 6. Aligned the broader memory model doc with these distinctions
+
+Updated:
+
+- `docs/memory-model.md`
+
+That doc now explicitly states that the current all-filtered auxiliary reading
+is **not** the same as either:
+
+- the current **summary-only primary grouped reading**
+- the narrower **episode-less `include_episodes = false` shaping path**
+
+This improves continuity across the higher-level model doc and the more detailed
+service/MCP contract docs.
+
+### 7. Framed and chose the next real behavior direction
+
+Added:
+
+- `docs/memory/episode_less_summary_first_decision.md`
+
+That note captures the next meaningful behavior question for the current stage:
+
+- should `include_episodes = false` remain fully narrow
+- or should episode-less shaping begin surfacing a limited summary-first grouped
+  view in some cases
+
+The chosen current direction is now:
+
+- **Option A**
+- keep the current narrow episode-less contract
+- do not surface limited summary-first grouped output in episode-less mode for
+  the current `0.6.0` stage
+- revisit only if a clearer product or retrieval-semantics reason emerges in a
+  later slice
+
+This is useful because it prevents the next session from rediscovering the same
+question informally and accidentally turning a real behavior choice into an
+incremental contract drift.
+
+---
+
+## Why this slice is useful
 
 This slice improves continuity and interpretation quality without broadening
 behavior.
 
-It reduces ambiguity around the current meaning of:
+It reduces ambiguity around three easy-to-confuse shapes and also makes the next
+behavior-choice frontier explicit instead of implicit:
 
-- `all_episodes_filtered_out_by_query`
-- `retrieval_routes_present`
-- `primary_retrieval_routes_present`
-- `auxiliary_retrieval_routes_present`
-- `workspace_inherited_auxiliary`
-- workflow-expansion no-match shaping
-- the difference between stored memory presence and actually emitted grouped
-  output
+### A. Summary-only primary grouped route
 
-That is useful because these response shapes are now covered by behavior, and
-the docs should say the same thing the tests already establish.
+Current reading:
+
+- summary-first remains visible
+- the primary route is still present in summary-only form
+- episode-scoped grouped output is absent
+- this should **not** currently be re-read as auxiliary-only output
+
+### B. Auxiliary-only no-match route
+
+Current reading:
+
+- query filtering removed all returned episodes
+- `all_episodes_filtered_out_by_query = true`
+- the primary path is gone
+- some auxiliary grouped route may still remain visible in some current shapes
+- when that happens, `auxiliary_only_after_query_filter = true` is the clearer
+  current signal of the surviving auxiliary-only reading
+
+### C. Episode-less shaping route
+
+Current reading:
+
+- `include_episodes = false`
+- the response does not currently surface summary-first grouped output or direct
+  episode-scoped grouped output
+- several episode-oriented top-level explanation fields may be absent entirely
+- consumers should read only what is actually emitted for that shape
+
+These distinctions matter because the current `0.6.0` behavior is now nuanced
+enough that “no visible episode groups” can arise in multiple ways, and the docs
+should not let those ways collapse into one generic reading.
+
+Separately, the new decision note is useful because it identifies a real next
+behavior choice and records the current chosen direction explicitly:
+
+- limited summary-first surfacing in episode-less mode is **not** being adopted
+  for the current `0.6.0` stage
+
+That choice now has an explicit Option A decision rather than living as an
+unspoken future direction.
 
 ---
 
@@ -109,51 +260,45 @@ the docs should say the same thing the tests already establish.
 
 This slice intentionally did **not** do any of the following:
 
-- change `memory_get_context` service behavior
+- change `memory_get_context` implementation behavior
 - add new grouped metadata fields
-- add new retrieval routes
-- broaden relation traversal beyond the current constrained shape
-- include relation types beyond `supports`
-- change workspace auxiliary positioning globally
-- change constrained relation auxiliary positioning
-- redesign grouped response structure
-- force workspace auxiliary visibility to survive in every no-match workflow
-  expansion shape
-- revive summary-first grouped output after all episodes are filtered out
-- revive relation-derived grouped output after all episodes are filtered out
-
-The current grouped interpretation remains:
-
-- `memory_context_groups` is still the primary grouped hierarchy-aware surface
-- summary-first remains one important grouped selection route within that
-  surface when episode-oriented shaping is active
-- workspace and relation outputs remain top-level sibling auxiliary grouped
-  surfaces where currently emitted
-- broader graph semantics remain intentionally deferred
+- change grouped ordering behavior
+- broaden relation traversal
+- expand relation types beyond constrained `supports`
+- redesign grouped output structure
+- change auxiliary-group positioning
+- widen summary semantics into ranking or planning behavior
+- change the current meaning of `memory_context_groups` as the primary grouped
+  hierarchy-aware surface
+- force every no-match shape to preserve auxiliary visibility
+- make episode-less shaping surface hidden episode-oriented metadata in falsey
+  form
+- introduce broader graph semantics
 
 ---
 
 ## Validation completed
 
-Validated this docs-consolidation slice with:
+Validated this grouped-path distinction consolidation slice with:
 
-- `pytest tests/memory/test_service_context_details.py`
-- `pytest tests/memory/test_memory_context_related_items.py`
+- `pytest tests/memory/test_service_context_details.py -q`
+- `pytest tests/memory/test_memory_context_related_items.py -q`
 
 Result at completion time:
 
-- `51 passed`
+- `45 passed`
+- `8 passed`
 
 ---
 
 ## Files most relevant to the current state
 
-### Core implementation
-- `src/ctxledger/memory/service_core.py`
-
 ### Tests
 - `tests/memory/test_service_context_details.py`
 - `tests/memory/test_memory_context_related_items.py`
+
+### Core implementation
+- `src/ctxledger/memory/service_core.py`
 
 ### Design and contract docs
 - `docs/memory/memory_get_context_service_contract.md`
@@ -161,6 +306,7 @@ Result at completion time:
 - `docs/memory-model.md`
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
+- `docs/memory/episode_less_summary_first_decision.md`
 
 ---
 
@@ -168,132 +314,114 @@ Result at completion time:
 
 The current `0.6.0` state should now be read as:
 
-- still relational-first
-- still constrained on relation-aware behavior
-- still not broader graph traversal
-- still not Apache AGE behavior expansion yet
 - `memory_context_groups` remains the primary grouped hierarchy-aware surface
-- primary summary/episode explainability remains explicit enough for the current
-  stage when episode-oriented shaping is active
-- summary-first query-filter surviving-child-set behavior is explicitly covered
-  by behavior and aligned in the docs
-- grouped summary child ids/count should currently be read from the surviving
-  post-filter primary set rather than from the broader pre-filter candidate set
-- top-level summary-first child ids/count should currently be read from that
-  same surviving post-filter primary set
-- grouped episode output should currently follow that same surviving post-filter
-  primary set when memory items are enabled
-- when memory items are disabled, the grouped response may remain summary-only
-  while still using that same surviving post-filter child set
+- flat and compatibility fields remain useful, but should currently be read as
+  derived, compatibility-oriented, or convenience views
+- summary-first remains an important grouped primary selection route
 - `summary_first_has_episode_groups = false` and
   `summary_first_is_summary_only = true` should currently be read as shaping of
-  the primary grouped route rather than as loss of summary-first selection
-- `primary_episode_groups_present_after_query_filter = false` can currently mean
-  either:
+  a still-visible **primary** grouped route rather than loss of summary-first
+  selection
+- `primary_episode_groups_present_after_query_filter = false` currently tracks
+  absence of **episode-scoped** grouped output after query filtering, not
+  whether every primary grouped route has disappeared
+- `auxiliary_only_after_query_filter = true` should currently be read as the
+  clearer signal of a no-primary-path / surviving-auxiliary-route post-filter
+  shape
+- `primary_episode_groups_present_after_query_filter = false` and
+  `auxiliary_only_after_query_filter = false` can currently mean either:
   - summary-only primary grouped output remains visible, or
-  - no primary episode-scoped grouped output remains visible at all
-- `auxiliary_only_after_query_filter = false` does not currently guarantee that
-  some grouped route is still visible
-- workspace-only multi-workflow summary-first grouped summaries still keep
-  `parent_scope_id = null`
-- ticket-only multi-workflow summary-first grouped summaries also keep
-  `parent_scope_id = null`
-- the same conservative `parent_scope_id = null` reading still applies in
-  summary-only low-limit query-filtered multi-workflow workspace/ticket cases
-- narrowing to one surviving visible episode does not currently imply stronger
-  grouped summary parentage
-- inherited workspace-scoped memory remains auxiliary support context
-- inherited workspace-scoped memory does not participate in the lightweight
-  episode query filter
-- inherited workspace-scoped memory does not drive primary episode selection
-- inherited workspace context may remain visible even when no episode survives
-  query filtering in some current shapes
-- but workspace-only multi-workflow no-match shaping is not currently guaranteed
-  to preserve that auxiliary visibility
-- ticket-only multi-workflow no-match shaping is also not currently guaranteed
-  to preserve any visible grouped route
-- constrained relation `supports` auxiliary grouped output remains explicit
-  enough to correlate back to returned episode-side context
-- constrained relation auxiliary aggregation across multiple returned source
-  episodes is explicitly covered by behavior and aligned in the docs
-- constrained relation auxiliary `memory_items` ordering is currently best read
-  as first-seen distinct target order under the present source-side traversal
-- shared constrained targets are currently aggregated once in the relation group
-- multi-source constrained contribution should currently be read through
-  `source_episode_ids` and `source_memory_ids`
-- relation-scoped grouped output remains the primary structured grouped
-  relation-aware surface
-- flat `related_memory_items` remains a compatibility surface
-- `related_memory_items_by_episode` remains a compatibility-oriented per-episode
-  mirror
-- episode-group embedded `related_memory_items` remains a convenience and local
-  inspection surface
-- constrained relation auxiliary low-limit truncation is currently best read as
-  truncation over that first-seen distinct-target sequence
-- constrained relation auxiliary output is currently disabled when
-  `include_memory_items = false`
-- constrained relation auxiliary does not currently survive when query filtering
-  removes all returned episodes
-- in that no-match relation case:
-  - `related_context_is_auxiliary` remains `false`
-  - `related_context_relation_types == []`
-  - `related_memory_items == []`
-  - `related_memory_items_by_episode == {}`
-  - no relation-scoped grouped output remains visible
-  - workspace auxiliary grouped output may still remain visible where currently
-    supported
-  - workspace-visible items should not thereby be re-read as surviving
-    relation-derived output
-- constrained relation auxiliary remains fully disabled when memory items are
-  disabled, even when:
-  - query filtering leaves one surviving episode visible
-  - low-limit shaping also applies
-  - underlying `supports` relation data exists
-- in that memory-items-disabled + low-limit + query-filter relation case:
-  - `related_context_is_auxiliary == false`
-  - `related_context_relation_types == []`
-  - `related_memory_items == []`
-  - `related_memory_items_by_episode == {}`
-  - `relation_supports_source_episode_count == 0`
-  - `relation_supports_auxiliary` remains absent from visible grouped routes
-- `include_episodes = false` now has explicit shaping coverage for:
-  - the baseline episode-less branch
-  - the query-present / summaries-enabled episode-less branch
-  - the low-limit, query-present, summaries-enabled episode-less branch
-- in that query-present episode-less branch:
-  - `query_filter_applied` is not currently surfaced as active
-  - summary-first grouped output is not currently surfaced
-  - direct episode-scoped grouped output is not currently surfaced
-  - summary-selection metadata is not currently surfaced
-  - visible grouped output should be read from the actually emitted response
-    only
-  - low-limit shaping still applies to the actually emitted workspace auxiliary
-    route
-- workspace auxiliary no-match low-limit shaping may still leave
-  `workspace_inherited_auxiliary` as the only visible grouped route
-- low-limit truncation still applies to that surviving workspace auxiliary route
-- still-visible workspace items should not currently be reclassified as
-  surviving relation-derived output merely because they had previously also been
-  reachable through filtered-out `supports` paths
+  - neither the primary episode path nor any auxiliary grouped path remained
+    visible
+- therefore `auxiliary_only_after_query_filter = false` does **not** currently
+  guarantee that some grouped route is still visible
+- when `include_episodes = false`, the current episode-less shaping path should
+  be read from actually emitted grouped routes and top-level details only
+- in that episode-less path, episode-oriented top-level explanation fields may
+  currently be **absent** rather than present-but-false
+- when query filtering removes all returned episodes but `include_episodes = true`,
+  the all-filtered no-match path is different from the episode-less path
+- the current all-filtered no-match reading is also different from the current
+  summary-only primary grouped reading
+- some no-match shapes may still preserve visible workspace auxiliary grouped
+  output
+- some workspace-only or ticket-only multi-workflow no-match shapes may instead
+  emit **no visible grouped routes**
+- consumers should therefore continue to read the current response from the
+  grouped routes and grouped outputs that are actually emitted rather than from
+  hidden routes inferred from storage presence
+- `include_episodes = false` should still currently be read as a deliberately
+  narrower shaping path rather than as a summary-only primary-path variant
+- introducing limited summary-first grouped surfacing into that episode-less path
+  was considered and is **not** part of the accepted current contract for the
+  present `0.6.0` stage
 
 ---
 
 ## Key conclusion
 
-The current ticket-only no-match shaping behavior slice is now covered well
-enough for the current stage.
+The recent grouped-path distinction slice is now covered well enough for the
+current stage.
 
 The next step should still avoid:
 
-- another hyper-narrow metadata addition without a clear missing behavior
+- adding another hyper-narrow metadata field
 - broad relation expansion
 - graph-first behavior expansion
-- auxiliary-group nesting without stronger retrieval semantics
-- generic cleanup for its own sake
+- auxiliary nesting without stronger retrieval semantics
+- generic cleanup with no contract value
 
 The next useful step should instead be one of:
 
-1. a genuinely different grouped-selection behavior choice
-2. a broader contract-consolidation / interpretation step in another part of the
+1. another genuinely different grouped-selection behavior choice
+   - the previously framed episode-less summary-first candidate is currently
+     resolved in favor of Option A, so the next candidate should be sought
+     elsewhere
+2. a broader contract-consolidation / interpretation step elsewhere in the
    current response model
 3. only later, broader relation/group behavior
+
+---
+
+## Close summary for the current memory retrieval contract area
+
+The current `0.6.0` memory retrieval contract area should now be treated as
+**closed for the current stage**.
+
+That close reading includes:
+
+- `memory_context_groups` remains the primary grouped hierarchy-aware surface
+- flat fields remain useful, but should currently be read as derived,
+  compatibility-oriented, or convenience views
+- summary-only primary grouped output, auxiliary-only no-match output, and the
+  narrower episode-less `include_episodes = false` path are now explicitly
+  separated in tests and docs
+- the current episode-less path remains on **Option A**
+  - it stays narrow
+  - it does not surface limited summary-first grouped output
+- summaries-enabled shapes that actually return summaries are already read
+  through the current summary-first selection rule
+- grouped ordering is now test-backed in representative current shapes
+- constrained relation auxiliary reading is also sufficiently stabilized for the
+  current stage, including:
+  - `supports` only
+  - one-hop only
+  - auxiliary-only role
+  - first-seen distinct target ordering
+  - low-limit truncation over that ordering
+  - shared-target aggregation
+  - source linkage through `source_episode_ids` and `source_memory_ids`
+
+What remains intentionally deferred from this closed area includes:
+
+- limited summary-first surfacing in episode-less mode
+- broader relation traversal
+- additional relation types
+- stronger auxiliary nesting semantics
+- graph-first or AGE-backed behavior expansion
+
+This means the next step should no longer mine this same contract area for
+another hyper-local refinement.
+The next meaningful step should instead come from a **different** behavior
+choice, a broader interpretation pass elsewhere, or a later relation/graph
+phase.

@@ -555,6 +555,21 @@ visibility after the primary episode path was emptied by query filtering, rather
 evidence that inherited workspace items are part of the lightweight query filter or
 that they drive primary episode selection.
 
+That current all-filtered auxiliary reading should also be kept distinct from two
+other nearby response shapes.
+
+First, it is not the same as the current summary-only primary grouped reading.
+When summary-first selection remains visible but no episode-scoped grouped output is
+emitted, the response may still preserve a primary grouped route in summary-only
+form. In that shape, the absence of primary episode-scoped grouped output should not
+be re-read as auxiliary-only survival.
+
+Second, it is not the same as the narrower `include_episodes = false` episode-less
+shaping path. In that episode-less shape, the response should currently be read from
+the grouped routes and top-level details fields that are actually emitted, rather
+than from a hidden episode-oriented primary path inferred from other query-filter
+cases.
+
 At the current implementation stage, when summaries are enabled and returned,
 `summary_selection_applied = true` and
 `summary_selection_kind = "episode_summary_first"` should be read as a minimal

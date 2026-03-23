@@ -1718,6 +1718,11 @@ def test_memory_get_context_ignores_non_supports_relations_in_related_memory_ite
         "workspace_inherited_auxiliary",
         "relation_supports_auxiliary",
     ]
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "episode",
+        "workspace",
+        "relation",
+    ]
     assert response.details["memory_context_groups"][1]["memory_items"] == [
         {
             "memory_id": str(workspace_root_item.memory_id),
