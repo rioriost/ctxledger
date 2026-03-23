@@ -1175,37 +1175,138 @@ The template records, for each candidate:
 This is useful because it turns the image-selection step into a more explicit
 decision workflow rather than an informal image swap.
 
-### 38. Updated cross-references around image selection and provisioning
+### 38. Added initial AGE image candidate records
+
+Added:
+
+- `docs/memory/age_image_candidate_prebuilt_record.md`
+- `docs/memory/age_image_candidate_repo_build_record.md`
+
+Those two notes turn the image-selection step from a generic planning boundary
+into an initial comparative record set.
+
+The current reading captured there is:
+
+- the **prebuilt image path** is operationally attractive if a trustworthy image
+  exists that cleanly satisfies:
+  - `LOAD 'age'`
+  - current PostgreSQL expectations
+  - current pgvector expectations where feasible
+  - explicit optional overlay use
+- the **repository-owned build path** is the stronger controlled fallback if
+  prebuilt image compatibility or trust is too uncertain
+
+The current recommendation split recorded across those notes is:
+
+- prebuilt path:
+  - **needs investigation**
+- repository-owned build path:
+  - **keep as fallback**
+
+This is useful because the next session no longer needs to start image
+selection from a blank template alone. It now has two concrete strategic
+candidate records to refine or replace with image-specific evaluations.
+This is useful because it turns the image-selection step into a more explicit
+decision workflow rather than an informal image swap.
+
+### 38. Added an image selection decision note
+
+Added:
+
+- `docs/memory/age_image_selection_decision.md`
+
+That note turns the current image-selection work from criteria plus candidate
+records into one concise provisional decision state.
+
+The current recorded decision there is:
+
+- do not finalize the repository-owned build path yet
+- do not implement the AGE-capable Docker overlay yet
+- first identify and evaluate at least one concrete prebuilt AGE-capable image
+- keep the repository-owned build path as the controlled fallback if the
+  prebuilt path fails the compatibility or confidence bar
+
+In short, the current provisional direction is:
+
+- **prebuilt path first, if credible**
+- **repository-owned build second, if needed**
+
+This is useful because the next session no longer has to infer the current
+selection state from multiple related notes alone. It now has one explicit
+decision note that captures:
+- current comparative reading
+- provisional conclusion
+- non-decisions still pending
+- exact next required action
+
+### 39. Updated cross-references around image selection and provisioning
 
 Updated:
 
-- `docs/memory/age_image_selection_note.md`
-- `docs/memory/age_docker_provisioning_plan.md`
+- `README.md`
 
-Those notes now explicitly point to the reusable candidate template so the
-reading order is clearer:
+The README now also points to:
 
-- image selection note for criteria
-- candidate template for per-option evaluation
-- provisioning plan for the later optional Docker/dev implementation path
+- `docs/memory/age_image_selection_decision.md`
 
-This matters because the next likely blocker is still AGE-capable local/dev
-provisioning, and the repository now frames that step as:
-- explicit
-- comparable
-- compatible with the current constrained prototype boundary
+alongside the broader selection note and provisioning plan, so the current
+operator/developer reading path is clearer.
 
-### 39. Updated recommended next step from the validated and operator-documented state
+### 40. Added a concrete prebuilt candidate investigation record
+
+Added:
+
+- `docs/memory/age_image_candidate_prebuilt_concrete_record.md`
+
+That note moves the prebuilt-image path from a generic strategy discussion into a
+more concrete investigation slot for the **first real prebuilt candidate**.
+
+The key current reading there is:
+
+- the exact image is still intentionally `TBD`
+- the file exists to lock in:
+  - the must-verify checks
+  - the required discovery fields
+  - the expected validation target
+  - the investigation questions for the next real candidate
+- the current recommendation remains:
+  - **needs investigation before adoption**
+
+This is useful because the next session no longer needs to create a concrete
+prebuilt-candidate evaluation shape from scratch. It can now start by selecting
+one real image and replacing the `TBD` fields.
+
+### 41. Updated image selection decision note to point at the concrete prebuilt investigation record
+
+Updated:
+
+- `docs/memory/age_image_selection_decision.md`
+
+That decision note now explicitly points to:
+
+- `docs/memory/age_image_candidate_prebuilt_concrete_record.md`
+
+as the next required artifact to fill in before final image selection.
+
+This makes the next action clearer:
+
+1. choose one real prebuilt AGE-capable image
+2. fill in the concrete prebuilt candidate record
+3. compare it against the repository-owned build candidate
+4. then finalize the image-selection decision
+
+### 42. Updated recommended next step from the validated and operator-documented state
 
 With the explicit CLI bootstrap path now present, the focused validation pass
 green, the changelog updated, operator guidance documented, runtime
 introspection now exposing constrained AGE prototype state, the current
 observability routes made more explicit, a dedicated `age-graph-readiness`
 command available, bootstrap rerun semantics clarified as rebuild-oriented,
-bootstrap success output now including lightweight verification counts, and the
-image-selection step now backed by a reusable candidate decision template, the
-next useful slice should continue hardening the prototype rather than
-broadening it.
+bootstrap success output now including lightweight verification counts, the
+image-selection step now backed by a reusable template, two initial candidate
+records, a provisional image-selection decision note, and now a concrete
+prebuilt-candidate investigation record, the next useful slice should continue
+hardening the prototype rather than broadening it.
 
 Most likely next work:
 

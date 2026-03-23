@@ -279,6 +279,7 @@ For the planned optional AGE-capable local/dev environment path, see:
 For the image-selection decision that should precede that provisioning path, see:
 
 - `docs/memory/age_image_selection_note.md`
+- `docs/memory/age_image_selection_decision.md`
 
 `ctxledger` now includes a **constrained Apache AGE prototype** for one-hop
 `supports` relation lookup.
@@ -437,6 +438,7 @@ local validation, see:
 For the image-selection decision that should precede that provisioning path, see:
 
 - `docs/memory/age_image_selection_note.md`
+- `docs/memory/age_image_selection_decision.md`
 
 This means the current command should be read as a rebuild-oriented bootstrap
 step for the constrained prototype graph, not as an incremental synchronization
