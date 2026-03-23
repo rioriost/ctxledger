@@ -245,6 +245,20 @@ class PostgresDatabaseHealthChecker:
 
         return required_tables.issubset(present)
 
+    def age_available(self) -> bool:
+        with _connect(self._config.database_url) as conn:
+            self._apply_session_settings(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM pg_extension
+                    WHERE extname = 'age'
+                    LIMIT 1
+                    """
+                )
+                return cur.fetchone() is not None
+
     def _apply_session_settings(self, conn: Connection) -> None:
         with conn.cursor() as cur:
             timeout_ms = (

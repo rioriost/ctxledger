@@ -234,6 +234,39 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
     finally:
         postgres._connect = original_connect
 
+    age_ready_connector = FakeConnector()
+    postgres._connect = age_ready_connector
+    try:
+        checker = postgres.PostgresDatabaseHealthChecker(config)
+        assert checker.age_available() is True
+    finally:
+        postgres._connect = original_connect
+
+    class EmptyFetchoneCursor(FakeCursor):
+        def fetchone(self) -> dict[str, int] | None:
+            return None
+
+    class EmptyFetchoneConnection(FakeConnection):
+        def cursor(self) -> EmptyFetchoneCursor:
+            cursor = EmptyFetchoneCursor(self._rows)
+            self.cursors.append(cursor)
+            return cursor
+
+    class EmptyFetchoneConnector(FakeConnector):
+        def __call__(self, database_url: str) -> EmptyFetchoneConnection:
+            self.calls.append(database_url)
+            connection = EmptyFetchoneConnection(self.rows)
+            self.connections.append(connection)
+            return connection
+
+    age_not_ready_connector = EmptyFetchoneConnector()
+    postgres._connect = age_not_ready_connector
+    try:
+        checker = postgres.PostgresDatabaseHealthChecker(config)
+        assert checker.age_available() is False
+    finally:
+        postgres._connect = original_connect
+
 
 def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guards() -> None:
     postgres = importlib.import_module("ctxledger.db.postgres")
