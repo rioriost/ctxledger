@@ -10,6 +10,21 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ### Added
 
+- validated default `small` Docker deployment path with:
+  - HTTPS through Traefik
+  - proxy-layer authentication
+  - Grafana enabled by default
+  - PostgreSQL 17 as the current validated repository-owned image base
+  - Apache AGE enabled by default
+  - pgvector source-built with portability-oriented build flags
+  - automatic canonical schema application during startup
+  - automatic AGE extension setup during startup
+  - automatic bootstrap of the default constrained AGE graph:
+    - `ctxledger_memory`
+  - automatic Grafana observability database setup during startup
+- helper scripts for default local startup automation:
+  - `scripts/ensure_age_extension.py`
+  - `scripts/setup_grafana_observability.py`
 - constrained Apache AGE prototype substrate for hierarchical memory `0.6.0`, including:
   - a narrow `supports` target lookup boundary for distinct one-hop relation lookup
   - relational baseline implementations in in-memory and PostgreSQL repositories
@@ -26,6 +41,14 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ### Changed
 
+- the default local deployment story is now centered on the authenticated `small` stack:
+  - `docker/docker-compose.yml`
+  - `docker/docker-compose.small-auth.yml`
+- Grafana is no longer treated as an optional observability overlay for normal local use
+- AGE is no longer treated as an optional local overlay for the validated `small` stack
+- unauthenticated local startup is retired from the current local deployment guidance
+- the repository-owned PostgreSQL image path was validated on PostgreSQL 17 after aligning the pgvector build with the upstream portability-oriented approach:
+  - `make OPTFLAGS=""`
 - `memory_get_context` related-item collection can now use the narrow `supports` target lookup boundary without changing the visible retrieval contract
 - constrained relation-auxiliary parity was preserved across the prototype path by keeping:
   - first-seen-by-source distinct target ordering
@@ -34,15 +57,43 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ### Validation
 
+- validated repository-owned PostgreSQL 17 image behavior for the default `small` stack:
+  - `CREATE EXTENSION vector;`
+  - `CREATE EXTENSION age;`
+  - `LOAD 'age';`
+  - graph creation and constrained graph bootstrap
+- validated default startup automation for:
+  - canonical schema application
+  - AGE extension setup
+  - constrained AGE graph bootstrap
+  - Grafana observability database setup
+- validated MCP smoke behavior against the authenticated HTTPS endpoint
+- validated runtime/debug AGE state reporting through:
+  - `/debug/runtime`
+  - `ctxledger age-graph-readiness`
 - focused AGE prototype validation passed:
   - `python -m pytest tests/cli/test_cli_main.py tests/cli/test_cli_schema.py tests/config/test_config.py tests/postgres/test_db_helpers.py tests/memory/test_memory_context_related_items.py -q`
   - `86 passed`
 
 ### Notes
 
-- the current AGE work should still be read as a constrained, optional prototype rather than broad graph adoption
+- the current AGE work should still be read as a constrained graph-backed prototype rather than broad graph adoption
 - relational PostgreSQL tables remain canonical; AGE graph state is still derived and rebuildable
-- the explicit bootstrap path is currently prototype-grade and rebuild-first rather than a full graph lifecycle or incremental sync framework
+- the explicit bootstrap path remains prototype-grade and rebuild-first rather than a full graph lifecycle or incremental sync framework
+- the validated local default is now:
+  - `small`
+  - HTTPS
+  - proxy-layer authentication
+  - Grafana enabled
+  - AGE enabled
+  - repository-owned PostgreSQL 17 image path
+- the planned second deployment pattern remains:
+  - `large`
+  - HTTPS
+  - proxy-layer authentication
+  - Grafana enabled
+  - Azure Database for PostgreSQL
+  - not implemented yet
 
 - planned `0.5.4` follow-up hardening work for `workflow_resume` timeout diagnosis and mitigation
 - roadmap/docs updates are being prepared for:

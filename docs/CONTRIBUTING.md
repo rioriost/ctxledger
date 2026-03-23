@@ -197,15 +197,16 @@ Expected behavior for PostgreSQL integration tests:
 You should strongly consider running the full suite.
 
 ### For small auth / proxy work
-You should also validate the small pattern operationally when your change affects:
+You should also validate the default small pattern operationally when your change affects:
 
 - Compose topology
 - Traefik config
 - `auth-small`
+- Grafana integration in the default stack
+- AGE-enabled PostgreSQL behavior in the default stack
 - auth-related docs that describe actual operator steps
 - smoke-script expectations
 - local HTTPS proxy guidance or certificate-handling steps
-- the HTTPS no-auth overlay or its operator-facing documentation
 
 Representative small-pattern validation flow:
 
@@ -234,24 +235,6 @@ python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-toke
 python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token replace-me-with-a-strong-secret --insecure --scenario workflow --workflow-resource-read
 ```
 
-If your change also affects the HTTPS no-auth path, validate that flow too:
-
-```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml down --remove-orphans
-```
-
-```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml up -d --build --force-recreate
-```
-
-```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://localhost:8444 --tool-name memory_get_context --insecure
-```
-
-```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://localhost:8444 --scenario workflow --workflow-resource-read --insecure
-```
-
 Expected local HTTPS setup notes:
 
 - local certificate files should exist at:
@@ -259,8 +242,11 @@ Expected local HTTPS setup notes:
   - `docker/traefik/certs/localhost.key`
 - do not commit real certificate or key material
 - use a trusted local certificate when possible, or use local-only insecure verification for self-signed testing
-- the small-auth path is now HTTPS-only; do not validate or document a public `http://127.0.0.1:8091` entrypoint for this flow
-- the no-auth HTTPS path is intended for controlled local testing only and should not be described as the shared/internet-facing default
+- the default local stack is HTTPS-only; do not validate or document a public `http://127.0.0.1:8091` entrypoint for this flow
+- the default local stack should be treated as:
+  - authenticated
+  - AGE-enabled
+  - Grafana-enabled
 
 Use `--insecure` only for local self-signed or otherwise untrusted certificates. If the local certificate is trusted, prefer normal TLS verification.
 

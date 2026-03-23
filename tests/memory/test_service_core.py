@@ -17,11 +17,13 @@ from ctxledger.memory.service import (
     InMemoryEpisodeRepository,
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
+    InMemoryMemoryRelationRepository,
     InMemoryWorkflowLookupRepository,
     MemoryEmbeddingRecord,
     MemoryErrorCode,
     MemoryFeature,
     MemoryItemRecord,
+    MemoryRelationRecord,
     MemoryService,
     MemoryServiceError,
     RememberEpisodeRequest,
@@ -102,16 +104,10 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert memory_item_repository.memory_items[0].workspace_id == UUID(
         "00000000-0000-0000-0000-000000000001"
     )
-    assert (
-        memory_item_repository.memory_items[0].episode_id
-        == remember_response.episode.episode_id
-    )
+    assert memory_item_repository.memory_items[0].episode_id == remember_response.episode.episode_id
     assert memory_item_repository.memory_items[0].type == "episode_note"
     assert memory_item_repository.memory_items[0].provenance == "episode"
-    assert (
-        memory_item_repository.memory_items[0].content
-        == "Episode summary with relevant context"
-    )
+    assert memory_item_repository.memory_items[0].content == "Episode summary with relevant context"
     assert memory_item_repository.memory_items[0].metadata == {
         "kind": "checkpoint",
         "topic": "relevant context",
@@ -133,13 +129,8 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     )
     assert search_response.details["results_returned"] == 1
     assert len(search_response.results) == 1
-    assert (
-        search_response.results[0].memory_id
-        == memory_item_repository.memory_items[0].memory_id
-    )
-    assert search_response.results[0].workspace_id == UUID(
-        "00000000-0000-0000-0000-000000000001"
-    )
+    assert search_response.results[0].memory_id == memory_item_repository.memory_items[0].memory_id
+    assert search_response.results[0].workspace_id == UUID("00000000-0000-0000-0000-000000000001")
     assert search_response.results[0].episode_id == remember_response.episode.episode_id
     assert search_response.results[0].workflow_instance_id is None
     assert search_response.results[0].attempt_id is None
@@ -290,9 +281,7 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
     assert search_response.results[1].semantic_score == 1.0
 
 
-def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> (
-    None
-):
+def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()
     memory_item_repository = InMemoryMemoryItemRepository()
@@ -460,9 +449,7 @@ def test_memory_service_resolve_workspace_id_and_has_text_helpers() -> None:
     assert service._has_text(None) is False
 
 
-def test_memory_service_search_records_semantic_generation_skip_reason_after_failure() -> (
-    None
-):
+def test_memory_service_search_records_semantic_generation_skip_reason_after_failure() -> None:
     class FailingEmbeddingGenerator:
         def generate(self, request: EmbeddingRequest) -> EmbeddingResult:
             raise EmbeddingGenerationError(
@@ -634,9 +621,7 @@ def test_memory_service_constructor_uses_built_embedding_generator(
 def test_memory_service_order_workflow_ids_by_freshness_with_empty_input() -> None:
     service = MemoryService()
 
-    assert (
-        service._order_workflow_ids_by_freshness_signals(workflow_ids=(), limit=5) == ()
-    )
+    assert service._order_workflow_ids_by_freshness_signals(workflow_ids=(), limit=5) == ()
 
 
 def test_memory_service_workflow_ordering_signals_without_lookup() -> None:
@@ -688,7 +673,7 @@ def test_memory_service_build_memory_item_details_without_optional_outputs() -> 
     )
     service = MemoryService(
         memory_item_repository=SimpleNamespace(
-            list_by_episode_id=lambda episode_id, limit: (memory_item,)
+            list_by_episode_ids=lambda episode_ids: (memory_item,)
         )
     )
 
@@ -731,6 +716,287 @@ def test_memory_service_build_episode_explanations_for_unfiltered_context() -> N
             "matched_metadata_values": [],
         },
     )
+
+
+def test_memory_service_build_memory_item_details_with_summary_output() -> None:
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=uuid4(),
+        summary="Episode summary",
+    )
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=uuid4(),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="first",
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=first_memory_item.workspace_id,
+        episode_id=episode.episode_id,
+        type="checkpoint_note",
+        provenance="checkpoint",
+        content="second",
+    )
+    service = MemoryService(
+        memory_item_repository=SimpleNamespace(
+            list_by_episode_ids=lambda episode_ids: (
+                second_memory_item,
+                first_memory_item,
+            )
+        )
+    )
+
+    details = service._build_memory_item_details_for_episodes(
+        episodes=(episode,),
+        include_memory_items=False,
+        include_summaries=True,
+    )
+
+    assert details == (
+        {
+            "episode_id": str(episode.episode_id),
+            "memory_item_count": 2,
+            "summary": {
+                "episode_id": str(episode.episode_id),
+                "workflow_instance_id": str(episode.workflow_instance_id),
+                "memory_item_count": 2,
+                "memory_item_types": ["checkpoint_note", "episode_note"],
+                "memory_item_provenance": ["checkpoint", "episode"],
+            },
+        },
+    )
+
+
+def test_memory_service_build_summary_selection_details_without_summaries() -> None:
+    service = MemoryService()
+
+    summaries, summary_selection_applied, summary_selection_kind = (
+        service._build_summary_selection_details(
+            (
+                {
+                    "episode_id": str(uuid4()),
+                    "memory_item_count": 1,
+                },
+            )
+        )
+    )
+
+    assert summaries == ()
+    assert summary_selection_applied is False
+    assert summary_selection_kind is None
+
+
+def test_memory_service_build_summary_selection_details_with_summaries() -> None:
+    service = MemoryService()
+    episode_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    summaries, summary_selection_applied, summary_selection_kind = (
+        service._build_summary_selection_details(
+            (
+                {
+                    "episode_id": str(episode_id),
+                    "memory_item_count": 1,
+                    "summary": {
+                        "episode_id": str(episode_id),
+                        "workflow_instance_id": str(workflow_instance_id),
+                        "memory_item_count": 1,
+                        "memory_item_types": ["episode_note"],
+                        "memory_item_provenance": ["episode"],
+                    },
+                },
+            )
+        )
+    )
+
+    assert summaries == (
+        {
+            "episode_id": str(episode_id),
+            "workflow_instance_id": str(workflow_instance_id),
+            "memory_item_count": 1,
+            "memory_item_types": ["episode_note"],
+            "memory_item_provenance": ["episode"],
+        },
+    )
+    assert summary_selection_applied is True
+    assert summary_selection_kind == "episode_summary_first"
+
+
+def test_memory_service_collect_supports_related_memory_items_returns_empty_without_lookup_support() -> (
+    None
+):
+    service = MemoryService(
+        memory_item_repository=SimpleNamespace(),
+        memory_relation_repository=SimpleNamespace(),
+    )
+
+    related_memory_items, related_relations = service._collect_supports_related_memory_items(
+        memory_item_details=(
+            {
+                "episode_id": str(uuid4()),
+                "memory_items": [
+                    {
+                        "memory_id": str(uuid4()),
+                    }
+                ],
+            },
+        ),
+        limit=3,
+        include_relation_metadata=True,
+    )
+
+    assert related_memory_items == ()
+    assert related_relations == ()
+
+
+def test_memory_service_collect_supports_related_memory_items_returns_empty_when_limit_is_zero() -> (
+    None
+):
+    service = MemoryService(
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_relation_repository=InMemoryMemoryRelationRepository(),
+    )
+
+    related_memory_items, related_relations = service._collect_supports_related_memory_items(
+        memory_item_details=(
+            {
+                "episode_id": str(uuid4()),
+                "memory_items": [
+                    {
+                        "memory_id": str(uuid4()),
+                    }
+                ],
+            },
+        ),
+        limit=0,
+        include_relation_metadata=True,
+    )
+
+    assert related_memory_items == ()
+    assert related_relations == ()
+
+
+def test_memory_service_collect_supports_related_memory_items_falls_back_to_relation_scan() -> None:
+    workspace_id = uuid4()
+    episode_id = uuid4()
+    source_memory_id = uuid4()
+    related_memory_id = uuid4()
+    created_at = datetime(2024, 2, 1, tzinfo=UTC)
+
+    target_memory_item = MemoryItemRecord(
+        memory_id=related_memory_id,
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="related memory item",
+        metadata={"kind": "related"},
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=related_memory_id,
+        relation_type="supports",
+        metadata={"kind": "supports-edge"},
+        created_at=created_at,
+    )
+
+    class RelationRepositoryWithoutBulkLookup:
+        def list_by_source_memory_ids(
+            self,
+            source_memory_ids: tuple[UUID, ...],
+        ) -> tuple[MemoryRelationRecord, ...]:
+            assert source_memory_ids == (source_memory_id,)
+            return (relation,)
+
+    class MemoryItemLookupRepository:
+        def get_by_memory_id(self, memory_id: UUID) -> MemoryItemRecord | None:
+            assert memory_id == related_memory_id
+            return target_memory_item
+
+        def list_by_memory_ids(
+            self,
+            memory_ids: tuple[UUID, ...],
+            *,
+            limit: int,
+        ) -> tuple[MemoryItemRecord, ...]:
+            assert memory_ids == (related_memory_id,)
+            assert limit == 2
+            return (target_memory_item,)
+
+    service = MemoryService(
+        memory_item_repository=MemoryItemLookupRepository(),
+        memory_relation_repository=RelationRepositoryWithoutBulkLookup(),
+    )
+
+    related_memory_items, related_relations = service._collect_supports_related_memory_items(
+        memory_item_details=(
+            {
+                "episode_id": str(episode_id),
+                "memory_items": [
+                    {
+                        "memory_id": str(source_memory_id),
+                    }
+                ],
+            },
+        ),
+        limit=2,
+        include_relation_metadata=True,
+    )
+
+    assert related_memory_items == (target_memory_item,)
+    assert related_relations == (relation,)
+
+
+def test_memory_service_build_retrieval_route_details_marks_auxiliary_only_after_query_filter() -> (
+    None
+):
+    service = MemoryService()
+    episode_id = uuid4()
+    workspace_id = uuid4()
+    inherited_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="workspace inherited",
+    )
+
+    details = service._build_retrieval_route_details(
+        memory_item_details=(
+            {
+                "episode_id": str(episode_id),
+                "memory_item_count": 0,
+            },
+        ),
+        summaries=(),
+        summary_selection_applied=False,
+        matched_episode_count=1,
+        include_memory_items=False,
+        inherited_memory_items=(inherited_memory_item,),
+        related_memory_items=(),
+    )
+
+    assert details["retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert details["primary_retrieval_routes_present"] == []
+    assert details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert details["primary_episode_groups_present_after_query_filter"] is False
+    assert details["auxiliary_only_after_query_filter"] is True
+    assert details["summary_first_has_episode_groups"] is False
+    assert details["summary_first_is_summary_only"] is False
+    assert details["summary_first_child_episode_count"] == 0
+    assert details["summary_first_child_episode_ids"] == []
+    assert details["relation_supports_source_episode_count"] == 0
 
 
 def test_memory_service_raises_validation_errors_for_invalid_requests() -> None:

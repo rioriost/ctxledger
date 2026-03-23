@@ -17,8 +17,8 @@ It provides:
 - PostgreSQL-backed persistence
 - HTTPS-friendly local deployment
 - operator-facing CLI observability
-- optional Grafana dashboard deployment
-- a constrained Apache AGE prototype path for graph-backed `supports` lookup with explicit CLI bootstrap
+- default Grafana dashboard deployment in the authenticated local stack
+- a constrained Apache AGE prototype path for graph-backed `supports` lookup with explicit CLI bootstrap, using a repository-owned PostgreSQL image path and now enabled by default in the `small` stack
 
 ---
 
@@ -53,7 +53,32 @@ Current PostgreSQL/graph setup commands:
 
 ## Quick Start
 
-If you want the fastest reliable local setup, use the authenticated HTTPS path.
+`ctxledger` now has two deployment patterns:
+
+1. `small` (default)
+   - HTTPS
+   - proxy-layer authentication
+   - Grafana enabled
+   - Apache AGE enabled
+   - repository-owned PostgreSQL 17 image with AGE + pgvector
+2. `large` (future plan; not implemented yet)
+   - HTTPS
+   - proxy-layer authentication
+   - Grafana enabled
+   - Azure Database for PostgreSQL
+
+This Quick Start is for the **default `small` deployment**.
+
+### What you will get
+
+When you finish the steps below, you will have:
+
+- an authenticated MCP endpoint at:
+  - `https://localhost:8443/mcp`
+- Grafana at:
+  - `http://localhost:3000`
+- PostgreSQL 17 through the repository-owned AGE-capable image path
+- the default local development stack running through Docker Compose
 
 ### Before you start
 
@@ -61,18 +86,16 @@ You need:
 
 - Docker and Docker Compose
 - a local certificate for `localhost`
+- either:
+  - a `.env` file workflow
+  - or `envrcctl exec`
 - an MCP client that can talk to a remote MCP server over HTTPS
   - for example: Zed or VS Code
 
-The recommended local endpoint is:
+### Step 1 — Create local TLS certificates
 
-```/dev/null/txt#L1-1
-https://localhost:8443/mcp
-```
+`ctxledger` uses Traefik for local HTTPS.
 
-### 1. Create local TLS certificates
-
-`ctxledger` uses Traefik for local HTTPS.  
 Create local certs first so your client does not fail on TLS.
 
 A practical local setup with `mkcert`:
@@ -83,41 +106,58 @@ mkcert -install
 mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
 ```
 
-Files expected by the local stack:
+Files expected by the default local stack:
 
 - `docker/traefik/certs/localhost.crt`
 - `docker/traefik/certs/localhost.key`
 
-### 2. Choose an auth token
+### Step 2 — Choose how you want to pass environment variables
 
-The authenticated local stack expects one bearer token shared across:
+The default `small` deployment expects values for:
 
-- startup environment
-- smoke tests
-- your MCP client configuration
+- `CTXLEDGER_SMALL_AUTH_TOKEN`
+- `CTXLEDGER_GRAFANA_ADMIN_USER`
+- `CTXLEDGER_GRAFANA_ADMIN_PASSWORD`
+- `CTXLEDGER_GRAFANA_POSTGRES_USER`
+- `CTXLEDGER_GRAFANA_POSTGRES_PASSWORD`
+
+You can provide these either through a `.env` file or through `envrcctl exec`.
+
+#### Option A: use a `.env` file
+
+Create a `.env` file in the repository root with values like:
+
+```/dev/null/dotenv#L1-5
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret
+CTXLEDGER_GRAFANA_ADMIN_USER=admin
+CTXLEDGER_GRAFANA_ADMIN_PASSWORD=replace-with-a-strong-admin-password
+CTXLEDGER_GRAFANA_POSTGRES_USER=ctxledger_grafana
+CTXLEDGER_GRAFANA_POSTGRES_PASSWORD=replace-with-a-strong-secret
+```
+
+#### Option B: use `envrcctl exec`
+
+You can store the same values as secrets instead.
 
 Example:
 
-```/dev/null/sh#L1-2
-export CTXLEDGER_SMALL_AUTH_TOKEN="$(openssl rand -hex 32)"
-echo "$CTXLEDGER_SMALL_AUTH_TOKEN"
+```/dev/null/sh#L1-5
+echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_SMALL_AUTH_TOKEN --account 'ctxledger_auth' --stdin
+echo -n "admin" | envrcctl secret set CTXLEDGER_GRAFANA_ADMIN_USER --account 'ctxledger_grafana_admin' --stdin
+echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_GRAFANA_ADMIN_PASSWORD --account 'ctxledger_grafana_pass' --stdin
+echo -n "ctxledger_grafana" | envrcctl secret set CTXLEDGER_GRAFANA_POSTGRES_USER --account 'ctxledger_pgsql_admin' --stdin
+echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_GRAFANA_POSTGRES_PASSWORD --account 'ctxledger_pgsql_pass' --stdin
 ```
 
-If you use `envrcctl`, you can store it as a secret instead:
+### Step 3 — Start the default `small` deployment
 
-```/dev/null/sh#L1-1
-echo -n "$(openssl rand -hex 32)" | envrcctl secret set CTXLEDGER_SMALL_AUTH_TOKEN --account 'ctxledger' --stdin
-```
+The default deployment is now:
 
-### 3. Start the authenticated local stack
+- `docker/docker-compose.yml`
+- `docker/docker-compose.small-auth.yml`
 
-Standard shell:
-
-```/dev/null/sh#L1-1
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
-```
-
-If you already exported the token:
+If you use a `.env` file:
+If you already exported the required values:
 
 ```/dev/null/sh#L1-1
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
@@ -129,7 +169,35 @@ If you use `envrcctl`:
 envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
 ```
 
-### 4. Verify the server is reachable
+This default startup path is intended to bring up:
+
+- authenticated HTTPS access
+- PostgreSQL 17 through the repository-owned AGE-capable image path
+- AGE enabled by default
+- automatic AGE extension setup before graph bootstrap
+- automatic AGE graph bootstrap for the default `ctxledger_memory` graph
+- the private application service behind auth
+- Grafana
+
+### Step 4 — Wait for the stack to become healthy
+
+A successful startup should leave these services healthy or started:
+
+- `ctxledger-postgres`
+- `ctxledger-server-private`
+- `ctxledger-auth-small`
+- `ctxledger-grafana`
+- `ctxledger-traefik`
+
+If `ctxledger-postgres` fails immediately after you switched from an older local stack, check whether you still have a PostgreSQL 16-era local volume attached. In that case, follow the PostgreSQL 18 migration note in Step 3 and recreate the local PostgreSQL volume before retrying.
+
+You can inspect the current state with:
+
+```/dev/null/sh#L1-1
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml ps
+```
+
+### Step 5 — Verify the MCP endpoint
 
 Expected MCP endpoint:
 
@@ -149,85 +217,9 @@ Check that valid auth works:
 python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --scenario workflow --workflow-resource-read --insecure
 ```
 
-### 5. Configure your MCP client
+If you are using a `.env` file and do not want to export the token into your shell first, pass the actual token value directly.
 
-Representative Zed configuration:
-
-```/dev/null/json#L1-11
-{
-  "ctxledger": {
-    "url": "https://localhost:8443/mcp",
-    "headers": {
-      "Authorization": "Bearer YOUR_TOKEN_HERE"
-    }
-  }
-}
-```
-
-Replace `YOUR_TOKEN_HERE` with the actual token.
-
-### 6. If you want observability dashboards, add Grafana
-
-First apply the observability SQL views:
-
-```/dev/null/sh#L1-1
-docker exec -i ctxledger-postgres psql -U ctxledger -d ctxledger < docs/sql/observability_views.sql
-```
-
-Create a read-only PostgreSQL role for Grafana.
-
-Open a PostgreSQL shell in the running container:
-
-```/dev/null/sh#L1-1
-docker exec -it ctxledger-postgres psql -U ctxledger -d ctxledger
-```
-
-Then run:
-
-```/dev/null/sql#L1-11
-CREATE ROLE ctxledger_grafana
-LOGIN
-PASSWORD 'replace-with-a-strong-secret';
-
-GRANT CONNECT ON DATABASE ctxledger TO ctxledger_grafana;
-GRANT USAGE ON SCHEMA observability TO ctxledger_grafana;
-GRANT SELECT ON ALL TABLES IN SCHEMA observability TO ctxledger_grafana;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA observability
-GRANT SELECT ON TABLES TO ctxledger_grafana;
-```
-
-You can verify the role works with:
-
-```/dev/null/sh#L1-1
-docker exec -it ctxledger-postgres psql -h 127.0.0.1 -U ctxledger_grafana -d ctxledger -c "SELECT * FROM observability.memory_overview;"
-```
-
-Set Grafana-related environment values, then start the overlay.
-
-Standard shell example:
-
-```/dev/null/sh#L1-4
-export CTXLEDGER_GRAFANA_ADMIN_USER=admin
-export CTXLEDGER_GRAFANA_ADMIN_PASSWORD='replace-with-a-strong-admin-password'
-export CTXLEDGER_GRAFANA_POSTGRES_USER=ctxledger_grafana
-export CTXLEDGER_GRAFANA_POSTGRES_PASSWORD='replace-with-a-strong-secret'
-```
-
-Example with `envrcctl`:
-
-```/dev/null/sh#L1-4
-echo -n "admin" | envrcctl secret set CTXLEDGER_GRAFANA_ADMIN_USER --account 'ctxledger' --stdin
-echo -n "replace-with-a-strong-admin-password" | envrcctl secret set CTXLEDGER_GRAFANA_ADMIN_PASSWORD --account 'ctxledger' --stdin
-echo -n "ctxledger_grafana" | envrcctl secret set CTXLEDGER_GRAFANA_POSTGRES_USER --account 'ctxledger' --stdin
-echo -n "replace-with-a-strong-secret" | envrcctl secret set CTXLEDGER_GRAFANA_POSTGRES_PASSWORD --account 'ctxledger' --stdin
-```
-
-Then start the stack with Grafana:
-
-```/dev/null/sh#L1-1
-envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml -f docker/docker-compose.observability.yml up -d --build
-```
+### Step 6 — Verify Grafana
 
 Grafana is available at:
 
@@ -248,17 +240,43 @@ Initial dashboards:
 - `ctxledger Memory Overview`
 - `ctxledger Failure Overview`
 
-If Grafana starts but dashboards are empty, the two most common causes are:
+The default stack is intended to complete the Grafana-related observability setup automatically during startup.
 
-1. the observability SQL views were not applied
-2. the Grafana PostgreSQL role does not have read access to the `observability` schema
-
-Useful checks:
+If Grafana starts but dashboards are empty, useful checks are:
 
 ```/dev/null/sh#L1-2
 docker exec -it ctxledger-postgres psql -U ctxledger -d ctxledger -c "SELECT * FROM observability.memory_overview;"
 docker exec -it ctxledger-postgres psql -h 127.0.0.1 -U ctxledger_grafana -d ctxledger -c "SELECT * FROM observability.memory_overview;"
 ```
+
+### Step 7 — Configure your MCP client
+
+Representative Zed configuration:
+
+```/dev/null/json#L1-11
+{
+  "ctxledger": {
+    "url": "https://localhost:8443/mcp",
+    "headers": {
+      "Authorization": "Bearer YOUR_TOKEN_HERE"
+    }
+  }
+}
+```
+
+Replace `YOUR_TOKEN_HERE` with the actual auth token used by your local stack.
+
+### Step 8 — Know the future `large` direction
+
+A second deployment pattern is planned, but not implemented yet:
+
+- `large`
+  - HTTPS
+  - proxy-layer authentication
+  - Grafana enabled
+  - Azure Database for PostgreSQL
+
+Until that work exists, treat the default `small` deployment as the canonical way to run `ctxledger` locally.
 
 ---
 
@@ -272,14 +290,13 @@ For a fill-in template that records one concrete validation pass, see:
 
 - `docs/memory/age_prototype_validation_observation_template.md`
 
-For the planned optional AGE-capable local/dev environment path, see:
+For the repository-owned PostgreSQL 17 AGE image/build path that now underpins
+the default local stack, see:
 
 - `docs/memory/age_docker_provisioning_plan.md`
-
-For the image-selection decision that should precede that provisioning path, see:
-
 - `docs/memory/age_image_selection_note.md`
 - `docs/memory/age_image_selection_decision.md`
+- `docs/memory/age_image_candidate_repo_build_record.md`
 
 `ctxledger` now includes a **constrained Apache AGE prototype** for one-hop
 `supports` relation lookup.
@@ -287,18 +304,22 @@ For the image-selection decision that should precede that provisioning path, see
 This prototype is intentionally narrow:
 
 - relational PostgreSQL tables remain canonical
-- AGE-backed graph lookup is optional
+- AGE-backed graph lookup is enabled by default in the `small` stack through the
+  repository-owned PostgreSQL image path
 - current visible `memory_get_context` behavior is intended to remain unchanged
-- relational fallback remains the safe path when AGE is disabled, unavailable,
-  unready, or not bootstrapped
+- relational fallback remains the safe path when AGE is unavailable, unready, or
+  not bootstrapped
 
 The current prototype controls are:
 
 - `CTXLEDGER_DB_AGE_ENABLED`
-  - enable the optional AGE-backed prototype path
+  - enable or disable the AGE-backed prototype path
+  - current default in the `small` stack:
+    - `true`
 - `CTXLEDGER_DB_AGE_GRAPH_NAME`
   - select the named AGE graph used by the prototype
-  - default: `ctxledger_memory`
+  - default:
+    - `ctxledger_memory`
 
 Example shell setup:
 
@@ -351,10 +372,47 @@ Example shape:
 This is useful as a lightweight operator-facing readiness check before or after
 running the explicit bootstrap path.
 
+For the default `small` deployment, the intended AGE operator flow is now:
+
+1. start the stack with:
+   - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build`
+   - or use the equivalent `envrcctl exec -- ...` form
+2. let the default startup path do all of the following automatically:
+   - apply the canonical PostgreSQL schema
+   - ensure the `age` extension exists in the database
+   - bootstrap the default AGE graph:
+     - `ctxledger_memory`
+3. confirm the application has AGE mode enabled:
+   - `CTXLEDGER_DB_AGE_ENABLED=true`
+   - `CTXLEDGER_DB_AGE_GRAPH_NAME=ctxledger_memory`
+4. run `ctxledger age-graph-readiness`
+5. inspect `/debug/runtime` if you want the current `age_prototype` payload
+6. use `ctxledger bootstrap-age-graph` only when you explicitly want to rebuild the current constrained graph contents
+
+The first successful validation target for the default `small` deployment is
+that the repository-owned PostgreSQL 17 image builds successfully and the
+resulting environment can support:
+
+- `CREATE EXTENSION age;`
+- `LOAD 'age';`
+- `CREATE EXTENSION vector;`
+
+The second validation target is that the default `small` deployment remains
+compatible with the current constrained prototype workflow:
+
+- `ctxledger apply-schema`
+- `ctxledger age-graph-readiness`
+- `ctxledger bootstrap-age-graph`
+- `/debug/runtime`
+
 ### Bootstrap the constrained AGE graph
 
 If you want to exercise the constrained AGE prototype in a graph-enabled
-environment, use the explicit bootstrap command:
+environment, the default `small` stack now bootstraps the default graph
+automatically during startup.
+
+You can still use the explicit bootstrap command when you want to rebuild the
+current constrained graph contents on demand:
 
 ```/dev/null/sh#L1-1
 ctxledger bootstrap-age-graph
@@ -385,17 +443,17 @@ ctxledger bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@lo
 From inside the running `ctxledger` service container:
 
 ```/dev/null/sh#L1-3
-docker exec -it ctxledger-server \
+docker exec -it ctxledger-server-private \
   sh -lc 'export CTXLEDGER_DB_AGE_ENABLED=true CTXLEDGER_DB_AGE_GRAPH_NAME=ctxledger_memory && \
   ctxledger bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger'
 ```
 
-A practical local Docker sequence is:
+A practical local Docker sequence is now:
 
-1. start the stack
-2. apply the canonical schema if needed
-3. run `ctxledger bootstrap-age-graph`
-4. only then treat the AGE-backed prototype path as graph-ready
+1. start the default stack
+2. let startup apply the canonical schema and bootstrap the default AGE graph
+3. run `ctxledger age-graph-readiness`
+4. only use `ctxledger bootstrap-age-graph` when you want to rebuild the graph intentionally
 
 Current bootstrap behavior is intentionally prototype-grade and constrained. It:
 
@@ -453,33 +511,21 @@ Important current limitations:
 
 ---
 
-## Alternative local startup: HTTPS without authentication
-
-If you want a simpler local HTTPS path for quick experiments, use the no-auth overlay instead.
-
-Start it:
-
-```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml up -d --build --force-recreate
-```
-
-Endpoint:
-
-```/dev/null/txt#L1-1
-https://localhost:8444/mcp
-```
 
 Representative Zed config:
 
-```/dev/null/json#L1-6
+```/dev/null/json#L1-8
 {
   "ctxledger": {
-    "url": "https://localhost:8444/mcp"
+    "url": "https://localhost:8443/mcp",
+    "headers": {
+      "Authorization": "Bearer YOUR_TOKEN_HERE"
+    }
   }
 }
 ```
 
-Use this only for local, controlled testing.
+Replace `YOUR_TOKEN_HERE` with the actual local auth token.
 
 ---
 

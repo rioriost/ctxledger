@@ -8,6 +8,8 @@ services:
         condition: service_healthy
       ctxledger-private:
         condition: service_healthy
+      grafana:
+        condition: service_healthy
     command:
       - --entrypoints.websecure.address=:8443
       - --providers.file.filename=/etc/traefik/dynamic.yml
@@ -59,6 +61,50 @@ services:
       retries: 10
       start_period: 10s
 
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: ctxledger-grafana
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: ${CTXLEDGER_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${CTXLEDGER_GRAFANA_ADMIN_PASSWORD:-ctxledger-grafana-change-me}
+      GF_SERVER_DOMAIN: ${CTXLEDGER_GRAFANA_DOMAIN:-localhost}
+      GF_SERVER_ROOT_URL: ${CTXLEDGER_GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_SECURITY_COOKIE_SECURE: "false"
+      GF_LOG_MODE: console
+      GF_LOG_LEVEL: info
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_PATHS_CONFIG: /etc/grafana/grafana.ini
+      CTXLEDGER_GRAFANA_POSTGRES_HOST: ${CTXLEDGER_GRAFANA_POSTGRES_HOST:-postgres:5432}
+      CTXLEDGER_GRAFANA_POSTGRES_DB: ${CTXLEDGER_GRAFANA_POSTGRES_DB:-ctxledger}
+      CTXLEDGER_GRAFANA_POSTGRES_USER: ${CTXLEDGER_GRAFANA_POSTGRES_USER:-ctxledger_grafana}
+      CTXLEDGER_GRAFANA_POSTGRES_PASSWORD: ${CTXLEDGER_GRAFANA_POSTGRES_PASSWORD:-replace-with-a-strong-secret}
+      CTXLEDGER_GRAFANA_POSTGRES_SSLMODE: ${CTXLEDGER_GRAFANA_POSTGRES_SSLMODE:-disable}
+      CTXLEDGER_DATABASE_URL: ${CTXLEDGER_DATABASE_URL:-postgresql://ctxledger:ctxledger@postgres:5432/ctxledger}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   ctxledger:
     profiles:
       - disabled
@@ -84,17 +130,24 @@ services:
       CTXLEDGER_LOG_LEVEL: info
       CTXLEDGER_LOG_STRUCTURED: "true"
       CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS: 5
+      CTXLEDGER_DB_AGE_ENABLED: "true"
+      CTXLEDGER_DB_AGE_GRAPH_NAME: ctxledger_memory
       CTXLEDGER_EMBEDDING_ENABLED: "true"
       CTXLEDGER_EMBEDDING_PROVIDER: openai
       CTXLEDGER_EMBEDDING_MODEL: ${OPENAI_MODEL:-text-embedding-3-small}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      CTXLEDGER_GRAFANA_POSTGRES_HOST: ${CTXLEDGER_GRAFANA_POSTGRES_HOST:-postgres:5432}
+      CTXLEDGER_GRAFANA_POSTGRES_DB: ${CTXLEDGER_GRAFANA_POSTGRES_DB:-ctxledger}
+      CTXLEDGER_GRAFANA_POSTGRES_USER: ${CTXLEDGER_GRAFANA_POSTGRES_USER:-ctxledger_grafana}
+      CTXLEDGER_GRAFANA_POSTGRES_PASSWORD: ${CTXLEDGER_GRAFANA_POSTGRES_PASSWORD}
+      CTXLEDGER_GRAFANA_POSTGRES_SSLMODE: ${CTXLEDGER_GRAFANA_POSTGRES_SSLMODE:-disable}
       PYTHONPATH: /app/src
     working_dir: /app
     command:
       [
         "sh",
         "-lc",
-        "python -m pip install --upgrade pip && python -m pip install -e . && uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080",
+        "python -m pip install --upgrade pip && python -m pip install -e . && python -m ctxledger.__init__ apply-schema && python scripts/ensure_age_extension.py --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger && python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory && python scripts/setup_grafana_observability.py && uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080",
       ]
     expose:
       - "8080"
@@ -110,3 +163,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+volumes:
+  grafana_data:

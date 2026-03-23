@@ -230,25 +230,23 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
             with connection.cursor() as cursor:
                 cursor.execute("LOAD 'age'")
                 cursor.execute('SET search_path = ag_catalog, "$user", public')
+                graph_name_literal = "'" + graph_name.replace("'", "''") + "'"
                 cursor.execute(
                     """
-                    SELECT CASE
-                        WHEN NOT EXISTS (
-                            SELECT 1
-                            FROM ag_catalog.ag_graph
-                            WHERE name = %s
-                        )
-                        THEN ag_catalog.create_graph(%s)
-                        ELSE NULL
-                    END
+                    SELECT 1
+                    FROM ag_catalog.ag_graph
+                    WHERE name = %s
+                    LIMIT 1
                     """,
-                    (graph_name, graph_name),
+                    (graph_name,),
                 )
+                if cursor.fetchone() is None:
+                    cursor.execute(f"SELECT ag_catalog.create_graph({graph_name_literal})")
                 cursor.execute(
-                    """
+                    f"""
                     SELECT *
                     FROM cypher(
-                        %s,
+                        {graph_name_literal},
                         $$
                         MATCH (n)
                         DETACH DELETE n
@@ -256,13 +254,12 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                         $$
                     ) AS (cleared agtype)
                     """,
-                    (graph_name,),
                 )
                 cursor.execute(
-                    """
+                    f"""
                     SELECT *
                     FROM cypher(
-                        %s,
+                        {graph_name_literal},
                         $$
                         UNWIND [] AS ignored
                         RETURN ignored
@@ -270,66 +267,102 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                     ) AS (ignored agtype)
                     WHERE false
                     """,
-                    (graph_name,),
                 )
                 cursor.execute(
                     """
-                    WITH memory_item_rows AS (
-                        SELECT memory_id
-                        FROM public.memory_items
-                    )
-                    SELECT *
-                    FROM cypher(
-                        %s,
-                        $$
-                        CREATE (n:memory_item {memory_id: $memory_id})
-                        RETURN n
-                        $$
-                    ) AS (n agtype)
-                    CROSS JOIN memory_item_rows
+                    SELECT memory_id
+                    FROM public.memory_items
                     """,
-                    (graph_name,),
                 )
+                memory_item_rows = cursor.fetchall()
+                for memory_item_row in memory_item_rows:
+                    raw_memory_id = (
+                        memory_item_row[0]
+                        if isinstance(memory_item_row, tuple)
+                        else memory_item_row["memory_id"]
+                    )
+                    memory_item_params = json.dumps(
+                        {"memory_id": str(raw_memory_id)},
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    cursor.execute(
+                        f"""
+                        SELECT *
+                        FROM cypher(
+                            {graph_name_literal},
+                            $$
+                            CREATE (n:memory_item {memory_id: $memory_id})
+                            RETURN n
+                            $$,
+                            %s
+                        ) AS (n agtype)
+                        """,
+                        (memory_item_params,),
+                    )
                 cursor.execute(
                     """
-                    WITH supports_rows AS (
-                        SELECT
-                            mr.memory_relation_id,
-                            mr.source_memory_id,
-                            mr.target_memory_id
-                        FROM public.memory_relations AS mr
-                        WHERE mr.relation_type = 'supports'
+                    SELECT
+                        mr.memory_relation_id,
+                        mr.source_memory_id,
+                        mr.target_memory_id
+                    FROM public.memory_relations AS mr
+                    WHERE mr.relation_type = 'supports'
+                    """,
+                )
+                supports_rows = cursor.fetchall()
+                for supports_row in supports_rows:
+                    if isinstance(supports_row, tuple):
+                        (
+                            raw_memory_relation_id,
+                            raw_source_memory_id,
+                            raw_target_memory_id,
+                        ) = supports_row
+                    else:
+                        raw_memory_relation_id = supports_row["memory_relation_id"]
+                        raw_source_memory_id = supports_row["source_memory_id"]
+                        raw_target_memory_id = supports_row["target_memory_id"]
+
+                    supports_params = json.dumps(
+                        {
+                            "memory_relation_id": str(raw_memory_relation_id),
+                            "source_memory_id": str(raw_source_memory_id),
+                            "target_memory_id": str(raw_target_memory_id),
+                        },
+                        separators=(",", ":"),
+                        sort_keys=True,
                     )
-                    SELECT *
-                    FROM cypher(
-                        %s,
-                        $$
-                        MATCH (source:memory_item {memory_id: $source_memory_id})
-                        MATCH (target:memory_item {memory_id: $target_memory_id})
-                        CREATE (source)-[r:supports {
+                    cursor.execute(
+                        f"""
+                        SELECT *
+                        FROM cypher(
+                            {graph_name_literal},
+                            $$
+                            MATCH (source:memory_item {memory_id: $source_memory_id})
+                            MATCH (target:memory_item {memory_id: $target_memory_id})
+                            CREATE (source)-[r:supports {
                             memory_relation_id: $memory_relation_id,
-                            source_memory_id: $source_memory_id,
-                            target_memory_id: $target_memory_id
-                        }]->(target)
-                        RETURN r
-                        $$
-                    ) AS (r agtype)
-                    CROSS JOIN supports_rows
-                    """,
-                    (graph_name,),
-                )
+                                source_memory_id: $source_memory_id,
+                                target_memory_id: $target_memory_id
+                            }]->(target)
+                            RETURN r
+                            $$,
+                            %s
+                        ) AS (r agtype)
+                        """,
+                        (supports_params,),
+                    )
                 cursor.execute(
-                    """
+                    f"""
                     SELECT count(*)
                     FROM cypher(
-                        %s,
+                        {graph_name_literal},
                         $$
                         MATCH (n:memory_item)
-                        RETURN count(n) AS count
+                        RETURN count(n) AS node_count
                         $$
-                    ) AS (count agtype)
+                    ) AS (node_count agtype)
                     """,
-                    (graph_name,),
                 )
                 memory_item_node_count_row = cursor.fetchone()
                 memory_item_node_count = (
@@ -339,17 +372,16 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                 )
 
                 cursor.execute(
-                    """
+                    f"""
                     SELECT count(*)
                     FROM cypher(
-                        %s,
+                        {graph_name_literal},
                         $$
                         MATCH ()-[r:supports]->()
-                        RETURN count(r) AS count
+                        RETURN count(r) AS edge_count
                         $$
-                    ) AS (count agtype)
+                    ) AS (edge_count agtype)
                     """,
-                    (graph_name,),
                 )
                 supports_edge_count_row = cursor.fetchone()
                 supports_edge_count = (

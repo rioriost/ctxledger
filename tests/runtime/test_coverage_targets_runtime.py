@@ -4,8 +4,10 @@ import argparse
 import signal
 import sys
 import types
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -29,6 +31,8 @@ from ctxledger.runtime.orchestration import (
 )
 from ctxledger.runtime.server_factory import build_workflow_service_factory
 from ctxledger.runtime.server_responses import (
+    _age_prototype_runtime_details,
+    _workflow_resume_error_payload,
     build_runtime_introspection_response,
     build_runtime_routes_response,
     build_runtime_tools_response,
@@ -37,6 +41,7 @@ from ctxledger.runtime.status import build_health_status, build_readiness_status
 from ctxledger.runtime.types import RuntimeIntrospectionResponse
 from ctxledger.server import CtxLedgerServer, create_server
 from ctxledger.version import get_app_name, get_app_version
+from ctxledger.workflow.service import WorkflowError
 
 from ..support.coverage_targets_support import (
     FailingDbChecker,
@@ -142,9 +147,7 @@ def test_postgres_database_health_checker_ping_executes_select_1(
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(
-        connect=lambda *_args, **_kwargs: FakeConnection()
-    )
+    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db?connect_timeout=9")
@@ -181,9 +184,7 @@ def test_postgres_database_health_checker_schema_ready_true_when_all_tables_exis
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(
-        connect=lambda *_args, **_kwargs: FakeConnection()
-    )
+    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -227,9 +228,7 @@ def test_postgres_database_health_checker_schema_ready_false_when_table_missing(
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(
-        connect=lambda *_args, **_kwargs: FakeConnection()
-    )
+    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -240,6 +239,273 @@ def test_postgres_database_health_checker_schema_ready_false_when_table_missing(
 def test_build_database_health_checker_prefers_default_without_url() -> None:
     checker = build_database_health_checker(None)
     assert isinstance(checker, DefaultDatabaseHealthChecker)
+
+
+def test_default_database_health_checker_age_methods_return_placeholder_values() -> None:
+    checker = DefaultDatabaseHealthChecker("postgresql://example/db")
+
+    assert checker.age_available() is False
+    assert checker.age_graph_status("ctxledger_memory") == "unknown"
+
+
+def test_postgres_database_health_checker_age_available_true_when_extension_loaded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executed: list[tuple[str, object | None]] = []
+
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            executed.append((query.strip(), params))
+
+        def fetchone(self) -> tuple[bool]:
+            return (True,)
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+
+    checker = PostgresDatabaseHealthChecker("postgresql://example/db")
+
+    assert checker.age_available() is True
+    assert executed == [
+        ("LOAD 'age'", None),
+        (
+            "SELECT EXISTS (\n                            SELECT 1\n                            FROM pg_extension\n                            WHERE extname = 'age'\n                        )",
+            None,
+        ),
+    ]
+
+
+def test_postgres_database_health_checker_age_available_false_when_extension_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            return None
+
+        def fetchone(self) -> tuple[bool]:
+            return (False,)
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+
+    checker = PostgresDatabaseHealthChecker("postgresql://example/db")
+
+    assert checker.age_available() is False
+
+
+def test_postgres_database_health_checker_age_available_false_on_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            raise RuntimeError("age load failed")
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+
+    checker = PostgresDatabaseHealthChecker("postgresql://example/db")
+
+    assert checker.age_available() is False
+
+
+def test_postgres_database_health_checker_age_graph_status_returns_age_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checker = PostgresDatabaseHealthChecker("postgresql://example/db")
+    monkeypatch.setattr(checker, "age_available", lambda: False)
+
+    assert checker.age_graph_status("ctxledger_memory") == "age_unavailable"
+
+
+def test_postgres_database_health_checker_age_graph_status_returns_graph_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fetch_rows: Iterator[tuple[bool]] = iter([(False,)])
+    executed: list[tuple[str, object | None]] = []
+
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            executed.append((query.strip(), params))
+
+        def fetchone(self) -> tuple[bool]:
+            return next(fetch_rows)
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+
+    checker = PostgresDatabaseHealthChecker("postgresql://example/db")
+    monkeypatch.setattr(checker, "age_available", lambda: True)
+
+    assert checker.age_graph_status("ctxledger_memory") == "graph_unavailable"
+    assert executed == [
+        ("LOAD 'age'", None),
+        ('SET search_path = ag_catalog, "$user", public', None),
+        (
+            "SELECT EXISTS (\n                            SELECT 1\n                            FROM ag_catalog.ag_graph\n                            WHERE name = %s\n                        )",
+            ("ctxledger_memory",),
+        ),
+    ]
+
+
+def test_postgres_database_health_checker_age_graph_status_returns_graph_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fetch_rows: Iterator[tuple[bool] | tuple[object]] = iter([(True,), ("node",)])
+    executed: list[tuple[str, object | None]] = []
+
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            executed.append((query.strip(), params))
+
+        def fetchone(self) -> tuple[bool] | tuple[object]:
+            return next(fetch_rows)
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+
+    checker = PostgresDatabaseHealthChecker("postgresql://example/db")
+    monkeypatch.setattr(checker, "age_available", lambda: True)
+
+    assert checker.age_graph_status("ctxledger_memory") == "graph_ready"
+    assert executed[0] == ("LOAD 'age'", None)
+    assert executed[1] == ('SET search_path = ag_catalog, "$user", public', None)
+    assert executed[2] == (
+        "SELECT EXISTS (\n                            SELECT 1\n                            FROM ag_catalog.ag_graph\n                            WHERE name = %s\n                        )",
+        ("ctxledger_memory",),
+    )
+    assert "FROM cypher(" in executed[3][0]
+
+
+def test_postgres_database_health_checker_age_graph_status_returns_unknown_on_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            raise RuntimeError("graph query failed")
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+
+    checker = PostgresDatabaseHealthChecker("postgresql://example/db")
+    monkeypatch.setattr(checker, "age_available", lambda: True)
+
+    assert checker.age_graph_status("ctxledger_memory") == "unknown"
+
+
+def test_build_database_health_checker_prefers_default_when_psycopg_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_import = __import__
+
+    def fake_import(
+        name: str,
+        globals: object | None = None,
+        locals: object | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "psycopg":
+            raise ImportError("missing driver")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    checker = build_database_health_checker("postgresql://example/db")
+
+    assert isinstance(checker, DefaultDatabaseHealthChecker)
+
+
+def test_build_database_health_checker_prefers_postgres_when_psycopg_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_import = __import__
+
+    def fake_import(
+        name: str,
+        globals: object | None = None,
+        locals: object | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "psycopg":
+            return types.SimpleNamespace()
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    checker = build_database_health_checker("postgresql://example/db")
+
+    assert isinstance(checker, PostgresDatabaseHealthChecker)
 
 
 def test_apply_overrides_returns_same_settings_when_no_overrides() -> None:
@@ -346,9 +612,7 @@ def test_create_runtime_uses_http_runtime_builder() -> None:
         received.append(server)
         return sentinel_runtime
 
-    created = create_runtime(
-        settings, server="server-ref", http_runtime_builder=builder
-    )
+    created = create_runtime(settings, server="server-ref", http_runtime_builder=builder)
 
     assert created is sentinel_runtime
     assert received == ["server-ref"]
@@ -461,9 +725,7 @@ def test_build_health_status_reports_workflow_service_and_runtime() -> None:
 def test_build_readiness_status_reports_schema_check_failed() -> None:
     server = CtxLedgerServer(
         settings=make_settings(),
-        db_health_checker=FailingDbChecker(
-            schema_error=RuntimeError("schema lookup failed")
-        ),
+        db_health_checker=FailingDbChecker(schema_error=RuntimeError("schema lookup failed")),
         runtime=None,
     )
     server._started = True
@@ -563,7 +825,17 @@ def test_runtime_introspection_response_uses_runtime_collection() -> None:
                 "tools": ["workflow_resume"],
                 "resources": ["workspace://{workspace_id}/resume"],
             }
-        ]
+        ],
+        "age_prototype": {
+            "age_enabled": False,
+            "age_graph_name": "ctxledger_memory",
+            "observability_routes": [
+                "/debug/runtime",
+                "/debug/routes",
+                "/debug/tools",
+            ],
+            "age_graph_status": "unknown",
+        },
     }
 
 
@@ -604,6 +876,313 @@ def test_cli_helpers_cover_schema_path_and_version_fallback(
 
     assert exit_code == 0
     assert captured.out.strip() == get_app_version()
+
+
+def test_cli_print_missing_database_url_with_and_without_override_hint(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli_module._print_missing_database_url() == 1
+    assert cli_module._print_missing_database_url(include_override_hint=True) == 1
+
+    captured = capsys.readouterr()
+    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+    assert (
+        "Database URL is required. Set CTXLEDGER_DATABASE_URL or pass --database-url."
+        in captured.err
+    )
+
+
+def test_cli_age_graph_readiness_returns_missing_database_url_when_unconfigured(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url=""),
+    )
+
+    exit_code = cli_module._age_graph_readiness(
+        argparse.Namespace(database_url=None, graph_name=None)
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert (
+        "Database URL is required. Set CTXLEDGER_DATABASE_URL or pass --database-url."
+        in captured.err
+    )
+
+
+def test_cli_age_graph_readiness_requires_graph_name(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+    settings = settings.__class__(
+        app_name=settings.app_name,
+        app_version=settings.app_version,
+        environment=settings.environment,
+        database=settings.database.__class__(
+            url=settings.database.url,
+            connect_timeout_seconds=settings.database.connect_timeout_seconds,
+            statement_timeout_ms=settings.database.statement_timeout_ms,
+            schema_name=settings.database.schema_name,
+            pool_min_size=settings.database.pool_min_size,
+            pool_max_size=settings.database.pool_max_size,
+            pool_timeout_seconds=settings.database.pool_timeout_seconds,
+            age_enabled=settings.database.age_enabled,
+            age_graph_name="",
+        ),
+        http=settings.http,
+        debug=settings.debug,
+        logging=settings.logging,
+        embedding=settings.embedding,
+    )
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+
+    exit_code = cli_module._age_graph_readiness(
+        argparse.Namespace(database_url=None, graph_name=None)
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert (
+        "AGE graph name is required. Set CTXLEDGER_DB_AGE_GRAPH_NAME or pass --graph-name."
+        in captured.err
+    )
+
+
+def test_cli_age_graph_readiness_prints_status_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+
+    class FakePostgresConfig:
+        def __init__(
+            self,
+            *,
+            database_url: str,
+            connect_timeout_seconds: int,
+            statement_timeout_ms: int | None,
+            schema_name: str,
+            pool_min_size: int,
+            pool_max_size: int,
+            pool_timeout_seconds: int,
+            age_enabled: bool,
+            age_graph_name: str,
+        ) -> None:
+            self.database_url = database_url
+            self.age_enabled = age_enabled
+            self.age_graph_name = age_graph_name
+
+    class FakeChecker:
+        def __init__(self, config: object) -> None:
+            self.config = config
+
+        def age_graph_status(self, graph_name: str) -> str:
+            assert graph_name == "ctxledger_memory"
+            return "graph_ready"
+
+        def age_available(self) -> bool:
+            return True
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr("ctxledger.db.postgres.PostgresConfig", FakePostgresConfig)
+    monkeypatch.setattr("ctxledger.db.postgres.PostgresDatabaseHealthChecker", FakeChecker)
+
+    exit_code = cli_module._age_graph_readiness(
+        argparse.Namespace(database_url=None, graph_name=None)
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert captured.out.strip() == (
+        '{"age_enabled": false, "age_graph_name": "ctxledger_memory", '
+        '"age_available": true, "age_graph_status": "graph_ready"}'
+    )
+
+
+def test_cli_age_graph_readiness_returns_failure_on_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+
+    class FakePostgresConfig:
+        def __init__(
+            self,
+            *,
+            database_url: str,
+            connect_timeout_seconds: int,
+            statement_timeout_ms: int | None,
+            schema_name: str,
+            pool_min_size: int,
+            pool_max_size: int,
+            pool_timeout_seconds: int,
+            age_enabled: bool,
+            age_graph_name: str,
+        ) -> None:
+            return None
+
+    class FakeChecker:
+        def __init__(self, config: object) -> None:
+            raise RuntimeError("health checker init failed")
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr("ctxledger.db.postgres.PostgresConfig", FakePostgresConfig)
+    monkeypatch.setattr("ctxledger.db.postgres.PostgresDatabaseHealthChecker", FakeChecker)
+
+    exit_code = cli_module._age_graph_readiness(
+        argparse.Namespace(database_url=None, graph_name=None)
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "Failed to check AGE graph readiness: health checker init failed" in captured.err
+
+
+def test_age_prototype_runtime_details_records_age_available_error() -> None:
+    class FailingAgeAvailableChecker:
+        def age_available(self) -> bool:
+            raise RuntimeError("age unavailable check failed")
+
+    server = CtxLedgerServer(
+        settings=make_settings(),
+        db_health_checker=FailingAgeAvailableChecker(),
+        runtime=None,
+    )
+
+    details = _age_prototype_runtime_details(server)
+
+    assert details == {
+        "age_enabled": False,
+        "age_graph_name": "ctxledger_memory",
+        "observability_routes": [
+            "/debug/runtime",
+            "/debug/routes",
+            "/debug/tools",
+        ],
+        "age_available_error": "age unavailable check failed",
+        "age_graph_status": "unknown",
+    }
+
+
+def test_age_prototype_runtime_details_records_age_graph_status_error() -> None:
+    class FailingAgeGraphStatusChecker:
+        def age_available(self) -> bool:
+            return True
+
+        def age_graph_status(self, graph_name: str) -> str:
+            assert graph_name == "ctxledger_memory"
+            raise RuntimeError("graph status failed")
+
+    server = CtxLedgerServer(
+        settings=make_settings(),
+        db_health_checker=FailingAgeGraphStatusChecker(),
+        runtime=None,
+    )
+
+    details = _age_prototype_runtime_details(server)
+
+    assert details == {
+        "age_enabled": False,
+        "age_graph_name": "ctxledger_memory",
+        "observability_routes": [
+            "/debug/runtime",
+            "/debug/routes",
+            "/debug/tools",
+        ],
+        "age_available": True,
+        "age_graph_status_error": "graph status failed",
+        "age_graph_status": "unknown",
+    }
+
+
+def test_age_prototype_runtime_details_records_age_graph_available_error() -> None:
+    class FailingAgeGraphAvailableChecker:
+        def age_available(self) -> bool:
+            return True
+
+        def age_graph_available(self, graph_name: str) -> bool:
+            assert graph_name == "ctxledger_memory"
+            raise RuntimeError("graph availability failed")
+
+    server = CtxLedgerServer(
+        settings=make_settings(),
+        db_health_checker=FailingAgeGraphAvailableChecker(),
+        runtime=None,
+    )
+
+    details = _age_prototype_runtime_details(server)
+
+    assert details == {
+        "age_enabled": False,
+        "age_graph_name": "ctxledger_memory",
+        "observability_routes": [
+            "/debug/runtime",
+            "/debug/routes",
+            "/debug/tools",
+        ],
+        "age_available": True,
+        "age_graph_available_error": "graph availability failed",
+        "age_graph_status": "unknown",
+    }
+
+
+def test_workflow_resume_error_payload_maps_not_found_codes() -> None:
+    workflow_instance_id = uuid4()
+
+    class NotFoundWorkflowError(WorkflowError):
+        code = "not_found"
+
+        def __init__(self) -> None:
+            super().__init__("missing workflow", details={})
+
+    status_code, code, message, details = _workflow_resume_error_payload(
+        NotFoundWorkflowError(),
+        workflow_instance_id=workflow_instance_id,
+    )
+
+    assert (status_code, code, message) == (404, "not_found", "missing workflow")
+    assert details == {"workflow_instance_id": str(workflow_instance_id)}
+
+
+def test_workflow_resume_error_payload_maps_validation_errors() -> None:
+    workflow_instance_id = uuid4()
+
+    class ValidationWorkflowError(WorkflowError):
+        code = "validation_error"
+
+        def __init__(self) -> None:
+            super().__init__("bad request", details={"field": "workflow_instance_id"})
+
+    status_code, code, message, details = _workflow_resume_error_payload(
+        ValidationWorkflowError(),
+        workflow_instance_id=workflow_instance_id,
+    )
+
+    assert (status_code, code, message) == (400, "invalid_request", "bad request")
+    assert details == {"field": "workflow_instance_id"}
+
+
+def test_workflow_resume_error_payload_maps_unknown_errors_to_server_error() -> None:
+    workflow_instance_id = uuid4()
+
+    class UnknownWorkflowError(WorkflowError):
+        code = "unexpected_failure"
+
+        def __init__(self) -> None:
+            super().__init__("resume failed", details={"reason": "boom"})
+
+    status_code, code, message, details = _workflow_resume_error_payload(
+        UnknownWorkflowError(),
+        workflow_instance_id=workflow_instance_id,
+    )
+
+    assert (status_code, code, message) == (500, "server_error", "resume failed")
+    assert details == {"reason": "boom"}
 
 
 def test_build_health_status_handles_missing_runtime() -> None:
@@ -654,9 +1233,7 @@ def test_cli_apply_schema_covers_missing_url_and_driver_paths(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     args = argparse.Namespace(database_url=None)
-    monkeypatch.setattr(
-        "ctxledger.config.get_settings", lambda: make_settings(database_url="")
-    )
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings(database_url=""))
 
     original_import = __import__
 
@@ -695,16 +1272,11 @@ def test_cli_apply_schema_covers_missing_url_and_driver_paths(
 
     monkeypatch.setattr("builtins.__import__", fake_import_missing_driver)
 
-    exit_code = cli_module._apply_schema(
-        argparse.Namespace(database_url="postgresql://example/db")
-    )
+    exit_code = cli_module._apply_schema(argparse.Namespace(database_url="postgresql://example/db"))
     captured = capsys.readouterr()
 
     assert exit_code == 1
-    assert (
-        "Failed to import PostgreSQL driver. Install psycopg[binary] first."
-        in captured.err
-    )
+    assert "Failed to import PostgreSQL driver. Install psycopg[binary] first." in captured.err
 
 
 def test_cli_serve_and_main_dispatch_paths(
@@ -775,9 +1347,7 @@ def test_run_server_returns_zero_on_success(
 
     fake_server = FakeServer()
 
-    monkeypatch.setattr(
-        "ctxledger.runtime.orchestration.get_settings", lambda: settings
-    )
+    monkeypatch.setattr("ctxledger.runtime.orchestration.get_settings", lambda: settings)
     monkeypatch.setattr(
         "ctxledger.runtime.orchestration.apply_overrides",
         lambda settings, **kwargs: settings,
@@ -802,16 +1372,12 @@ def test_run_server_returns_one_for_bootstrap_error(
         def startup(self) -> None:
             raise ServerBootstrapError("database schema is not ready")
 
-    monkeypatch.setattr(
-        "ctxledger.runtime.orchestration.get_settings", lambda: settings
-    )
+    monkeypatch.setattr("ctxledger.runtime.orchestration.get_settings", lambda: settings)
     monkeypatch.setattr(
         "ctxledger.runtime.orchestration.apply_overrides",
         lambda settings, **kwargs: settings,
     )
-    monkeypatch.setattr(
-        "ctxledger.server.create_server", lambda _settings: FakeServer()
-    )
+    monkeypatch.setattr("ctxledger.server.create_server", lambda _settings: FakeServer())
 
     exit_code = run_server()
     captured = capsys.readouterr()
@@ -830,16 +1396,12 @@ def test_run_server_returns_one_for_unhandled_error(
         def startup(self) -> None:
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(
-        "ctxledger.runtime.orchestration.get_settings", lambda: settings
-    )
+    monkeypatch.setattr("ctxledger.runtime.orchestration.get_settings", lambda: settings)
     monkeypatch.setattr(
         "ctxledger.runtime.orchestration.apply_overrides",
         lambda settings, **kwargs: settings,
     )
-    monkeypatch.setattr(
-        "ctxledger.server.create_server", lambda _settings: FakeServer()
-    )
+    monkeypatch.setattr("ctxledger.server.create_server", lambda _settings: FakeServer())
 
     exit_code = run_server()
     captured = capsys.readouterr()
@@ -1196,9 +1758,7 @@ def test_create_server_uses_provided_runtime_and_factory(
 
     monkeypatch.setattr(
         "ctxledger.server.build_workflow_service_factory",
-        lambda received_settings: (
-            build_factory_calls.append(received_settings) or "BUILT-FACTORY"
-        ),
+        lambda received_settings: build_factory_calls.append(received_settings) or "BUILT-FACTORY",
     )
     monkeypatch.setattr(
         "ctxledger.server.build_http_runtime_adapter",
@@ -1228,9 +1788,7 @@ def test_create_server_builds_defaults_when_runtime_and_factory_are_missing(
 
     monkeypatch.setattr(
         "ctxledger.server.build_workflow_service_factory",
-        lambda received_settings: (
-            build_factory_calls.append(received_settings) or "BUILT-FACTORY"
-        ),
+        lambda received_settings: build_factory_calls.append(received_settings) or "BUILT-FACTORY",
     )
     monkeypatch.setattr(
         "ctxledger.server.build_http_runtime_adapter",

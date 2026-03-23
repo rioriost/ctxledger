@@ -127,19 +127,26 @@ This candidate should become the preferred implementation path if:
 
 ## Current Provisional Decision
 
-The current provisional decision is:
+The current decision is:
 
-- **promote the repository-owned build path to the preferred implementation
-  path**
-- **treat that preferred path as an arm64-oriented PostgreSQL 18 image built and
-  owned by the repository**
-- **treat the current preferred base-image assumption as:**
-  - `postgres:18`
-- **treat the current preferred extension-installation assumption as:**
+- **treat the repository-owned build path as validated for the default `small`
+  deployment**
+- **treat that validated path as a PostgreSQL 17-based authenticated local stack
+  built and owned by the repository**
+- **treat the current preferred base-image assumption for `small` as:**
+  - `postgres:17`
+- **treat the current preferred extension-installation assumption for `small`
+  as:**
   - Apache AGE source build during the derived image build
-  - pgvector source build during the derived image build
-- **do not implement the AGE-capable Docker overlay until those preferred
-  assumptions are reflected in the overlay/build design**
+  - pgvector source build during the derived image build with portability-oriented
+    build flags:
+    - `make OPTFLAGS=""`
+- **treat the authenticated default `small` stack as the canonical validated
+  local/dev deployment path**
+- **treat `large` as a separate future deployment pattern that is not yet
+  implemented**
+  - intended direction:
+    - Azure Database for PostgreSQL
 - **retain the identified concrete prebuilt AGE-capable image as a non-preferred
   investigation candidate**
   - `apache/age:dev_snapshot_master`
@@ -148,7 +155,8 @@ The current provisional decision is:
 
 In short:
 
-- **repository-owned PostgreSQL 18 arm64-capable build first**
+- **repository-owned PostgreSQL 17 validated default `small` stack first**
+- **future `large` deployment later, as a separate implementation track**
 - **concrete prebuilt path second, only if it later clears the compatibility
   bar**
 
@@ -160,23 +168,27 @@ current repository expectations.
 
 At the same time, the current working assumption for the preferred path is now:
 
-- both Apache AGE and pgvector support PostgreSQL 18
-- arm64 support should not be assumed blindly
-- the first preferred base-image assumption is:
-  - `postgres:18`
-- the first preferred extension-installation assumption is:
-  - Apache AGE source build against PostgreSQL 18 during image build
-  - pgvector source build against PostgreSQL 18 during image build
-- therefore the repository should own an arm64-capable PostgreSQL 18 image path
-  and prove it by building and validating it directly
+- the repository-owned PostgreSQL 17 image path now validates successfully for
+  the default `small` stack
+- AGE and pgvector both work on the validated PostgreSQL 17 path
+- the current preferred base-image assumption is:
+  - `postgres:17`
+- the current preferred extension-installation assumption is:
+  - Apache AGE source build against PostgreSQL 17 during image build
+  - pgvector source build against PostgreSQL 17 during image build
+  - with portability-oriented build flags:
+    - `make OPTFLAGS=""`
+- therefore the repository should treat the validated PostgreSQL 17
+  repository-owned image path as the current default local/dev implementation
+  basis
 
 Promoting the repository-owned build path now better preserves:
 
 - explicit control over extension compatibility
-- explicit control over PostgreSQL 18 selection
-- explicit control over arm64-oriented local/dev validation
+- explicit control over PostgreSQL 17 selection
+- explicit control over the validated local/dev image build path
 - reproducibility for local/dev validation
-- unchanged default relational-first stack behavior
+- a default authenticated `small` stack with Grafana and AGE already validated
 - constrained prototype discipline without hidden environment risk
 
 ---
@@ -255,7 +267,8 @@ The current milestone direction remains:
 - behavior preservation
 - operational clarity over hidden magic
 
-This provisional decision preserves those principles.
+This validated decision preserves those principles while making the default
+authenticated `small` stack the canonical local/dev deployment path.
 
 ---
 
@@ -263,21 +276,33 @@ This provisional decision preserves those principles.
 
 Current state:
 
-- **selection not final**
-- **provisional direction chosen**
-- **next comparison narrowed**
+- **selection validated for the default `small` path**
+- **repository-owned PostgreSQL 17 direction chosen for `small`**
+- **`large` remains a separate future deployment pattern and is not yet
+  implemented**
+- **prebuilt path retained only as a secondary comparison record**
 
-This note therefore records a **gated decision**, not a final adoption.
+This note therefore records a **split decision**:
 
-The gate is now narrower and more practical:
+- validated now for:
+  - the default authenticated `small` deployment
+- still future-facing for:
+  - the `large` deployment pattern
 
-- proceed with the repository-owned build path as the preferred implementation
-  direction
+The current practical reading is:
+
+- proceed with the repository-owned PostgreSQL 17 build path as the preferred
+  implementation direction for `small`
+- treat the authenticated default `small` stack as the canonical validated
+  local/dev path
+- treat `large` as a later implementation track rather than something implied by
+  the validated `small` result
 - keep the identified concrete prebuilt image candidate:
   - `apache/age:dev_snapshot_master`
   as a secondary comparison point or possible later simplification path
 - only reopen the prebuilt-first decision if a concrete candidate demonstrates a
-  clearer AGE + PostgreSQL + pgvector fit than the repository-owned path
+  clearer AGE + PostgreSQL + pgvector fit than the validated PostgreSQL 17
+  repository-owned path
 
 Only after that should the repository reconsider whether the final path should
 shift back toward:
@@ -327,20 +352,24 @@ confidence, the repository should choose the repository-owned build path.
 
 ## What Must Be True to Finalize the Repository-Owned Build Path
 
-The repository-owned build path should be finalized if one or more of these are
-true:
+The repository-owned build path should now be treated as finalized for the
+default `small` deployment because all of the following are now true under
+current evidence:
 
-- no trustworthy prebuilt image passes the required criteria
-- prebuilt image compatibility with pgvector is too weak or unclear
-- prebuilt image behavior is too ambiguous for reproducible local/dev use
-- a repository-owned path provides materially better explicitness and control for
-  the constrained prototype at acceptable maintenance cost
+- no stronger trustworthy prebuilt image has displaced it
+- the PostgreSQL 17 repository-owned path has been validated end-to-end for the
+  default local stack
+- pgvector compatibility was proven only after aligning with the upstream
+  portability-oriented build flags:
+  - `make OPTFLAGS=""`
+- the repository-owned path provides materially better explicitness and control
+  for the constrained prototype at acceptable maintenance cost
 
-If this path is chosen, the implementation should still remain narrow:
+The implementation should still remain narrow:
 
 - local/dev focused
-- optional overlay only
-- no change to default stack
+- default authenticated `small` stack focused
+- no separate AGE overlay required for normal local use
 - no broad graph platform claims
 
 ---
@@ -349,9 +378,7 @@ If this path is chosen, the implementation should still remain narrow:
 
 This note does **not** yet decide:
 
-- the exact image name
-- the exact Docker overlay contents
-- the exact Dockerfile/build path
+- the future `large` deployment implementation details
 - any production graph provisioning standard
 - any broader graph semantics
 
@@ -363,16 +390,17 @@ Those belong to the next slice after concrete candidate evaluation.
 
 The next required action is:
 
-- refine the repository-owned build candidate into the preferred implementation
-  path
-- make the build assumptions concrete enough to support an explicit optional
-  Docker/dev overlay
-- treat the preferred path specifically as:
-  - an arm64-capable PostgreSQL 18 repository-owned image
-  - based first on:
-    - `postgres:18`
-  - with Apache AGE added explicitly through a source-build assumption
-  - with pgvector added explicitly through a source-build assumption
+- treat the repository-owned PostgreSQL 17 build candidate as the validated
+  default `small` implementation path
+- keep the build assumptions concrete and explicit:
+  - PostgreSQL base:
+    - `postgres:17`
+  - Apache AGE source ref:
+    - `PG17/v1.7.0-rc0`
+  - pgvector source ref:
+    - `v0.8.2`
+  - pgvector portability-oriented build flags:
+    - `make OPTFLAGS=""`
 - retain the identified concrete prebuilt AGE-capable PostgreSQL image
   candidate:
   - `apache/age:dev_snapshot_master`
@@ -380,14 +408,16 @@ The next required action is:
 - update that record only if new evidence materially improves its
   PostgreSQL + pgvector fit
 
-The most practical next artifacts are:
+The most practical next artifacts are now:
 
-- one refined repository-owned build record
+- one updated repository-owned build record aligned with the validated
+  PostgreSQL 17 path
   - `docs/memory/age_image_candidate_repo_build_record.md`
-- one implementation-facing overlay/design step after that
+- cleanup of older planning notes that still describe:
+  - PostgreSQL 18 as the intended default
+  - optional AGE overlays
 - optionally one updated concrete prebuilt candidate record if new evidence
   warrants it
-- then a final image-selection update to this note
 
 ---
 
@@ -395,20 +425,21 @@ The most practical next artifacts are:
 
 Use this sequence:
 
-1. refine the repository-owned build path as the preferred implementation
-   candidate
+1. treat the validated PostgreSQL 17 repository-owned path as the preferred
+   implementation candidate
 2. update:
    - `docs/memory/age_image_candidate_repo_build_record.md`
-   with more concrete build assumptions, especially:
-   - confirm the preferred PostgreSQL 18 base-image path:
-     - `postgres:18`
-   - refine the exact Apache AGE source-build method
-   - refine the exact pgvector source-build method
+   with the validated assumptions, especially:
+   - confirm the preferred PostgreSQL 17 base-image path:
+     - `postgres:17`
+   - confirm the current Apache AGE source-build method
+   - confirm the current pgvector source-build method and portability flags
 3. keep `docs/memory/age_image_candidate_prebuilt_concrete_record.md` as the
    secondary comparison record for `apache/age:dev_snapshot_master`
-4. update this note with the stronger preferred-path reading
-5. only then implement:
+4. update this note with the validated preferred-path reading
+5. remove stale references to:
    - `docker/docker-compose.age.yml`
+   as if it were still the normal implementation target
 
 ---
 
@@ -416,10 +447,11 @@ Use this sequence:
 
 Use this rule for the next step:
 
-- **prefer a concrete prebuilt candidate if it is trustworthy and compatible**
-- **fall back to a repository-owned build if the prebuilt path is too uncertain**
-- **do not implement the AGE overlay before image selection is explicit**
-- **keep the default stack unchanged**
+- **prefer the validated PostgreSQL 17 repository-owned path for the default
+  `small` deployment**
+- **treat the prebuilt path as secondary unless it materially improves the
+  current validated result**
+- **do not reintroduce an AGE overlay as the normal local path**
 - **preserve constrained prototype boundaries**
 
 ---
@@ -428,8 +460,10 @@ Use this rule for the next step:
 
 Current decision status:
 
-- **not final**
-- **provisional path selected**
+- **validated for the default `small` deployment on PostgreSQL 17**
+- **not yet implemented for the future `large` deployment**
+- **final enough for the current `small` local/dev path**
+- **not final for the broader two-pattern deployment story**
 
 Current provisional choice:
 

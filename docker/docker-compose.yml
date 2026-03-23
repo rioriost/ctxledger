@@ -1,17 +1,25 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: ctxledger-postgres-age:pg17
+    build:
+      context: ..
+      dockerfile: docker/postgres-age/Dockerfile
+      args:
+        POSTGRES_BASE_IMAGE: postgres:17
+        POSTGRES_MAJOR: 17
+        APACHE_AGE_REF: PG17/v1.7.0-rc0
+        PGVECTOR_REF: v0.8.2
     container_name: ctxledger-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ctxledger
       POSTGRES_USER: ctxledger
       POSTGRES_PASSWORD: ctxledger
+      PGDATA: /var/lib/postgresql/data
     ports:
       - "55432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../schemas/postgres.sql:/docker-entrypoint-initdb.d/001-postgres.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ctxledger -d ctxledger"]
       interval: 5s
@@ -42,6 +50,8 @@ services:
       CTXLEDGER_LOG_LEVEL: info
       CTXLEDGER_LOG_STRUCTURED: "true"
       CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS: 5
+      CTXLEDGER_DB_AGE_ENABLED: "true"
+      CTXLEDGER_DB_AGE_GRAPH_NAME: ctxledger_memory
       PYTHONPATH: /app/src
     working_dir: /app
     command:

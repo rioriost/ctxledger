@@ -161,47 +161,64 @@ The intended reading is:
 - the image selection note defines the decision criteria
 - the candidate template records the evaluation of each serious option
 
-## Option A: Docker Compose overlay (preferred)
+## Option A: Default authenticated `small` stack (preferred and now validated)
 
 Recommended shape:
 
-- add an optional Compose overlay such as:
-  - `docker/docker-compose.age.yml`
+- treat the authenticated `small` stack as the canonical local/dev deployment
+  path:
+  - `docker/docker-compose.yml`
+  - `docker/docker-compose.small-auth.yml`
+- keep AGE within that default stack by:
+  - using the repository-owned PostgreSQL image path directly in the base stack
+  - enabling AGE in the application configuration by default
+  - ensuring the `age` extension exists during startup
+  - bootstrapping the default constrained graph during startup:
+    - `ctxledger_memory`
 
-That overlay should modify the PostgreSQL service so the environment becomes
-AGE-capable while leaving the base Compose path unchanged.
+This replaces the earlier optional overlay framing.
+
+The repository no longer needs a separate AGE-specific Compose overlay for normal
+local operator use.
 
 ### Why this is preferred
 
-This option is preferred because it preserves:
+This option is preferred because it now provides all of the following in one
+validated path:
 
 - current default local simplicity
-- explicit operator intent
-- compatibility with the current prototype’s optionality model
-- easier comparison between relational-only and AGE-enabled paths
+- authenticated HTTPS access
+- Grafana enabled by default
+- PostgreSQL 17 through the repository-owned AGE-capable image path
+- AGE enabled by default
+- automatic schema application
+- automatic AGE extension setup
+- automatic constrained graph bootstrap
+- easier operator onboarding because the normal startup path is the graph-capable
+  path
 
-It also aligns with the current repository style, where optional behavior is
-often enabled through overlays or explicit environment configuration rather than
-by silently changing the default stack.
+It also aligns with the validated current repository direction, where the
+default `small` stack is the canonical local environment rather than one overlay
+among several competing local startup patterns.
 
 ---
 
-## Option B: Replace the default PostgreSQL image (not preferred)
+## Option B: Separate AGE overlay (no longer preferred)
 
-This would mean making the default Docker path AGE-capable by changing the main
-PostgreSQL service image directly.
+This would mean keeping AGE behind a distinct Compose overlay instead of treating
+it as part of the normal authenticated `small` stack.
 
-### Why this is not preferred now
+### Why this is no longer preferred
 
-This is less desirable because it would:
+This is no longer desirable because it would:
 
-- implicitly broaden the default environment assumptions
-- make graph provisioning less explicit
-- weaken the current prototype’s optional-by-default reading
-- make it easier for AGE behavior to feel like a default dependency instead of a
-  constrained experiment
+- reintroduce unnecessary operator branching for local startup
+- make the validated default local path harder to explain
+- preserve obsolete distinctions between "normal local stack" and
+  "graph-capable local stack"
+- add documentation and operational overhead without current benefit
 
-The current prototype is not mature enough to justify that shift.
+The repository has now moved beyond that earlier provisional shape.
 
 ---
 
@@ -211,16 +228,18 @@ The provisioning slice should remain narrow and focused on environment
 capability.
 
 It should include only what is needed to make the current prototype locally
-exercisable:
+exercisable in the default authenticated `small` stack:
 
 - an AGE-capable PostgreSQL image or Docker build path
-- optional Compose overlay wiring
-- documentation for how to start the graph-enabled stack
+- default-stack wiring through:
+  - `docker/docker-compose.yml`
+  - `docker/docker-compose.small-auth.yml`
+- documentation for how to start the validated default stack
 - compatibility with:
   - `ctxledger apply-schema`
   - `ctxledger age-graph-readiness`
   - `ctxledger bootstrap-age-graph`
-- focused validation instructions for the new path
+- focused validation instructions for the default path
 
 It should **not** include:
 
@@ -236,21 +255,27 @@ It should **not** include:
 
 The intended operator flow after this provisioning slice should be:
 
-1. start the normal stack for relational-first work
-2. start the AGE overlay only when graph-enabled prototype validation is needed
-3. apply canonical schema if needed
-4. enable:
+1. start the default authenticated `small` stack:
+   - `docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build`
+2. allow startup to:
+   - apply the canonical schema
+   - ensure the `age` extension exists
+   - bootstrap the default constrained graph:
+     - `ctxledger_memory`
+   - prepare Grafana-facing observability database access
+3. confirm:
    - `CTXLEDGER_DB_AGE_ENABLED=true`
    - `CTXLEDGER_DB_AGE_GRAPH_NAME=ctxledger_memory`
-5. run:
+4. run:
    - `ctxledger age-graph-readiness`
-6. run:
+5. inspect `/debug/runtime` if desired
+6. use:
    - `ctxledger bootstrap-age-graph`
-7. rerun readiness
-8. inspect `/debug/runtime` if desired
-9. record the result using the validation observation template
+   only when the operator intentionally wants to rebuild the constrained graph
+7. record the result using the validation observation template
 
-This keeps the graph-enabled path explicit and operationally understandable.
+This keeps the default graph-enabled path explicit and operationally
+understandable while eliminating the now-obsolete separate overlay flow.
 
 ---
 
@@ -273,11 +298,19 @@ The environment must still be compatible with:
 - pgvector support already used by the project where applicable
 
 ### 3. Explicit graph usage
-The environment should not itself force graph usage.
+The environment now enables the constrained AGE prototype by default in the
+validated `small` stack.
 
-Graph-backed use should still remain gated by:
+That means the default local/dev path should carry:
 
-- `CTXLEDGER_DB_AGE_ENABLED`
+- `CTXLEDGER_DB_AGE_ENABLED=true`
+- `CTXLEDGER_DB_AGE_GRAPH_NAME=ctxledger_memory`
+
+Even with that default, the broader prototype reading remains constrained:
+
+- relational PostgreSQL tables remain canonical
+- the AGE graph remains derived and rebuildable
+- explicit bootstrap remains the operator-visible rebuild mechanism
 - graph readiness
 - explicit bootstrap
 

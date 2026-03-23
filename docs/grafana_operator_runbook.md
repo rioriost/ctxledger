@@ -66,11 +66,13 @@ You should also have:
 
 Relevant files:
 
-- `docker/docker-compose.observability.yml`
+- `docker/docker-compose.yml`
+- `docker/docker-compose.small-auth.yml`
 - `docker/grafana/provisioning/datasources/postgres.yml`
 - `docker/grafana/provisioning/dashboards/dashboards.yml`
 - `docker/grafana/dashboards/runtime_overview.json`
 - `docs/sql/observability_views.sql`
+- `scripts/setup_grafana_observability.py`
 
 Related documentation:
 
@@ -119,91 +121,75 @@ Grafana should **not** have:
 
 ---
 
-## 6. Step 1 — Ensure base services are running
+## 6. Step 1 — Start the default `small` deployment
 
-From the repository root, start the base stack if needed:
+From the repository root, start the default `small` deployment:
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml up -d --build
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
 ```
+
+If you use `envrcctl`, use the equivalent wrapped command instead.
 
 Confirm containers are healthy before continuing.
 
 Recommended checks:
 
 - PostgreSQL is healthy
-- `ctxledger` is healthy
-- the HTTP debug/runtime endpoint responds
-- the CLI observability commands return sensible results
+- `ctxledger-server-private` is healthy
+- `ctxledger-auth-small` is healthy
+- `ctxledger-grafana` is running normally
+- `ctxledger-traefik` is running normally
 
 ---
 
-## 7. Step 2 — Apply observability SQL views
+## 7. Step 2 — Understand the default automatic setup
 
-Apply the observability SQL bootstrap to PostgreSQL.
+In the default `small` deployment, Grafana-related observability database setup is now intended to happen automatically during application startup.
 
-This creates:
+The startup path runs:
 
-- `observability` schema
-- workflow overview views
-- memory overview views
-- projection failure views
-- simple activity timeline view
+- `scripts/setup_grafana_observability.py`
 
-Example command:
+That helper is intended to:
+
+- apply `docs/sql/observability_views.sql`
+- ensure the Grafana read-only PostgreSQL role exists
+- ensure the Grafana role password matches the configured value
+- grant the required observability read privileges
+- revoke broad access from the `public` schema for the Grafana role
+
+### Manual fallback
+
+If you need to re-run the setup manually against the current environment, use:
 
 ```/dev/null/sh#L1-1
-docker exec -i ctxledger-postgres psql -U ctxledger -d ctxledger < docs/sql/observability_views.sql
+python scripts/setup_grafana_observability.py
 ```
 
 ### Expected result
 
-The command should complete without SQL errors.
-
-### If it fails
-
-Check for:
-
-- schema privilege issues
-- syntax errors from local edits
-- database name/user mismatch
-- applying against the wrong environment
+The helper should complete without SQL errors and leave Grafana able to read from the `observability` schema.
 
 ---
 
-## 8. Step 3 — Create the Grafana read-only PostgreSQL role
+## 8. Step 3 — Choose Grafana credentials up front
 
-Create a dedicated role for Grafana.
+The default `small` deployment expects Grafana-related credentials to be provided before startup.
 
-Use a strong password and do not keep the placeholder value.
+Required values:
 
-Representative SQL:
+- `CTXLEDGER_GRAFANA_ADMIN_USER`
+- `CTXLEDGER_GRAFANA_ADMIN_PASSWORD`
+- `CTXLEDGER_GRAFANA_POSTGRES_USER`
+- `CTXLEDGER_GRAFANA_POSTGRES_PASSWORD`
 
-```/dev/null/sql#L1-19
-CREATE ROLE ctxledger_grafana
-LOGIN
-PASSWORD 'replace-with-a-strong-secret';
+You can provide these through:
 
-GRANT CONNECT ON DATABASE ctxledger TO ctxledger_grafana;
-GRANT USAGE ON SCHEMA observability TO ctxledger_grafana;
-GRANT SELECT ON ALL TABLES IN SCHEMA observability TO ctxledger_grafana;
+- a repository-root `.env` file
+- or `envrcctl exec`
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA observability
-GRANT SELECT ON TABLES TO ctxledger_grafana;
-
-REVOKE ALL ON SCHEMA public FROM ctxledger_grafana;
-REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ctxledger_grafana;
-REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ctxledger_grafana;
-REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM ctxledger_grafana;
-```
-
-### Example execution
-
-```/dev/null/sh#L1-1
-docker exec -it ctxledger-postgres psql -U ctxledger -d ctxledger
-```
-
-Then paste the SQL interactively.
+The automatic setup helper uses the configured PostgreSQL role name and password when preparing observability access.
 
 ### Verification
 
@@ -214,55 +200,17 @@ A useful verification is to connect with the Grafana role and confirm:
 
 ---
 
-## 9. Step 4 — Set Grafana environment variables
+## 9. Step 4 — Start the default stack and let Grafana come up with it
 
-The observability overlay expects environment variables for Grafana admin login and PostgreSQL datasource credentials.
+Grafana is now part of the default authenticated `small` deployment.
 
-Recommended values:
-
-- `CTXLEDGER_GRAFANA_ADMIN_USER`
-- `CTXLEDGER_GRAFANA_ADMIN_PASSWORD`
-- `CTXLEDGER_GRAFANA_POSTGRES_USER`
-- `CTXLEDGER_GRAFANA_POSTGRES_PASSWORD`
-
-Example shell setup:
-
-```/dev/null/sh#L1-4
-export CTXLEDGER_GRAFANA_ADMIN_USER=admin
-export CTXLEDGER_GRAFANA_ADMIN_PASSWORD='replace-with-a-strong-admin-password'
-export CTXLEDGER_GRAFANA_POSTGRES_USER=ctxledger_grafana
-export CTXLEDGER_GRAFANA_POSTGRES_PASSWORD='replace-with-a-strong-secret'
-```
-
-Optional values:
-
-- `CTXLEDGER_GRAFANA_ROOT_URL`
-- `CTXLEDGER_GRAFANA_DOMAIN`
-- `CTXLEDGER_GRAFANA_POSTGRES_HOST`
-- `CTXLEDGER_GRAFANA_POSTGRES_DB`
-- `CTXLEDGER_GRAFANA_POSTGRES_SSLMODE`
-
-For local Docker use, defaults are typically sufficient for:
-
-- host: `postgres:5432`
-- db: `ctxledger`
-- sslmode: `disable`
-
----
-
-## 10. Step 5 — Start Grafana with the observability overlay
-
-Start Grafana alongside the base stack:
+Start the stack with:
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.observability.yml up -d
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
 ```
 
-If you need a fresh rebuild/recreate:
-
-```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.observability.yml up -d --build --force-recreate
-```
+If you use `envrcctl`, use the equivalent wrapped command instead.
 
 ### Exposed port
 
@@ -274,14 +222,14 @@ http://localhost:3000
 
 ---
 
-## 11. Step 6 — Verify Grafana health
+## 10. Step 5 — Verify Grafana health
 
 ### Container health
 
 Check container status:
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.observability.yml ps
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml ps
 ```
 
 The `grafana` container should be healthy or running normally.
@@ -556,19 +504,21 @@ Suggested content:
 To stop the Grafana overlay while keeping the base stack:
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.observability.yml stop grafana
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml stop grafana
 ```
 
+To stop the full stack:
 To fully remove the observability overlay resources:
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.observability.yml down
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down
 ```
 
+To remove Grafana data volume as well:
 If you also want to remove Grafana persisted state volume:
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.observability.yml down -v
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml down -v
 ```
 
 Be aware that removing the Grafana volume deletes local dashboard/UI state stored in Grafana.

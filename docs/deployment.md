@@ -538,94 +538,94 @@ The payloads returned by `/debug/*` may reveal details such as:
 
 ## 6.4 Local HTTPS paths
 
-The repository now supports two local HTTPS variants through Traefik:
+The repository now has two deployment patterns:
 
-1. **HTTPS without authentication**
-2. **HTTPS with proxy-layer authentication**
+1. **`small` (default)**
+2. **`large` (future plan; not implemented yet)**
 
-Both variants keep the backend private and terminate TLS at Traefik.
+Both patterns are intended to keep the backend private and terminate TLS at the proxy boundary.
 
 Shared shape:
 
 - Traefik remains the host-exposed MCP entrypoint
-- Traefik terminates TLS locally
-- the private `ctxledger` backend remains on internal plain HTTP inside the Compose network
-- operators provide local certificate files for Traefik rather than enabling TLS inside `ctxledger` itself
+- Traefik terminates TLS
+- the private `ctxledger` backend remains on internal plain HTTP inside the deployment network
+- operators provide certificate material for the HTTPS listener rather than enabling TLS inside `ctxledger` itself
+- proxy-layer authentication remains part of the intended deployment boundary
 
-Expected local certificate files:
+Expected local certificate files for the default Docker-based local stack:
 
 - `docker/traefik/certs/localhost.crt`
 - `docker/traefik/certs/localhost.key`
 
 These files are mounted into the Traefik container and used for the HTTPS listener.
 
-### 6.4.1 Local HTTPS path without authentication
+### 6.4.1 `small` deployment pattern (default)
 
-This path is intended for:
+This is the default deployment pattern for local operator use and development.
 
-- local client testing over HTTPS
-- simple Zed validation without proxy auth
-- controlled local experiments where auth is intentionally not part of the test
+Current characteristics:
 
-The intended shape is:
-
-- Traefik exposes HTTPS on `8444`
-- no forward-auth middleware is applied
-- the backend remains private behind the proxy
-
-With the no-auth HTTPS overlay running:
-
-- HTTPS MCP endpoint:
-  - `https://localhost:8444/mcp`
-
-Representative startup command:
-
-```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.https-no-auth.yml up -d --build --force-recreate
-```
-
-Representative smoke validation commands:
-
-```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://localhost:8444 --tool-name memory_get_context --insecure
-```
-
-```/dev/null/sh#L1-1
-python scripts/mcp_http_smoke.py --base-url https://localhost:8444 --scenario workflow --workflow-resource-read --insecure
-```
-
-### 6.4.2 Local HTTPS-only small-auth path
-
-This path is intended for:
-
-- local operator validation
-- production-like proxy-boundary testing
-- authenticated MCP client checks over `https`
-- smoke validation against a TLS-terminated entrypoint
+- HTTPS enabled
+- proxy-layer authentication enabled
+- Grafana enabled
+- Apache AGE enabled
+- repository-owned PostgreSQL 17 image with AGE + pgvector
+- Docker Compose based
 
 The intended shape is:
 
 - Traefik exposes HTTPS on `8443`
 - the forward-auth middleware protects the HTTPS entrypoint
 - the backend remains private behind the proxy
-- the small-auth proxy path does not accept a separate public HTTP entrypoint
+- Grafana is part of the default stack
+- the PostgreSQL path is AGE-enabled by default
+- the default startup path applies the canonical schema automatically
+- the default startup path ensures the `age` extension exists automatically
+- the default startup path bootstraps the default constrained AGE graph automatically:
+  - `ctxledger_memory`
+- the default startup path prepares Grafana-facing observability access automatically
+- no separate no-auth startup path is supported
 
-With the small-auth overlay running:
-
-- HTTPS MCP endpoint:
-  - `https://localhost:8443/mcp`
-
-Representative startup command:
+Default startup command:
 
 ```/dev/null/sh#L1-1
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
+
+Default MCP endpoint:
+
+- `https://localhost:8443/mcp`
+
+Default Grafana endpoint:
+
+- `http://localhost:3000`
 
 Representative smoke validation command for local self-signed testing:
 
 ```/dev/null/sh#L1-1
 python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-token "$CTXLEDGER_SMALL_AUTH_TOKEN" --insecure --scenario workflow --workflow-resource-read
 ```
+
+The validated default `small` pattern now performs the AGE and Grafana bootstrap work during startup so operators do not need separate AGE or observability overlays for normal local use.
+
+### 6.4.2 `large` deployment pattern (future plan)
+
+This pattern is planned but not implemented yet.
+
+Intended characteristics:
+
+- HTTPS enabled
+- proxy-layer authentication enabled
+- Grafana enabled
+- Azure Database for PostgreSQL
+- larger-scale deployment posture than the validated PostgreSQL 17-based default Docker local stack
+
+Current status:
+
+- planned only
+- not yet implemented
+- should be treated as a future deployment direction rather than a current operator workflow
 
 ### Certificate guidance
 
@@ -647,21 +647,21 @@ Operational expectations:
 
 ### Relationship to production posture
 
-These local HTTPS paths improve production-like operator validation, but they do not change the broader deployment model:
+These deployment patterns improve production-like operator validation, but they do not change the broader deployment model:
 
 - TLS termination still belongs at the proxy boundary
-- when auth is enabled, authentication still belongs at the proxy boundary
+- authentication still belongs at the proxy boundary
 - the backend application remains private behind the proxy
 - certificate issuance, trust, rotation, and secret handling remain deployment/operator concerns rather than application concerns
 
 These details are useful for diagnostics but increase observability exposure, so they should be treated as operationally sensitive.
 
-The local HTTPS paths do not add any additional operator-only mutation routes beyond the supported MCP and workflow inspection surfaces.
+The deployment patterns do not add any additional operator-only mutation routes beyond the supported MCP and workflow inspection surfaces.
 
-Operational guidance for these paths:
+Operational guidance for these patterns:
 
-- protect operator-facing HTTPS access with the same proxy-layer authentication boundary used for other protected endpoints when authentication is enabled
-- expose the HTTPS surface only to trusted operators or trusted local automation
+- protect operator-facing HTTPS access with the same proxy-layer authentication boundary used for other protected endpoints
+- expose the HTTPS surface only to trusted operators or trusted automation
 - prefer exact path matching for supported entrypoints such as `/mcp` and `/debug/*`
 - keep request logging enabled at the proxy or gateway boundary so operational access remains observable during incident review
 - treat workflow-scoping identifiers that may appear in query strings, resource URIs, or logs as operational metadata

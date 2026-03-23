@@ -10,10 +10,14 @@ from ctxledger.workflow.service import (
     ActiveWorkflowExistsError,
     CompleteWorkflowInput,
     CreateCheckpointInput,
+    FailureListEntry,
     InvalidStateTransitionError,
+    MemoryStats,
+    PersistenceError,
     RegisterWorkspaceInput,
     ResumableStatus,
     StartWorkflowInput,
+    ValidationError,
     VerifyStatus,
     WorkflowAttempt,
     WorkflowAttemptMismatchError,
@@ -21,7 +25,10 @@ from ctxledger.workflow.service import (
     WorkflowCompleteResult,
     WorkflowInstance,
     WorkflowInstanceStatus,
+    WorkflowListEntry,
     WorkflowService,
+    WorkflowStats,
+    _status_count_dict,
 )
 
 from .conftest import make_service_and_uow, register_workspace
@@ -43,10 +50,7 @@ def test_start_workflow_creates_running_workflow_and_attempt() -> None:
     assert result.workflow_instance.ticket_id == "TICKET-123"
     assert result.workflow_instance.status == WorkflowInstanceStatus.RUNNING
 
-    assert (
-        result.attempt.workflow_instance_id
-        == result.workflow_instance.workflow_instance_id
-    )
+    assert result.attempt.workflow_instance_id == result.workflow_instance.workflow_instance_id
     assert result.attempt.attempt_number == 1
     assert result.attempt.status == WorkflowAttemptStatus.RUNNING
 
@@ -105,10 +109,7 @@ def test_create_checkpoint_persists_snapshot_and_verify_report() -> None:
 
     assert result.checkpoint.step_name == "edit_files"
     assert result.checkpoint.summary == "Updated workflow docs"
-    assert (
-        result.checkpoint.checkpoint_json["next_intended_action"]
-        == "Implement repositories"
-    )
+    assert result.checkpoint.checkpoint_json["next_intended_action"] == "Implement repositories"
 
     assert result.verify_report is not None
     assert result.verify_report.status == VerifyStatus.PASSED
@@ -301,9 +302,7 @@ def test_completed_workflow_requires_new_workflow_for_additional_work() -> None:
     assert second.attempt.attempt_number == 1
 
 
-def test_complete_workflow_without_verify_status_preserves_attempt_verify_status() -> (
-    None
-):
+def test_complete_workflow_without_verify_status_preserves_attempt_verify_status() -> None:
     service, uow = make_service_and_uow()
     workspace = register_workspace(service)
     started = service.start_workflow(
@@ -379,8 +378,6 @@ def test_derive_next_hint_covers_inconsistent_and_blocked_without_checkpoint() -
 
 
 def test_status_count_dict_and_grouped_status_zero_fill_behavior() -> None:
-    from ctxledger.workflow.service import _status_count_dict
-
     counts = _status_count_dict(
         ("running", "completed", "failed"),
         {"running": 2, "failed": 1, "ignored": 99},
@@ -393,9 +390,318 @@ def test_status_count_dict_and_grouped_status_zero_fill_behavior() -> None:
     }
 
 
-def test_complete_workflow_returns_default_auto_memory_details_when_bridge_returns_none() -> (
-    None
-):
+def test_count_helpers_support_in_memory_repositories_and_missing_methods() -> None:
+    service, _ = make_service_and_uow()
+
+    class CountRepo:
+        def count_all(self) -> int:
+            return 7
+
+    class CountByStatusRepo:
+        def count_by_status(self) -> dict[str, int]:
+            return {"running": 3, "completed": 2}
+
+    class MaxDatetimeRepo:
+        def max_datetime(self, field_name: str):  # noqa: ANN001
+            assert field_name == "updated_at"
+            return datetime(2024, 1, 8, tzinfo=UTC)
+
+    class OpenFailureRepo:
+        def count_open_failures(self) -> int:
+            return 4
+
+    uow = SimpleNamespace(
+        rows=CountRepo(),
+        grouped=CountByStatusRepo(),
+        latest=MaxDatetimeRepo(),
+        failures=OpenFailureRepo(),
+        memory_items=SimpleNamespace(),
+    )
+
+    assert service._count_rows(uow, "rows") == 7
+
+    with pytest.raises(
+        PersistenceError,
+        match="stats counting is not supported for repository 'memory_items'",
+    ):
+        service._count_rows(uow, "memory_items")
+
+    assert service._count_grouped_statuses(
+        uow,
+        repository_name="grouped",
+        allowed_statuses=("running", "completed", "failed"),
+    ) == {
+        "running": 3,
+        "completed": 2,
+        "failed": 0,
+    }
+
+    with pytest.raises(
+        PersistenceError,
+        match="stats status aggregation is not supported for repository 'rows'",
+    ):
+        service._count_grouped_statuses(
+            uow,
+            repository_name="rows",
+            allowed_statuses=("running",),
+        )
+
+    assert service._max_datetime_field(
+        uow,
+        repository_name="latest",
+        field_name="updated_at",
+    ) == datetime(2024, 1, 8, tzinfo=UTC)
+
+    with pytest.raises(
+        PersistenceError,
+        match="stats datetime aggregation is not supported for repository 'rows'",
+    ):
+        service._max_datetime_field(
+            uow,
+            repository_name="rows",
+            field_name="updated_at",
+        )
+
+    assert uow.failures.count_open_failures() == 4
+    assert not hasattr(service, "_count_open_projection_failures")
+
+
+def test_count_memory_item_provenance_uses_repository_when_available() -> None:
+    service, _ = make_service_and_uow()
+
+    class ProvenanceRepo:
+        def count_by_provenance(self) -> dict[str, int]:
+            return {"episode_summary": 5, "workflow_completion": 1}
+
+    counts = service._count_memory_item_provenance(SimpleNamespace(memory_items=ProvenanceRepo()))
+
+    assert counts == {
+        "episode_summary": 5,
+        "workflow_completion": 1,
+    }
+
+
+def test_count_memory_item_provenance_raises_without_repository_support() -> None:
+    service, _ = make_service_and_uow()
+
+    with pytest.raises(
+        PersistenceError,
+        match="memory stats provenance aggregation is not supported for memory items",
+    ):
+        service._count_memory_item_provenance(SimpleNamespace(memory_items=SimpleNamespace()))
+
+
+def test_get_stats_collects_counts_and_latest_timestamps() -> None:
+    service, _ = make_service_and_uow()
+
+    expected_time = datetime(2024, 2, 1, tzinfo=UTC)
+
+    class FakeUow:
+        def __enter__(self) -> "FakeUow":
+            self.workspaces = SimpleNamespace(
+                count_all=lambda: 2, max_datetime=lambda field: expected_time
+            )
+            self.workflow_instances = SimpleNamespace(
+                count_all=lambda: 4,
+                count_by_status=lambda: {"running": 1, "completed": 2},
+                max_datetime=lambda field: expected_time,
+            )
+            self.workflow_attempts = SimpleNamespace(
+                count_all=lambda: 5,
+                count_by_status=lambda: {"running": 1, "succeeded": 3, "failed": 1},
+            )
+            self.workflow_checkpoints = SimpleNamespace(
+                count_all=lambda: 6,
+                max_datetime=lambda field: expected_time,
+            )
+            self.verify_reports = SimpleNamespace(
+                count_all=lambda: 3,
+                count_by_status=lambda: {"passed": 2, "failed": 1},
+                max_datetime=lambda field: expected_time,
+            )
+            self.memory_episodes = SimpleNamespace(
+                count_all=lambda: 7, max_datetime=lambda field: expected_time
+            )
+            self.memory_items = SimpleNamespace(
+                count_all=lambda: 8, max_datetime=lambda field: expected_time
+            )
+            self.memory_embeddings = SimpleNamespace(
+                count_all=lambda: 9, max_datetime=lambda field: expected_time
+            )
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service._uow_factory = lambda: FakeUow()  # type: ignore[assignment]
+
+    stats = service.get_stats()
+
+    assert stats == WorkflowStats(
+        workspace_count=2,
+        workflow_status_counts={
+            "running": 1,
+            "completed": 2,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        attempt_status_counts={
+            "running": 1,
+            "succeeded": 3,
+            "failed": 1,
+            "cancelled": 0,
+        },
+        verify_status_counts={
+            "passed": 2,
+            "failed": 1,
+            "pending": 0,
+            "skipped": 0,
+        },
+        checkpoint_count=6,
+        episode_count=7,
+        memory_item_count=8,
+        memory_embedding_count=9,
+        latest_workflow_updated_at=expected_time,
+        latest_checkpoint_created_at=expected_time,
+        latest_verify_report_created_at=expected_time,
+        latest_episode_created_at=expected_time,
+        latest_memory_item_created_at=expected_time,
+        latest_memory_embedding_created_at=expected_time,
+    )
+
+
+def test_get_memory_stats_collects_relation_and_provenance_information() -> None:
+    service, _ = make_service_and_uow()
+
+    expected_time = datetime(2024, 3, 1, tzinfo=UTC)
+
+    class FakeUow:
+        def __enter__(self) -> "FakeUow":
+            self.memory_episodes = SimpleNamespace(
+                count_all=lambda: 2, max_datetime=lambda field: expected_time
+            )
+            self.memory_items = SimpleNamespace(
+                count_all=lambda: 4,
+                max_datetime=lambda field: expected_time,
+                count_by_provenance=lambda: {"episode_summary": 3, "workflow_completion": 1},
+            )
+            self.memory_embeddings = SimpleNamespace(
+                count_all=lambda: 5, max_datetime=lambda field: expected_time
+            )
+            self.memory_relations = SimpleNamespace(
+                count_all=lambda: 6, max_datetime=lambda field: expected_time
+            )
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service._uow_factory = lambda: FakeUow()  # type: ignore[assignment]
+
+    stats = service.get_memory_stats()
+
+    assert stats == MemoryStats(
+        episode_count=2,
+        memory_item_count=4,
+        memory_embedding_count=5,
+        memory_relation_count=6,
+        memory_item_provenance_counts={
+            "episode_summary": 3,
+            "workflow_completion": 1,
+        },
+        latest_episode_created_at=expected_time,
+        latest_memory_item_created_at=expected_time,
+        latest_memory_embedding_created_at=expected_time,
+        latest_memory_relation_created_at=expected_time,
+    )
+
+
+def test_list_workflows_validates_inputs_and_maps_related_state() -> None:
+    service, _ = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="LIST-1",
+        )
+    )
+    service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="inspect",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["tests"], "status": "passed"},
+        )
+    )
+
+    entries = service.list_workflows(
+        limit=5,
+        status=" running ",
+        workspace_id=workspace.workspace_id,
+        ticket_id=" LIST-1 ",
+    )
+
+    assert entries == (
+        WorkflowListEntry(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            workspace_id=workspace.workspace_id,
+            canonical_path=workspace.canonical_path,
+            ticket_id="LIST-1",
+            workflow_status=WorkflowInstanceStatus.RUNNING.value,
+            latest_step_name="inspect",
+            latest_verify_status=VerifyStatus.PASSED.value,
+            updated_at=started.workflow_instance.updated_at,
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="limit must be greater than zero"):
+        service.list_workflows(limit=0)
+
+    with pytest.raises(
+        ValidationError,
+        match="status must be one of running, completed, failed, or cancelled",
+    ):
+        service.list_workflows(status="unknown")
+
+
+def test_list_workflows_falls_back_to_attempt_verify_status_without_verify_report() -> None:
+    service, uow = make_service_and_uow()
+    workspace = register_workspace(service)
+    started = service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="LIST-VERIFY-FALLBACK",
+        )
+    )
+
+    updated_attempt = WorkflowAttempt(
+        attempt_id=started.attempt.attempt_id,
+        workflow_instance_id=started.attempt.workflow_instance_id,
+        attempt_number=started.attempt.attempt_number,
+        status=started.attempt.status,
+        failure_reason=started.attempt.failure_reason,
+        verify_status=VerifyStatus.SKIPPED,
+        started_at=started.attempt.started_at,
+        finished_at=started.attempt.finished_at,
+        created_at=started.attempt.created_at,
+        updated_at=datetime(2024, 1, 2, tzinfo=UTC),
+    )
+    uow.attempts_by_id[updated_attempt.attempt_id] = updated_attempt
+
+    entries = service.list_workflows(limit=5)
+
+    assert len(entries) == 1
+    assert entries[0].latest_verify_status == VerifyStatus.SKIPPED.value
+
+
+def test_list_failures_currently_returns_empty_tuple() -> None:
+    service, _ = make_service_and_uow()
+
+    assert service.list_failures() == ()
+
+
+def test_complete_workflow_returns_default_auto_memory_details_when_bridge_returns_none() -> None:
     class NoneReturningBridge:
         embedding_generator = None
 
@@ -428,9 +734,7 @@ def test_complete_workflow_returns_default_auto_memory_details_when_bridge_retur
     assert result.warnings == ()
 
 
-def test_complete_workflow_adds_embedding_warning_when_auto_memory_embedding_fails() -> (
-    None
-):
+def test_complete_workflow_adds_embedding_warning_when_auto_memory_embedding_fails() -> None:
     class EmbeddingFailureBridge:
         embedding_generator = None
 

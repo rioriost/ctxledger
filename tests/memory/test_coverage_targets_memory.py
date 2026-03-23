@@ -1161,8 +1161,8 @@ def test_in_memory_memory_relation_repository_lists_distinct_support_targets_by_
             other_source_memory_id,
         )
     ) == (
-        repeated_target_memory_id,
         newer_target_memory_id,
+        repeated_target_memory_id,
     )
 
 

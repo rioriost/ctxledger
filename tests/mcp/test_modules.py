@@ -65,6 +65,8 @@ def make_settings(
             pool_min_size=1,
             pool_max_size=10,
             pool_timeout_seconds=5,
+            age_enabled=False,
+            age_graph_name="ctxledger_memory",
         ),
         http=HttpSettings(
             host=host,
@@ -226,9 +228,7 @@ def test_build_streamable_http_not_found_response_returns_expected_payload() -> 
     )
 
 
-def test_build_streamable_http_invalid_request_response_returns_expected_payload() -> (
-    None
-):
+def test_build_streamable_http_invalid_request_response_returns_expected_payload() -> None:
     response = build_streamable_http_invalid_request_response("bad request")
 
     assert response == StreamableHttpResponse(
@@ -440,9 +440,7 @@ def test_streamable_http_endpoint_rejects_invalid_json() -> None:
 
     assert response.status_code == 400
     assert response.payload["error"]["code"] == "invalid_request"
-    assert response.payload["error"]["message"].startswith(
-        "request body must be valid JSON:"
-    )
+    assert response.payload["error"]["message"].startswith("request body must be valid JSON:")
     assert response.headers == {"content-type": "application/json"}
 
 
@@ -572,9 +570,9 @@ def test_path_matches_normalizes_paths(
 def test_parse_workspace_resume_resource_uri_returns_workspace_id() -> None:
     workspace_id = uuid4()
 
-    assert parse_workspace_resume_resource_uri(
-        f"workspace://{workspace_id}/resume"
-    ) == (workspace_id)
+    assert parse_workspace_resume_resource_uri(f"workspace://{workspace_id}/resume") == (
+        workspace_id
+    )
 
 
 @pytest.mark.parametrize(
@@ -595,9 +593,7 @@ def test_parse_workspace_resume_resource_uri_rejects_invalid_values(
     assert parse_workspace_resume_resource_uri(uri) is None
 
 
-def test_parse_workflow_detail_resource_uri_returns_workspace_and_workflow_ids() -> (
-    None
-):
+def test_parse_workflow_detail_resource_uri_returns_workspace_and_workflow_ids() -> None:
     workspace_id = uuid4()
     workflow_instance_id = uuid4()
 
@@ -670,9 +666,7 @@ def test_build_workflow_detail_resource_response_delegates_to_server() -> None:
     )
 
 
-def test_build_workspace_resume_resource_handler_returns_not_found_for_invalid_uri() -> (
-    None
-):
+def test_build_workspace_resume_resource_handler_returns_not_found_for_invalid_uri() -> None:
     class FakeServer:
         pass
 
@@ -687,10 +681,7 @@ def test_build_workspace_resume_resource_handler_returns_not_found_for_invalid_u
         payload={
             "error": {
                 "code": "not_found",
-                "message": (
-                    "workspace resume resource requires "
-                    "workspace://{workspace_id}/resume"
-                ),
+                "message": ("workspace resume resource requires workspace://{workspace_id}/resume"),
             }
         },
         headers={"content-type": "application/json"},
@@ -718,9 +709,7 @@ def test_build_workspace_resume_resource_handler_returns_server_response() -> No
     assert handler(f"workspace://{workspace_id}/resume") == expected
 
 
-def test_build_workflow_detail_resource_handler_returns_not_found_for_invalid_uri() -> (
-    None
-):
+def test_build_workflow_detail_resource_handler_returns_not_found_for_invalid_uri() -> None:
     class FakeServer:
         pass
 
@@ -771,10 +760,7 @@ def test_build_workflow_detail_resource_handler_returns_server_response() -> Non
 
     handler = build_workflow_detail_resource_handler(FakeServer())
 
-    assert (
-        handler(f"workspace://{workspace_id}/workflow/{workflow_instance_id}")
-        == expected
-    )
+    assert handler(f"workspace://{workspace_id}/workflow/{workflow_instance_id}") == expected
 
 
 @dataclass
@@ -792,9 +778,7 @@ class FakeRpcRuntime:
         if self.resource_calls is None:
             self.resource_calls = []
         if self.tool_response is None:
-            self.tool_response = McpToolResponse(
-                payload={"ok": True, "result": {"echo": "tool"}}
-            )
+            self.tool_response = McpToolResponse(payload={"ok": True, "result": {"echo": "tool"}})
         if self.resource_response is None:
             self.resource_response = McpResourceResponse(
                 status_code=200,
@@ -875,9 +859,7 @@ def test_handle_mcp_rpc_request_returns_initialize_success_payload() -> None:
             },
         },
     }
-    assert runtime._mcp_lifecycle_state.negotiated_protocol_version == (
-        MCP_PROTOCOL_VERSION
-    )
+    assert runtime._mcp_lifecycle_state.negotiated_protocol_version == (MCP_PROTOCOL_VERSION)
 
 
 def test_handle_mcp_rpc_request_returns_tools_list_payload() -> None:
@@ -912,9 +894,7 @@ def test_handle_mcp_rpc_request_returns_tools_call_payload() -> None:
     settings = make_settings()
     runtime = FakeRpcRuntime(
         settings=settings,
-        tool_response=McpToolResponse(
-            payload={"ok": True, "result": {"message": "hello"}}
-        ),
+        tool_response=McpToolResponse(payload={"ok": True, "result": {"message": "hello"}}),
     )
 
     response = handle_mcp_rpc_request(

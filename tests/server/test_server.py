@@ -89,9 +89,7 @@ def test_configure_logging_sets_ctxledger_and_root_logger_levels() -> None:
         logging.basicConfig = original_basic_config
         logging.getLogger().setLevel(original_root_level)
         logging.getLogger("ctxledger").setLevel(original_ctxledger_level)
-        logging.getLogger("ctxledger.workflow.service").setLevel(
-            original_workflow_level
-        )
+        logging.getLogger("ctxledger.workflow.service").setLevel(original_workflow_level)
         logging.getLogger("ctxledger.server").setLevel(original_server_level)
 
     assert basic_config_calls == [
@@ -214,16 +212,27 @@ def test_server_response_builder_methods_delegate_to_runtime_response_helpers() 
         }
     }
     assert introspection_response.status_code == 200
-    assert introspection_response.payload == {"runtime": []}
+    assert introspection_response.payload == {
+        "runtime": [],
+        "age_prototype": {
+            "age_enabled": False,
+            "age_graph_name": "ctxledger_memory",
+            "observability_routes": [
+                "/debug/runtime",
+                "/debug/routes",
+                "/debug/tools",
+            ],
+            "age_available": True,
+            "age_graph_status": "graph_ready",
+        },
+    }
     assert routes_response.status_code == 200
     assert routes_response.payload == {"routes": []}
     assert tools_response.status_code == 200
     assert tools_response.payload == {"tools": []}
 
 
-def test_build_workspace_and_workflow_resource_responses_delegate_to_runtime_helpers() -> (
-    None
-):
+def test_build_workspace_and_workflow_resource_responses_delegate_to_runtime_helpers() -> None:
     workspace_id = make_resume_fixture().workspace.workspace_id
     workflow_instance_id = make_resume_fixture().workflow_instance.workflow_instance_id
     server = make_server(runtime=None)
@@ -325,12 +334,8 @@ def test_startup_builds_owned_connection_pool_and_falls_back_when_factory_reject
     server.workflow_service_factory = rejecting_factory
     server._owns_connection_pool = True
 
-    monkeypatch.setattr(
-        "ctxledger.server.PostgresConfig.from_settings", fake_from_settings
-    )
-    monkeypatch.setattr(
-        "ctxledger.server.build_connection_pool", fake_build_connection_pool
-    )
+    monkeypatch.setattr("ctxledger.server.PostgresConfig.from_settings", fake_from_settings)
+    monkeypatch.setattr("ctxledger.server.build_connection_pool", fake_build_connection_pool)
 
     server.startup()
 
@@ -377,12 +382,8 @@ def test_startup_raises_type_error_when_factory_failure_is_not_connection_pool_r
     server.workflow_service_factory = exploding_factory
     server._owns_connection_pool = True
 
-    monkeypatch.setattr(
-        "ctxledger.server.PostgresConfig.from_settings", fake_from_settings
-    )
-    monkeypatch.setattr(
-        "ctxledger.server.build_connection_pool", fake_build_connection_pool
-    )
+    monkeypatch.setattr("ctxledger.server.PostgresConfig.from_settings", fake_from_settings)
+    monkeypatch.setattr("ctxledger.server.build_connection_pool", fake_build_connection_pool)
 
     with pytest.raises(TypeError, match="unexpected keyword"):
         server.startup()
@@ -523,9 +524,7 @@ def test_create_runtime_returns_http_adapter_when_http_only() -> None:
     assert runtime.__class__.__name__ == "HttpRuntimeAdapter"
 
 
-def test_build_database_health_checker_returns_default_when_database_url_is_missing() -> (
-    None
-):
+def test_build_database_health_checker_returns_default_when_database_url_is_missing() -> None:
     checker = build_database_health_checker(None)
 
     assert checker.__class__.__name__ == "DefaultDatabaseHealthChecker"
@@ -651,9 +650,7 @@ def test_startup_logs_runtime_introspection_metadata_for_http_runtime(
     server.startup()
 
     startup_complete_extra = next(
-        extra
-        for message, extra in info_calls
-        if message == "ctxledger startup complete"
+        extra for message, extra in info_calls if message == "ctxledger startup complete"
     )
 
     assert startup_complete_extra["host"] == settings.http.host

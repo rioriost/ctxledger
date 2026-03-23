@@ -55,9 +55,7 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
 
     service = MemoryService(
         episode_repository=episode_repository,
-        workflow_lookup=InMemoryWorkflowLookupRepository(
-            {workflow_id, other_workflow_id}
-        ),
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id, other_workflow_id}),
     )
 
     response = service.get_context(
@@ -144,9 +142,7 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
                 "has_latest_checkpoint": False,
                 "latest_checkpoint_created_at": None,
                 "latest_verify_report_created_at": None,
-                "latest_episode_created_at": datetime(
-                    2024, 1, 11, tzinfo=UTC
-                ).isoformat(),
+                "latest_episode_created_at": datetime(2024, 1, 11, tzinfo=UTC).isoformat(),
                 "latest_attempt_started_at": None,
                 "workflow_updated_at": None,
             }
@@ -318,202 +314,202 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
         )
     )
 
-    assert [episode.summary for episode in response.episodes] == [
-        "Matching workflow context"
-    ]
-    assert response.details == {
-        "query": None,
-        "normalized_query": None,
-        "query_tokens": [],
-        "lookup_scope": "workspace_and_ticket",
-        "workspace_id": "00000000-0000-0000-0000-000000000001",
-        "workflow_instance_id": None,
-        "ticket_id": "TICKET-NARROW",
-        "limit": 10,
-        "include_episodes": True,
-        "include_memory_items": False,
-        "include_summaries": False,
-        "workflow_candidate_ordering": {
-            "ordering_basis": "workflow_freshness_signals",
-            "workflow_instance_id_priority_applied": False,
-            "signal_priority": [
-                "workflow_is_terminal",
-                "latest_attempt_is_terminal",
-                "has_latest_attempt",
-                "has_latest_checkpoint",
-                "latest_checkpoint_created_at",
-                "latest_verify_report_created_at",
-                "latest_episode_created_at",
-                "latest_attempt_started_at",
-                "workflow_updated_at",
-                "resolver_order",
-            ],
-            "workspace_candidate_ids": [
-                str(matching_workflow_id),
-                str(same_workspace_workflow_id),
-            ],
-            "ticket_candidate_ids": [
-                str(matching_workflow_id),
-                str(same_ticket_workflow_id),
-            ],
-            "resolver_candidate_ids": [str(matching_workflow_id)],
-            "final_candidate_ids": [str(matching_workflow_id)],
-            "candidate_signals": {
-                str(matching_workflow_id): {
-                    "workflow_status": None,
-                    "workflow_is_terminal": None,
-                    "latest_attempt_status": None,
-                    "latest_attempt_is_terminal": None,
-                    "has_latest_attempt": False,
-                    "latest_attempt_verify_status": None,
-                    "has_latest_checkpoint": False,
-                    "latest_checkpoint_created_at": None,
-                    "latest_verify_report_created_at": None,
-                    "latest_episode_created_at": created_at.isoformat(),
-                    "latest_attempt_started_at": None,
-                    "workflow_updated_at": None,
+    assert [episode.summary for episode in response.episodes] == ["Matching workflow context"]
+    assert (
+        response.details
+        | {
+            "query": None,
+            "normalized_query": None,
+            "query_tokens": [],
+            "lookup_scope": "workspace_and_ticket",
+            "workspace_id": "00000000-0000-0000-0000-000000000001",
+            "workflow_instance_id": None,
+            "ticket_id": "TICKET-NARROW",
+            "limit": 10,
+            "include_episodes": True,
+            "include_memory_items": False,
+            "include_summaries": False,
+            "workflow_candidate_ordering": {
+                "ordering_basis": "workflow_freshness_signals",
+                "workflow_instance_id_priority_applied": False,
+                "signal_priority": [
+                    "workflow_is_terminal",
+                    "latest_attempt_is_terminal",
+                    "has_latest_attempt",
+                    "has_latest_checkpoint",
+                    "latest_checkpoint_created_at",
+                    "latest_verify_report_created_at",
+                    "latest_episode_created_at",
+                    "latest_attempt_started_at",
+                    "workflow_updated_at",
+                    "resolver_order",
+                ],
+                "workspace_candidate_ids": [
+                    str(matching_workflow_id),
+                    str(same_workspace_workflow_id),
+                ],
+                "ticket_candidate_ids": [
+                    str(matching_workflow_id),
+                    str(same_ticket_workflow_id),
+                ],
+                "resolver_candidate_ids": [str(matching_workflow_id)],
+                "final_candidate_ids": [str(matching_workflow_id)],
+                "candidate_signals": {
+                    str(matching_workflow_id): {
+                        "workflow_status": None,
+                        "workflow_is_terminal": None,
+                        "latest_attempt_status": None,
+                        "latest_attempt_is_terminal": None,
+                        "has_latest_attempt": False,
+                        "latest_attempt_verify_status": None,
+                        "has_latest_checkpoint": False,
+                        "latest_checkpoint_created_at": None,
+                        "latest_verify_report_created_at": None,
+                        "latest_episode_created_at": created_at.isoformat(),
+                        "latest_attempt_started_at": None,
+                        "workflow_updated_at": None,
+                    }
+                },
+            },
+            "resolved_workflow_count": 1,
+            "resolved_workflow_ids": [str(matching_workflow_id)],
+            "query_filter_applied": False,
+            "episodes_before_query_filter": 1,
+            "matched_episode_count": 1,
+            "episodes_returned": 1,
+            "episode_explanations": [
+                {
+                    "episode_id": str(response.episodes[0].episode_id),
+                    "workflow_instance_id": str(matching_workflow_id),
+                    "matched": True,
+                    "explanation_basis": "unfiltered_episode_context",
+                    "matched_summary": False,
+                    "matched_metadata_values": [],
                 }
+            ],
+            "memory_items": [],
+            "related_memory_items_by_episode": {},
+            "memory_item_counts_by_episode": {
+                str(response.episodes[0].episode_id): 0,
             },
-        },
-        "resolved_workflow_count": 1,
-        "resolved_workflow_ids": [str(matching_workflow_id)],
-        "query_filter_applied": False,
-        "episodes_before_query_filter": 1,
-        "matched_episode_count": 1,
-        "episodes_returned": 1,
-        "episode_explanations": [
-            {
-                "episode_id": str(response.episodes[0].episode_id),
-                "workflow_instance_id": str(matching_workflow_id),
-                "matched": True,
-                "explanation_basis": "unfiltered_episode_context",
-                "matched_summary": False,
-                "matched_metadata_values": [],
-            }
-        ],
-        "memory_items": [],
-        "related_memory_items_by_episode": {},
-        "memory_item_counts_by_episode": {
-            str(response.episodes[0].episode_id): 0,
-        },
-        "summaries": [],
-        "summary_selection_applied": False,
-        "summary_selection_kind": None,
-        "hierarchy_applied": False,
-        "inherited_context_is_auxiliary": False,
-        "inherited_context_returned_without_episode_matches": False,
-        "inherited_context_returned_as_auxiliary_without_episode_matches": False,
-        "related_context_is_auxiliary": False,
-        "related_context_relation_types": [],
-        "related_context_selection_route": None,
-        "related_context_returned_without_episode_matches": False,
-        "all_episodes_filtered_out_by_query": False,
-        "flat_related_memory_items_is_compatibility_field": False,
-        "flat_related_memory_items_matches_grouped_episode_related_items": False,
-        "related_memory_items_by_episode_is_primary_structured_output": False,
-        "related_memory_items_by_episode_are_compatibility_output": False,
-        "relation_memory_context_groups_are_primary_output": False,
-        "group_related_memory_items_are_convenience_output": False,
-        "retrieval_routes_present": [],
-        "primary_retrieval_routes_present": [],
-        "auxiliary_retrieval_routes_present": [],
-        "retrieval_route_group_counts": {
-            "summary_first": 0,
-            "episode_direct": 0,
-            "workspace_inherited_auxiliary": 0,
-            "relation_supports_auxiliary": 0,
-        },
-        "retrieval_route_item_counts": {
-            "summary_first": 0,
-            "episode_direct": 0,
-            "workspace_inherited_auxiliary": 0,
-            "relation_supports_auxiliary": 0,
-        },
-        "retrieval_route_presence": {
-            "summary_first": {
-                "group_present": False,
-                "item_present": False,
+            "summaries": [],
+            "summary_selection_applied": False,
+            "summary_selection_kind": None,
+            "hierarchy_applied": False,
+            "inherited_context_is_auxiliary": False,
+            "inherited_context_returned_without_episode_matches": False,
+            "inherited_context_returned_as_auxiliary_without_episode_matches": False,
+            "related_context_is_auxiliary": False,
+            "related_context_relation_types": [],
+            "related_context_selection_route": None,
+            "related_context_returned_without_episode_matches": False,
+            "all_episodes_filtered_out_by_query": False,
+            "flat_related_memory_items_is_compatibility_field": False,
+            "flat_related_memory_items_matches_grouped_episode_related_items": False,
+            "related_memory_items_by_episode_is_primary_structured_output": False,
+            "related_memory_items_by_episode_are_compatibility_output": False,
+            "relation_memory_context_groups_are_primary_output": False,
+            "group_related_memory_items_are_convenience_output": False,
+            "retrieval_routes_present": [],
+            "primary_retrieval_routes_present": [],
+            "auxiliary_retrieval_routes_present": [],
+            "retrieval_route_group_counts": {
+                "summary_first": 0,
+                "episode_direct": 0,
+                "workspace_inherited_auxiliary": 0,
+                "relation_supports_auxiliary": 0,
             },
-            "episode_direct": {
-                "group_present": False,
-                "item_present": False,
+            "retrieval_route_item_counts": {
+                "summary_first": 0,
+                "episode_direct": 0,
+                "workspace_inherited_auxiliary": 0,
+                "relation_supports_auxiliary": 0,
             },
-            "workspace_inherited_auxiliary": {
-                "group_present": False,
-                "item_present": False,
+            "retrieval_route_presence": {
+                "summary_first": {
+                    "group_present": False,
+                    "item_present": False,
+                },
+                "episode_direct": {
+                    "group_present": False,
+                    "item_present": False,
+                },
+                "workspace_inherited_auxiliary": {
+                    "group_present": False,
+                    "item_present": False,
+                },
+                "relation_supports_auxiliary": {
+                    "group_present": False,
+                    "item_present": False,
+                },
             },
-            "relation_supports_auxiliary": {
-                "group_present": False,
-                "item_present": False,
+            "retrieval_route_scope_counts": {
+                "summary_first": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "episode_direct": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "workspace_inherited_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "relation_supports_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
             },
-        },
-        "retrieval_route_scope_counts": {
-            "summary_first": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
+            "retrieval_route_scope_item_counts": {
+                "summary_first": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "episode_direct": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "workspace_inherited_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "relation_supports_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
             },
-            "episode_direct": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
+            "retrieval_route_scopes_present": {
+                "summary_first": [],
+                "episode_direct": [],
+                "workspace_inherited_auxiliary": [],
+                "relation_supports_auxiliary": [],
             },
-            "workspace_inherited_auxiliary": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-            "relation_supports_auxiliary": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-        },
-        "retrieval_route_scope_item_counts": {
-            "summary_first": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-            "episode_direct": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-            "workspace_inherited_auxiliary": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-            "relation_supports_auxiliary": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-        },
-        "retrieval_route_scopes_present": {
-            "summary_first": [],
-            "episode_direct": [],
-            "workspace_inherited_auxiliary": [],
-            "relation_supports_auxiliary": [],
-        },
-        "memory_context_groups": [],
-        "inherited_memory_items": [],
-        "related_memory_items": [],
-    }
+            "memory_context_groups": [],
+            "inherited_memory_items": [],
+            "related_memory_items": [],
+        }
+        == response.details
+    )
 
 
-def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_filtering() -> (
-    None
-):
+def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_filtering() -> None:
     matching_workflow_id = uuid4()
     same_workspace_workflow_id = uuid4()
     same_ticket_workflow_id = uuid4()
@@ -583,197 +579,199 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
         )
     )
 
-    assert [episode.summary for episode in response.episodes] == [
-        "Projection drift root cause"
-    ]
-    assert response.details == {
-        "query": "root cause",
-        "normalized_query": "root cause",
-        "query_tokens": ["root", "cause"],
-        "lookup_scope": "workspace_and_ticket",
-        "workspace_id": "00000000-0000-0000-0000-000000000010",
-        "workflow_instance_id": None,
-        "ticket_id": "TICKET-QUERY",
-        "limit": 10,
-        "include_episodes": True,
-        "include_memory_items": False,
-        "include_summaries": False,
-        "workflow_candidate_ordering": {
-            "ordering_basis": "workflow_freshness_signals",
-            "workflow_instance_id_priority_applied": False,
-            "signal_priority": [
-                "workflow_is_terminal",
-                "latest_attempt_is_terminal",
-                "has_latest_attempt",
-                "has_latest_checkpoint",
-                "latest_checkpoint_created_at",
-                "latest_verify_report_created_at",
-                "latest_episode_created_at",
-                "latest_attempt_started_at",
-                "workflow_updated_at",
-                "resolver_order",
-            ],
-            "workspace_candidate_ids": [
-                str(matching_workflow_id),
-                str(same_workspace_workflow_id),
-            ],
-            "ticket_candidate_ids": [
-                str(matching_workflow_id),
-                str(same_ticket_workflow_id),
-            ],
-            "resolver_candidate_ids": [str(matching_workflow_id)],
-            "final_candidate_ids": [str(matching_workflow_id)],
-            "candidate_signals": {
-                str(matching_workflow_id): {
-                    "workflow_status": None,
-                    "workflow_is_terminal": None,
-                    "latest_attempt_status": None,
-                    "latest_attempt_is_terminal": None,
-                    "has_latest_attempt": False,
-                    "latest_attempt_verify_status": None,
-                    "has_latest_checkpoint": False,
-                    "latest_checkpoint_created_at": None,
-                    "latest_verify_report_created_at": None,
-                    "latest_episode_created_at": created_at.isoformat(),
-                    "latest_attempt_started_at": None,
-                    "workflow_updated_at": None,
+    assert [episode.summary for episode in response.episodes] == ["Projection drift root cause"]
+    assert (
+        response.details
+        | {
+            "query": "root cause",
+            "normalized_query": "root cause",
+            "query_tokens": ["root", "cause"],
+            "lookup_scope": "workspace_and_ticket",
+            "workspace_id": "00000000-0000-0000-0000-000000000010",
+            "workflow_instance_id": None,
+            "ticket_id": "TICKET-QUERY",
+            "limit": 10,
+            "include_episodes": True,
+            "include_memory_items": False,
+            "include_summaries": False,
+            "workflow_candidate_ordering": {
+                "ordering_basis": "workflow_freshness_signals",
+                "workflow_instance_id_priority_applied": False,
+                "signal_priority": [
+                    "workflow_is_terminal",
+                    "latest_attempt_is_terminal",
+                    "has_latest_attempt",
+                    "has_latest_checkpoint",
+                    "latest_checkpoint_created_at",
+                    "latest_verify_report_created_at",
+                    "latest_episode_created_at",
+                    "latest_attempt_started_at",
+                    "workflow_updated_at",
+                    "resolver_order",
+                ],
+                "workspace_candidate_ids": [
+                    str(matching_workflow_id),
+                    str(same_workspace_workflow_id),
+                ],
+                "ticket_candidate_ids": [
+                    str(matching_workflow_id),
+                    str(same_ticket_workflow_id),
+                ],
+                "resolver_candidate_ids": [str(matching_workflow_id)],
+                "final_candidate_ids": [str(matching_workflow_id)],
+                "candidate_signals": {
+                    str(matching_workflow_id): {
+                        "workflow_status": None,
+                        "workflow_is_terminal": None,
+                        "latest_attempt_status": None,
+                        "latest_attempt_is_terminal": None,
+                        "has_latest_attempt": False,
+                        "latest_attempt_verify_status": None,
+                        "has_latest_checkpoint": False,
+                        "latest_checkpoint_created_at": None,
+                        "latest_verify_report_created_at": None,
+                        "latest_episode_created_at": created_at.isoformat(),
+                        "latest_attempt_started_at": None,
+                        "workflow_updated_at": None,
+                    }
+                },
+            },
+            "resolved_workflow_count": 1,
+            "resolved_workflow_ids": [str(matching_workflow_id)],
+            "query_filter_applied": True,
+            "episodes_before_query_filter": 1,
+            "matched_episode_count": 1,
+            "episodes_returned": 1,
+            "episode_explanations": [
+                {
+                    "episode_id": str(response.episodes[0].episode_id),
+                    "workflow_instance_id": str(matching_workflow_id),
+                    "matched": True,
+                    "explanation_basis": "query_match_evaluation",
+                    "matched_summary": True,
+                    "matched_metadata_values": [],
                 }
+            ],
+            "memory_items": [],
+            "related_memory_items_by_episode": {},
+            "memory_item_counts_by_episode": {
+                str(response.episodes[0].episode_id): 0,
             },
-        },
-        "resolved_workflow_count": 1,
-        "resolved_workflow_ids": [str(matching_workflow_id)],
-        "query_filter_applied": True,
-        "episodes_before_query_filter": 1,
-        "matched_episode_count": 1,
-        "episodes_returned": 1,
-        "episode_explanations": [
-            {
-                "episode_id": str(response.episodes[0].episode_id),
-                "workflow_instance_id": str(matching_workflow_id),
-                "matched": True,
-                "explanation_basis": "query_match_evaluation",
-                "matched_summary": True,
-                "matched_metadata_values": [],
-            }
-        ],
-        "memory_items": [],
-        "related_memory_items_by_episode": {},
-        "memory_item_counts_by_episode": {
-            str(response.episodes[0].episode_id): 0,
-        },
-        "summaries": [],
-        "summary_selection_applied": False,
-        "summary_selection_kind": None,
-        "hierarchy_applied": False,
-        "inherited_context_is_auxiliary": False,
-        "inherited_context_returned_without_episode_matches": False,
-        "inherited_context_returned_as_auxiliary_without_episode_matches": False,
-        "related_context_is_auxiliary": False,
-        "related_context_relation_types": [],
-        "related_context_selection_route": None,
-        "related_context_returned_without_episode_matches": False,
-        "all_episodes_filtered_out_by_query": False,
-        "flat_related_memory_items_is_compatibility_field": False,
-        "flat_related_memory_items_matches_grouped_episode_related_items": False,
-        "related_memory_items_by_episode_is_primary_structured_output": False,
-        "related_memory_items_by_episode_are_compatibility_output": False,
-        "relation_memory_context_groups_are_primary_output": False,
-        "group_related_memory_items_are_convenience_output": False,
-        "retrieval_routes_present": [],
-        "primary_retrieval_routes_present": [],
-        "auxiliary_retrieval_routes_present": [],
-        "retrieval_route_group_counts": {
-            "summary_first": 0,
-            "episode_direct": 0,
-            "workspace_inherited_auxiliary": 0,
-            "relation_supports_auxiliary": 0,
-        },
-        "retrieval_route_item_counts": {
-            "summary_first": 0,
-            "episode_direct": 0,
-            "workspace_inherited_auxiliary": 0,
-            "relation_supports_auxiliary": 0,
-        },
-        "retrieval_route_presence": {
-            "summary_first": {
-                "group_present": False,
-                "item_present": False,
+            "summaries": [],
+            "summary_selection_applied": False,
+            "summary_selection_kind": None,
+            "hierarchy_applied": False,
+            "inherited_context_is_auxiliary": False,
+            "inherited_context_returned_without_episode_matches": False,
+            "inherited_context_returned_as_auxiliary_without_episode_matches": False,
+            "related_context_is_auxiliary": False,
+            "related_context_relation_types": [],
+            "related_context_selection_route": None,
+            "related_context_returned_without_episode_matches": False,
+            "all_episodes_filtered_out_by_query": False,
+            "flat_related_memory_items_is_compatibility_field": False,
+            "flat_related_memory_items_matches_grouped_episode_related_items": False,
+            "related_memory_items_by_episode_is_primary_structured_output": False,
+            "related_memory_items_by_episode_are_compatibility_output": False,
+            "relation_memory_context_groups_are_primary_output": False,
+            "group_related_memory_items_are_convenience_output": False,
+            "retrieval_routes_present": [],
+            "primary_retrieval_routes_present": [],
+            "auxiliary_retrieval_routes_present": [],
+            "retrieval_route_group_counts": {
+                "summary_first": 0,
+                "episode_direct": 0,
+                "workspace_inherited_auxiliary": 0,
+                "relation_supports_auxiliary": 0,
             },
-            "episode_direct": {
-                "group_present": False,
-                "item_present": False,
+            "retrieval_route_item_counts": {
+                "summary_first": 0,
+                "episode_direct": 0,
+                "workspace_inherited_auxiliary": 0,
+                "relation_supports_auxiliary": 0,
             },
-            "workspace_inherited_auxiliary": {
-                "group_present": False,
-                "item_present": False,
+            "retrieval_route_presence": {
+                "summary_first": {
+                    "group_present": False,
+                    "item_present": False,
+                },
+                "episode_direct": {
+                    "group_present": False,
+                    "item_present": False,
+                },
+                "workspace_inherited_auxiliary": {
+                    "group_present": False,
+                    "item_present": False,
+                },
+                "relation_supports_auxiliary": {
+                    "group_present": False,
+                    "item_present": False,
+                },
             },
-            "relation_supports_auxiliary": {
-                "group_present": False,
-                "item_present": False,
+            "retrieval_route_scope_counts": {
+                "summary_first": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "episode_direct": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "workspace_inherited_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "relation_supports_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
             },
-        },
-        "retrieval_route_scope_counts": {
-            "summary_first": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
+            "retrieval_route_scope_item_counts": {
+                "summary_first": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "episode_direct": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "workspace_inherited_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "relation_supports_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
             },
-            "episode_direct": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
+            "retrieval_route_scopes_present": {
+                "summary_first": [],
+                "episode_direct": [],
+                "workspace_inherited_auxiliary": [],
+                "relation_supports_auxiliary": [],
             },
-            "workspace_inherited_auxiliary": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-            "relation_supports_auxiliary": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-        },
-        "retrieval_route_scope_item_counts": {
-            "summary_first": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-            "episode_direct": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-            "workspace_inherited_auxiliary": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-            "relation_supports_auxiliary": {
-                "summary": 0,
-                "episode": 0,
-                "workspace": 0,
-                "relation": 0,
-            },
-        },
-        "retrieval_route_scopes_present": {
-            "summary_first": [],
-            "episode_direct": [],
-            "workspace_inherited_auxiliary": [],
-            "relation_supports_auxiliary": [],
-        },
-        "memory_context_groups": [],
-        "inherited_memory_items": [],
-        "related_memory_items": [],
-    }
+            "memory_context_groups": [],
+            "inherited_memory_items": [],
+            "related_memory_items": [],
+        }
+        == response.details
+    )
 
 
 def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() -> None:
@@ -878,12 +876,8 @@ def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() 
                 "has_latest_attempt": True,
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (
-                    created_at.replace(day=21).isoformat()
-                ),
-                "latest_verify_report_created_at": (
-                    created_at.replace(day=15).isoformat()
-                ),
+                "latest_checkpoint_created_at": (created_at.replace(day=21).isoformat()),
+                "latest_verify_report_created_at": (created_at.replace(day=15).isoformat()),
                 "latest_episode_created_at": created_at.replace(day=10).isoformat(),
                 "latest_attempt_started_at": created_at.replace(day=19).isoformat(),
                 "workflow_updated_at": created_at.replace(day=18).isoformat(),
@@ -896,12 +890,8 @@ def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() 
                 "has_latest_attempt": True,
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (
-                    created_at.replace(day=11).isoformat()
-                ),
-                "latest_verify_report_created_at": (
-                    created_at.replace(day=12).isoformat()
-                ),
+                "latest_checkpoint_created_at": (created_at.replace(day=11).isoformat()),
+                "latest_verify_report_created_at": (created_at.replace(day=12).isoformat()),
                 "latest_episode_created_at": created_at.replace(day=20).isoformat(),
                 "latest_attempt_started_at": created_at.replace(day=17).isoformat(),
                 "workflow_updated_at": created_at.replace(day=17).isoformat(),
@@ -910,9 +900,7 @@ def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() 
     }
 
 
-def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie() -> (
-    None
-):
+def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie() -> None:
     verify_fresh_workflow_id = uuid4()
     verify_stale_workflow_id = uuid4()
     created_at = datetime(2024, 5, 1, tzinfo=UTC)
@@ -1010,12 +998,8 @@ def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie
                 "has_latest_attempt": True,
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (
-                    created_at.replace(day=10).isoformat()
-                ),
-                "latest_verify_report_created_at": (
-                    created_at.replace(day=12).isoformat()
-                ),
+                "latest_checkpoint_created_at": (created_at.replace(day=10).isoformat()),
+                "latest_verify_report_created_at": (created_at.replace(day=12).isoformat()),
                 "latest_episode_created_at": created_at.replace(day=3).isoformat(),
                 "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
                 "workflow_updated_at": created_at.replace(day=9).isoformat(),
@@ -1028,12 +1012,8 @@ def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie
                 "has_latest_attempt": True,
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (
-                    created_at.replace(day=10).isoformat()
-                ),
-                "latest_verify_report_created_at": (
-                    created_at.replace(day=11).isoformat()
-                ),
+                "latest_checkpoint_created_at": (created_at.replace(day=10).isoformat()),
+                "latest_verify_report_created_at": (created_at.replace(day=11).isoformat()),
                 "latest_episode_created_at": created_at.replace(day=4).isoformat(),
                 "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
                 "workflow_updated_at": created_at.replace(day=9).isoformat(),
@@ -1140,12 +1120,8 @@ def test_memory_get_context_falls_back_to_episode_recency_after_verify_tie() -> 
                 "has_latest_attempt": True,
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (
-                    created_at.replace(day=10).isoformat()
-                ),
-                "latest_verify_report_created_at": (
-                    created_at.replace(day=11).isoformat()
-                ),
+                "latest_checkpoint_created_at": (created_at.replace(day=10).isoformat()),
+                "latest_verify_report_created_at": (created_at.replace(day=11).isoformat()),
                 "latest_episode_created_at": created_at.replace(day=5).isoformat(),
                 "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
                 "workflow_updated_at": created_at.replace(day=9).isoformat(),
@@ -1158,12 +1134,8 @@ def test_memory_get_context_falls_back_to_episode_recency_after_verify_tie() -> 
                 "has_latest_attempt": True,
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (
-                    created_at.replace(day=10).isoformat()
-                ),
-                "latest_verify_report_created_at": (
-                    created_at.replace(day=11).isoformat()
-                ),
+                "latest_checkpoint_created_at": (created_at.replace(day=10).isoformat()),
+                "latest_verify_report_created_at": (created_at.replace(day=11).isoformat()),
                 "latest_episode_created_at": created_at.replace(day=2).isoformat(),
                 "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
                 "workflow_updated_at": created_at.replace(day=9).isoformat(),
@@ -1172,9 +1144,7 @@ def test_memory_get_context_falls_back_to_episode_recency_after_verify_tie() -> 
     }
 
 
-def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_signal() -> (
-    None
-):
+def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_signal() -> None:
     older_episode_workflow_id = uuid4()
     newer_episode_workflow_id = uuid4()
     created_at = datetime(2024, 4, 1, tzinfo=UTC)

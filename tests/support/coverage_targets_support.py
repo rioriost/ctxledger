@@ -49,6 +49,8 @@ def make_settings(
             pool_min_size=1,
             pool_max_size=10,
             pool_timeout_seconds=5,
+            age_enabled=False,
+            age_graph_name="ctxledger_memory",
         ),
         http=HttpSettings(
             host=host,
