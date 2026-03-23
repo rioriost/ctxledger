@@ -422,6 +422,13 @@ It does need to demonstrate at least one meaningful retrieval improvement such a
 ### Deliverables
 - schema plan
 - AGE setup approach
+  - first-slice reading should remain boundary-first, bootstrap-first, and behavior-preserving
+  - the minimum setup approach should clarify:
+    - graph ownership boundary
+    - bootstrap/init responsibility
+    - optionality vs required deployment expectations
+    - failure/degradation expectations for local/dev/test and later graph-oriented work
+  - this deliverable should not yet imply graph-backed retrieval behavior
 - storage boundary decision note
 
 ---
@@ -642,8 +649,11 @@ Avoid:
 1. update roadmap and continuation notes to mark `0.6.0` active
 2. define the minimal hierarchical memory entity/relationship model
 3. decide the first AGE-backed graph slice
+   - for the current stage, prefer a boundary-first, bootstrap-first, behavior-preserving first slice
+   - clarify graph ownership, bootstrap responsibility, and degradation expectations before changing retrieval behavior
 4. identify the first `memory_get_context` hierarchical retrieval improvement
    - for the current stage, prefer a clearly framed small behavior choice over another narrow metadata addition
    - the current episode-less `include_episodes = false` choice is to keep that path narrow rather than surfacing a limited summary-first grouped view
+   - after the AGE boundary decision, the next retrieval improvement should remain constrained and behavior-preserving
 5. add focused tests before expanding scope
 6. defer Mnemis comparison and alignment decisions to `0.7.0`

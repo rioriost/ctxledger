@@ -4,8 +4,9 @@
 
 Continued the `0.6.0` hierarchical memory retrieval work with a narrow
 **grouped-path distinction consolidation** slice, then recorded and chose the
-episode-less shaping direction, and finally completed a small
-**bulk source relation lookup primitive** slice.
+episode-less shaping direction, completed a small
+**bulk source relation lookup primitive** slice, and finally framed the
+**first AGE-backed graph slice boundary** for the current stage.
 
 The grouped-path distinction work did **not** change service behavior, widen
 relation traversal, add new metadata fields, redesign grouped output, or
@@ -44,6 +45,17 @@ completed:
   - first-seen distinct target ordering
   - low-limit truncation over that ordering
   - grouped/output semantics still assembled in the service layer
+
+Finally, the next Phase A-oriented design question was explicitly framed:
+
+- what the **first AGE-backed graph slice** should actually do
+- whether it should immediately change retrieval behavior
+- or whether it should first define graph boundary, bootstrap responsibility,
+  and operational expectations without changing current `memory_get_context`
+  behavior
+
+That question is now resolved in favor of a **boundary-first,
+bootstrap-first, behavior-preserving** first AGE slice.
 
 ---
 
@@ -246,6 +258,59 @@ This means the repository contract is now slightly better aligned with the
 already-constrained relation-aware retrieval direction, while the user-visible
 service behavior remains stable.
 
+### 9. Framed the first AGE-backed graph slice as a boundary-first decision
+
+Added:
+
+- `docs/memory/first_age_slice_boundary_decision.md`
+
+That note captures the next meaningful Phase A-oriented design question for the
+current stage:
+
+- what the first AGE-backed graph slice should actually do
+- whether AGE should first appear as retrieval behavior
+- or whether it should first enter as a bounded operational and architectural
+  layer
+
+The chosen current direction recorded there is:
+
+- the first AGE-backed slice should be **boundary-first**
+- it should be **bootstrap-first**
+- it should be **behavior-preserving**
+
+In other words:
+
+- define graph ownership boundary first
+- define bootstrap/init responsibility and operational expectations second
+- only later consider a constrained graph-backed retrieval experiment
+
+This is useful because it prevents the next session from jumping directly from a
+stabilized relational-first retrieval contract into premature graph behavior.
+
+### 10. Added a minimum AGE setup approach note for the first graph slice
+
+Added:
+
+- `docs/memory/age_setup_first_slice.md`
+
+That note narrows the first AGE-oriented implementation path further by stating
+that the minimum first slice should:
+
+- make setup and bootstrap expectations explicit
+- treat AGE as optional by default in the first slice
+- define local / dev / test expectations
+- define failure and degradation expectations
+- preserve current relational retrieval behavior
+
+This means the next graph-oriented work now has two aligned design anchors:
+
+- the first AGE slice is boundary-first
+- the first AGE setup approach is operationally explicit and
+  behavior-preserving
+
+That is useful because it gives the next session a lower-risk path into Phase A
+work without reopening the just-stabilized retrieval contract area.
+
 ---
 
 ## Why this slice is useful
@@ -306,6 +371,23 @@ contract area.
 It gives the next relation-aware slices a cleaner repository boundary while
 preserving the current constrained service behavior.
 
+The new AGE boundary decision is useful because it gives the next graph-oriented
+work a low-risk entry point:
+
+- it acknowledges that AGE remains part of the `0.6.0` direction
+- it avoids turning AGE into unexplained retrieval behavior drift
+- it keeps the current relational-first retrieval contract stable while graph
+  ownership and bootstrap expectations are clarified
+
+The minimum AGE setup note is also useful because it turns that boundary-first
+decision into a more operational next-step reading:
+
+- setup responsibility is made explicit
+- optionality is made explicit
+- degradation is made explicit
+- local / dev / test expectations are made explicit
+- retrieval behavior still remains unchanged in the first graph-oriented slice
+
 ---
 
 ## What did not change
@@ -329,6 +411,8 @@ This slice intentionally did **not** do any of the following:
 - make the new bulk source relation lookup primitive imply broader relation
   semantics than the current constrained slice
 - move grouped relation assembly semantics out of the service layer
+- make the first AGE-backed slice change `memory_get_context` behavior
+- broaden traversal or grouped semantics merely because AGE is now in scope
 
 ---
 
@@ -372,6 +456,8 @@ Result at completion time:
 - `docs/memory/grouped_selection_primary_surface_decision.md`
 - `docs/memory/auxiliary_groups_top_level_sibling_decision.md`
 - `docs/memory/episode_less_summary_first_decision.md`
+- `docs/memory/first_age_slice_boundary_decision.md`
+- `docs/memory/age_setup_first_slice.md`
 
 ---
 
@@ -424,6 +510,15 @@ The current `0.6.0` state should now be read as:
   available for later constrained relation-aware refinement
 - that primitive should currently be read as infrastructure support rather than
   as broader relation behavior
+- the first AGE-backed graph slice is now also framed as a **boundary-first**
+  and **behavior-preserving** step
+- the minimum first AGE setup approach is now also defined as:
+  - setup-explicit
+  - optional-by-default
+  - degradation-explicit
+  - retrieval-behavior-preserving
+- graph-oriented follow-up should currently begin from ownership/bootstrap
+  clarification rather than from immediate retrieval behavior expansion
 
 ---
 
@@ -451,7 +546,11 @@ The next useful step should instead be one of:
 3. a follow-up constrained relation repository/service slice that actually uses
    the bulk source relation lookup primitive more broadly while preserving the
    current external contract
-4. only later, broader relation/group behavior
+4. a Phase A-oriented graph bootstrap / boundary slice following the
+   boundary-first AGE decision
+5. a minimum AGE setup / optionality / degradation slice following that same
+   behavior-preserving graph boundary direction
+6. only later, broader relation/group behavior
 
 ---
 
