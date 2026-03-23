@@ -3,11 +3,13 @@
 ## Summary
 
 Continued the `0.6.0` hierarchical memory retrieval work with a narrow
-**grouped-path distinction consolidation** slice, and then framed the next
-credible **real behavior choice** for the current stage.
+**grouped-path distinction consolidation** slice, then recorded and chose the
+episode-less shaping direction, and finally completed a small
+**bulk source relation lookup primitive** slice.
 
-This follow-up did **not** change service behavior, widen relation traversal,
-add new metadata fields, redesign grouped output, or broaden graph semantics.
+The grouped-path distinction work did **not** change service behavior, widen
+relation traversal, add new metadata fields, redesign grouped output, or
+broaden graph semantics.
 
 Instead, it tightened the current contract and handoff reading around three
 nearby but importantly different response shapes in `memory_get_context`:
@@ -16,19 +18,32 @@ nearby but importantly different response shapes in `memory_get_context`:
 2. **auxiliary-only no-match path after query filtering**
 3. **episode-less `include_episodes = false` shaping path**
 
-The main outcome is that these shapes are now more explicitly separated across
-tests and docs, so the current `0.6.0` reading is less likely to collapse them
-into one another.
+The main outcome there is that these shapes are now more explicitly separated
+across tests and docs, so the current `0.6.0` reading is less likely to
+collapse them into one another.
 
-In addition, the next plausible behavior change was explicitly framed rather
-than implemented:
+In addition, the next plausible behavior change was explicitly framed and then
+resolved for the current stage:
 
 - whether `include_episodes = false` should remain a strictly narrower
   episode-less shaping path
 - or whether it should later surface a limited summary-first grouped view
 
-That choice was intentionally recorded as a decision point rather than folded
-into the current contract by accident.
+That choice is now resolved in favor of keeping the current narrow episode-less
+path for the present `0.6.0` stage.
+
+After that, a small internal Phase C-oriented retrieval substrate slice was
+completed:
+
+- added a bulk source relation lookup primitive
+  `list_by_source_memory_ids(...)`
+- kept external `memory_get_context` behavior unchanged
+- preserved the current constrained relation-aware reading:
+  - `supports` only
+  - one-hop only
+  - first-seen distinct target ordering
+  - low-limit truncation over that ordering
+  - grouped/output semantics still assembled in the service layer
 
 ---
 
@@ -201,6 +216,36 @@ This is useful because it prevents the next session from rediscovering the same
 question informally and accidentally turning a real behavior choice into an
 incremental contract drift.
 
+### 8. Added a bulk source relation lookup primitive without changing visible retrieval behavior
+
+A small Phase C-oriented retrieval substrate slice was completed.
+
+Updated:
+
+- `src/ctxledger/memory/protocols.py`
+- `src/ctxledger/db/postgres.py`
+- `tests/memory/test_relation_contract.py`
+- `tests/memory/test_coverage_targets_memory.py`
+- `tests/postgres/test_db_helpers.py`
+
+The slice added:
+
+- `MemoryRelationRepository.list_by_source_memory_ids(...)`
+
+The current reading of this slice is:
+
+- it is an internal retrieval primitive improvement
+- it does not by itself broaden relation behavior
+- it does not introduce graph semantics
+- it does not add new response fields
+- it does not change the current `memory_get_context` external contract
+- it creates a cleaner next-step boundary for constrained relation retrieval and
+  later repository-backed refinement
+
+This means the repository contract is now slightly better aligned with the
+already-constrained relation-aware retrieval direction, while the user-visible
+service behavior remains stable.
+
 ---
 
 ## Why this slice is useful
@@ -254,6 +299,13 @@ behavior choice and records the current chosen direction explicitly:
 That choice now has an explicit Option A decision rather than living as an
 unspoken future direction.
 
+The bulk source relation lookup primitive is also useful because it improves the
+retrieval substrate without reopening the just-stabilized grouped response
+contract area.
+
+It gives the next relation-aware slices a cleaner repository boundary while
+preserving the current constrained service behavior.
+
 ---
 
 ## What did not change
@@ -274,20 +326,28 @@ This slice intentionally did **not** do any of the following:
 - make episode-less shaping surface hidden episode-oriented metadata in falsey
   form
 - introduce broader graph semantics
+- make the new bulk source relation lookup primitive imply broader relation
+  semantics than the current constrained slice
+- move grouped relation assembly semantics out of the service layer
 
 ---
 
 ## Validation completed
 
-Validated this grouped-path distinction consolidation slice with:
+Validated this grouped-path distinction consolidation and bulk relation primitive
+work with:
 
 - `pytest tests/memory/test_service_context_details.py -q`
 - `pytest tests/memory/test_memory_context_related_items.py -q`
+- `pytest tests/memory/test_relation_contract.py -q`
+- `pytest tests/memory/test_coverage_targets_memory.py -q`
+- `pytest tests/postgres/test_db_helpers.py -q`
 
 Result at completion time:
 
 - `45 passed`
 - `8 passed`
+- targeted relation repository and Postgres helper coverage passed
 
 ---
 
@@ -296,9 +356,14 @@ Result at completion time:
 ### Tests
 - `tests/memory/test_service_context_details.py`
 - `tests/memory/test_memory_context_related_items.py`
+- `tests/memory/test_relation_contract.py`
+- `tests/memory/test_coverage_targets_memory.py`
+- `tests/postgres/test_db_helpers.py`
 
 ### Core implementation
 - `src/ctxledger/memory/service_core.py`
+- `src/ctxledger/memory/protocols.py`
+- `src/ctxledger/db/postgres.py`
 
 ### Design and contract docs
 - `docs/memory/memory_get_context_service_contract.md`
@@ -355,6 +420,10 @@ The current `0.6.0` state should now be read as:
 - introducing limited summary-first grouped surfacing into that episode-less path
   was considered and is **not** part of the accepted current contract for the
   present `0.6.0` stage
+- the repository layer now also has a bulk source relation lookup primitive
+  available for later constrained relation-aware refinement
+- that primitive should currently be read as infrastructure support rather than
+  as broader relation behavior
 
 ---
 
@@ -379,7 +448,10 @@ The next useful step should instead be one of:
      elsewhere
 2. a broader contract-consolidation / interpretation step elsewhere in the
    current response model
-3. only later, broader relation/group behavior
+3. a follow-up constrained relation repository/service slice that actually uses
+   the bulk source relation lookup primitive more broadly while preserving the
+   current external contract
+4. only later, broader relation/group behavior
 
 ---
 
