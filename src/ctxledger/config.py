@@ -132,6 +132,8 @@ class DatabaseSettings:
     pool_min_size: int
     pool_max_size: int
     pool_timeout_seconds: int
+    age_enabled: bool
+    age_graph_name: str
 
     @property
     def is_configured(self) -> bool:
@@ -221,25 +223,19 @@ class AppSettings:
             raise ConfigError("CTXLEDGER_HTTP_PATH must not be empty")
 
         if self.database.connect_timeout_seconds <= 0:
-            raise ConfigError(
-                "CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS must be greater than 0"
-            )
+            raise ConfigError("CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS must be greater than 0")
 
         if (
             self.database.statement_timeout_ms is not None
             and self.database.statement_timeout_ms <= 0
         ):
-            raise ConfigError(
-                "CTXLEDGER_DB_STATEMENT_TIMEOUT_MS must be greater than 0"
-            )
+            raise ConfigError("CTXLEDGER_DB_STATEMENT_TIMEOUT_MS must be greater than 0")
 
         if not self.database.schema_name:
             raise ConfigError("CTXLEDGER_DB_SCHEMA_NAME must not be empty")
 
         if self.database.pool_min_size < 0:
-            raise ConfigError(
-                "CTXLEDGER_DB_POOL_MIN_SIZE must be greater than or equal to 0"
-            )
+            raise ConfigError("CTXLEDGER_DB_POOL_MIN_SIZE must be greater than or equal to 0")
 
         if self.database.pool_max_size <= 0:
             raise ConfigError("CTXLEDGER_DB_POOL_MAX_SIZE must be greater than 0")
@@ -250,18 +246,14 @@ class AppSettings:
             )
 
         if self.database.pool_timeout_seconds <= 0:
-            raise ConfigError(
-                "CTXLEDGER_DB_POOL_TIMEOUT_SECONDS must be greater than 0"
-            )
+            raise ConfigError("CTXLEDGER_DB_POOL_TIMEOUT_SECONDS must be greater than 0")
 
         if self.embedding.enabled:
             if not self.embedding.model:
                 raise ConfigError("CTXLEDGER_EMBEDDING_MODEL must not be empty")
 
             if self.embedding.requires_external_api and not self.embedding.api_key:
-                raise ConfigError(
-                    "OPENAI_API_KEY is required for the selected embedding provider"
-                )
+                raise ConfigError("OPENAI_API_KEY is required for the selected embedding provider")
 
             if (
                 self.embedding.provider is EmbeddingProvider.CUSTOM_HTTP
@@ -288,21 +280,19 @@ def load_settings() -> AppSettings:
 
     settings = AppSettings(
         app_name=_get_env("CTXLEDGER_APP_NAME", default_app_name) or default_app_name,
-        app_version=_get_env("CTXLEDGER_APP_VERSION", default_app_version)
-        or default_app_version,
+        app_version=_get_env("CTXLEDGER_APP_VERSION", default_app_version) or default_app_version,
         environment=_get_env("CTXLEDGER_ENV", "development") or "development",
         database=DatabaseSettings(
             url=_get_env("CTXLEDGER_DATABASE_URL", "") or "",
-            connect_timeout_seconds=_parse_int(
-                "CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS", 5
-            ),
-            statement_timeout_ms=_parse_optional_int(
-                "CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"
-            ),
+            connect_timeout_seconds=_parse_int("CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS", 5),
+            statement_timeout_ms=_parse_optional_int("CTXLEDGER_DB_STATEMENT_TIMEOUT_MS"),
             schema_name=_get_env("CTXLEDGER_DB_SCHEMA_NAME", "public") or "public",
             pool_min_size=_parse_int("CTXLEDGER_DB_POOL_MIN_SIZE", 1),
             pool_max_size=_parse_int("CTXLEDGER_DB_POOL_MAX_SIZE", 10),
             pool_timeout_seconds=_parse_int("CTXLEDGER_DB_POOL_TIMEOUT_SECONDS", 5),
+            age_enabled=_parse_bool("CTXLEDGER_DB_AGE_ENABLED", False),
+            age_graph_name=_get_env("CTXLEDGER_DB_AGE_GRAPH_NAME", "ctxledger_memory")
+            or "ctxledger_memory",
         ),
         http=HttpSettings(
             host=_get_env("CTXLEDGER_HOST", "0.0.0.0") or "0.0.0.0",

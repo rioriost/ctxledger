@@ -13,9 +13,7 @@ def test_build_parser_includes_expected_subcommands() -> None:
     parser = cli_module._build_parser()
 
     actions = [
-        action
-        for action in parser._actions
-        if isinstance(action, argparse._SubParsersAction)
+        action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
     ]
     assert len(actions) == 1
 
@@ -28,6 +26,8 @@ def test_build_parser_includes_expected_subcommands() -> None:
         "serve",
         "print-schema-path",
         "apply-schema",
+        "bootstrap-age-graph",
+        "age-graph-readiness",
         "resume-workflow",
         "version",
     }
@@ -61,12 +61,66 @@ def test_main_dispatches_apply_schema(
 
     monkeypatch.setattr(cli_module, "_apply_schema", fake_apply_schema)
 
-    result = cli_module.main(
-        ["apply-schema", "--database-url", "postgresql://override/db"]
-    )
+    result = cli_module.main(["apply-schema", "--database-url", "postgresql://override/db"])
 
     assert result == 5
     assert received_urls == ["postgresql://override/db"]
+
+
+def test_main_dispatches_bootstrap_age_graph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received_database_urls: list[str | None] = []
+    received_graph_names: list[str | None] = []
+
+    def fake_bootstrap_age_graph(args: argparse.Namespace) -> int:
+        received_database_urls.append(args.database_url)
+        received_graph_names.append(args.graph_name)
+        return 9
+
+    monkeypatch.setattr(cli_module, "_bootstrap_age_graph", fake_bootstrap_age_graph)
+
+    result = cli_module.main(
+        [
+            "bootstrap-age-graph",
+            "--database-url",
+            "postgresql://override/db",
+            "--graph-name",
+            "ctxledger_test_graph",
+        ]
+    )
+
+    assert result == 9
+    assert received_database_urls == ["postgresql://override/db"]
+    assert received_graph_names == ["ctxledger_test_graph"]
+
+
+def test_main_dispatches_age_graph_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received_database_urls: list[str | None] = []
+    received_graph_names: list[str | None] = []
+
+    def fake_age_graph_readiness(args: argparse.Namespace) -> int:
+        received_database_urls.append(args.database_url)
+        received_graph_names.append(args.graph_name)
+        return 11
+
+    monkeypatch.setattr(cli_module, "_age_graph_readiness", fake_age_graph_readiness)
+
+    result = cli_module.main(
+        [
+            "age-graph-readiness",
+            "--database-url",
+            "postgresql://override/db",
+            "--graph-name",
+            "ctxledger_test_graph",
+        ]
+    )
+
+    assert result == 11
+    assert received_database_urls == ["postgresql://override/db"]
+    assert received_graph_names == ["ctxledger_test_graph"]
 
 
 def test_main_dispatches_version(
@@ -74,9 +128,7 @@ def test_main_dispatches_version(
 ) -> None:
     called: list[str] = []
 
-    monkeypatch.setattr(
-        cli_module, "_print_version", lambda: called.append("version") or 3
-    )
+    monkeypatch.setattr(cli_module, "_print_version", lambda: called.append("version") or 3)
 
     result = cli_module.main(["version"])
 
@@ -203,9 +255,7 @@ def test_main_dispatches_resume_workflow(
 
     monkeypatch.setattr(cli_module, "_resume_workflow", fake_resume_workflow)
 
-    result = cli_module.main(
-        ["resume-workflow", "--workflow-instance-id", "workflow-123"]
-    )
+    result = cli_module.main(["resume-workflow", "--workflow-instance-id", "workflow-123"])
 
     assert result == 9
     assert received_ids == ["workflow-123"]

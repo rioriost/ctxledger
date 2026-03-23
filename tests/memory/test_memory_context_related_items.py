@@ -960,6 +960,210 @@ def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_
     }
 
 
+def test_memory_get_context_supports_target_lookup_boundary_preserves_relation_auxiliary_parity() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = UUID("00000000-0000-0000-0000-000000000059")
+    created_at = datetime(2024, 10, 26, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_relation_repository = InMemoryMemoryRelationRepository()
+
+    first_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="First episode for supports lookup parity",
+        metadata={"kind": "supports-parity-first"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    second_episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Second episode for supports lookup parity",
+        metadata={"kind": "supports-parity-second"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    episode_repository.create(first_episode)
+    episode_repository.create(second_episode)
+
+    first_source_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=first_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="First parity source memory item",
+        metadata={"kind": "supports-parity-first-source"},
+        created_at=created_at.replace(hour=3),
+        updated_at=created_at.replace(hour=3),
+    )
+    second_source_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=second_episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Second parity source memory item",
+        metadata={"kind": "supports-parity-second-source"},
+        created_at=created_at.replace(hour=4),
+        updated_at=created_at.replace(hour=4),
+    )
+    latest_support_target_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Latest parity supporting target",
+        metadata={"kind": "supports-parity-latest"},
+        created_at=created_at.replace(hour=0, minute=10),
+        updated_at=created_at.replace(hour=0, minute=10),
+    )
+    shared_support_target_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Shared parity supporting target",
+        metadata={"kind": "supports-parity-shared"},
+        created_at=created_at.replace(hour=0, minute=20),
+        updated_at=created_at.replace(hour=0, minute=20),
+    )
+    earlier_support_target_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Earlier parity supporting target",
+        metadata={"kind": "supports-parity-earlier"},
+        created_at=created_at.replace(hour=0, minute=30),
+        updated_at=created_at.replace(hour=0, minute=30),
+    )
+
+    memory_item_repository.create(first_source_memory_item)
+    memory_item_repository.create(second_source_memory_item)
+    memory_item_repository.create(latest_support_target_item)
+    memory_item_repository.create(shared_support_target_item)
+    memory_item_repository.create(earlier_support_target_item)
+
+    memory_relation_repository.create(
+        MemoryRelationRecord(
+            memory_relation_id=uuid4(),
+            source_memory_id=first_source_memory_item.memory_id,
+            target_memory_id=shared_support_target_item.memory_id,
+            relation_type="supports",
+            metadata={"kind": "supports-parity-shared-first"},
+            created_at=created_at.replace(hour=5),
+        )
+    )
+    memory_relation_repository.create(
+        MemoryRelationRecord(
+            memory_relation_id=uuid4(),
+            source_memory_id=second_source_memory_item.memory_id,
+            target_memory_id=shared_support_target_item.memory_id,
+            relation_type="supports",
+            metadata={"kind": "supports-parity-shared-second"},
+            created_at=created_at.replace(hour=6),
+        )
+    )
+    memory_relation_repository.create(
+        MemoryRelationRecord(
+            memory_relation_id=uuid4(),
+            source_memory_id=first_source_memory_item.memory_id,
+            target_memory_id=earlier_support_target_item.memory_id,
+            relation_type="supports",
+            metadata={"kind": "supports-parity-earlier"},
+            created_at=created_at.replace(hour=7),
+        )
+    )
+    memory_relation_repository.create(
+        MemoryRelationRecord(
+            memory_relation_id=uuid4(),
+            source_memory_id=second_source_memory_item.memory_id,
+            target_memory_id=latest_support_target_item.memory_id,
+            relation_type="supports",
+            metadata={"kind": "supports-parity-latest"},
+            created_at=created_at.replace(hour=8),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_relation_repository=memory_relation_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": str(workspace_id),
+                    "ticket_id": "TICKET-CONTEXT-SUPPORTS-LOOKUP-PARITY",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert response.details["related_context_is_auxiliary"] is True
+    assert response.details["related_context_relation_types"] == ["supports"]
+    assert response.details["related_context_selection_route"] == ("relation_supports_auxiliary")
+    assert response.details["relation_supports_source_episode_count"] == 2
+    assert response.details["retrieval_route_item_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 2,
+        "workspace_inherited_auxiliary": 3,
+        "relation_supports_auxiliary": 3,
+    }
+    assert response.details["memory_context_groups"][3]["memory_items"] == [
+        {
+            "memory_id": str(latest_support_target_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Latest parity supporting target",
+            "metadata": {"kind": "supports-parity-latest"},
+            "created_at": latest_support_target_item.created_at.isoformat(),
+            "updated_at": latest_support_target_item.updated_at.isoformat(),
+        },
+        {
+            "memory_id": str(shared_support_target_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Shared parity supporting target",
+            "metadata": {"kind": "supports-parity-shared"},
+            "created_at": shared_support_target_item.created_at.isoformat(),
+            "updated_at": shared_support_target_item.updated_at.isoformat(),
+        },
+        {
+            "memory_id": str(earlier_support_target_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Earlier parity supporting target",
+            "metadata": {"kind": "supports-parity-earlier"},
+            "created_at": earlier_support_target_item.created_at.isoformat(),
+            "updated_at": earlier_support_target_item.updated_at.isoformat(),
+        },
+    ]
+
+
 def test_memory_get_context_limit_truncates_constrained_relation_aggregation_after_distinct_first_seen_targets() -> (
     None
 ):

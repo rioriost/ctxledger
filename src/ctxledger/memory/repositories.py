@@ -609,6 +609,38 @@ class InMemoryMemoryRelationRepository:
         matches.sort(key=lambda relation: relation.created_at, reverse=True)
         return tuple(matches)
 
+    def list_distinct_support_target_memory_ids_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+    ) -> tuple[UUID, ...]:
+        if not source_memory_ids:
+            return ()
+
+        distinct_target_memory_ids: list[UUID] = []
+        seen_target_memory_ids: set[UUID] = set()
+
+        relations_by_source_memory_id: dict[UUID, list[MemoryRelationRecord]] = {
+            source_memory_id: [] for source_memory_id in source_memory_ids
+        }
+        for relation in self._relations:
+            if relation.relation_type != "supports":
+                continue
+            if relation.source_memory_id not in relations_by_source_memory_id:
+                continue
+            relations_by_source_memory_id[relation.source_memory_id].append(relation)
+
+        for source_memory_id in source_memory_ids:
+            matches = relations_by_source_memory_id[source_memory_id]
+            matches.sort(key=lambda relation: relation.created_at, reverse=True)
+
+            for relation in matches:
+                if relation.target_memory_id in seen_target_memory_ids:
+                    continue
+                seen_target_memory_ids.add(relation.target_memory_id)
+                distinct_target_memory_ids.append(relation.target_memory_id)
+
+        return tuple(distinct_target_memory_ids)
+
     def list_by_target_memory_id(
         self,
         target_memory_id: UUID,

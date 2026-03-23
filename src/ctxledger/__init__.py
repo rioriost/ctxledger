@@ -132,6 +132,32 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the database URL instead of using CTXLEDGER_DATABASE_URL",
     )
 
+    bootstrap_age_graph_parser = subparsers.add_parser(
+        "bootstrap-age-graph",
+        help="Create and populate the constrained AGE prototype graph",
+    )
+    bootstrap_age_graph_parser.add_argument(
+        "--database-url",
+        help="Override the database URL instead of using CTXLEDGER_DATABASE_URL",
+    )
+    bootstrap_age_graph_parser.add_argument(
+        "--graph-name",
+        help="Override the AGE graph name instead of using CTXLEDGER_DB_AGE_GRAPH_NAME",
+    )
+
+    age_graph_readiness_parser = subparsers.add_parser(
+        "age-graph-readiness",
+        help="Check constrained AGE prototype graph readiness",
+    )
+    age_graph_readiness_parser.add_argument(
+        "--database-url",
+        help="Override the database URL instead of using CTXLEDGER_DATABASE_URL",
+    )
+    age_graph_readiness_parser.add_argument(
+        "--graph-name",
+        help="Override the AGE graph name instead of using CTXLEDGER_DB_AGE_GRAPH_NAME",
+    )
+
     resume_workflow_parser = subparsers.add_parser(
         "resume-workflow",
         help="Display resumable workflow state for a workflow instance",
@@ -171,6 +197,264 @@ def _print_schema_path(absolute: bool) -> int:
     path = _schema_path()
     print(path if absolute else path.as_posix())
     return 0
+
+
+def _bootstrap_age_graph(args: argparse.Namespace) -> int:
+    try:
+        from .config import get_settings
+
+        try:
+            import psycopg
+        except ImportError:
+            print(
+                "Failed to import PostgreSQL driver. Install psycopg[binary] first.",
+                file=sys.stderr,
+            )
+            return 1
+
+        settings = get_settings()
+        database_url = args.database_url or settings.database.url
+        graph_name = args.graph_name or settings.database.age_graph_name
+
+        if not database_url:
+            return _print_missing_database_url(include_override_hint=True)
+
+        if not graph_name:
+            print(
+                "AGE graph name is required. Set CTXLEDGER_DB_AGE_GRAPH_NAME or pass --graph-name.",
+                file=sys.stderr,
+            )
+            return 1
+
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("LOAD 'age'")
+                cursor.execute('SET search_path = ag_catalog, "$user", public')
+                cursor.execute(
+                    """
+                    SELECT CASE
+                        WHEN NOT EXISTS (
+                            SELECT 1
+                            FROM ag_catalog.ag_graph
+                            WHERE name = %s
+                        )
+                        THEN ag_catalog.create_graph(%s)
+                        ELSE NULL
+                    END
+                    """,
+                    (graph_name, graph_name),
+                )
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM cypher(
+                        %s,
+                        $$
+                        MATCH (n)
+                        DETACH DELETE n
+                        RETURN 1 AS cleared
+                        $$
+                    ) AS (cleared agtype)
+                    """,
+                    (graph_name,),
+                )
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM cypher(
+                        %s,
+                        $$
+                        UNWIND [] AS ignored
+                        RETURN ignored
+                        $$
+                    ) AS (ignored agtype)
+                    WHERE false
+                    """,
+                    (graph_name,),
+                )
+                cursor.execute(
+                    """
+                    WITH memory_item_rows AS (
+                        SELECT memory_id
+                        FROM public.memory_items
+                    )
+                    SELECT *
+                    FROM cypher(
+                        %s,
+                        $$
+                        CREATE (n:memory_item {memory_id: $memory_id})
+                        RETURN n
+                        $$
+                    ) AS (n agtype)
+                    CROSS JOIN memory_item_rows
+                    """,
+                    (graph_name,),
+                )
+                cursor.execute(
+                    """
+                    WITH supports_rows AS (
+                        SELECT
+                            mr.memory_relation_id,
+                            mr.source_memory_id,
+                            mr.target_memory_id
+                        FROM public.memory_relations AS mr
+                        WHERE mr.relation_type = 'supports'
+                    )
+                    SELECT *
+                    FROM cypher(
+                        %s,
+                        $$
+                        MATCH (source:memory_item {memory_id: $source_memory_id})
+                        MATCH (target:memory_item {memory_id: $target_memory_id})
+                        CREATE (source)-[r:supports {
+                            memory_relation_id: $memory_relation_id,
+                            source_memory_id: $source_memory_id,
+                            target_memory_id: $target_memory_id
+                        }]->(target)
+                        RETURN r
+                        $$
+                    ) AS (r agtype)
+                    CROSS JOIN supports_rows
+                    """,
+                    (graph_name,),
+                )
+                cursor.execute(
+                    """
+                    SELECT count(*)
+                    FROM cypher(
+                        %s,
+                        $$
+                        MATCH (n:memory_item)
+                        RETURN count(n) AS count
+                        $$
+                    ) AS (count agtype)
+                    """,
+                    (graph_name,),
+                )
+                memory_item_node_count_row = cursor.fetchone()
+                memory_item_node_count = (
+                    memory_item_node_count_row[0]
+                    if isinstance(memory_item_node_count_row, tuple)
+                    else memory_item_node_count_row["count"]
+                )
+
+                cursor.execute(
+                    """
+                    SELECT count(*)
+                    FROM cypher(
+                        %s,
+                        $$
+                        MATCH ()-[r:supports]->()
+                        RETURN count(r) AS count
+                        $$
+                    ) AS (count agtype)
+                    """,
+                    (graph_name,),
+                )
+                supports_edge_count_row = cursor.fetchone()
+                supports_edge_count = (
+                    supports_edge_count_row[0]
+                    if isinstance(supports_edge_count_row, tuple)
+                    else supports_edge_count_row["count"]
+                )
+            connection.commit()
+
+        print(
+            f"AGE graph bootstrap completed for '{graph_name}' "
+            f"(memory_item nodes repopulated={memory_item_node_count}, "
+            f"supports edges repopulated={supports_edge_count})."
+        )
+        return 0
+    except Exception as exc:
+        print(f"Failed to bootstrap AGE graph: {exc}", file=sys.stderr)
+        return 1
+
+
+def _age_graph_readiness(args: argparse.Namespace) -> int:
+    try:
+        from .config import get_settings
+        from .db.postgres import PostgresConfig, PostgresDatabaseHealthChecker
+
+        settings = get_settings()
+        database_url = args.database_url or settings.database.url
+        graph_name = args.graph_name or settings.database.age_graph_name
+
+        if not database_url:
+            return _print_missing_database_url(include_override_hint=True)
+
+        if not graph_name:
+            print(
+                "AGE graph name is required. Set CTXLEDGER_DB_AGE_GRAPH_NAME or pass --graph-name.",
+                file=sys.stderr,
+            )
+            return 1
+
+        config = PostgresConfig(
+            database_url=database_url,
+            connect_timeout_seconds=settings.database.connect_timeout_seconds,
+            statement_timeout_ms=settings.database.statement_timeout_ms,
+            schema_name=settings.database.schema_name,
+            pool_min_size=settings.database.pool_min_size,
+            pool_max_size=settings.database.pool_max_size,
+            pool_timeout_seconds=settings.database.pool_timeout_seconds,
+            age_enabled=settings.database.age_enabled,
+            age_graph_name=graph_name,
+        )
+        checker = PostgresDatabaseHealthChecker(config)
+        status = checker.age_graph_status(graph_name)
+        status_value = getattr(status, "value", str(status))
+        age_available = checker.age_available()
+
+        print(
+            json.dumps(
+                {
+                    "age_enabled": settings.database.age_enabled,
+                    "age_graph_name": graph_name,
+                    "age_available": age_available,
+                    "age_graph_status": status_value,
+                }
+            )
+        )
+        return 0
+    except Exception as exc:
+        print(f"Failed to check AGE graph readiness: {exc}", file=sys.stderr)
+        return 1
+
+
+def _apply_schema(args: argparse.Namespace) -> int:
+    try:
+        from .config import get_settings
+        from .db.postgres import load_postgres_schema_sql
+
+        try:
+            import psycopg
+        except ImportError:
+            print(
+                "Failed to import PostgreSQL driver. Install psycopg[binary] first.",
+                file=sys.stderr,
+            )
+            return 1
+
+        database_url = args.database_url
+        if database_url is None:
+            settings = get_settings()
+            database_url = settings.database.url
+
+        if not database_url:
+            return _print_missing_database_url(include_override_hint=True)
+
+        schema_sql = load_postgres_schema_sql()
+
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(schema_sql)
+            connection.commit()
+
+        print("Schema applied successfully.")
+        return 0
+    except Exception as exc:
+        print(f"Failed to apply schema: {exc}", file=sys.stderr)
+        return 1
 
 
 def _print_missing_database_url(*, include_override_hint: bool = False) -> int:
@@ -365,12 +649,8 @@ def _format_workflows_text(workflows: list[object] | tuple[object, ...]) -> str:
             f"  workspace={getattr(workflow, 'canonical_path', None) or getattr(workflow, 'workspace_id', '')}"
         )
         lines.append(f"  ticket={getattr(workflow, 'ticket_id', '')}")
-        lines.append(
-            f"  latest_step={getattr(workflow, 'latest_step_name', None) or 'none'}"
-        )
-        lines.append(
-            f"  verify_status={getattr(workflow, 'latest_verify_status', None) or 'none'}"
-        )
+        lines.append(f"  latest_step={getattr(workflow, 'latest_step_name', None) or 'none'}")
+        lines.append(f"  verify_status={getattr(workflow, 'latest_verify_status', None) or 'none'}")
         lines.append(f"  updated_at={getattr(workflow, 'updated_at', None)}")
         lines.append("")
 
@@ -518,9 +798,7 @@ def _failures(args: argparse.Namespace) -> int:
                         "error_code": failure.error_code,
                         "error_message": failure.error_message,
                         "attempt_id": (
-                            str(failure.attempt_id)
-                            if failure.attempt_id is not None
-                            else None
+                            str(failure.attempt_id) if failure.attempt_id is not None else None
                         ),
                         "occurred_at": _isoformat_or_none(failure.occurred_at),
                         "resolved_at": _isoformat_or_none(failure.resolved_at),
@@ -560,9 +838,7 @@ def _memory_stats(args: argparse.Namespace) -> int:
                     "memory_item_count": stats.memory_item_count,
                     "memory_embedding_count": stats.memory_embedding_count,
                     "memory_relation_count": stats.memory_relation_count,
-                    "memory_item_provenance_counts": (
-                        stats.memory_item_provenance_counts
-                    ),
+                    "memory_item_provenance_counts": (stats.memory_item_provenance_counts),
                     "latest_episode_created_at": _isoformat_or_none(
                         stats.latest_episode_created_at
                     ),
@@ -691,6 +967,10 @@ def main(argv: list[str] | None = None) -> int:
         return _print_schema_path(args.absolute)
     if command == "apply-schema":
         return _apply_schema(args)
+    if command == "bootstrap-age-graph":
+        return _bootstrap_age_graph(args)
+    if command == "age-graph-readiness":
+        return _age_graph_readiness(args)
     if command == "resume-workflow":
         return _resume_workflow(args)
     if command == "version":

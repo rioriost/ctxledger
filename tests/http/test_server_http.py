@@ -24,7 +24,10 @@ from ctxledger.runtime.serializers import (
     serialize_runtime_introspection_collection,
     serialize_workflow_resume,
 )
-from ctxledger.runtime.server_responses import build_runtime_introspection_response
+from ctxledger.runtime.server_responses import (
+    _age_prototype_runtime_details,
+    build_runtime_introspection_response,
+)
 from ctxledger.runtime.types import McpHttpResponse, WorkflowResumeResponse
 from tests.support.server_test_support import (
     FakeDatabaseHealthChecker,
@@ -46,9 +49,7 @@ def test_parse_workflow_resume_request_path_returns_uuid_for_valid_path() -> Non
         == workflow_instance_id
     )
     assert (
-        parse_workflow_resume_request_path(
-            f"/workflow-resume/{workflow_instance_id}?format=json"
-        )
+        parse_workflow_resume_request_path(f"/workflow-resume/{workflow_instance_id}?format=json")
         == workflow_instance_id
     )
 
@@ -75,9 +76,7 @@ def test_build_workflow_resume_http_handler_returns_success_response() -> None:
 
     server.startup()
 
-    response = handler(
-        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}"
-    )
+    response = handler(f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}")
 
     assert isinstance(response, WorkflowResumeResponse)
     assert response.status_code == 200
@@ -85,9 +84,7 @@ def test_build_workflow_resume_http_handler_returns_success_response() -> None:
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workflow_resume_http_handler_returns_not_found_for_invalid_path() -> (
-    None
-):
+def test_build_workflow_resume_http_handler_returns_not_found_for_invalid_path() -> None:
     settings = make_settings()
     server = make_server(
         settings=settings,
@@ -104,17 +101,14 @@ def test_build_workflow_resume_http_handler_returns_not_found_for_invalid_path()
         "error": {
             "code": "not_found",
             "message": (
-                "workflow resume endpoint requires "
-                "/workflow-resume/{workflow_instance_id}"
+                "workflow resume endpoint requires /workflow-resume/{workflow_instance_id}"
             ),
         }
     }
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workflow_resume_http_handler_returns_503_when_server_is_not_ready() -> (
-    None
-):
+def test_build_workflow_resume_http_handler_returns_503_when_server_is_not_ready() -> None:
     settings = make_settings()
     server = make_server(settings=settings)
     handler = build_workflow_resume_http_handler(server)
@@ -130,6 +124,108 @@ def test_build_workflow_resume_http_handler_returns_503_when_server_is_not_ready
         }
     }
     assert response.headers == {"content-type": "application/json"}
+
+
+def test_age_prototype_runtime_details_reports_enabled_ready_graph_state() -> None:
+    settings = make_settings()
+    settings = replace(
+        settings,
+        database=replace(
+            settings.database,
+            age_enabled=True,
+            age_graph_name="ctxledger_memory",
+        ),
+    )
+    health_checker = FakeDatabaseHealthChecker(
+        age_available_value=True,
+        age_graph_available_value=True,
+    )
+    server = make_server(
+        settings=settings,
+        db_health_checker=health_checker,
+        runtime=FakeRuntime(),
+    )
+
+    details = _age_prototype_runtime_details(server)
+
+    assert details == {
+        "age_enabled": True,
+        "age_graph_name": "ctxledger_memory",
+        "observability_routes": [
+            "/debug/runtime",
+            "/debug/routes",
+            "/debug/tools",
+        ],
+        "age_available": True,
+        "age_graph_status": "graph_ready",
+    }
+    assert health_checker.age_available_calls == 1
+    assert health_checker.age_graph_status_calls == 1
+    assert health_checker.requested_graph_names == ["ctxledger_memory"]
+
+
+def test_age_prototype_runtime_details_reports_disabled_graph_state() -> None:
+    settings = make_settings()
+    health_checker = FakeDatabaseHealthChecker(
+        age_available_value=False,
+        age_graph_available_value=False,
+    )
+    server = make_server(
+        settings=settings,
+        db_health_checker=health_checker,
+        runtime=FakeRuntime(),
+    )
+
+    details = _age_prototype_runtime_details(server)
+
+    assert details == {
+        "age_enabled": False,
+        "age_graph_name": "ctxledger_memory",
+        "observability_routes": [
+            "/debug/runtime",
+            "/debug/routes",
+            "/debug/tools",
+        ],
+        "age_available": False,
+        "age_graph_status": "age_unavailable",
+    }
+
+
+def test_build_runtime_introspection_response_includes_age_prototype_details() -> None:
+    settings = make_settings()
+    settings = replace(
+        settings,
+        database=replace(
+            settings.database,
+            age_enabled=True,
+            age_graph_name="ctxledger_memory",
+        ),
+    )
+    server = make_server(
+        settings=settings,
+        db_health_checker=FakeDatabaseHealthChecker(
+            age_available_value=True,
+            age_graph_available_value=False,
+        ),
+        runtime=FakeRuntime(),
+    )
+
+    response = build_runtime_introspection_response(server)
+
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload["age_prototype"] == {
+        "age_enabled": True,
+        "age_graph_name": "ctxledger_memory",
+        "observability_routes": [
+            "/debug/runtime",
+            "/debug/routes",
+            "/debug/tools",
+        ],
+        "age_available": True,
+        "age_graph_status": "graph_unavailable",
+    }
+    assert "runtime" in response.payload
 
 
 def test_http_runtime_adapter_dispatches_registered_workflow_resume_handler() -> None:
@@ -246,9 +342,7 @@ def test_dispatch_http_request_returns_route_not_found_result() -> None:
     }
 
 
-def test_dispatch_http_request_returns_error_result_for_handler_error_response() -> (
-    None
-):
+def test_dispatch_http_request_returns_error_result_for_handler_error_response() -> None:
     settings = make_settings()
     server = make_server(
         settings=settings,
@@ -362,9 +456,7 @@ def test_serialize_runtime_introspection_returns_json_ready_payload() -> None:
     }
 
 
-def test_serialize_runtime_introspection_collection_returns_json_ready_payloads() -> (
-    None
-):
+def test_serialize_runtime_introspection_collection_returns_json_ready_payloads() -> None:
     introspections = (
         RuntimeIntrospection(
             transport="http",
@@ -386,9 +478,7 @@ def test_serialize_runtime_introspection_collection_returns_json_ready_payloads(
     ]
 
 
-def test_build_runtime_introspection_response_returns_http_payload_for_single_runtime() -> (
-    None
-):
+def test_build_runtime_introspection_response_returns_http_payload_for_single_runtime() -> None:
     settings = make_settings()
     server, _, _, _ = make_http_runtime(
         settings=settings,
@@ -401,6 +491,17 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
     assert response.headers == {"content-type": "application/json"}
     assert response.payload == {
         "runtime": build_runtime_summary_payload(),
+        "age_prototype": {
+            "age_enabled": False,
+            "age_graph_name": "ctxledger_memory",
+            "observability_routes": [
+                "/debug/runtime",
+                "/debug/routes",
+                "/debug/tools",
+            ],
+            "age_available": True,
+            "age_graph_status": "graph_ready",
+        },
     }
 
 
@@ -419,7 +520,20 @@ def test_build_runtime_introspection_response_returns_empty_runtime_list_when_ru
     assert response.__class__.__name__ == "RuntimeIntrospectionResponse"
     assert response.status_code == 200
     assert response.headers == {"content-type": "application/json"}
-    assert response.payload == {"runtime": []}
+    assert response.payload == {
+        "runtime": [],
+        "age_prototype": {
+            "age_enabled": False,
+            "age_graph_name": "ctxledger_memory",
+            "observability_routes": [
+                "/debug/runtime",
+                "/debug/routes",
+                "/debug/tools",
+            ],
+            "age_available": True,
+            "age_graph_status": "graph_ready",
+        },
+    }
 
 
 def test_build_runtime_introspection_http_handler_returns_success_response() -> None:
@@ -436,12 +550,21 @@ def test_build_runtime_introspection_http_handler_returns_success_response() -> 
     assert response.headers == {"content-type": "application/json"}
     assert response.payload == {
         "runtime": build_runtime_summary_payload(),
+        "age_prototype": {
+            "age_enabled": False,
+            "age_graph_name": "ctxledger_memory",
+            "observability_routes": [
+                "/debug/runtime",
+                "/debug/routes",
+                "/debug/tools",
+            ],
+            "age_available": True,
+            "age_graph_status": "graph_ready",
+        },
     }
 
 
-def test_build_runtime_introspection_http_handler_returns_not_found_for_invalid_path() -> (
-    None
-):
+def test_build_runtime_introspection_http_handler_returns_not_found_for_invalid_path() -> None:
     settings = make_settings()
     server, _, _, _ = make_http_runtime(
         settings=settings,
@@ -481,9 +604,7 @@ def test_build_http_runtime_adapter_omits_runtime_introspection_route_when_debug
     )
 
 
-def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handler() -> (
-    None
-):
+def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handler() -> None:
     settings = make_settings()
     server, _, _, _ = make_http_runtime(
         settings=settings,
@@ -500,6 +621,17 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
     assert response.headers == {"content-type": "application/json"}
     assert response.payload == {
         "runtime": build_runtime_summary_payload(),
+        "age_prototype": {
+            "age_enabled": False,
+            "age_graph_name": "ctxledger_memory",
+            "observability_routes": [
+                "/debug/runtime",
+                "/debug/routes",
+                "/debug/tools",
+            ],
+            "age_available": True,
+            "age_graph_status": "graph_ready",
+        },
     }
 
 
@@ -806,9 +938,7 @@ def test_http_mcp_route_supports_tools_list_over_http() -> None:
         "workspace_register",
     ]
 
-    workspace_register_tool = next(
-        tool for tool in tools if tool["name"] == "workspace_register"
-    )
+    workspace_register_tool = next(tool for tool in tools if tool["name"] == "workspace_register")
     assert workspace_register_tool["inputSchema"] == {
         "type": "object",
         "properties": {
@@ -981,14 +1111,9 @@ def test_http_mcp_rpc_tools_list_returns_registered_tools_with_input_schemas() -
         "canonical_path",
         "default_branch",
     ]
+    assert tools["workflow_start"]["inputSchema"]["properties"]["workspace_id"]["format"] == "uuid"
     assert (
-        tools["workflow_start"]["inputSchema"]["properties"]["workspace_id"]["format"]
-        == "uuid"
-    )
-    assert (
-        tools["memory_get_context"]["inputSchema"]["properties"]["include_summaries"][
-            "type"
-        ]
+        tools["memory_get_context"]["inputSchema"]["properties"]["include_summaries"]["type"]
         == "boolean"
     )
 
@@ -1082,8 +1207,7 @@ def test_http_mcp_rpc_resources_list_returns_registered_resources() -> None:
                     "uri": "workspace://{workspace_id}/workflow/{workflow_instance_id}",
                     "name": "workspace://{workspace_id}/workflow/{workflow_instance_id}",
                     "description": (
-                        "workspace://{workspace_id}/workflow/"
-                        "{workflow_instance_id} resource"
+                        "workspace://{workspace_id}/workflow/{workflow_instance_id} resource"
                     ),
                 },
             ]

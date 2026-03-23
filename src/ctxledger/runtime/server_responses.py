@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from ..workflow.service import WorkflowError
@@ -59,6 +59,52 @@ def build_workflow_resume_response(
     )
 
 
+def _age_prototype_runtime_details(server: CtxLedgerServer) -> dict[str, Any]:
+    database_settings = server.settings.database
+    details: dict[str, Any] = {
+        "age_enabled": database_settings.age_enabled,
+        "age_graph_name": database_settings.age_graph_name,
+        "observability_routes": [
+            "/debug/runtime",
+            "/debug/routes",
+            "/debug/tools",
+        ],
+    }
+
+    health_checker = getattr(server, "db_health_checker", None)
+    if health_checker is None:
+        details["age_graph_status"] = "unknown"
+        return details
+
+    age_available = getattr(health_checker, "age_available", None)
+    if callable(age_available):
+        try:
+            details["age_available"] = bool(age_available())
+        except Exception as exc:
+            details["age_available_error"] = str(exc)
+
+    age_graph_status = getattr(health_checker, "age_graph_status", None)
+    if callable(age_graph_status):
+        try:
+            graph_status = age_graph_status(database_settings.age_graph_name)
+            details["age_graph_status"] = getattr(graph_status, "value", graph_status)
+            return details
+        except Exception as exc:
+            details["age_graph_status_error"] = str(exc)
+
+    age_graph_available = getattr(health_checker, "age_graph_available", None)
+    if callable(age_graph_available):
+        try:
+            details["age_graph_available"] = bool(
+                age_graph_available(database_settings.age_graph_name)
+            )
+        except Exception as exc:
+            details["age_graph_available_error"] = str(exc)
+
+    details.setdefault("age_graph_status", "unknown")
+    return details
+
+
 def build_runtime_introspection_response(
     server: CtxLedgerServer,
 ) -> RuntimeIntrospectionResponse:
@@ -71,6 +117,7 @@ def build_runtime_introspection_response(
         status_code=200,
         payload={
             "runtime": serialize_runtime_introspection_collection(introspections),
+            "age_prototype": _age_prototype_runtime_details(server),
         },
         headers={"content-type": "application/json"},
     )
@@ -163,14 +210,10 @@ def build_workspace_resume_resource_response(
                     headers={"content-type": "application/json"},
                 )
 
-            running_workflow = uow.workflow_instances.get_running_by_workspace_id(
-                workspace_id
-            )
+            running_workflow = uow.workflow_instances.get_running_by_workspace_id(workspace_id)
             selected_workflow = running_workflow
             if selected_workflow is None:
-                selected_workflow = uow.workflow_instances.get_latest_by_workspace_id(
-                    workspace_id
-                )
+                selected_workflow = uow.workflow_instances.get_latest_by_workspace_id(workspace_id)
 
         if selected_workflow is None:
             return McpResourceResponse(

@@ -1102,6 +1102,76 @@ def test_in_memory_memory_relation_repository_lists_matches_by_source_memory_ids
     assert repository.list_by_source_memory_ids(()) == ()
 
 
+def test_in_memory_memory_relation_repository_lists_distinct_support_targets_by_source_memory_ids() -> (
+    None
+):
+    repository = InMemoryMemoryRelationRepository()
+    source_memory_id = uuid4()
+    other_source_memory_id = uuid4()
+    unrelated_source_memory_id = uuid4()
+    repeated_target_memory_id = uuid4()
+    newer_target_memory_id = uuid4()
+    created_at = datetime(2024, 2, 1, tzinfo=UTC)
+
+    older_support_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=repeated_target_memory_id,
+        relation_type="supports",
+        created_at=created_at.replace(hour=1),
+    )
+    newer_distinct_support_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=newer_target_memory_id,
+        relation_type="supports",
+        created_at=created_at.replace(hour=2),
+    )
+    duplicate_target_support_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=other_source_memory_id,
+        target_memory_id=repeated_target_memory_id,
+        relation_type="supports",
+        created_at=created_at.replace(hour=3),
+    )
+    non_support_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=uuid4(),
+        relation_type="references",
+        created_at=created_at.replace(hour=4),
+    )
+    unrelated_support_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=unrelated_source_memory_id,
+        target_memory_id=uuid4(),
+        relation_type="supports",
+        created_at=created_at.replace(hour=5),
+    )
+
+    repository.create(older_support_relation)
+    repository.create(newer_distinct_support_relation)
+    repository.create(duplicate_target_support_relation)
+    repository.create(non_support_relation)
+    repository.create(unrelated_support_relation)
+
+    assert repository.list_distinct_support_target_memory_ids_by_source_memory_ids(
+        (
+            source_memory_id,
+            other_source_memory_id,
+        )
+    ) == (
+        repeated_target_memory_id,
+        newer_target_memory_id,
+    )
+
+
+def test_in_memory_memory_relation_repository_lists_no_support_targets_for_empty_sources() -> None:
+    repository = InMemoryMemoryRelationRepository()
+
+    assert repository.list_distinct_support_target_memory_ids_by_source_memory_ids(()) == ()
+
+
 def test_memory_service_records_episodes_and_returns_search_results() -> None:
     workflow_id = uuid4()
     attempt_id = uuid4()

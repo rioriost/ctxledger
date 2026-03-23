@@ -96,6 +96,8 @@ def test_load_settings_with_minimum_valid_env(clean_ctxledger_env: None) -> None
     assert settings.http.mcp_url == "http://0.0.0.0:8080/mcp"
     assert settings.logging.level == LogLevel.INFO
     assert settings.debug.enabled is True
+    assert settings.database.age_enabled is False
+    assert settings.database.age_graph_name == "ctxledger_memory"
     assert settings.embedding.enabled is False
     assert settings.embedding.provider is EmbeddingProvider.OPENAI
     assert settings.embedding.model == "text-embedding-3-small"
@@ -142,9 +144,7 @@ def test_non_integer_port_raises_config_error(clean_ctxledger_env: None) -> None
 
 def test_invalid_port_raises_config_error(clean_ctxledger_env: None) -> None:
     with patched_env(**minimum_valid_env(CTXLEDGER_PORT="70000")):
-        with pytest.raises(
-            ConfigError, match="CTXLEDGER_PORT must be between 1 and 65535"
-        ):
+        with pytest.raises(ConfigError, match="CTXLEDGER_PORT must be between 1 and 65535"):
             load_settings()
 
 
@@ -314,10 +314,7 @@ def test_parse_log_level_returns_default_when_missing(
     clean_ctxledger_env: None,
 ) -> None:
     with patched_env(CTXLEDGER_LOG_LEVEL=None):
-        assert (
-            _parse_log_level("CTXLEDGER_LOG_LEVEL", LogLevel.WARNING)
-            is LogLevel.WARNING
-        )
+        assert _parse_log_level("CTXLEDGER_LOG_LEVEL", LogLevel.WARNING) is LogLevel.WARNING
 
 
 def test_format_expected_values_supports_non_collection_object() -> None:
@@ -333,6 +330,8 @@ def test_database_settings_is_configured_reflects_url_presence() -> None:
         pool_min_size=1,
         pool_max_size=10,
         pool_timeout_seconds=5,
+        age_enabled=False,
+        age_graph_name="ctxledger_memory",
     )
     missing = DatabaseSettings(
         url="",
@@ -342,6 +341,8 @@ def test_database_settings_is_configured_reflects_url_presence() -> None:
         pool_min_size=1,
         pool_max_size=10,
         pool_timeout_seconds=5,
+        age_enabled=False,
+        age_graph_name="ctxledger_memory",
     )
 
     assert configured.is_configured is True
@@ -353,6 +354,19 @@ def test_http_settings_base_url_and_mcp_url_normalize_path() -> None:
 
     assert settings.base_url == "http://127.0.0.1:9000"
     assert settings.mcp_url == "http://127.0.0.1:9000/mcp"
+
+
+def test_load_settings_reads_age_database_settings(clean_ctxledger_env: None) -> None:
+    with patched_env(
+        **minimum_valid_env(
+            CTXLEDGER_DB_AGE_ENABLED="true",
+            CTXLEDGER_DB_AGE_GRAPH_NAME="ctxledger_test_graph",
+        )
+    ):
+        settings = load_settings()
+
+    assert settings.database.age_enabled is True
+    assert settings.database.age_graph_name == "ctxledger_test_graph"
 
 
 def test_app_settings_validate_rejects_empty_host() -> None:
@@ -368,6 +382,8 @@ def test_app_settings_validate_rejects_empty_host() -> None:
             pool_min_size=1,
             pool_max_size=10,
             pool_timeout_seconds=5,
+            age_enabled=False,
+            age_graph_name="ctxledger_memory",
         ),
         http=HttpSettings(host="", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -399,6 +415,8 @@ def test_app_settings_validate_rejects_empty_http_path() -> None:
             pool_min_size=1,
             pool_max_size=10,
             pool_timeout_seconds=5,
+            age_enabled=False,
+            age_graph_name="ctxledger_memory",
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path=""),
         debug=DebugSettings(enabled=True),
@@ -430,6 +448,8 @@ def test_app_settings_validate_requires_embedding_model_when_enabled() -> None:
             pool_min_size=1,
             pool_max_size=10,
             pool_timeout_seconds=5,
+            age_enabled=False,
+            age_graph_name="ctxledger_memory",
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -451,9 +471,7 @@ def test_app_settings_validate_requires_embedding_model_when_enabled() -> None:
         settings.validate()
 
 
-def test_app_settings_validate_requires_api_key_for_external_embedding_provider() -> (
-    None
-):
+def test_app_settings_validate_requires_api_key_for_external_embedding_provider() -> None:
     settings = AppSettings(
         app_name="ctxledger",
         app_version="0.1.0",
@@ -466,6 +484,8 @@ def test_app_settings_validate_requires_api_key_for_external_embedding_provider(
             pool_min_size=1,
             pool_max_size=10,
             pool_timeout_seconds=5,
+            age_enabled=False,
+            age_graph_name="ctxledger_memory",
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -487,9 +507,7 @@ def test_app_settings_validate_requires_api_key_for_external_embedding_provider(
         settings.validate()
 
 
-def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provider() -> (
-    None
-):
+def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provider() -> None:
     settings = AppSettings(
         app_name="ctxledger",
         app_version="0.1.0",
@@ -502,6 +520,8 @@ def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provi
             pool_min_size=1,
             pool_max_size=10,
             pool_timeout_seconds=5,
+            age_enabled=False,
+            age_graph_name="ctxledger_memory",
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -536,6 +556,8 @@ def test_app_settings_validate_rejects_non_positive_embedding_dimensions() -> No
             pool_min_size=1,
             pool_max_size=10,
             pool_timeout_seconds=5,
+            age_enabled=False,
+            age_graph_name="ctxledger_memory",
         ),
         http=HttpSettings(host="127.0.0.1", port=8080, path="/mcp"),
         debug=DebugSettings(enabled=True),
@@ -574,6 +596,8 @@ def test_load_settings_uses_defaults_for_optional_values(
     assert settings.database.pool_min_size == 1
     assert settings.database.pool_max_size == 10
     assert settings.database.pool_timeout_seconds == 5
+    assert settings.database.age_enabled is False
+    assert settings.database.age_graph_name == "ctxledger_memory"
     assert settings.logging.structured is True
     assert settings.database.connect_timeout_seconds == 5
     assert settings.database.statement_timeout_ms is None

@@ -18,6 +18,7 @@ It provides:
 - HTTPS-friendly local deployment
 - operator-facing CLI observability
 - optional Grafana dashboard deployment
+- a constrained Apache AGE prototype path for graph-backed `supports` lookup with explicit CLI bootstrap
 
 ---
 
@@ -40,6 +41,13 @@ Current observability commands:
 - `ctxledger workflows`
 - `ctxledger memory-stats`
 - `ctxledger failures`
+
+Current PostgreSQL/graph setup commands:
+
+- `ctxledger print-schema-path`
+- `ctxledger apply-schema`
+- `ctxledger bootstrap-age-graph`
+- `ctxledger age-graph-readiness`
 
 ---
 
@@ -251,6 +259,195 @@ Useful checks:
 docker exec -it ctxledger-postgres psql -U ctxledger -d ctxledger -c "SELECT * FROM observability.memory_overview;"
 docker exec -it ctxledger-postgres psql -h 127.0.0.1 -U ctxledger_grafana -d ctxledger -c "SELECT * FROM observability.memory_overview;"
 ```
+
+---
+
+## Constrained AGE prototype controls
+
+For a practical step-by-step validation procedure for this prototype, see:
+
+- `docs/memory/age_prototype_validation_runbook.md`
+
+For a fill-in template that records one concrete validation pass, see:
+
+- `docs/memory/age_prototype_validation_observation_template.md`
+
+For the planned optional AGE-capable local/dev environment path, see:
+
+- `docs/memory/age_docker_provisioning_plan.md`
+
+For the image-selection decision that should precede that provisioning path, see:
+
+- `docs/memory/age_image_selection_note.md`
+
+`ctxledger` now includes a **constrained Apache AGE prototype** for one-hop
+`supports` relation lookup.
+
+This prototype is intentionally narrow:
+
+- relational PostgreSQL tables remain canonical
+- AGE-backed graph lookup is optional
+- current visible `memory_get_context` behavior is intended to remain unchanged
+- relational fallback remains the safe path when AGE is disabled, unavailable,
+  unready, or not bootstrapped
+
+The current prototype controls are:
+
+- `CTXLEDGER_DB_AGE_ENABLED`
+  - enable the optional AGE-backed prototype path
+- `CTXLEDGER_DB_AGE_GRAPH_NAME`
+  - select the named AGE graph used by the prototype
+  - default: `ctxledger_memory`
+
+Example shell setup:
+
+```/dev/null/sh#L1-2
+export CTXLEDGER_DB_AGE_ENABLED=true
+export CTXLEDGER_DB_AGE_GRAPH_NAME=ctxledger_memory
+```
+
+### Check constrained AGE graph readiness
+
+If you want a lightweight readiness check for the constrained AGE prototype,
+use:
+
+```/dev/null/sh#L1-1
+ctxledger age-graph-readiness
+```
+
+You can also override the database URL or graph name directly:
+
+```/dev/null/sh#L1-3
+ctxledger age-graph-readiness \
+  --database-url postgresql://ctxledger:ctxledger@localhost:5432/ctxledger \
+  --graph-name ctxledger_memory
+```
+
+The command prints a small JSON summary including:
+
+- whether the prototype is enabled
+- the configured graph name
+- AGE availability
+- current graph-readiness status
+
+The current runtime debug surface also exposes the AGE prototype state through:
+
+- `/debug/runtime`
+- `/debug/routes`
+- `/debug/tools`
+
+Example shape:
+
+```/dev/null/json#L1-6
+{
+  "age_enabled": true,
+  "age_graph_name": "ctxledger_memory",
+  "age_available": true,
+  "age_graph_status": "graph_ready"
+}
+```
+
+This is useful as a lightweight operator-facing readiness check before or after
+running the explicit bootstrap path.
+
+### Bootstrap the constrained AGE graph
+
+If you want to exercise the constrained AGE prototype in a graph-enabled
+environment, use the explicit bootstrap command:
+
+```/dev/null/sh#L1-1
+ctxledger bootstrap-age-graph
+```
+
+You can also override the database URL or graph name directly:
+
+```/dev/null/sh#L1-3
+ctxledger bootstrap-age-graph \
+  --database-url postgresql://ctxledger:ctxledger@localhost:5432/ctxledger \
+  --graph-name ctxledger_memory
+```
+
+For the Docker Compose local stack in this repository, the PostgreSQL container
+is named `ctxledger-postgres`, but the in-network database host for service-to-
+service access is `postgres`.
+
+That means the most useful current Docker-oriented bootstrap patterns are:
+
+From your host, against the published PostgreSQL port:
+
+```/dev/null/sh#L1-3
+export CTXLEDGER_DB_AGE_ENABLED=true
+export CTXLEDGER_DB_AGE_GRAPH_NAME=ctxledger_memory
+ctxledger bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@localhost:55432/ctxledger
+```
+
+From inside the running `ctxledger` service container:
+
+```/dev/null/sh#L1-3
+docker exec -it ctxledger-server \
+  sh -lc 'export CTXLEDGER_DB_AGE_ENABLED=true CTXLEDGER_DB_AGE_GRAPH_NAME=ctxledger_memory && \
+  ctxledger bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger'
+```
+
+A practical local Docker sequence is:
+
+1. start the stack
+2. apply the canonical schema if needed
+3. run `ctxledger bootstrap-age-graph`
+4. only then treat the AGE-backed prototype path as graph-ready
+
+Current bootstrap behavior is intentionally prototype-grade and constrained. It:
+
+- loads AGE
+- creates the named graph if needed
+- clears the currently managed prototype graph contents
+- repopulates:
+  - `memory_item` nodes from canonical `memory_items`
+  - `supports` edges from canonical `memory_relations`
+- reports a success message of the form:
+  - `AGE graph bootstrap completed for 'ctxledger_memory' (memory_item nodes repopulated=123, supports edges repopulated=45).`
+
+Those counts should be read as a lightweight verification summary for the current
+bootstrap run.
+
+For the current constrained prototype, the most useful observability routes are:
+
+- `/debug/runtime`
+  - includes the `age_prototype` payload with enablement, graph name, AGE
+    availability, and graph-readiness status
+- `/debug/routes`
+  - confirms the currently exposed runtime routes
+- `/debug/tools`
+  - confirms the currently exposed runtime tools surface
+
+For a fuller operator-facing validation flow that combines readiness checks,
+bootstrap counts, and runtime introspection, see:
+
+- `docs/memory/age_prototype_validation_runbook.md`
+
+For a reusable fill-in template for recording one validation pass, see:
+
+- `docs/memory/age_prototype_validation_observation_template.md`
+
+For the planned optional AGE-capable Docker/dev path needed for real graph-enabled
+local validation, see:
+
+- `docs/memory/age_docker_provisioning_plan.md`
+
+For the image-selection decision that should precede that provisioning path, see:
+
+- `docs/memory/age_image_selection_note.md`
+
+This means the current command should be read as a rebuild-oriented bootstrap
+step for the constrained prototype graph, not as an incremental synchronization
+path.
+
+Important current limitations:
+
+- this is not yet a full graph administration framework
+- graph population is currently rebuild-first rather than incremental
+- the prototype should still be read as an internal, optional graph-backed path
+  rather than broad graph adoption
 
 ---
 

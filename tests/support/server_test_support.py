@@ -40,8 +40,18 @@ from ctxledger.workflow.service import (
 class FakeDatabaseHealthChecker:
     ping_should_fail: bool = False
     schema_ready_value: bool = True
+    age_available_value: bool = True
+    age_graph_available_value: bool = True
     ping_calls: int = 0
     schema_ready_calls: int = 0
+    age_available_calls: int = 0
+    age_graph_available_calls: int = 0
+    age_graph_status_calls: int = 0
+    requested_graph_names: list[str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.requested_graph_names is None:
+            self.requested_graph_names = []
 
     def ping(self) -> None:
         self.ping_calls += 1
@@ -51,6 +61,26 @@ class FakeDatabaseHealthChecker:
     def schema_ready(self) -> bool:
         self.schema_ready_calls += 1
         return self.schema_ready_value
+
+    def age_available(self) -> bool:
+        self.age_available_calls += 1
+        return self.age_available_value
+
+    def age_graph_available(self, graph_name: str) -> bool:
+        self.age_graph_available_calls += 1
+        if self.requested_graph_names is not None:
+            self.requested_graph_names.append(graph_name)
+        return self.age_graph_available_value
+
+    def age_graph_status(self, graph_name: str) -> str:
+        self.age_graph_status_calls += 1
+        if self.requested_graph_names is not None:
+            self.requested_graph_names.append(graph_name)
+        if not self.age_available_value:
+            return "age_unavailable"
+        if not self.age_graph_available_value:
+            return "graph_unavailable"
+        return "graph_ready"
 
 
 @dataclass
@@ -217,6 +247,8 @@ def make_settings(
             pool_min_size=1,
             pool_max_size=10,
             pool_timeout_seconds=5,
+            age_enabled=False,
+            age_graph_name="ctxledger_memory",
         ),
         http=HttpSettings(
             host=host,

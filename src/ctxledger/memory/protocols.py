@@ -132,17 +132,22 @@ class MemoryRelationRepository(Protocol):
         source_memory_ids: tuple[UUID, ...],
     ) -> tuple[MemoryRelationRecord, ...]: ...
 
-    def list_by_source_memory_ids(
-        self,
-        source_memory_ids: tuple[UUID, ...],
-    ) -> tuple[MemoryRelationRecord, ...]: ...
-
     def list_by_target_memory_id(
         self,
         target_memory_id: UUID,
         *,
         limit: int,
     ) -> tuple[MemoryRelationRecord, ...]: ...
+
+
+@runtime_checkable
+class MemoryRelationSupportsTargetLookupRepository(Protocol):
+    """Read-only contract for distinct one-hop `supports` target lookup."""
+
+    def list_distinct_support_target_memory_ids_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+    ) -> tuple[UUID, ...]: ...
 
 
 @runtime_checkable

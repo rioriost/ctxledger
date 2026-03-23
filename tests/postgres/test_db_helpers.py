@@ -184,6 +184,8 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
         database_url="postgresql://example/db",
         statement_timeout_ms=None,
         schema_name="ctxledger",
+        age_enabled=False,
+        age_graph_name="ctxledger_memory",
     )
 
     ping_connector = FakeConnector()
@@ -264,6 +266,48 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
     try:
         checker = postgres.PostgresDatabaseHealthChecker(config)
         assert checker.age_available() is False
+        assert checker.age_graph_available("ctxledger_memory") is False
+        assert checker.age_graph_status("ctxledger_memory").value == "age_unavailable"
+    finally:
+        postgres._connect = original_connect
+
+    graph_ready_connector = FakeConnector()
+    postgres._connect = graph_ready_connector
+    try:
+        checker = postgres.PostgresDatabaseHealthChecker(config)
+        assert checker.age_graph_available("ctxledger_memory") is True
+        assert checker.age_graph_status("ctxledger_memory").value == "graph_ready"
+    finally:
+        postgres._connect = original_connect
+
+    class GraphMissingCursor(FakeCursor):
+        def __init__(self, rows: list[object] | None = None) -> None:
+            super().__init__(rows)
+
+        def fetchone(self) -> dict[str, int] | None:
+            if any("FROM pg_extension" in query for query, _params in self.executed):
+                return {"ok": 1}
+            return None
+
+    class GraphMissingConnection(FakeConnection):
+        def cursor(self) -> GraphMissingCursor:
+            cursor = GraphMissingCursor(self._rows)
+            self.cursors.append(cursor)
+            return cursor
+
+    class GraphMissingConnector(FakeConnector):
+        def __call__(self, database_url: str) -> GraphMissingConnection:
+            self.calls.append(database_url)
+            connection = GraphMissingConnection(self.rows)
+            self.connections.append(connection)
+            return connection
+
+    graph_not_ready_connector = GraphMissingConnector()
+    postgres._connect = graph_not_ready_connector
+    try:
+        checker = postgres.PostgresDatabaseHealthChecker(config)
+        assert checker.age_graph_available("ctxledger_memory") is False
+        assert checker.age_graph_status("ctxledger_memory").value == "graph_unavailable"
     finally:
         postgres._connect = original_connect
 
@@ -381,6 +425,125 @@ def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guar
         ),
     )
     assert relation_repo.list_by_source_memory_ids(()) == ()
+
+    support_target_a = uuid4()
+    support_target_b = uuid4()
+    duplicate_support_target_row = {
+        "target_memory_id": support_target_a,
+    }
+    newer_support_target_row = {
+        "target_memory_id": support_target_b,
+    }
+
+    connection.fetchall_results.append(
+        [
+            duplicate_support_target_row,
+            newer_support_target_row,
+        ]
+    )
+    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids(
+        (source_memory_id, other_source_memory_id)
+    ) == (
+        support_target_a,
+        support_target_b,
+    )
+    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids(()) == ()
+
+    graph_relation_row = {
+        "target_memory_id": f'"{support_target_a}"',
+    }
+    connection.fetchall_results.append([graph_relation_row])
+    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age(
+        (source_memory_id,),
+        graph_name="ctxledger_memory",
+    ) == (support_target_a,)
+
+    fallback_relation_row = {
+        "target_memory_id": support_target_b,
+    }
+    connection.fetchall_results.append([fallback_relation_row])
+    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_with_fallback(
+        (source_memory_id,),
+        graph_name="ctxledger_memory",
+        graph_status=postgres.AgeGraphStatus.GRAPH_READY,
+    ) == (support_target_b,)
+
+    original_via_age = (
+        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age
+    )
+    relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age = (  # type: ignore[method-assign]
+        lambda source_memory_ids, *, graph_name: (_ for _ in ()).throw(RuntimeError("age failed"))
+    )
+    try:
+        connection.fetchall_results.append([fallback_relation_row])
+        assert (
+            relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_with_fallback(
+                (source_memory_id,),
+                graph_name="ctxledger_memory",
+                graph_status=postgres.AgeGraphStatus.GRAPH_READY,
+            )
+            == (support_target_b,)
+        )
+    finally:
+        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age = (  # type: ignore[method-assign]
+            original_via_age
+        )
+
+    assert (
+        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_with_fallback(
+            (source_memory_id,),
+            graph_name="ctxledger_memory",
+            graph_status=postgres.AgeGraphStatus.AGE_UNAVAILABLE,
+        )
+        == ()
+    )
+
+    disabled_age_config = postgres.PostgresConfig(
+        database_url="postgresql://example/db",
+        statement_timeout_ms=None,
+        schema_name="ctxledger",
+        age_enabled=False,
+        age_graph_name="ctxledger_memory",
+    )
+    connection.fetchall_results.append([fallback_relation_row])
+    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
+        (source_memory_id,),
+        config=disabled_age_config,
+    ) == (support_target_b,)
+
+    class StubHealthChecker:
+        def __init__(self, graph_status: object) -> None:
+            self.graph_status = graph_status
+            self.requested_graph_names: list[str] = []
+
+        def age_graph_status(self, graph_name: str) -> object:
+            self.requested_graph_names.append(graph_name)
+            return self.graph_status
+
+    enabled_age_config = postgres.PostgresConfig(
+        database_url="postgresql://example/db",
+        statement_timeout_ms=None,
+        schema_name="ctxledger",
+        age_enabled=True,
+        age_graph_name="ctxledger_memory",
+    )
+    graph_ready_checker = StubHealthChecker(postgres.AgeGraphStatus.GRAPH_READY)
+    connection.fetchall_results.append([graph_relation_row])
+    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
+        (source_memory_id,),
+        config=enabled_age_config,
+        health_checker=graph_ready_checker,
+    ) == (support_target_a,)
+    assert graph_ready_checker.requested_graph_names == ["ctxledger_memory"]
+
+    graph_unavailable_checker = StubHealthChecker(postgres.AgeGraphStatus.GRAPH_UNAVAILABLE)
+    connection.fetchall_results.append([fallback_relation_row])
+    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
+        (source_memory_id,),
+        config=enabled_age_config,
+        health_checker=graph_unavailable_checker,
+    ) == (support_target_b,)
+    assert graph_unavailable_checker.requested_graph_names == ["ctxledger_memory"]
 
     connection.fetchall_results.append([relation_row])
     by_target = relation_repo.list_by_target_memory_id(target_memory_id, limit=5)

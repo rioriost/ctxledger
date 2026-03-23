@@ -5,6 +5,7 @@ import time
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -138,6 +139,12 @@ def _pgvector_literal(values: tuple[float, ...]) -> str:
     return "[" + ",".join(format(value, ".17g") for value in values) + "]"
 
 
+class AgeGraphStatus(StrEnum):
+    AGE_UNAVAILABLE = "age_unavailable"
+    GRAPH_UNAVAILABLE = "graph_unavailable"
+    GRAPH_READY = "graph_ready"
+
+
 def _memory_item_row_to_record(row: dict[str, Any]) -> MemoryItemRecord:
     return MemoryItemRecord(
         memory_id=_to_uuid(row["memory_id"]),
@@ -194,6 +201,8 @@ class PostgresConfig:
     pool_min_size: int = 1
     pool_max_size: int = 10
     pool_timeout_seconds: int = 5
+    age_enabled: bool = False
+    age_graph_name: str = "ctxledger_memory"
 
     @classmethod
     def from_settings(cls, settings: Any) -> PostgresConfig:
@@ -207,6 +216,8 @@ class PostgresConfig:
             pool_min_size=getattr(settings.database, "pool_min_size", 1),
             pool_max_size=getattr(settings.database, "pool_max_size", 10),
             pool_timeout_seconds=getattr(settings.database, "pool_timeout_seconds", 5),
+            age_enabled=getattr(settings.database, "age_enabled", False),
+            age_graph_name=getattr(settings.database, "age_graph_name", "ctxledger_memory"),
         )
 
 
@@ -258,6 +269,31 @@ class PostgresDatabaseHealthChecker:
                     """
                 )
                 return cur.fetchone() is not None
+
+    def age_graph_available(self, graph_name: str) -> bool:
+        if not self.age_available():
+            return False
+
+        with _connect(self._config.database_url) as conn:
+            self._apply_session_settings(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM ag_catalog.ag_graph
+                    WHERE name = %s
+                    LIMIT 1
+                    """,
+                    (graph_name,),
+                )
+                return cur.fetchone() is not None
+
+    def age_graph_status(self, graph_name: str) -> AgeGraphStatus:
+        if not self.age_available():
+            return AgeGraphStatus.AGE_UNAVAILABLE
+        if not self.age_graph_available(graph_name):
+            return AgeGraphStatus.GRAPH_UNAVAILABLE
+        return AgeGraphStatus.GRAPH_READY
 
     def _apply_session_settings(self, conn: Connection) -> None:
         with conn.cursor() as cur:
@@ -1612,6 +1648,101 @@ class PostgresMemoryRelationRepository:
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
 
+    def list_distinct_support_target_memory_ids_by_source_memory_ids_via_age(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+        *,
+        graph_name: str,
+    ) -> tuple[UUID, ...]:
+        if not source_memory_ids:
+            return ()
+
+        with self._conn.cursor() as cur:
+            cur.execute("LOAD 'age'")
+            cur.execute('SET search_path = ag_catalog, "$user", public')
+            cur.execute(
+                """
+                SELECT target_memory_id
+                FROM cypher(
+                    %s,
+                    $$
+                    MATCH (source:memory_item)-[relation:supports]->(target:memory_item)
+                    WHERE source.memory_id IN $source_memory_ids
+                    RETURN DISTINCT target.memory_id AS target_memory_id
+                    $$
+                ) AS (
+                    target_memory_id agtype
+                )
+                """,
+                (
+                    graph_name,
+                    json.dumps(
+                        {
+                            "source_memory_ids": [
+                                str(source_memory_id) for source_memory_id in source_memory_ids
+                            ]
+                        },
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ),
+                ),
+            )
+            rows = cur.fetchall()
+
+        target_memory_ids: list[UUID] = []
+        for row in rows:
+            raw_target_memory_id = row["target_memory_id"]
+            if isinstance(raw_target_memory_id, str):
+                normalized_target_memory_id = raw_target_memory_id.strip('"')
+            else:
+                normalized_target_memory_id = str(raw_target_memory_id)
+            target_memory_ids.append(_to_uuid(normalized_target_memory_id))
+
+        return tuple(target_memory_ids)
+
+    def list_distinct_support_target_memory_ids_by_source_memory_ids_with_fallback(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+        *,
+        graph_name: str,
+        graph_status: AgeGraphStatus,
+    ) -> tuple[UUID, ...]:
+        if graph_status is not AgeGraphStatus.GRAPH_READY:
+            return self.list_distinct_support_target_memory_ids_by_source_memory_ids(
+                source_memory_ids
+            )
+
+        try:
+            return self.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age(
+                source_memory_ids,
+                graph_name=graph_name,
+            )
+        except Exception:
+            return self.list_distinct_support_target_memory_ids_by_source_memory_ids(
+                source_memory_ids
+            )
+
+    def list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+        *,
+        config: PostgresConfig,
+        health_checker: PostgresDatabaseHealthChecker | None = None,
+    ) -> tuple[UUID, ...]:
+        if not config.age_enabled:
+            return self.list_distinct_support_target_memory_ids_by_source_memory_ids(
+                source_memory_ids
+            )
+
+        checker = health_checker or PostgresDatabaseHealthChecker(config)
+        graph_status = checker.age_graph_status(config.age_graph_name)
+
+        return self.list_distinct_support_target_memory_ids_by_source_memory_ids_with_fallback(
+            source_memory_ids,
+            graph_name=config.age_graph_name,
+            graph_status=graph_status,
+        )
+
     def create(self, relation: MemoryRelationRecord) -> MemoryRelationRecord:
         with self._conn.cursor() as cur:
             cur.execute(
@@ -1730,42 +1861,48 @@ class PostgresMemoryRelationRepository:
             for row in rows
         )
 
-    def list_by_source_memory_ids(
+    def list_distinct_support_target_memory_ids_by_source_memory_ids(
         self,
         source_memory_ids: tuple[UUID, ...],
-    ) -> tuple[MemoryRelationRecord, ...]:
+    ) -> tuple[UUID, ...]:
         if not source_memory_ids:
             return ()
 
         with self._conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT
-                    memory_relation_id,
-                    source_memory_id,
-                    target_memory_id,
-                    relation_type,
-                    metadata_json,
-                    created_at
-                FROM memory_relations
-                WHERE source_memory_id = ANY(%s)
-                ORDER BY created_at DESC, memory_relation_id DESC
+                WITH ranked_support_relations AS (
+                    SELECT
+                        target_memory_id,
+                        source_memory_id,
+                        created_at,
+                        memory_relation_id,
+                        array_position(%s::uuid[], source_memory_id) AS source_position,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY target_memory_id
+                            ORDER BY
+                                array_position(%s::uuid[], source_memory_id),
+                                created_at DESC,
+                                memory_relation_id DESC
+                        ) AS target_rank
+                    FROM memory_relations
+                    WHERE source_memory_id = ANY(%s)
+                      AND relation_type = 'supports'
+                )
+                SELECT target_memory_id
+                FROM ranked_support_relations
+                WHERE target_rank = 1
+                ORDER BY source_position, created_at DESC, memory_relation_id DESC
                 """,
-                (list(source_memory_ids),),
+                (
+                    list(source_memory_ids),
+                    list(source_memory_ids),
+                    list(source_memory_ids),
+                ),
             )
             rows = cur.fetchall()
 
-        return tuple(
-            MemoryRelationRecord(
-                memory_relation_id=_to_uuid(row["memory_relation_id"]),
-                source_memory_id=_to_uuid(row["source_memory_id"]),
-                target_memory_id=_to_uuid(row["target_memory_id"]),
-                relation_type=str(row["relation_type"]),
-                metadata=_json_loads(row["metadata_json"]),
-                created_at=_to_datetime(row["created_at"]),
-            )
-            for row in rows
-        )
+        return tuple(_to_uuid(row["target_memory_id"]) for row in rows)
 
     def list_by_target_memory_id(
         self,
@@ -1930,6 +2067,7 @@ def load_postgres_schema_sql() -> str:
 
 
 __all__ = [
+    "AgeGraphStatus",
     "PostgresConfig",
     "PostgresDatabaseHealthChecker",
     "PostgresMemoryEmbeddingRepository",

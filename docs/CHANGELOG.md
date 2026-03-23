@@ -8,6 +8,42 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ## [Unreleased]
 
+### Added
+
+- constrained Apache AGE prototype substrate for hierarchical memory `0.6.0`, including:
+  - a narrow `supports` target lookup boundary for distinct one-hop relation lookup
+  - relational baseline implementations in in-memory and PostgreSQL repositories
+  - AGE capability and graph-readiness checks
+  - a PostgreSQL AGE-backed one-hop `supports` lookup path
+  - explicit relational fallback when AGE is disabled, unavailable, unready, or the graph-backed read fails
+  - config-gated prototype controls:
+    - `CTXLEDGER_DB_AGE_ENABLED`
+    - `CTXLEDGER_DB_AGE_GRAPH_NAME`
+  - an explicit prototype bootstrap command:
+    - `ctxledger bootstrap-age-graph`
+- documentation for the constrained AGE prototype boundary, setup approach, implementation plan, and graph bootstrap/population model
+- README guidance for the constrained AGE prototype controls and bootstrap command
+
+### Changed
+
+- `memory_get_context` related-item collection can now use the narrow `supports` target lookup boundary without changing the visible retrieval contract
+- constrained relation-auxiliary parity was preserved across the prototype path by keeping:
+  - first-seen-by-source distinct target ordering
+  - relation metadata continuity for grouped relation outputs
+  - relational canonical storage as the system of record
+
+### Validation
+
+- focused AGE prototype validation passed:
+  - `python -m pytest tests/cli/test_cli_main.py tests/cli/test_cli_schema.py tests/config/test_config.py tests/postgres/test_db_helpers.py tests/memory/test_memory_context_related_items.py -q`
+  - `86 passed`
+
+### Notes
+
+- the current AGE work should still be read as a constrained, optional prototype rather than broad graph adoption
+- relational PostgreSQL tables remain canonical; AGE graph state is still derived and rebuildable
+- the explicit bootstrap path is currently prototype-grade and rebuild-first rather than a full graph lifecycle or incremental sync framework
+
 - planned `0.5.4` follow-up hardening work for `workflow_resume` timeout diagnosis and mitigation
 - roadmap/docs updates are being prepared for:
   - timeout-aware resume-path hardening
