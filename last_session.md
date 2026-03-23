@@ -1263,7 +1263,6 @@ more concrete investigation slot for the **first real prebuilt candidate**.
 
 The key current reading there is:
 
-- the exact image is still intentionally `TBD`
 - the file exists to lock in:
   - the must-verify checks
   - the required discovery fields
@@ -1272,9 +1271,23 @@ The key current reading there is:
 - the current recommendation remains:
   - **needs investigation before adoption**
 
-This is useful because the next session no longer needs to create a concrete
-prebuilt-candidate evaluation shape from scratch. It can now start by selecting
-one real image and replacing the `TBD` fields.
+The first concrete prebuilt candidate now recorded there is:
+
+- `apache/age:dev_snapshot_master`
+
+Current reading of that candidate:
+
+- AGE support looks promising at the published-image documentation level
+- provenance is materially stronger than an arbitrary third-party image because
+  the image is published through the Apache Software Foundation path
+- the biggest unresolved gates are still:
+  - exact PostgreSQL version fit
+  - pgvector compatibility for the repository's current expectations
+  - repository-local readiness/bootstrap validation
+
+This is useful because the next session no longer has to begin from a blank
+`TBD` investigation slot. It can start from a named candidate and decide whether
+that candidate clears the bar for the optional AGE-capable Docker/dev path.
 
 ### 41. Updated image selection decision note to point at the concrete prebuilt investigation record
 
@@ -1286,14 +1299,38 @@ That decision note now explicitly points to:
 
 - `docs/memory/age_image_candidate_prebuilt_concrete_record.md`
 
-as the next required artifact to fill in before final image selection.
+and records the current provisional decision more concretely:
+
+- `apache/age:dev_snapshot_master` remains the first concrete prebuilt
+  comparison candidate
+- however, unresolved pgvector compatibility now weakens the prebuilt-first
+  reading
+- the repository-owned build path is now the safer preferred implementation
+  direction
+- that preferred path should currently be read as:
+  - a repository-owned PostgreSQL 18 image
+  - based first on:
+    - `postgres:18`
+  - with Apache AGE added explicitly through a source-build assumption
+  - with pgvector added explicitly through a source-build assumption
+  - with arm64 support treated as something to prove by actually building and
+    validating the derived image
+- the prebuilt path should remain secondary unless it later clears the
+  PostgreSQL + pgvector compatibility bar
 
 This makes the next action clearer:
 
-1. choose one real prebuilt AGE-capable image
-2. fill in the concrete prebuilt candidate record
-3. compare it against the repository-owned build candidate
-4. then finalize the image-selection decision
+1. refine the repository-owned build candidate as the preferred path
+2. make its build assumptions more explicit:
+   - confirm the preferred PostgreSQL 18 base-image path:
+     - `postgres:18`
+   - refine the exact Apache AGE source-build method
+   - refine the exact pgvector source-build method
+   - overlay integration shape
+3. keep `apache/age:dev_snapshot_master` as the non-preferred comparison
+   candidate
+4. compare the two paths explicitly
+5. then finalize the image-selection decision
 
 ### 42. Updated recommended next step from the validated and operator-documented state
 
@@ -1305,15 +1342,53 @@ command available, bootstrap rerun semantics clarified as rebuild-oriented,
 bootstrap success output now including lightweight verification counts, the
 image-selection step now backed by a reusable template, two initial candidate
 records, a provisional image-selection decision note, and now a concrete
-prebuilt-candidate investigation record, the next useful slice should continue
-hardening the prototype rather than broadening it.
+prebuilt-candidate investigation record naming `apache/age:dev_snapshot_master`,
+the current repository reading should now be:
+
+- the prebuilt path is no longer the preferred implementation direction under
+  current evidence
+- the main blocker is unresolved pgvector compatibility for the current
+  repository expectations
+- the repository-owned build path is now the safer preferred path for an
+  optional AGE-capable Docker/dev overlay
+- the Apache-published prebuilt candidate should remain as the non-preferred
+  comparison point unless new evidence materially improves its fit
+
+A further refinement was then added to the preferred repository-owned build
+direction itself:
+
+- `docs/memory/age_image_candidate_repo_build_record.md` now treats the
+  repository-owned path as the preferred implementation path rather than only a
+  fallback
+- that record now also includes a concrete-build-assumptions section covering:
+  - explicit optional overlay usage
+  - PostgreSQL base/version strategy
+  - Apache AGE installation strategy
+  - pgvector installation strategy
+  - schema/bootstrap/readiness compatibility targets
+  - local/dev scope limits
+
+This is useful because the next session no longer needs to infer what
+"repository-owned build preferred" should practically mean. It now has an
+explicit place to refine the remaining `TBD` build assumptions before any
+optional AGE-capable overlay is implemented.
 
 Most likely next work:
 
-- harden graph population behavior and clarify idempotent rerun expectations
-- validate the bootstrap path more directly in graph-enabled environments
-- connect readiness expectations more explicitly to the populated graph state
-- clarify production-like operator guidance for the constrained prototype
+- refine the repository-owned AGE-capable build path as the preferred local/dev
+  implementation direction
+- fill the remaining concrete build assumptions in:
+  - `docs/memory/age_image_candidate_repo_build_record.md`
+- treat the preferred path specifically as:
+  - an arm64-capable PostgreSQL 18 repository-owned image
+  - based first on:
+    - `postgres:18`
+  - with Apache AGE installed explicitly through a source-build assumption
+  - with pgvector installed explicitly through a source-build assumption
+- keep `apache/age:dev_snapshot_master` as the comparison candidate rather than
+  the lead implementation path
+- validate any later image choice against PostgreSQL + pgvector compatibility
+  expectations before implementing the optional overlay
 - continue preserving relational fallback whenever the graph is not ready
 
 The next session should still avoid broadening the prototype beyond its current

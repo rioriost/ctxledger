@@ -76,8 +76,13 @@ Current reading:
 - potentially the fastest route to a real graph-enabled local/dev overlay
 - naturally compatible with the current explicit optional overlay model
 
-However, it is still **not yet ready for adoption** because a concrete trusted
-candidate image has not been pinned and evaluated directly.
+The first concrete prebuilt candidate now identified is:
+
+- `apache/age:dev_snapshot_master`
+
+However, it is still **not yet ready for adoption** because the concrete
+candidate has not yet been validated directly against the repository's actual
+readiness/bootstrap/vector-fit expectations.
 
 Current status:
 
@@ -85,9 +90,8 @@ Current status:
 
 Main unresolved questions:
 
-- which specific prebuilt image is credible enough to evaluate?
-- does it actually satisfy `LOAD 'age'` in a way that works with the current
-  readiness/bootstrap flow?
+- does `apache/age:dev_snapshot_master` actually satisfy `LOAD 'age'` in a way
+  that works with the current readiness/bootstrap flow?
 - does it preserve current PostgreSQL expectations closely enough?
 - does it preserve current pgvector expectations cleanly enough for the
   constrained prototype path?
@@ -125,26 +129,55 @@ This candidate should become the preferred implementation path if:
 
 The current provisional decision is:
 
-- **do not select the repository-owned build path yet**
-- **do not implement the AGE-capable Docker overlay yet**
-- **first identify and evaluate at least one concrete prebuilt AGE-capable image**
-- **keep the repository-owned build path as the fallback if the prebuilt option
-  fails the compatibility/confidence bar**
+- **promote the repository-owned build path to the preferred implementation
+  path**
+- **treat that preferred path as an arm64-oriented PostgreSQL 18 image built and
+  owned by the repository**
+- **treat the current preferred base-image assumption as:**
+  - `postgres:18`
+- **treat the current preferred extension-installation assumption as:**
+  - Apache AGE source build during the derived image build
+  - pgvector source build during the derived image build
+- **do not implement the AGE-capable Docker overlay until those preferred
+  assumptions are reflected in the overlay/build design**
+- **retain the identified concrete prebuilt AGE-capable image as a non-preferred
+  investigation candidate**
+  - `apache/age:dev_snapshot_master`
+- **treat the prebuilt path as secondary unless it later proves clear enough on
+  PostgreSQL + pgvector compatibility**
 
 In short:
 
-- **prebuilt path first, if credible**
-- **repository-owned build second, if needed**
+- **repository-owned PostgreSQL 18 arm64-capable build first**
+- **concrete prebuilt path second, only if it later clears the compatibility
+  bar**
 
-This is the current best decision because it balances:
+This is the current best decision because the main unresolved blocker in the
+prebuilt path is no longer abstract uncertainty alone.
 
-- operational simplicity
-- explicit optionality
-- limited blast radius
-- and effort discipline
+It is specifically the lack of a clear pgvector compatibility story for the
+current repository expectations.
 
-without prematurely committing the repository to maintaining a custom local/dev
-PostgreSQL image before it is clearly necessary.
+At the same time, the current working assumption for the preferred path is now:
+
+- both Apache AGE and pgvector support PostgreSQL 18
+- arm64 support should not be assumed blindly
+- the first preferred base-image assumption is:
+  - `postgres:18`
+- the first preferred extension-installation assumption is:
+  - Apache AGE source build against PostgreSQL 18 during image build
+  - pgvector source build against PostgreSQL 18 during image build
+- therefore the repository should own an arm64-capable PostgreSQL 18 image path
+  and prove it by building and validating it directly
+
+Promoting the repository-owned build path now better preserves:
+
+- explicit control over extension compatibility
+- explicit control over PostgreSQL 18 selection
+- explicit control over arm64-oriented local/dev validation
+- reproducibility for local/dev validation
+- unchanged default relational-first stack behavior
+- constrained prototype discipline without hidden environment risk
 
 ---
 
@@ -166,29 +199,51 @@ So the next meaningful question is not whether the prototype exists.
 
 It is whether a graph-enabled environment can be provided simply and credibly.
 
-### 2. A strong prebuilt image would be the lowest-friction path
+### 2. A strong prebuilt image would still be the lowest-friction path, but it is not the strongest current fit
 
-If a strong prebuilt image exists, it would likely provide:
+If a strong prebuilt image existed with clear support for:
+
+- Apache AGE
+- current PostgreSQL expectations
+- current pgvector expectations
+
+then it would likely provide:
 
 - the smallest implementation slice
 - the smallest disruption to the repository
 - the clearest optional overlay path
 - the fastest route to real graph-enabled validation
 
-So it makes sense to check that path first.
+However, the first concrete candidate currently identified does not yet provide a
+clear enough pgvector compatibility story to justify making the prebuilt path the
+preferred implementation direction.
 
-### 3. The repository-owned build path is valuable, but should remain a fallback until needed
+### 3. The repository-owned build path is now the safer preferred path
 
 A repository-owned build path is attractive when:
 
 - compatibility must be tightly controlled
 - reproducibility matters more than convenience
 - external image confidence is weak
+- extension coexistence must be made explicit rather than assumed
+- architecture fit, including arm64-oriented local/dev validation, must be
+  proven rather than guessed
 
-But it also increases maintenance scope.
+That is now the repository’s more credible current reading.
 
-At the current stage, that extra cost should only be paid if the prebuilt path
-fails the actual selection criteria.
+Although the repository-owned path increases maintenance scope, the current
+evidence suggests that paying that extra cost is more disciplined than
+continuing to treat the prebuilt path as the primary implementation direction
+while pgvector compatibility remains unclear.
+
+It also better fits the current working assumption that the preferred path
+should target:
+
+- PostgreSQL 18
+- explicit AGE installation
+- explicit pgvector installation
+- an arm64-capable base image whose actual buildability is validated by the
+  repository rather than assumed from external image claims
 
 ### 4. This preserves the current prototype discipline
 
@@ -214,14 +269,21 @@ Current state:
 
 This note therefore records a **gated decision**, not a final adoption.
 
-The gate is:
+The gate is now narrower and more practical:
 
-- identify and assess one or more concrete prebuilt image candidates
+- proceed with the repository-owned build path as the preferred implementation
+  direction
+- keep the identified concrete prebuilt image candidate:
+  - `apache/age:dev_snapshot_master`
+  as a secondary comparison point or possible later simplification path
+- only reopen the prebuilt-first decision if a concrete candidate demonstrates a
+  clearer AGE + PostgreSQL + pgvector fit than the repository-owned path
 
-Only after that should the final decision be made between:
+Only after that should the repository reconsider whether the final path should
+shift back toward:
 
 - prebuilt image path
-- repository-owned build path
+- instead of the currently preferred repository-owned build path
 
 ---
 
@@ -301,18 +363,30 @@ Those belong to the next slice after concrete candidate evaluation.
 
 The next required action is:
 
-- choose at least one concrete prebuilt AGE-capable PostgreSQL image candidate
-- evaluate it using:
-  - `docs/memory/age_image_candidate_decision_record_template.md`
-
-If useful, also refine the repository-owned build candidate with more concrete
-build assumptions.
+- refine the repository-owned build candidate into the preferred implementation
+  path
+- make the build assumptions concrete enough to support an explicit optional
+  Docker/dev overlay
+- treat the preferred path specifically as:
+  - an arm64-capable PostgreSQL 18 repository-owned image
+  - based first on:
+    - `postgres:18`
+  - with Apache AGE added explicitly through a source-build assumption
+  - with pgvector added explicitly through a source-build assumption
+- retain the identified concrete prebuilt AGE-capable PostgreSQL image
+  candidate:
+  - `apache/age:dev_snapshot_master`
+  as a secondary comparison record
+- update that record only if new evidence materially improves its
+  PostgreSQL + pgvector fit
 
 The most practical next artifacts are:
 
-- one concrete prebuilt candidate record
-  - `docs/memory/age_image_candidate_prebuilt_concrete_record.md`
-- optionally one refined repository-owned build record
+- one refined repository-owned build record
+  - `docs/memory/age_image_candidate_repo_build_record.md`
+- one implementation-facing overlay/design step after that
+- optionally one updated concrete prebuilt candidate record if new evidence
+  warrants it
 - then a final image-selection update to this note
 
 ---
@@ -321,11 +395,18 @@ The most practical next artifacts are:
 
 Use this sequence:
 
-1. identify one serious concrete prebuilt candidate
-2. fill:
-   - `docs/memory/age_image_candidate_prebuilt_concrete_record.md`
-3. compare it against the current repository-owned build record
-4. update this note with a final selection
+1. refine the repository-owned build path as the preferred implementation
+   candidate
+2. update:
+   - `docs/memory/age_image_candidate_repo_build_record.md`
+   with more concrete build assumptions, especially:
+   - confirm the preferred PostgreSQL 18 base-image path:
+     - `postgres:18`
+   - refine the exact Apache AGE source-build method
+   - refine the exact pgvector source-build method
+3. keep `docs/memory/age_image_candidate_prebuilt_concrete_record.md` as the
+   secondary comparison record for `apache/age:dev_snapshot_master`
+4. update this note with the stronger preferred-path reading
 5. only then implement:
    - `docker/docker-compose.age.yml`
 
@@ -352,10 +433,19 @@ Current decision status:
 
 Current provisional choice:
 
-- **investigate a concrete prebuilt AGE-capable image first**
+- **promote the repository-owned build path to the preferred implementation
+  direction**
+  - tracked in:
+    - `docs/memory/age_image_candidate_repo_build_record.md`
+  - currently read as:
+    - arm64-capable PostgreSQL 18 base image
+    - explicit Apache AGE installation
+    - explicit pgvector installation
+- **retain the identified concrete prebuilt AGE-capable image as the
+  non-preferred comparison candidate**
+  - `apache/age:dev_snapshot_master`
   - tracked in:
     - `docs/memory/age_image_candidate_prebuilt_concrete_record.md`
-- **retain repository-owned build as the controlled fallback**
 
 This is the smallest next decision that can move the repository toward a real
 graph-enabled local/dev validation path without prematurely widening prototype

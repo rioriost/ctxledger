@@ -32,7 +32,7 @@ a good fit for the current constrained validation path.
 - source:
   - repository-maintained Docker build defined inside `ctxledger`
 - image or build reference:
-  - not yet implemented
+  - repository-owned local/dev PostgreSQL image build
 - intended usage:
   - repository-owned build
 - evaluation date:
@@ -318,50 +318,171 @@ AGE graph bootstrap completed for 'ctxledger_memory' (memory_item nodes repopula
 
 ---
 
+## Concrete Build Assumptions
+
+### 1. Integration shape
+
+- preferred implementation shape:
+  - explicit optional Docker Compose overlay
+- expected overlay file:
+  - `docker/docker-compose.age.yml`
+- expected default-stack impact:
+  - none
+- notes:
+  - the default relational-first stack should remain unchanged
+  - the AGE-capable path should be activated only for constrained prototype work
+
+### 2. PostgreSQL base strategy
+
+- preferred base strategy:
+  - repository-owned PostgreSQL image based on an arm64-capable PostgreSQL 18
+    base image, with pgvector and Apache AGE added explicitly during the derived
+    image build
+- exact base image:
+  - `postgres:18`
+- PostgreSQL version pinning strategy:
+  - `18`
+- notes:
+  - the current working assumption is that both pgvector and Apache AGE support
+    PostgreSQL 18
+  - the build should use PostgreSQL 18 explicitly rather than inheriting version
+    choice accidentally
+  - the first preferred base-image assumption is the official PostgreSQL 18 image
+    path:
+    - `postgres:18`
+  - arm64 support should still be treated as something to prove by actually
+    building the derived image rather than assuming blindly
+
+### 3. Apache AGE installation strategy
+
+- preferred AGE strategy:
+  - explicit installation in the repository-owned image build on top of the
+    chosen arm64-capable PostgreSQL 18 base image
+- installation mechanism:
+  - add Apache AGE during the derived image build
+  - preferred current mechanism:
+    - source build against PostgreSQL 18 during image build
+- notes:
+  - the resulting image must support:
+    - `CREATE EXTENSION age;`
+    - `LOAD 'age';`
+    - `SET search_path = ag_catalog, "$user", public;`
+  - AGE support should be built into the image rather than relying on manual
+    post-start installation
+  - a source-build assumption is currently preferred because it makes the
+    PostgreSQL 18 fit more explicit for the constrained local/dev path
+  - arm64 compatibility still needs to be proven by actually building and
+    validating the image
+
+### 4. pgvector installation strategy
+
+- preferred pgvector strategy:
+  - explicit installation in the same repository-owned image build on top of the
+    chosen arm64-capable PostgreSQL 18 base image
+- installation mechanism:
+  - add pgvector during the derived image build
+  - preferred current mechanism:
+    - source build against PostgreSQL 18 during image build
+- notes:
+  - this is one of the strongest reasons to prefer the repository-owned path
+  - the graph-enabled path should preserve current vector expectations clearly
+    enough for local/dev constrained prototype work
+  - using the same general source-build assumption as AGE keeps the derived image
+    story simpler and more explicit at the current stage
+  - arm64 compatibility still needs to be proven by actually building and
+    validating the image
+
+### 5. Schema/bootstrap/readiness compatibility targets
+
+- schema application compatibility:
+  - required
+- readiness command compatibility:
+  - required
+- bootstrap command compatibility:
+  - required
+- runtime introspection compatibility:
+  - required
+- notes:
+  - the build should support:
+    - `ctxledger apply-schema`
+    - `ctxledger age-graph-readiness`
+    - `ctxledger bootstrap-age-graph`
+    - runtime `age_prototype` reporting through `/debug/runtime`
+
+### 6. Build scope limits
+
+- intended scope:
+  - local/dev only
+- non-goals:
+  - production deployment standard
+  - broad graph lifecycle automation
+  - generalized PostgreSQL platform ownership
+- notes:
+  - the image should remain as small and explicit as possible
+  - this build exists to support the constrained prototype, not broad graph
+    adoption
+
+---
+
 ## Recommendation
 
-- keep as fallback
+- preferred implementation path
 
 ### Rationale
 
-- the repository-owned build path is the safest technical fallback if no
-  trustworthy prebuilt image can satisfy the constrained prototype's real needs
-  cleanly
-- it is especially attractive if pgvector compatibility and reproducibility are
-  too uncertain in external candidates
-- however, because it carries more implementation and maintenance burden, it
-  should not automatically be the first choice if a strong prebuilt option exists
+- the repository-owned build path is now the safest and clearest implementation
+  direction under current evidence
+- it is especially attractive because the current working assumption is now:
+  - both pgvector and Apache AGE support PostgreSQL 18
+  - but arm64 support still needs to be proven in practice
+- that makes a repository-owned image based on an arm64-capable PostgreSQL base
+  image the clearest path for local/dev validation
+- the added implementation and maintenance burden is acceptable at the current
+  prototype stage because it buys explicit control over:
+  - PostgreSQL 18 fit
+  - arm64 base-image choice
+  - AGE installation
+  - pgvector installation
+  - local/dev reproducibility
 
 ### Conditions for adoption
 
 - condition 1:
-  - no trustworthy prebuilt image cleanly satisfies AGE + PostgreSQL + pgvector
-    expectations
+  - current prebuilt evidence remains too weak on AGE + PostgreSQL + pgvector
+    compatibility together, especially for the desired arm64-oriented path
 - condition 2:
   - the repository is willing to own a small local/dev PostgreSQL build path
 - condition 3:
   - the implementation remains explicitly scoped to the constrained prototype and
     optional overlay usage
+- condition 4:
+  - the resulting image is treated as a build-and-validate path rather than as an
+    assumed arm64 success story until it is actually proven
 
 ### Next action
 
-- compare this candidate directly against at least one serious prebuilt image
-  candidate
-- adopt this path if the prebuilt option fails the compatibility or confidence
-  bar
-- if adopted, implement it through an explicit optional Compose overlay while
-  leaving the default stack unchanged
+- refine this candidate from a strategic fallback into the concrete preferred
+  local/dev implementation path
+- use the concrete build assumptions above to make the remaining implementation
+  details explicit:
+  - confirm the official PostgreSQL 18 base-image path:
+    - `postgres:18`
+  - refine the exact Apache AGE source-build method
+  - refine the exact pgvector source-build method
+- then implement it through an explicit optional Compose overlay while leaving
+  the default stack unchanged
+- treat the first success criterion as:
+  - the derived PostgreSQL 18 image builds and validates on the intended
+    arm64-oriented path
 
 ---
 
 ## Final Short Summary
 
 - final read:
-  - strong controlled fallback, possibly the best option if external images are
-    too uncertain
+  - preferred controlled implementation path under current evidence
 - suitable for the constrained prototype:
   - yes
 - recommended next step:
-  - compare this candidate against one or more concrete prebuilt image
-    candidates, then choose between operational simplicity and repository-owned
-    control
+  - refine this record with concrete build assumptions and use it as the basis
+    for the optional AGE-capable Docker/dev overlay
