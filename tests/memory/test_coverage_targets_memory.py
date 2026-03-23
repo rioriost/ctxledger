@@ -26,10 +26,12 @@ from ctxledger.memory.service import (
     InMemoryEpisodeRepository,
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
+    InMemoryMemoryRelationRepository,
     InMemoryWorkflowLookupRepository,
     MemoryEmbeddingRecord,
     MemoryFeature,
     MemoryItemRecord,
+    MemoryRelationRecord,
     MemoryService,
     RememberEpisodeRequest,
     RememberEpisodeResponse,
@@ -153,10 +155,7 @@ def test_serialize_search_memory_response_serializes_results() -> None:
 
     assert payload["feature"] == "memory_search"
     assert payload["implemented"] is True
-    assert (
-        payload["message"]
-        == "Hybrid lexical and semantic memory search completed successfully."
-    )
+    assert payload["message"] == "Hybrid lexical and semantic memory search completed successfully."
     assert payload["status"] == "ok"
     assert payload["available_in_version"] == "0.3.0"
     assert payload["timestamp"] == created_at.isoformat()
@@ -232,9 +231,7 @@ def test_build_embedding_generator_returns_disabled_generator_when_disabled() ->
     assert exc_info.value.provider == "disabled"
 
 
-def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest() -> (
-    None
-):
+def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest() -> None:
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()
     memory_item_repository = InMemoryMemoryItemRepository()
@@ -277,9 +274,7 @@ def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest()
     )
     assert memory_embedding_repository.embeddings[0].embedding_model == "local-stub-v1"
     assert len(memory_embedding_repository.embeddings[0].embedding) == 8
-    assert memory_embedding_repository.embeddings[
-        0
-    ].content_hash == compute_content_hash(
+    assert memory_embedding_repository.embeddings[0].content_hash == compute_content_hash(
         "Persist embedding for this memory item",
         {"kind": "checkpoint", "component": "memory"},
     )
@@ -337,13 +332,9 @@ def test_memory_service_persists_openai_embedding_after_memory_item_ingest() -> 
         memory_embedding_repository.embeddings[0].memory_id
         == memory_item_repository.memory_items[0].memory_id
     )
-    assert memory_embedding_repository.embeddings[0].embedding_model == (
-        "text-embedding-3-small"
-    )
+    assert memory_embedding_repository.embeddings[0].embedding_model == ("text-embedding-3-small")
     assert memory_embedding_repository.embeddings[0].embedding == (0.25, -0.5, 1.0)
-    assert memory_embedding_repository.embeddings[
-        0
-    ].content_hash == compute_content_hash(
+    assert memory_embedding_repository.embeddings[0].content_hash == compute_content_hash(
         "External embedding provider remains optional",
         {"kind": "checkpoint", "component": "memory"},
     )
@@ -704,9 +695,7 @@ def test_custom_http_embedding_generator_rejects_missing_embedding_vector(
     assert exc_info.value.details == {"field": "embedding"}
 
 
-def test_in_memory_memory_embedding_repository_find_similar_orders_by_similarity() -> (
-    None
-):
+def test_in_memory_memory_embedding_repository_find_similar_orders_by_similarity() -> None:
     repository = InMemoryMemoryEmbeddingRepository()
     first_embedding = MemoryEmbeddingRecord(
         memory_embedding_id=uuid4(),
@@ -742,9 +731,7 @@ def test_in_memory_memory_embedding_repository_find_similar_orders_by_similarity
     assert matches == (first_embedding, second_embedding)
 
 
-def test_in_memory_memory_embedding_repository_find_similar_ignores_dimension_mismatch() -> (
-    None
-):
+def test_in_memory_memory_embedding_repository_find_similar_ignores_dimension_mismatch() -> None:
     repository = InMemoryMemoryEmbeddingRepository()
     matching_embedding = MemoryEmbeddingRecord(
         memory_embedding_id=uuid4(),
@@ -771,9 +758,7 @@ def test_in_memory_memory_embedding_repository_find_similar_ignores_dimension_mi
     assert matches == (matching_embedding,)
 
 
-def test_in_memory_memory_embedding_repository_find_similar_returns_empty_for_empty_query() -> (
-    None
-):
+def test_in_memory_memory_embedding_repository_find_similar_returns_empty_for_empty_query() -> None:
     repository = InMemoryMemoryEmbeddingRepository()
     repository.create(
         MemoryEmbeddingRecord(
@@ -830,17 +815,13 @@ def test_in_memory_workflow_lookup_repository_workspace_id_by_workflow_id_withou
     assert repository.workspace_id_by_workflow_id(workflow_id) is None
 
 
-def test_in_memory_memory_item_repository_get_by_memory_id_returns_none_for_unknown_id() -> (
-    None
-):
+def test_in_memory_memory_item_repository_get_by_memory_id_returns_none_for_unknown_id() -> None:
     repository = InMemoryMemoryItemRepository()
 
     assert repository.get_by_memory_id(uuid4()) is None
 
 
-def test_in_memory_memory_item_repository_lists_items_by_memory_ids_in_request_order() -> (
-    None
-):
+def test_in_memory_memory_item_repository_lists_items_by_memory_ids_in_request_order() -> None:
     repository = InMemoryMemoryItemRepository()
     workspace_id = uuid4()
     missing_memory_id = uuid4()
@@ -884,9 +865,7 @@ def test_in_memory_memory_item_repository_lists_items_by_memory_ids_in_request_o
     )
 
 
-def test_in_memory_memory_item_repository_lists_items_by_episode_ids_in_recency_order() -> (
-    None
-):
+def test_in_memory_memory_item_repository_lists_items_by_episode_ids_in_recency_order() -> None:
     repository = InMemoryMemoryItemRepository()
     workspace_id = uuid4()
     first_episode_id = uuid4()
@@ -956,9 +935,7 @@ def test_in_memory_memory_item_repository_lists_items_by_episode_ids_in_recency_
     )
 
 
-def test_in_memory_memory_item_repository_lists_items_by_episode_ids_for_empty_input() -> (
-    None
-):
+def test_in_memory_memory_item_repository_lists_items_by_episode_ids_for_empty_input() -> None:
     repository = InMemoryMemoryItemRepository()
 
     assert repository.list_by_episode_ids(()) == ()
@@ -1007,6 +984,64 @@ def test_in_memory_memory_relation_repository_lists_source_and_target_matches_in
         target_match_relation,
         newer_relation,
     )
+
+
+def test_in_memory_memory_relation_repository_lists_matches_by_source_memory_ids_in_recency_order() -> (
+    None
+):
+    repository = InMemoryMemoryRelationRepository()
+    source_memory_id = uuid4()
+    other_source_memory_id = uuid4()
+    unrelated_source_memory_id = uuid4()
+    target_memory_id = uuid4()
+    created_at = datetime(2024, 2, 1, tzinfo=UTC)
+
+    older_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=target_memory_id,
+        relation_type="supports",
+        created_at=created_at.replace(hour=1),
+    )
+    newer_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=source_memory_id,
+        target_memory_id=uuid4(),
+        relation_type="supports",
+        created_at=created_at.replace(hour=2),
+    )
+    other_source_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=other_source_memory_id,
+        target_memory_id=uuid4(),
+        relation_type="references",
+        created_at=created_at.replace(hour=3),
+    )
+    unrelated_relation = MemoryRelationRecord(
+        memory_relation_id=uuid4(),
+        source_memory_id=unrelated_source_memory_id,
+        target_memory_id=uuid4(),
+        relation_type="related_to",
+        created_at=created_at.replace(hour=4),
+    )
+
+    repository.create(older_relation)
+    repository.create(newer_relation)
+    repository.create(other_source_relation)
+    repository.create(unrelated_relation)
+
+    assert repository.list_by_source_memory_ids(
+        (
+            source_memory_id,
+            other_source_memory_id,
+        )
+    ) == (
+        other_source_relation,
+        newer_relation,
+        older_relation,
+    )
+
+    assert repository.list_by_source_memory_ids(()) == ()
 
 
 def test_memory_service_records_episodes_and_returns_search_results() -> None:
@@ -1081,16 +1116,10 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert memory_item_repository.memory_items[0].workspace_id == UUID(
         "00000000-0000-0000-0000-000000000001"
     )
-    assert (
-        memory_item_repository.memory_items[0].episode_id
-        == remember_response.episode.episode_id
-    )
+    assert memory_item_repository.memory_items[0].episode_id == remember_response.episode.episode_id
     assert memory_item_repository.memory_items[0].type == "episode_note"
     assert memory_item_repository.memory_items[0].provenance == "episode"
-    assert (
-        memory_item_repository.memory_items[0].content
-        == "Episode summary with relevant context"
-    )
+    assert memory_item_repository.memory_items[0].content == "Episode summary with relevant context"
     assert memory_item_repository.memory_items[0].metadata == {
         "kind": "checkpoint",
         "topic": "relevant context",
@@ -1112,13 +1141,8 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     )
     assert search_response.details["results_returned"] == 1
     assert len(search_response.results) == 1
-    assert (
-        search_response.results[0].memory_id
-        == memory_item_repository.memory_items[0].memory_id
-    )
-    assert search_response.results[0].workspace_id == UUID(
-        "00000000-0000-0000-0000-000000000001"
-    )
+    assert search_response.results[0].memory_id == memory_item_repository.memory_items[0].memory_id
+    assert search_response.results[0].workspace_id == UUID("00000000-0000-0000-0000-000000000001")
     assert search_response.results[0].episode_id == remember_response.episode.episode_id
     assert search_response.results[0].workflow_instance_id is None
     assert search_response.results[0].attempt_id is None
@@ -1269,9 +1293,7 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
     assert search_response.results[1].semantic_score == 1.0
 
 
-def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> (
-    None
-):
+def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()
     memory_item_repository = InMemoryMemoryItemRepository()
@@ -1521,15 +1543,10 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
     assert len(episode_repository.episodes) == 1
     assert len(memory_item_repository.memory_items) == 1
     assert len(memory_embedding_repository.embeddings) == 1
-    assert (
-        memory_embedding_repository.embeddings[0].memory_id
-        == result.memory_item.memory_id
-    )
+    assert memory_embedding_repository.embeddings[0].memory_id == result.memory_item.memory_id
 
 
-def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources() -> (
-    None
-):
+def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     workflow_id = uuid4()
@@ -1581,9 +1598,7 @@ def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources(
     }
 
 
-def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation_fails() -> (
-    None
-):
+def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation_fails() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     class FailingEmbeddingGenerator:
@@ -1740,9 +1755,7 @@ def test_workflow_memory_bridge_post_init_swallows_settings_error(
     assert bridge.embedding_generator is None
 
 
-def test_workflow_memory_bridge_returns_skip_result_when_summary_sources_are_absent() -> (
-    None
-):
+def test_workflow_memory_bridge_returns_skip_result_when_summary_sources_are_absent() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     workflow_id = uuid4()

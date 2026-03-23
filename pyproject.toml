@@ -1,12 +1,13 @@
 [project]
 name = "ctxledger"
 version = "0.6.0"
-description = "Add your description here"
-readme = "README.md"
+description = "Durable Workflow Runtime and Multi-Layer Memory for AI Agents"
+readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
-    { name = "Rio Fujita", email = "rio_github@rio.st" }
+    { name = "Rio Fujita", email = "rio_github@rio.st" },
 ]
 requires-python = ">=3.14"
+license = { file = "LICENSE" }
 dependencies = [
     "fastapi>=0.115",
     "psycopg[binary]>=3.2",
@@ -14,16 +15,38 @@ dependencies = [
     "uvicorn[standard]>=0.32",
 ]
 
+[project.urls]
+Homepage = "https://github.com/rioriost/ctxledger"
+Issues = "https://github.com/rioriost/ctxledger/issues"
+Repository = "https://github.com/rioriost/ctxledger"
+
 [project.scripts]
 ctxledger = "ctxledger:main"
-
-[build-system]
-requires = ["uv_build>=0.9.27,<0.10.0"]
-build-backend = "uv_build"
 
 [project.optional-dependencies]
 test = [
   "pytest>=9",
   "pytest-cov>=7",
-  "fastapi"
 ]
+
+[dependency-groups]
+dev = [
+  "build>=1.2.2",
+  "twine>=6.1.0",
+  "ruff>=0.12.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.27,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

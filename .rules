@@ -102,29 +102,6 @@ user_notes: JA allowed
   - why it mattered
   - how to apply the lesson later
 
-## Projection and resume artifact handling
-
-- If resume projections are part of the current workflow, keep them up-to-date as part of the checkpoint or close-out flow.
-- Treat projections and resume artifacts as derived outputs, not the canonical source of workflow truth, unless the repository explicitly says otherwise.
-- If the repository maintains its own continuation notes or resume artifacts, treat them as auxiliary context that should stay consistent with canonical workflow state.
-
-## Projection failure handling
-
-- Treat projection failures as operational signals that should be reviewed, not silently ignored.
-- When projection failures exist:
-  - inspect the situation before deciding how to proceed
-  - distinguish between a failure that should be fixed, a failure that has already been fixed, and a failure that is intentionally being accepted
-- Use `projection_failures_resolve` when:
-  - the underlying cause has been corrected
-  - the projection path is now healthy again
-  - you want the canonical failure state to reflect that the issue is no longer open
-- Use `projection_failures_ignore` only when:
-  - there is an intentional decision not to pursue recovery now
-  - the team or task context accepts the projection remaining unresolved for the moment
-  - you want the canonical record to show that the failure was acknowledged and intentionally not pursued
-- Do not confuse `ignore` with successful recovery.
-- If you ignore or resolve projection failures, report that decision clearly in status updates and, when appropriate, in checkpoints.
-
 ## Change sizing and semantic decomposition
 
 - Keep generated code, tests, and documentation semantically small.

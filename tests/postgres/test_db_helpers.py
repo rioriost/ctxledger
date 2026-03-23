@@ -18,9 +18,7 @@ def test_schema_file_exists() -> None:
 
     assert schema_path.exists()
     assert (
-        schema_path.read_text(encoding="utf-8")
-        .strip()
-        .startswith("-- ctxledger PostgreSQL schema")
+        schema_path.read_text(encoding="utf-8").strip().startswith("-- ctxledger PostgreSQL schema")
     )
 
 
@@ -63,8 +61,7 @@ def test_postgres_low_level_helpers_and_pool_builder() -> None:
     assert postgres._optional_datetime(aware) == aware
     assert postgres._optional_str_enum(postgres.VerifyStatus, None) is None
     assert (
-        postgres._optional_str_enum(postgres.VerifyStatus, "passed")
-        == postgres.VerifyStatus.PASSED
+        postgres._optional_str_enum(postgres.VerifyStatus, "passed") == postgres.VerifyStatus.PASSED
     )
     assert postgres._normalized_schema_name(None) == "public"
     assert postgres._normalized_schema_name("  ") == "public"
@@ -238,9 +235,7 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
         postgres._connect = original_connect
 
 
-def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guards() -> (
-    None
-):
+def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guards() -> None:
     postgres = importlib.import_module("ctxledger.db.postgres")
     connection = FakeConnection()
 
@@ -299,6 +294,60 @@ def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guar
             created_at=relation_row["created_at"],
         ),
     )
+
+    other_source_memory_id = uuid4()
+    newer_relation_row = {
+        "memory_relation_id": uuid4(),
+        "source_memory_id": source_memory_id,
+        "target_memory_id": uuid4(),
+        "relation_type": "supports",
+        "metadata_json": {"kind": "newer"},
+        "created_at": datetime(2024, 1, 13, tzinfo=UTC),
+    }
+    older_other_source_relation_row = {
+        "memory_relation_id": uuid4(),
+        "source_memory_id": other_source_memory_id,
+        "target_memory_id": uuid4(),
+        "relation_type": "references",
+        "metadata_json": {"kind": "older-other-source"},
+        "created_at": datetime(2024, 1, 11, tzinfo=UTC),
+    }
+
+    connection.fetchall_results.append(
+        [
+            newer_relation_row,
+            relation_row,
+            older_other_source_relation_row,
+        ]
+    )
+    by_sources = relation_repo.list_by_source_memory_ids((source_memory_id, other_source_memory_id))
+    assert by_sources == (
+        MemoryRelationRecord(
+            memory_relation_id=newer_relation_row["memory_relation_id"],
+            source_memory_id=source_memory_id,
+            target_memory_id=newer_relation_row["target_memory_id"],
+            relation_type="supports",
+            metadata={"kind": "newer"},
+            created_at=newer_relation_row["created_at"],
+        ),
+        MemoryRelationRecord(
+            memory_relation_id=relation_row["memory_relation_id"],
+            source_memory_id=source_memory_id,
+            target_memory_id=target_memory_id,
+            relation_type="related_to",
+            metadata={"score": 0.8},
+            created_at=relation_row["created_at"],
+        ),
+        MemoryRelationRecord(
+            memory_relation_id=older_other_source_relation_row["memory_relation_id"],
+            source_memory_id=other_source_memory_id,
+            target_memory_id=older_other_source_relation_row["target_memory_id"],
+            relation_type="references",
+            metadata={"kind": "older-other-source"},
+            created_at=older_other_source_relation_row["created_at"],
+        ),
+    )
+    assert relation_repo.list_by_source_memory_ids(()) == ()
 
     connection.fetchall_results.append([relation_row])
     by_target = relation_repo.list_by_target_memory_id(target_memory_id, limit=5)

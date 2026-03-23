@@ -82,9 +82,7 @@ class UnitOfWorkWorkflowLookupRepository:
                     "latest_verify_report_created_at": None,
                 }
 
-            latest_attempt = uow.workflow_attempts.get_latest_by_workflow_id(
-                workflow_instance_id
-            )
+            latest_attempt = uow.workflow_attempts.get_latest_by_workflow_id(workflow_instance_id)
             latest_checkpoint = uow.workflow_checkpoints.get_latest_by_workflow_id(
                 workflow_instance_id
             )
@@ -107,8 +105,7 @@ class UnitOfWorkWorkflowLookupRepository:
                 "has_latest_attempt": latest_attempt is not None,
                 "latest_attempt_verify_status": (
                     latest_attempt.verify_status.value
-                    if latest_attempt is not None
-                    and latest_attempt.verify_status is not None
+                    if latest_attempt is not None and latest_attempt.verify_status is not None
                     else None
                 ),
                 "latest_attempt_started_at": (
@@ -116,14 +113,10 @@ class UnitOfWorkWorkflowLookupRepository:
                 ),
                 "has_latest_checkpoint": latest_checkpoint is not None,
                 "latest_checkpoint_created_at": (
-                    latest_checkpoint.created_at
-                    if latest_checkpoint is not None
-                    else None
+                    latest_checkpoint.created_at if latest_checkpoint is not None else None
                 ),
                 "latest_verify_report_created_at": (
-                    latest_verify_report.created_at
-                    if latest_verify_report is not None
-                    else None
+                    latest_verify_report.created_at if latest_verify_report is not None else None
                 ),
             }
 
@@ -220,9 +213,7 @@ class InMemoryWorkflowLookupRepository:
             "workflow_is_terminal": workflow_info.get("workflow_is_terminal"),
             "workflow_updated_at": workflow_info.get("workflow_updated_at"),
             "latest_attempt_status": workflow_info.get("latest_attempt_status"),
-            "latest_attempt_is_terminal": workflow_info.get(
-                "latest_attempt_is_terminal"
-            ),
+            "latest_attempt_is_terminal": workflow_info.get("latest_attempt_is_terminal"),
             "has_latest_attempt": workflow_info.get(
                 "has_latest_attempt",
                 workflow_info.get("latest_attempt_status") is not None
@@ -230,20 +221,14 @@ class InMemoryWorkflowLookupRepository:
                 or workflow_info.get("latest_attempt_verify_status") is not None
                 or workflow_info.get("latest_attempt_started_at") is not None,
             ),
-            "latest_attempt_verify_status": workflow_info.get(
-                "latest_attempt_verify_status"
-            ),
+            "latest_attempt_verify_status": workflow_info.get("latest_attempt_verify_status"),
             "latest_attempt_started_at": workflow_info.get("latest_attempt_started_at"),
             "has_latest_checkpoint": workflow_info.get(
                 "has_latest_checkpoint",
                 workflow_info.get("latest_checkpoint_created_at") is not None,
             ),
-            "latest_checkpoint_created_at": workflow_info.get(
-                "latest_checkpoint_created_at"
-            ),
-            "latest_verify_report_created_at": workflow_info.get(
-                "latest_verify_report_created_at"
-            ),
+            "latest_checkpoint_created_at": workflow_info.get("latest_checkpoint_created_at"),
+            "latest_verify_report_created_at": workflow_info.get("latest_verify_report_created_at"),
         }
 
     def workspace_id_by_workflow_id(self, workflow_instance_id: UUID) -> UUID | None:
@@ -363,8 +348,7 @@ class InMemoryMemoryItemRepository:
         matches = [
             memory_item
             for memory_item in self._memory_items
-            if memory_item.workspace_id == workspace_id
-            and memory_item.episode_id is None
+            if memory_item.workspace_id == workspace_id and memory_item.episode_id is None
         ]
         matches.sort(key=lambda memory_item: memory_item.created_at, reverse=True)
         return tuple(matches[:limit])
@@ -404,11 +388,7 @@ class InMemoryMemoryEmbeddingRepository:
         *,
         limit: int,
     ) -> tuple[MemoryEmbeddingRecord, ...]:
-        matches = [
-            embedding
-            for embedding in self._embeddings
-            if embedding.memory_id == memory_id
-        ]
+        matches = [embedding for embedding in self._embeddings if embedding.memory_id == memory_id]
         matches.sort(key=lambda embedding: embedding.created_at, reverse=True)
         return tuple(matches[:limit])
 
@@ -428,9 +408,7 @@ class InMemoryMemoryEmbeddingRepository:
                 continue
             score = sum(
                 left * right
-                for left, right in zip(
-                    embedding.embedding, query_embedding, strict=False
-                )
+                for left, right in zip(embedding.embedding, query_embedding, strict=False)
             )
             scored_embeddings.append((score, embedding))
 
@@ -614,6 +592,22 @@ class InMemoryMemoryRelationRepository:
         ]
         matches.sort(key=lambda relation: relation.created_at, reverse=True)
         return tuple(matches[:limit])
+
+    def list_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+    ) -> tuple[MemoryRelationRecord, ...]:
+        if not source_memory_ids:
+            return ()
+
+        source_memory_id_set = set(source_memory_ids)
+        matches = [
+            relation
+            for relation in self._relations
+            if relation.source_memory_id in source_memory_id_set
+        ]
+        matches.sort(key=lambda relation: relation.created_at, reverse=True)
+        return tuple(matches)
 
     def list_by_target_memory_id(
         self,

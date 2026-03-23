@@ -118,9 +118,7 @@ def _parse_embedding_values(raw_embedding: Any) -> tuple[float, ...]:
         normalized = raw_embedding.strip().strip("[]")
         if not normalized:
             return ()
-        return tuple(
-            float(part.strip()) for part in normalized.split(",") if part.strip()
-        )
+        return tuple(float(part.strip()) for part in normalized.split(",") if part.strip())
     return tuple(float(part) for part in raw_embedding)
 
 
@@ -144,13 +142,9 @@ def _memory_item_row_to_record(row: dict[str, Any]) -> MemoryItemRecord:
     return MemoryItemRecord(
         memory_id=_to_uuid(row["memory_id"]),
         workspace_id=(
-            _to_uuid(row["workspace_id"])
-            if row.get("workspace_id") is not None
-            else None
+            _to_uuid(row["workspace_id"]) if row.get("workspace_id") is not None else None
         ),
-        episode_id=(
-            _to_uuid(row["episode_id"]) if row.get("episode_id") is not None else None
-        ),
+        episode_id=(_to_uuid(row["episode_id"]) if row.get("episode_id") is not None else None),
         type=str(row["type"]),
         provenance=str(row["provenance"]),
         content=str(row["content"]),
@@ -168,9 +162,7 @@ def _memory_embedding_row_to_record(row: dict[str, Any]) -> MemoryEmbeddingRecor
         memory_id=_to_uuid(row["memory_id"]),
         embedding_model=str(row["embedding_model"]),
         embedding=embedding_values,
-        content_hash=str(row["content_hash"])
-        if row.get("content_hash") is not None
-        else None,
+        content_hash=str(row["content_hash"]) if row.get("content_hash") is not None else None,
         created_at=_to_datetime(row["created_at"]),
     )
 
@@ -205,9 +197,7 @@ class PostgresConfig:
 
     @classmethod
     def from_settings(cls, settings: Any) -> PostgresConfig:
-        schema_name = getattr(
-            getattr(settings, "database", None), "schema_name", "public"
-        )
+        schema_name = getattr(getattr(settings, "database", None), "schema_name", "public")
         normalized_schema_name = _normalized_schema_name(schema_name)
         return cls(
             database_url=settings.database.url,
@@ -263,9 +253,7 @@ class PostgresDatabaseHealthChecker:
                 else 0
             )
             cur.execute(f"SET statement_timeout = {timeout_ms}")
-            cur.execute(
-                f"SET search_path TO {_quote_ident(self._config.schema_name)}, public"
-            )
+            cur.execute(f"SET search_path TO {_quote_ident(self._config.schema_name)}, public")
 
 
 class PostgresWorkspaceRepository(WorkspaceRepository):
@@ -280,9 +268,7 @@ class PostgresWorkspaceRepository(WorkspaceRepository):
 
     def max_datetime(self, field_name: str) -> datetime | None:
         if field_name not in {"created_at", "updated_at"}:
-            raise PersistenceError(
-                f"Unsupported datetime field '{field_name}' for workspaces"
-            )
+            raise PersistenceError(f"Unsupported datetime field '{field_name}' for workspaces")
         with self._conn.cursor() as cur:
             cur.execute(f"SELECT MAX({field_name}) AS value FROM workspaces")
             row = cur.fetchone()
@@ -486,9 +472,7 @@ class PostgresWorkflowInstanceRepository(WorkflowInstanceRepository):
             row = cur.fetchone()
         return None if row is None else self._row_to_workflow(row)
 
-    def get_running_by_workspace_id(
-        self, workspace_id: UUID
-    ) -> WorkflowInstance | None:
+    def get_running_by_workspace_id(self, workspace_id: UUID) -> WorkflowInstance | None:
         with self._conn.cursor() as cur:
             cur.execute(
                 """
@@ -769,9 +753,7 @@ class PostgresWorkflowAttemptRepository(WorkflowAttemptRepository):
             row = cur.fetchone()
         return None if row is None else self._row_to_attempt(row)
 
-    def get_running_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowAttempt | None:
+    def get_running_by_workflow_id(self, workflow_instance_id: UUID) -> WorkflowAttempt | None:
         with self._conn.cursor() as cur:
             cur.execute(
                 """
@@ -797,9 +779,7 @@ class PostgresWorkflowAttemptRepository(WorkflowAttemptRepository):
             row = cur.fetchone()
         return None if row is None else self._row_to_attempt(row)
 
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowAttempt | None:
+    def get_latest_by_workflow_id(self, workflow_instance_id: UUID) -> WorkflowAttempt | None:
         with self._conn.cursor() as cur:
             cur.execute(
                 """
@@ -874,9 +854,7 @@ class PostgresWorkflowAttemptRepository(WorkflowAttemptRepository):
                     attempt.attempt_number,
                     attempt.status.value,
                     attempt.failure_reason,
-                    attempt.verify_status.value
-                    if attempt.verify_status is not None
-                    else None,
+                    attempt.verify_status.value if attempt.verify_status is not None else None,
                     attempt.started_at,
                     attempt.finished_at,
                     attempt.created_at,
@@ -916,9 +894,7 @@ class PostgresWorkflowAttemptRepository(WorkflowAttemptRepository):
                 (
                     attempt.status.value,
                     attempt.failure_reason,
-                    attempt.verify_status.value
-                    if attempt.verify_status is not None
-                    else None,
+                    attempt.verify_status.value if attempt.verify_status is not None else None,
                     attempt.started_at,
                     attempt.finished_at,
                     attempt.updated_at,
@@ -965,9 +941,7 @@ class PostgresWorkflowCheckpointRepository(WorkflowCheckpointRepository):
             row = cur.fetchone()
         return _optional_datetime(None if row is None else row["value"])
 
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowCheckpoint | None:
+    def get_latest_by_workflow_id(self, workflow_instance_id: UUID) -> WorkflowCheckpoint | None:
         with self._conn.cursor() as cur:
             cur.execute(
                 """
@@ -1085,9 +1059,7 @@ class PostgresVerifyReportRepository(VerifyReportRepository):
 
     def max_datetime(self, field_name: str) -> datetime | None:
         if field_name != "created_at":
-            raise PersistenceError(
-                f"Unsupported datetime field '{field_name}' for verify_reports"
-            )
+            raise PersistenceError(f"Unsupported datetime field '{field_name}' for verify_reports")
         with self._conn.cursor() as cur:
             cur.execute("SELECT MAX(created_at) AS value FROM verify_reports")
             row = cur.fetchone()
@@ -1167,9 +1139,7 @@ class PostgresMemoryEpisodeRepository(MemoryEpisodeRepository):
 
     def max_datetime(self, field_name: str) -> datetime | None:
         if field_name not in {"created_at", "updated_at"}:
-            raise PersistenceError(
-                f"Unsupported datetime field '{field_name}' for episodes"
-            )
+            raise PersistenceError(f"Unsupported datetime field '{field_name}' for episodes")
         with self._conn.cursor() as cur:
             cur.execute(f"SELECT MAX({field_name}) AS value FROM episodes")
             row = cur.fetchone()
@@ -1255,11 +1225,7 @@ class PostgresMemoryEpisodeRepository(MemoryEpisodeRepository):
             episode_id=_to_uuid(row["episode_id"]),
             workflow_instance_id=_to_uuid(row["workflow_instance_id"]),
             summary=str(row["summary"]),
-            attempt_id=(
-                _to_uuid(row["attempt_id"])
-                if row.get("attempt_id") is not None
-                else None
-            ),
+            attempt_id=(_to_uuid(row["attempt_id"]) if row.get("attempt_id") is not None else None),
             metadata=_json_loads(row["metadata_json"]),
             status=_episode_status(row.get("status")),
             created_at=_to_datetime(row["created_at"]),
@@ -1292,9 +1258,7 @@ class PostgresMemoryItemRepository(MemoryItemRepository):
 
     def max_datetime(self, field_name: str) -> datetime | None:
         if field_name not in {"created_at", "updated_at"}:
-            raise PersistenceError(
-                f"Unsupported datetime field '{field_name}' for memory_items"
-            )
+            raise PersistenceError(f"Unsupported datetime field '{field_name}' for memory_items")
         with self._conn.cursor() as cur:
             cur.execute(f"SELECT MAX({field_name}) AS value FROM memory_items")
             row = cur.fetchone()
@@ -1715,6 +1679,43 @@ class PostgresMemoryRelationRepository:
             for row in rows
         )
 
+    def list_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+    ) -> tuple[MemoryRelationRecord, ...]:
+        if not source_memory_ids:
+            return ()
+
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_relation_id,
+                    source_memory_id,
+                    target_memory_id,
+                    relation_type,
+                    metadata_json,
+                    created_at
+                FROM memory_relations
+                WHERE source_memory_id = ANY(%s)
+                ORDER BY created_at DESC, memory_relation_id DESC
+                """,
+                (list(source_memory_ids),),
+            )
+            rows = cur.fetchall()
+
+        return tuple(
+            MemoryRelationRecord(
+                memory_relation_id=_to_uuid(row["memory_relation_id"]),
+                source_memory_id=_to_uuid(row["source_memory_id"]),
+                target_memory_id=_to_uuid(row["target_memory_id"]),
+                relation_type=str(row["relation_type"]),
+                metadata=_json_loads(row["metadata_json"]),
+                created_at=_to_datetime(row["created_at"]),
+            )
+            for row in rows
+        )
+
     def list_by_target_memory_id(
         self,
         target_memory_id: UUID,
@@ -1855,9 +1856,7 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
                 else 0
             )
             cur.execute(f"SET statement_timeout = {timeout_ms}")
-            cur.execute(
-                f"SET search_path TO {_quote_ident(self._config.schema_name)}, public"
-            )
+            cur.execute(f"SET search_path TO {_quote_ident(self._config.schema_name)}, public")
 
 
 def build_postgres_uow_factory(

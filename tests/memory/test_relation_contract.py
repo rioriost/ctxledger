@@ -33,6 +33,21 @@ class InMemoryMemoryRelationRepository(MemoryRelationRepository):
         matches.sort(key=lambda relation: relation.created_at, reverse=True)
         return tuple(matches[:limit])
 
+    def list_by_source_memory_ids(
+        self,
+        source_memory_ids,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        if not source_memory_ids:
+            return ()
+
+        matches = [
+            relation
+            for relation in self._relations
+            if relation.source_memory_id in source_memory_ids
+        ]
+        matches.sort(key=lambda relation: relation.created_at, reverse=True)
+        return tuple(matches)
+
     def list_by_target_memory_id(
         self,
         target_memory_id,
@@ -48,9 +63,7 @@ class InMemoryMemoryRelationRepository(MemoryRelationRepository):
         return tuple(matches[:limit])
 
 
-def test_memory_relation_repository_contract_supports_create_and_directional_reads() -> (
-    None
-):
+def test_memory_relation_repository_contract_supports_create_and_directional_reads() -> None:
     source_memory_id = uuid4()
     target_memory_id = uuid4()
     other_memory_id = uuid4()
@@ -108,9 +121,16 @@ def test_memory_relation_repository_contract_supports_create_and_directional_rea
         older_relation,
     )
 
-    assert repository.list_by_source_memory_id(source_memory_id, limit=1) == (
-        newer_relation,
-    )
-    assert repository.list_by_target_memory_id(target_memory_id, limit=1) == (
+    assert repository.list_by_source_memory_id(source_memory_id, limit=1) == (newer_relation,)
+    assert repository.list_by_source_memory_ids(
+        (
+            source_memory_id,
+            other_memory_id,
+        )
+    ) == (
         incoming_relation,
+        newer_relation,
+        older_relation,
     )
+    assert repository.list_by_source_memory_ids(()) == ()
+    assert repository.list_by_target_memory_id(target_memory_id, limit=1) == (incoming_relation,)

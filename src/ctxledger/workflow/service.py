@@ -383,9 +383,7 @@ class WorkflowInstanceRepository:
     def get_by_id(self, workflow_instance_id: UUID) -> WorkflowInstance | None:
         raise NotImplementedError
 
-    def get_running_by_workspace_id(
-        self, workspace_id: UUID
-    ) -> WorkflowInstance | None:
+    def get_running_by_workspace_id(self, workspace_id: UUID) -> WorkflowInstance | None:
         raise NotImplementedError
 
     def get_latest_by_workspace_id(self, workspace_id: UUID) -> WorkflowInstance | None:
@@ -428,14 +426,10 @@ class WorkflowAttemptRepository:
     def get_by_id(self, attempt_id: UUID) -> WorkflowAttempt | None:
         raise NotImplementedError
 
-    def get_running_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowAttempt | None:
+    def get_running_by_workflow_id(self, workflow_instance_id: UUID) -> WorkflowAttempt | None:
         raise NotImplementedError
 
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowAttempt | None:
+    def get_latest_by_workflow_id(self, workflow_instance_id: UUID) -> WorkflowAttempt | None:
         raise NotImplementedError
 
     def get_next_attempt_number(self, workflow_instance_id: UUID) -> int:
@@ -449,9 +443,7 @@ class WorkflowAttemptRepository:
 
 
 class WorkflowCheckpointRepository:
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowCheckpoint | None:
+    def get_latest_by_workflow_id(self, workflow_instance_id: UUID) -> WorkflowCheckpoint | None:
         raise NotImplementedError
 
     def get_latest_by_attempt_id(self, attempt_id: UUID) -> WorkflowCheckpoint | None:
@@ -528,6 +520,12 @@ class MemoryRelationRepository:
         source_memory_id: UUID,
         *,
         limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        raise NotImplementedError
+
+    def list_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
     ) -> tuple[MemoryRelationRecord, ...]:
         raise NotImplementedError
 
@@ -759,9 +757,7 @@ class WorkflowService:
                     workflow.workflow_instance_id
                 )
                 latest_verify_report = (
-                    uow.verify_reports.get_latest_by_attempt_id(
-                        latest_attempt.attempt_id
-                    )
+                    uow.verify_reports.get_latest_by_attempt_id(latest_attempt.attempt_id)
                     if latest_attempt is not None
                     else None
                 )
@@ -776,9 +772,7 @@ class WorkflowService:
                         ticket_id=workflow.ticket_id,
                         workflow_status=workflow.status.value,
                         latest_step_name=(
-                            latest_checkpoint.step_name
-                            if latest_checkpoint is not None
-                            else None
+                            latest_checkpoint.step_name if latest_checkpoint is not None else None
                         ),
                         latest_verify_status=(
                             latest_verify_report.status.value
@@ -893,9 +887,7 @@ class WorkflowService:
                     details={"workspace_id": str(data.workspace_id)},
                 )
 
-            running = uow.workflow_instances.get_running_by_workspace_id(
-                data.workspace_id
-            )
+            running = uow.workflow_instances.get_running_by_workspace_id(data.workspace_id)
             if running is not None:
                 raise ActiveWorkflowExistsError(
                     "workspace already has a running workflow",
@@ -924,9 +916,7 @@ class WorkflowService:
             uow.commit()
             return WorkflowStartResult(workflow_instance=workflow, attempt=attempt)
 
-    def create_checkpoint(
-        self, data: CreateCheckpointInput
-    ) -> WorkflowCheckpointResult:
+    def create_checkpoint(self, data: CreateCheckpointInput) -> WorkflowCheckpointResult:
         self._validate_step_name(data.step_name)
 
         with self._uow_factory() as uow:
@@ -1005,12 +995,8 @@ class WorkflowService:
             )
         with self._uow_factory() as uow:
             uow_enter_duration_ms = int(getattr(uow, "enter_duration_ms", 0) or 0)
-            pool_checkout_duration_ms = int(
-                getattr(uow, "pool_checkout_duration_ms", 0) or 0
-            )
-            session_setup_duration_ms = int(
-                getattr(uow, "session_setup_duration_ms", 0) or 0
-            )
+            pool_checkout_duration_ms = int(getattr(uow, "pool_checkout_duration_ms", 0) or 0)
+            session_setup_duration_ms = int(getattr(uow, "session_setup_duration_ms", 0) or 0)
             checkout_context_create_duration_ms = int(
                 getattr(uow, "checkout_context_create_duration_ms", 0) or 0
             )
@@ -1077,9 +1063,7 @@ class WorkflowService:
                     extra={
                         "workflow_instance_id": str(workflow.workflow_instance_id),
                         "attempt_lookup_strategy": attempt_lookup_strategy,
-                        "attempt_id": (
-                            str(attempt.attempt_id) if attempt is not None else None
-                        ),
+                        "attempt_id": (str(attempt.attempt_id) if attempt is not None else None),
                         "duration_ms": attempt_lookup_duration_ms,
                     },
                 )
@@ -1119,9 +1103,7 @@ class WorkflowService:
                     "resume_workflow verify report lookup complete",
                     extra={
                         "workflow_instance_id": str(workflow.workflow_instance_id),
-                        "attempt_id": (
-                            str(attempt.attempt_id) if attempt is not None else None
-                        ),
+                        "attempt_id": (str(attempt.attempt_id) if attempt is not None else None),
                         "verify_id": (
                             str(latest_verify_report.verify_id)
                             if latest_verify_report is not None
@@ -1155,9 +1137,7 @@ class WorkflowService:
                     extra={
                         "workflow_instance_id": str(workflow.workflow_instance_id),
                         "workspace_id": str(workspace.workspace_id),
-                        "attempt_id": (
-                            str(attempt.attempt_id) if attempt is not None else None
-                        ),
+                        "attempt_id": (str(attempt.attempt_id) if attempt is not None else None),
                         "checkpoint_id": (
                             str(latest_checkpoint.checkpoint_id)
                             if latest_checkpoint is not None
@@ -1177,9 +1157,7 @@ class WorkflowService:
                     extra={
                         "workflow_instance_id": str(workflow.workflow_instance_id),
                         "workspace_id": str(workspace.workspace_id),
-                        "attempt_id": (
-                            str(attempt.attempt_id) if attempt is not None else None
-                        ),
+                        "attempt_id": (str(attempt.attempt_id) if attempt is not None else None),
                         "checkpoint_id": (
                             str(latest_checkpoint.checkpoint_id)
                             if latest_checkpoint is not None
@@ -1197,12 +1175,8 @@ class WorkflowService:
                         "workspace_lookup_duration_ms": workspace_lookup_duration_ms,
                         "attempt_lookup_duration_ms": attempt_lookup_duration_ms,
                         "checkpoint_lookup_duration_ms": checkpoint_lookup_duration_ms,
-                        "verify_report_lookup_duration_ms": (
-                            verify_report_lookup_duration_ms
-                        ),
-                        "response_assembly_duration_ms": (
-                            response_assembly_duration_ms
-                        ),
+                        "verify_report_lookup_duration_ms": (verify_report_lookup_duration_ms),
+                        "response_assembly_duration_ms": (response_assembly_duration_ms),
                         "duration_ms": duration_ms,
                     },
                 )
@@ -1213,9 +1187,7 @@ class WorkflowService:
                     extra={
                         "workflow_instance_id": str(workflow.workflow_instance_id),
                         "workspace_id": str(workspace.workspace_id),
-                        "attempt_id": (
-                            str(attempt.attempt_id) if attempt is not None else None
-                        ),
+                        "attempt_id": (str(attempt.attempt_id) if attempt is not None else None),
                         "checkpoint_id": (
                             str(latest_checkpoint.checkpoint_id)
                             if latest_checkpoint is not None
@@ -1233,12 +1205,8 @@ class WorkflowService:
                         "workspace_lookup_duration_ms": workspace_lookup_duration_ms,
                         "attempt_lookup_duration_ms": attempt_lookup_duration_ms,
                         "checkpoint_lookup_duration_ms": checkpoint_lookup_duration_ms,
-                        "verify_report_lookup_duration_ms": (
-                            verify_report_lookup_duration_ms
-                        ),
-                        "response_assembly_duration_ms": (
-                            response_assembly_duration_ms
-                        ),
+                        "verify_report_lookup_duration_ms": (verify_report_lookup_duration_ms),
+                        "response_assembly_duration_ms": (response_assembly_duration_ms),
                         "duration_ms": duration_ms,
                         "warning_threshold_ms": latency_warning_threshold_ms,
                     },
@@ -1351,15 +1319,13 @@ class WorkflowService:
 
             if workflow_memory_bridge is not None:
                 try:
-                    auto_memory_result = (
-                        workflow_memory_bridge.record_workflow_completion_memory(
-                            workflow=updated_workflow,
-                            attempt=updated_attempt,
-                            latest_checkpoint=latest_checkpoint,
-                            verify_report=verify_report,
-                            summary=data.summary,
-                            failure_reason=data.failure_reason,
-                        )
+                    auto_memory_result = workflow_memory_bridge.record_workflow_completion_memory(
+                        workflow=updated_workflow,
+                        attempt=updated_attempt,
+                        latest_checkpoint=latest_checkpoint,
+                        verify_report=verify_report,
+                        summary=data.summary,
+                        failure_reason=data.failure_reason,
                     )
                 except Exception as exc:
                     completion_warnings.append(
@@ -1379,16 +1345,12 @@ class WorkflowService:
                     if auto_memory_result is None:
                         auto_memory_details = {
                             "auto_memory_recorded": False,
-                            "auto_memory_skipped_reason": (
-                                "no_completion_summary_source"
-                            ),
+                            "auto_memory_skipped_reason": ("no_completion_summary_source"),
                         }
                     else:
                         auto_memory_details = dict(auto_memory_result.details)
                         if (
-                            auto_memory_result.details.get(
-                                "embedding_persistence_status"
-                            )
+                            auto_memory_result.details.get("embedding_persistence_status")
                             == "failed"
                         ):
                             completion_warnings.append(
@@ -1432,9 +1394,7 @@ class WorkflowService:
             )
         return workspace
 
-    def _require_workflow(
-        self, uow: UnitOfWork, workflow_instance_id: UUID
-    ) -> WorkflowInstance:
+    def _require_workflow(self, uow: UnitOfWork, workflow_instance_id: UUID) -> WorkflowInstance:
         workflow = uow.workflow_instances.get_by_id(workflow_instance_id)
         if workflow is None:
             workspace = uow.workspaces.get_by_id(workflow_instance_id)

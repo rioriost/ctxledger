@@ -127,6 +127,11 @@ class MemoryRelationRepository(Protocol):
         limit: int,
     ) -> tuple[MemoryRelationRecord, ...]: ...
 
+    def list_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+    ) -> tuple[MemoryRelationRecord, ...]: ...
+
     def list_by_target_memory_id(
         self,
         target_memory_id: UUID,

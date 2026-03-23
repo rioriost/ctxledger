@@ -123,9 +123,7 @@ class MemoryService:
         workspace_lookup: WorkspaceLookupRepository | None = None,
     ) -> None:
         self._episode_repository = episode_repository or InMemoryEpisodeRepository()
-        self._memory_item_repository = (
-            memory_item_repository or InMemoryMemoryItemRepository()
-        )
+        self._memory_item_repository = memory_item_repository or InMemoryMemoryItemRepository()
         self._memory_embedding_repository = memory_embedding_repository
         self._memory_relation_repository = (
             memory_relation_repository or InMemoryMemoryRelationRepository()
@@ -141,9 +139,7 @@ class MemoryService:
         self._workflow_lookup = workflow_lookup
         self._workspace_lookup = workspace_lookup
 
-    def remember_episode(
-        self, request: RememberEpisodeRequest
-    ) -> RememberEpisodeResponse:
+    def remember_episode(self, request: RememberEpisodeRequest) -> RememberEpisodeResponse:
         """Persist a new episode associated with a workflow."""
         self._require_non_empty(
             request.workflow_instance_id,
@@ -171,9 +167,8 @@ class MemoryService:
             else None
         )
 
-        if (
-            self._workflow_lookup is not None
-            and not self._workflow_lookup.workflow_exists(workflow_instance_id)
+        if self._workflow_lookup is not None and not self._workflow_lookup.workflow_exists(
+            workflow_instance_id
         ):
             raise MemoryServiceError(
                 code=MemoryErrorCode.WORKFLOW_NOT_FOUND,
@@ -215,9 +210,7 @@ class MemoryService:
             episode=episode,
             details={
                 "workflow_instance_id": str(episode.workflow_instance_id),
-                "attempt_id": (
-                    str(episode.attempt_id) if episode.attempt_id is not None else None
-                ),
+                "attempt_id": (str(episode.attempt_id) if episode.attempt_id is not None else None),
                 **embedding_outcome,
             },
         )
@@ -256,10 +249,7 @@ class MemoryService:
         semantic_query_generated = False
         semantic_generation_skipped_reason: str | None = None
 
-        if (
-            self._embedding_generator is None
-            or self._memory_embedding_repository is None
-        ):
+        if self._embedding_generator is None or self._memory_embedding_repository is None:
             semantic_generation_skipped_reason = "embedding_search_not_configured"
         else:
             try:
@@ -267,9 +257,7 @@ class MemoryService:
                     EmbeddingRequest(text=request.query)
                 )
             except EmbeddingGenerationError as exc:
-                semantic_generation_skipped_reason = (
-                    f"embedding_generation_failed:{exc.provider}"
-                )
+                semantic_generation_skipped_reason = f"embedding_generation_failed:{exc.provider}"
             else:
                 semantic_query_generated = True
                 semantic_matches = self._memory_embedding_repository.find_similar(
@@ -304,10 +292,7 @@ class MemoryService:
                 )
                 rank_component = semantic_rank_floor + (
                     (1.0 - semantic_rank_floor)
-                    * (
-                        float(semantic_rank_denominator - index)
-                        / float(semantic_rank_denominator)
-                    )
+                    * (float(semantic_rank_denominator - index) / float(semantic_rank_denominator))
                 )
                 similarity_component = 1.0
                 if similarity_range > 0:
@@ -332,9 +317,7 @@ class MemoryService:
                     0.0,
                 )
                 if semantic_score > current_best:
-                    semantic_score_by_memory_id[embedding_match.memory_id] = (
-                        semantic_score
-                    )
+                    semantic_score_by_memory_id[embedding_match.memory_id] = semantic_score
                     semantic_matched_fields_by_memory_id[embedding_match.memory_id] = (
                         "embedding_similarity",
                     )
@@ -408,9 +391,7 @@ class MemoryService:
         limited_results = tuple(scored_results[: request.limit])
 
         search_mode = (
-            "hybrid_memory_item_search"
-            if semantic_query_generated
-            else "memory_item_lexical"
+            "hybrid_memory_item_search" if semantic_query_generated else "memory_item_lexical"
         )
         message = (
             "Hybrid lexical and semantic memory search completed successfully."
@@ -461,9 +442,7 @@ class MemoryService:
             "results_returned": len(limited_results),
         }
         if semantic_generation_skipped_reason is not None:
-            details["semantic_generation_skipped_reason"] = (
-                semantic_generation_skipped_reason
-            )
+            details["semantic_generation_skipped_reason"] = semantic_generation_skipped_reason
 
         return SearchMemoryResponse(
             feature=MemoryFeature.SEARCH,
@@ -524,9 +503,8 @@ class MemoryService:
                 field_name="workflow_instance_id",
                 feature=MemoryFeature.GET_CONTEXT,
             )
-            if (
-                self._workflow_lookup is not None
-                and not self._workflow_lookup.workflow_exists(workflow_instance_id)
+            if self._workflow_lookup is not None and not self._workflow_lookup.workflow_exists(
+                workflow_instance_id
             ):
                 raise MemoryServiceError(
                     code=MemoryErrorCode.WORKFLOW_NOT_FOUND,
@@ -538,11 +516,9 @@ class MemoryService:
             resolved_workflow_instance_id = str(workflow_instance_id)
         elif self._workflow_lookup is not None:
             if self._has_text(request.workspace_id):
-                workspace_workflow_ids = (
-                    self._workflow_lookup.workflow_ids_by_workspace_id(
-                        request.workspace_id or "",
-                        limit=request.limit,
-                    )
+                workspace_workflow_ids = self._workflow_lookup.workflow_ids_by_workspace_id(
+                    request.workspace_id or "",
+                    limit=request.limit,
                 )
 
             if self._has_text(request.ticket_id):
@@ -576,13 +552,9 @@ class MemoryService:
         )
         if resolved_workflow_instance_id is None:
             resolved_workflow_ids = signal_ordered_workflow_ids
-            ordering_signals = self._workflow_ordering_signals(
-                workflow_ids=resolved_workflow_ids
-            )
+            ordering_signals = self._workflow_ordering_signals(workflow_ids=resolved_workflow_ids)
         elif resolved_workflow_ids:
-            ordering_signals = self._workflow_ordering_signals(
-                workflow_ids=resolved_workflow_ids
-            )
+            ordering_signals = self._workflow_ordering_signals(workflow_ids=resolved_workflow_ids)
 
         inherited_workspace_items: tuple[MemoryItemRecord, ...] = ()
         resolved_workspace_id = request.workspace_id
@@ -596,11 +568,9 @@ class MemoryService:
             )
             if raw_workspace_id is not None:
                 resolved_workspace_id = str(raw_workspace_id)
-                inherited_workspace_items = (
-                    self._memory_item_repository.list_workspace_root_items(
-                        raw_workspace_id,
-                        limit=request.limit,
-                    )
+                inherited_workspace_items = self._memory_item_repository.list_workspace_root_items(
+                    raw_workspace_id,
+                    limit=request.limit,
                 )
 
         details = {
@@ -639,21 +609,15 @@ class MemoryService:
                 "workspace_candidate_ids": [
                     str(workflow_id) for workflow_id in workspace_workflow_ids
                 ],
-                "ticket_candidate_ids": [
-                    str(workflow_id) for workflow_id in ticket_workflow_ids
-                ],
+                "ticket_candidate_ids": [str(workflow_id) for workflow_id in ticket_workflow_ids],
                 "resolver_candidate_ids": [
                     str(workflow_id) for workflow_id in resolver_ordered_workflow_ids
                 ],
-                "final_candidate_ids": [
-                    str(workflow_id) for workflow_id in resolved_workflow_ids
-                ],
+                "final_candidate_ids": [str(workflow_id) for workflow_id in resolved_workflow_ids],
                 "candidate_signals": ordering_signals,
             },
             "resolved_workflow_count": len(resolved_workflow_ids),
-            "resolved_workflow_ids": [
-                str(workflow_id) for workflow_id in resolved_workflow_ids
-            ],
+            "resolved_workflow_ids": [str(workflow_id) for workflow_id in resolved_workflow_ids],
         }
 
         if not request.include_episodes:
@@ -692,15 +656,13 @@ class MemoryService:
                     "group_related_memory_items_are_convenience_output": False,
                     "retrieval_routes_present": (
                         ["workspace_inherited_auxiliary"]
-                        if inherited_workspace_items
-                        and resolved_workspace_id is not None
+                        if inherited_workspace_items and resolved_workspace_id is not None
                         else []
                     ),
                     "primary_retrieval_routes_present": [],
                     "auxiliary_retrieval_routes_present": (
                         ["workspace_inherited_auxiliary"]
-                        if inherited_workspace_items
-                        and resolved_workspace_id is not None
+                        if inherited_workspace_items and resolved_workspace_id is not None
                         else []
                     ),
                     "retrieval_route_group_counts": {
@@ -708,8 +670,7 @@ class MemoryService:
                         "episode_direct": 0,
                         "workspace_inherited_auxiliary": (
                             1
-                            if inherited_workspace_items
-                            and resolved_workspace_id is not None
+                            if inherited_workspace_items and resolved_workspace_id is not None
                             else 0
                         ),
                         "relation_supports_auxiliary": 0,
@@ -731,8 +692,7 @@ class MemoryService:
                         },
                         "workspace_inherited_auxiliary": {
                             "group_present": bool(
-                                inherited_workspace_items
-                                and resolved_workspace_id is not None
+                                inherited_workspace_items and resolved_workspace_id is not None
                             ),
                             "item_present": bool(inherited_workspace_items),
                         },
@@ -759,8 +719,7 @@ class MemoryService:
                             "episode": 0,
                             "workspace": (
                                 1
-                                if inherited_workspace_items
-                                and resolved_workspace_id is not None
+                                if inherited_workspace_items and resolved_workspace_id is not None
                                 else 0
                             ),
                             "relation": 0,
@@ -803,8 +762,7 @@ class MemoryService:
                         "episode_direct": [],
                         "workspace_inherited_auxiliary": (
                             ["workspace"]
-                            if inherited_workspace_items
-                            and resolved_workspace_id is not None
+                            if inherited_workspace_items and resolved_workspace_id is not None
                             else []
                         ),
                         "relation_supports_auxiliary": [],
@@ -844,12 +802,10 @@ class MemoryService:
             normalized_query=normalized_query,
             query_tokens=query_token_values,
         )
-        memory_item_details_before_query_filter = (
-            self._build_memory_item_details_for_episodes(
-                episodes=episodes,
-                include_memory_items=request.include_memory_items,
-                include_summaries=request.include_summaries,
-            )
+        memory_item_details_before_query_filter = self._build_memory_item_details_for_episodes(
+            episodes=episodes,
+            include_memory_items=request.include_memory_items,
+            include_summaries=request.include_summaries,
         )
 
         if normalized_query is not None:
@@ -870,8 +826,7 @@ class MemoryService:
 
             episodes = tuple(filtered_episodes)
             all_episodes_filtered_out_by_query = (
-                bool(episode_explanations_before_query_filter)
-                and not filtered_episode_explanations
+                bool(episode_explanations_before_query_filter) and not filtered_episode_explanations
             )
             if filtered_episode_explanations:
                 episode_explanations = tuple(filtered_episode_explanations)
@@ -953,9 +908,7 @@ class MemoryService:
                     inherited_memory_items and matched_episode_count == 0
                 ),
                 "related_context_is_auxiliary": bool(related_memory_items),
-                "related_context_relation_types": (
-                    ["supports"] if related_memory_items else []
-                ),
+                "related_context_relation_types": (["supports"] if related_memory_items else []),
                 "related_context_selection_route": (
                     "relation_supports_auxiliary" if related_memory_items else None
                 ),
@@ -969,12 +922,8 @@ class MemoryService:
                     related_memory_items=related_memory_items,
                 ),
                 "related_context_returned_without_episode_matches": False,
-                "all_episodes_filtered_out_by_query": (
-                    all_episodes_filtered_out_by_query
-                ),
-                "flat_related_memory_items_is_compatibility_field": bool(
-                    related_memory_items
-                ),
+                "all_episodes_filtered_out_by_query": (all_episodes_filtered_out_by_query),
+                "flat_related_memory_items_is_compatibility_field": bool(related_memory_items),
                 "flat_related_memory_items_matches_grouped_episode_related_items": bool(
                     related_memory_items
                 ),
@@ -982,20 +931,15 @@ class MemoryService:
                 "related_memory_items_by_episode_are_compatibility_output": bool(
                     related_memory_items
                 ),
-                "relation_memory_context_groups_are_primary_output": bool(
-                    related_memory_items
-                ),
-                "group_related_memory_items_are_convenience_output": bool(
-                    related_memory_items
-                ),
+                "relation_memory_context_groups_are_primary_output": bool(related_memory_items),
+                "group_related_memory_items_are_convenience_output": bool(related_memory_items),
                 "memory_context_groups": memory_context_groups,
                 "inherited_memory_items": [
                     self._serialize_memory_item(memory_item)
                     for memory_item in inherited_memory_items
                 ],
                 "related_memory_items": [
-                    self._serialize_memory_item(memory_item)
-                    for memory_item in related_memory_items
+                    self._serialize_memory_item(memory_item) for memory_item in related_memory_items
                 ],
             },
         )
@@ -1126,13 +1070,9 @@ class MemoryService:
                 limit=1,
             )
             workflow_is_terminal = bool(freshness.get("workflow_is_terminal") or False)
-            latest_attempt_is_terminal = bool(
-                freshness.get("latest_attempt_is_terminal") or False
-            )
+            latest_attempt_is_terminal = bool(freshness.get("latest_attempt_is_terminal") or False)
             has_latest_attempt = bool(freshness.get("has_latest_attempt") or False)
-            has_latest_checkpoint = bool(
-                freshness.get("has_latest_checkpoint") or False
-            )
+            has_latest_checkpoint = bool(freshness.get("has_latest_checkpoint") or False)
             latest_checkpoint_created_at = freshness.get(
                 "latest_checkpoint_created_at"
             ) or datetime.min.replace(tzinfo=timezone.utc)
@@ -1268,9 +1208,7 @@ class MemoryService:
                 )
                 metadata_matches = [
                     metadata_query_string
-                    for metadata_query_string in metadata_query_strings(
-                        episode.metadata
-                    )
+                    for metadata_query_string in metadata_query_strings(episode.metadata)
                     if text_matches_query(
                         text=metadata_query_string,
                         normalized_query=normalized_query,
@@ -1307,9 +1245,7 @@ class MemoryService:
         memory_items_by_episode_id: dict[UUID, tuple[MemoryItemRecord, ...]] = {}
 
         episode_ids = tuple(episode.episode_id for episode in episodes)
-        bulk_memory_items = self._memory_item_repository.list_by_episode_ids(
-            episode_ids
-        )
+        bulk_memory_items = self._memory_item_repository.list_by_episode_ids(episode_ids)
         for episode in episodes:
             episode_memory_items = tuple(
                 memory_item
@@ -1328,8 +1264,7 @@ class MemoryService:
 
             if include_memory_items:
                 detail["memory_items"] = [
-                    self._serialize_memory_item(memory_item)
-                    for memory_item in memory_items
+                    self._serialize_memory_item(memory_item) for memory_item in memory_items
                 ]
                 related_memory_items, related_memory_relations = (
                     self._collect_supports_related_memory_items(
@@ -1339,8 +1274,7 @@ class MemoryService:
                     )
                 )
                 detail["related_memory_items"] = [
-                    self._serialize_memory_item(memory_item)
-                    for memory_item in related_memory_items
+                    self._serialize_memory_item(memory_item) for memory_item in related_memory_items
                 ]
                 detail["related_memory_item_provenance"] = [
                     {
@@ -1350,9 +1284,7 @@ class MemoryService:
                         "target_memory_id": str(relation.target_memory_id),
                         "source_group_scope": "episode",
                         "target_group_scope": (
-                            "episode"
-                            if memory_item.episode_id is not None
-                            else "workspace"
+                            "episode" if memory_item.episode_id is not None else "workspace"
                         ),
                         "target_group_selection_kind": "supports_related_auxiliary",
                     }
@@ -1379,9 +1311,7 @@ class MemoryService:
                     "episode_id": str(episode.episode_id),
                     "workflow_instance_id": str(episode.workflow_instance_id),
                     "memory_item_count": memory_item_count,
-                    "memory_item_types": [
-                        memory_item.type for memory_item in memory_items
-                    ],
+                    "memory_item_types": [memory_item.type for memory_item in memory_items],
                     "memory_item_provenance": [
                         memory_item.provenance for memory_item in memory_items
                     ],
@@ -1406,9 +1336,7 @@ class MemoryService:
                 return (), ()
             return ()
 
-        if not isinstance(
-            self._memory_item_repository, MemoryRelationMemoryItemLookupRepository
-        ):
+        if not isinstance(self._memory_item_repository, MemoryRelationMemoryItemLookupRepository):
             if include_relation_metadata:
                 return (), ()
             return ()
@@ -1416,6 +1344,7 @@ class MemoryService:
         related_memory_items: list[MemoryItemRecord] = []
         related_relations: list[MemoryRelationRecord] = []
         seen_memory_ids: set[UUID] = set()
+        source_memory_ids: list[UUID] = []
 
         for detail in memory_item_details:
             raw_memory_items = detail.get("memory_items")
@@ -1435,39 +1364,51 @@ class MemoryService:
                 except ValueError:
                     continue
 
-                relations = self._memory_relation_repository.list_by_source_memory_id(
-                    source_memory_id,
+                source_memory_ids.append(source_memory_id)
+
+        relations_by_source_memory_id: dict[UUID, tuple[MemoryRelationRecord, ...]] = {
+            source_memory_id: () for source_memory_id in source_memory_ids
+        }
+        bulk_relations = self._memory_relation_repository.list_by_source_memory_ids(
+            tuple(source_memory_ids)
+        )
+        for relation in bulk_relations:
+            source_memory_id = relation.source_memory_id
+            if source_memory_id not in relations_by_source_memory_id:
+                continue
+            relations_by_source_memory_id[source_memory_id] = relations_by_source_memory_id[
+                source_memory_id
+            ] + (relation,)
+
+        for source_memory_id in source_memory_ids:
+            relations = relations_by_source_memory_id.get(source_memory_id, ())
+
+            for relation in relations:
+                if relation.relation_type != "supports":
+                    continue
+                if relation.target_memory_id in seen_memory_ids:
+                    continue
+
+                target_memory_items = self._memory_item_repository.list_by_memory_ids(
+                    (relation.target_memory_id,),
                     limit=limit,
                 )
+                if not target_memory_items:
+                    continue
 
-                for relation in relations:
-                    if relation.relation_type != "supports":
-                        continue
-                    if relation.target_memory_id in seen_memory_ids:
-                        continue
+                target_memory_item = target_memory_items[0]
 
-                    target_memory_items = (
-                        self._memory_item_repository.list_by_memory_ids(
-                            (relation.target_memory_id,),
-                            limit=limit,
+                seen_memory_ids.add(target_memory_item.memory_id)
+                related_memory_items.append(target_memory_item)
+                related_relations.append(relation)
+
+                if len(related_memory_items) >= limit:
+                    if include_relation_metadata:
+                        return (
+                            tuple(related_memory_items),
+                            tuple(related_relations),
                         )
-                    )
-                    if not target_memory_items:
-                        continue
-
-                    target_memory_item = target_memory_items[0]
-
-                    seen_memory_ids.add(target_memory_item.memory_id)
-                    related_memory_items.append(target_memory_item)
-                    related_relations.append(relation)
-
-                    if len(related_memory_items) >= limit:
-                        if include_relation_metadata:
-                            return (
-                                tuple(related_memory_items),
-                                tuple(related_relations),
-                            )
-                        return tuple(related_memory_items)
+                    return tuple(related_memory_items)
 
         if include_relation_metadata:
             return tuple(related_memory_items), tuple(related_relations)
@@ -1483,9 +1424,7 @@ class MemoryService:
             if isinstance(detail.get("summary"), dict)
         )
         summary_selection_applied = bool(summaries)
-        summary_selection_kind = (
-            "episode_summary_first" if summary_selection_applied else None
-        )
+        summary_selection_kind = "episode_summary_first" if summary_selection_applied else None
         return summaries, summary_selection_applied, summary_selection_kind
 
     def _build_retrieval_route_details(
@@ -1500,9 +1439,7 @@ class MemoryService:
         related_memory_items: tuple[MemoryItemRecord, ...],
     ) -> dict[str, Any]:
         episode_direct_group_present = bool(
-            include_memory_items
-            and matched_episode_count > 0
-            and not summary_selection_applied
+            include_memory_items and matched_episode_count > 0 and not summary_selection_applied
         )
         episode_direct_item_count = (
             sum(len(detail.get("memory_items", [])) for detail in memory_item_details)
@@ -1511,16 +1448,12 @@ class MemoryService:
         )
         summary_episode_scope_count = (
             matched_episode_count
-            if include_memory_items
-            and matched_episode_count > 0
-            and summary_selection_applied
+            if include_memory_items and matched_episode_count > 0 and summary_selection_applied
             else 0
         )
         summary_episode_scope_item_count = (
             sum(len(detail.get("memory_items", [])) for detail in memory_item_details)
-            if include_memory_items
-            and matched_episode_count > 0
-            and summary_selection_applied
+            if include_memory_items and matched_episode_count > 0 and summary_selection_applied
             else 0
         )
         summary_first_has_episode_groups = summary_episode_scope_count > 0
@@ -1546,8 +1479,7 @@ class MemoryService:
             {
                 detail["episode_id"]
                 for detail in memory_item_details
-                if detail.get("related_memory_items")
-                and isinstance(detail.get("episode_id"), str)
+                if detail.get("related_memory_items") and isinstance(detail.get("episode_id"), str)
             }
         )
 
@@ -1557,11 +1489,7 @@ class MemoryService:
                 for route in [
                     "summary_first" if summary_selection_applied else None,
                     "episode_direct" if episode_direct_group_present else None,
-                    (
-                        "workspace_inherited_auxiliary"
-                        if inherited_memory_items
-                        else None
-                    ),
+                    ("workspace_inherited_auxiliary" if inherited_memory_items else None),
                     ("relation_supports_auxiliary" if related_memory_items else None),
                 ]
                 if route is not None
@@ -1577,20 +1505,14 @@ class MemoryService:
             "auxiliary_retrieval_routes_present": [
                 route
                 for route in [
-                    (
-                        "workspace_inherited_auxiliary"
-                        if inherited_memory_items
-                        else None
-                    ),
+                    ("workspace_inherited_auxiliary" if inherited_memory_items else None),
                     ("relation_supports_auxiliary" if related_memory_items else None),
                 ]
                 if route is not None
             ],
             "retrieval_route_group_counts": {
                 "summary_first": 1 if summary_selection_applied else 0,
-                "episode_direct": matched_episode_count
-                if episode_direct_group_present
-                else 0,
+                "episode_direct": matched_episode_count if episode_direct_group_present else 0,
                 "workspace_inherited_auxiliary": 1 if inherited_memory_items else 0,
                 "relation_supports_auxiliary": (
                     matched_episode_count if related_memory_items else 0
@@ -1626,10 +1548,7 @@ class MemoryService:
                     "group_present": episode_direct_group_present,
                     "item_present": bool(
                         episode_direct_group_present
-                        and any(
-                            detail.get("memory_items", [])
-                            for detail in memory_item_details
-                        )
+                        and any(detail.get("memory_items", []) for detail in memory_item_details)
                     ),
                 },
                 "workspace_inherited_auxiliary": {
@@ -1650,9 +1569,7 @@ class MemoryService:
                 },
                 "episode_direct": {
                     "summary": 0,
-                    "episode": (
-                        matched_episode_count if episode_direct_group_present else 0
-                    ),
+                    "episode": (matched_episode_count if episode_direct_group_present else 0),
                     "workspace": 0,
                     "relation": 0,
                 },
@@ -1685,18 +1602,14 @@ class MemoryService:
                 "workspace_inherited_auxiliary": {
                     "summary": 0,
                     "episode": 0,
-                    "workspace": (
-                        len(inherited_memory_items) if inherited_memory_items else 0
-                    ),
+                    "workspace": (len(inherited_memory_items) if inherited_memory_items else 0),
                     "relation": 0,
                 },
                 "relation_supports_auxiliary": {
                     "summary": 0,
                     "episode": 0,
                     "workspace": 0,
-                    "relation": (
-                        len(related_memory_items) if related_memory_items else 0
-                    ),
+                    "relation": (len(related_memory_items) if related_memory_items else 0),
                 },
             },
             "retrieval_route_scopes_present": {
@@ -1752,9 +1665,7 @@ class MemoryService:
 
         if summary_selection_applied:
             summary_parent_scope_id = (
-                resolved_workflow_instance_id
-                if len(resolved_workflow_ids) == 1
-                else None
+                resolved_workflow_instance_id if len(resolved_workflow_ids) == 1 else None
             )
             summary_group_id = "summary:episode_summary_first"
             memory_context_groups.append(
@@ -1766,9 +1677,7 @@ class MemoryService:
                     "parent_scope_id": summary_parent_scope_id,
                     "selection_kind": summary_selection_kind,
                     "selection_route": "summary_first",
-                    "child_episode_ids": [
-                        detail["episode_id"] for detail in memory_item_details
-                    ],
+                    "child_episode_ids": [detail["episode_id"] for detail in memory_item_details],
                     "child_episode_count": len(memory_item_details),
                     "child_episode_ordering": "returned_episode_order",
                     "child_episode_groups_emitted": bool(
@@ -1791,17 +1700,13 @@ class MemoryService:
                         "scope_id": str(episode.episode_id),
                         "parent_scope": "workflow_instance",
                         "parent_scope_id": str(episode.workflow_instance_id),
-                        "parent_group_scope": (
-                            "summary" if summary_selection_applied else None
-                        ),
+                        "parent_group_scope": ("summary" if summary_selection_applied else None),
                         "parent_group_id": (
                             summary_group_id if summary_selection_applied else None
                         ),
                         "selection_kind": "direct_episode",
                         "selection_route": (
-                            "summary_first"
-                            if summary_selection_applied
-                            else "episode_direct"
+                            "summary_first" if summary_selection_applied else "episode_direct"
                         ),
                         "selected_via_summary_first": summary_selection_applied,
                         "memory_items": detail.get("memory_items", []),
@@ -1858,9 +1763,7 @@ class MemoryService:
                         {
                             detail["source_memory_id"]
                             for detail in memory_item_details
-                            for detail in detail.get(
-                                "related_memory_item_provenance", []
-                            )
+                            for detail in detail.get("related_memory_item_provenance", [])
                             if detail.get("relation_type") == "supports"
                             and isinstance(detail.get("source_memory_id"), str)
                         }
@@ -1886,14 +1789,10 @@ class MemoryService:
         return {
             "memory_id": str(memory_item.memory_id),
             "workspace_id": (
-                str(memory_item.workspace_id)
-                if memory_item.workspace_id is not None
-                else None
+                str(memory_item.workspace_id) if memory_item.workspace_id is not None else None
             ),
             "episode_id": (
-                str(memory_item.episode_id)
-                if memory_item.episode_id is not None
-                else None
+                str(memory_item.episode_id) if memory_item.episode_id is not None else None
             ),
             "type": memory_item.type,
             "provenance": memory_item.provenance,
@@ -1956,15 +1855,10 @@ class MemoryService:
             ) from None
 
     def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
-        if (
-            self._embedding_generator is None
-            or self._memory_embedding_repository is None
-        ):
+        if self._embedding_generator is None or self._memory_embedding_repository is None:
             return {
                 "embedding_persistence_status": "skipped",
-                "embedding_generation_skipped_reason": (
-                    "embedding_persistence_not_configured"
-                ),
+                "embedding_generation_skipped_reason": ("embedding_persistence_not_configured"),
             }
 
         try:
