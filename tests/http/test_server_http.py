@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 
+from ctxledger.memory.service import GetContextResponse, MemoryFeature
 from ctxledger.runtime.http_handlers import (
     build_runtime_introspection_http_handler,
     build_workflow_resume_http_handler,
@@ -1116,6 +1118,231 @@ def test_http_mcp_rpc_tools_list_returns_registered_tools_with_input_schemas() -
         tools["memory_get_context"]["inputSchema"]["properties"]["include_summaries"]["type"]
         == "boolean"
     )
+
+
+def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payload() -> None:
+    settings = make_settings()
+    workflow_id = uuid4()
+    episode_id = uuid4()
+    memory_summary_id = uuid4()
+    member_memory_id = uuid4()
+    created_at = datetime(2024, 10, 12, 4, 5, 6, tzinfo=UTC)
+
+    _, runtime, _, _ = make_http_runtime(
+        settings=settings,
+        started=True,
+    )
+
+    runtime._server = runtime._server  # keep explicit local reference shape stable
+    runtime._server.workflow_service._uow_factory = lambda: None  # type: ignore[attr-defined]
+
+    memory_service = GetContextResponse(
+        feature=MemoryFeature.GET_CONTEXT,
+        implemented=True,
+        message="Episode-oriented memory context retrieved successfully.",
+        status="ok",
+        available_in_version="0.2.0",
+        timestamp=created_at,
+        episodes=(),
+        details={
+            "episodes_returned": 0,
+            "summary_selection_applied": True,
+            "summary_selection_kind": "memory_summary_first",
+            "retrieval_routes_present": ["summary_first"],
+            "primary_retrieval_routes_present": ["summary_first"],
+            "memory_context_groups": [
+                {
+                    "scope": "summary",
+                    "scope_id": None,
+                    "group_id": "summary:memory_summary_first",
+                    "parent_scope": "workflow_instance",
+                    "parent_scope_id": str(workflow_id),
+                    "selection_kind": "memory_summary_first",
+                    "selection_route": "summary_first",
+                    "child_episode_ids": [str(episode_id)],
+                    "child_episode_count": 1,
+                    "child_episode_ordering": "returned_episode_order",
+                    "child_episode_groups_emitted": True,
+                    "child_episode_groups_emission_reason": "memory_items_enabled",
+                    "summaries": [
+                        {
+                            "memory_summary_id": str(memory_summary_id),
+                            "episode_id": str(episode_id),
+                            "workflow_instance_id": str(workflow_id),
+                            "summary_text": "Canonical summary selected first",
+                            "summary_kind": "episode_summary",
+                            "metadata": {"kind": "canonical"},
+                            "member_memory_count": 1,
+                            "member_memory_ids": [str(member_memory_id)],
+                            "member_memory_items": [
+                                {
+                                    "memory_id": str(member_memory_id),
+                                    "workspace_id": str(workflow_id),
+                                    "episode_id": str(episode_id),
+                                    "type": "episode_note",
+                                    "provenance": "episode",
+                                    "content": "Expanded member memory item",
+                                    "metadata": {"kind": "member"},
+                                    "created_at": created_at.isoformat(),
+                                    "updated_at": created_at.isoformat(),
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "summaries": [
+                {
+                    "memory_summary_id": str(memory_summary_id),
+                    "episode_id": str(episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "summary_text": "Canonical summary selected first",
+                    "summary_kind": "episode_summary",
+                    "metadata": {"kind": "canonical"},
+                    "member_memory_count": 1,
+                    "member_memory_ids": [str(member_memory_id)],
+                    "member_memory_items": [
+                        {
+                            "memory_id": str(member_memory_id),
+                            "workspace_id": str(workflow_id),
+                            "episode_id": str(episode_id),
+                            "type": "episode_note",
+                            "provenance": "episode",
+                            "content": "Expanded member memory item",
+                            "metadata": {"kind": "member"},
+                            "created_at": created_at.isoformat(),
+                            "updated_at": created_at.isoformat(),
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    runtime._server.workflow_service = runtime._server.workflow_service  # type: ignore[attr-defined]
+
+    from ctxledger.runtime import http_runtime as http_runtime_module
+
+    original_builder = http_runtime_module.build_workflow_backed_memory_service
+
+    class FakeMemoryService:
+        def __init__(self) -> None:
+            self.calls: list[object] = []
+
+        def get_context(self, request: object) -> GetContextResponse:
+            self.calls.append(request)
+            return memory_service
+
+    fake_memory_service = FakeMemoryService()
+    http_runtime_module.build_workflow_backed_memory_service = lambda server: fake_memory_service
+
+    try:
+        response = runtime.dispatch(
+            "mcp_rpc",
+            "/mcp",
+            body=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memory_get_context",
+                        "arguments": {
+                            "workflow_instance_id": str(workflow_id),
+                            "limit": 10,
+                            "include_episodes": True,
+                            "include_memory_items": True,
+                            "include_summaries": True,
+                        },
+                    },
+                }
+            ),
+        )
+    finally:
+        http_runtime_module.build_workflow_backed_memory_service = original_builder
+
+    assert isinstance(response, McpHttpResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload["jsonrpc"] == "2.0"
+    assert response.payload["id"] == 3
+    result = response.payload["result"]
+    assert result["content"][0]["type"] == "text"
+    payload = json.loads(result["content"][0]["text"])
+
+    assert payload["ok"] is True
+    assert payload["result"]["feature"] == "memory_get_context"
+    assert payload["result"]["details"]["summary_selection_applied"] is True
+    assert payload["result"]["details"]["summary_selection_kind"] == "memory_summary_first"
+    assert payload["result"]["details"]["retrieval_routes_present"] == ["summary_first"]
+    assert payload["result"]["details"]["primary_retrieval_routes_present"] == ["summary_first"]
+    assert payload["result"]["details"]["summaries"] == [
+        {
+            "memory_summary_id": str(memory_summary_id),
+            "episode_id": str(episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "summary_text": "Canonical summary selected first",
+            "summary_kind": "episode_summary",
+            "metadata": {"kind": "canonical"},
+            "member_memory_count": 1,
+            "member_memory_ids": [str(member_memory_id)],
+            "member_memory_items": [
+                {
+                    "memory_id": str(member_memory_id),
+                    "workspace_id": str(workflow_id),
+                    "episode_id": str(episode_id),
+                    "type": "episode_note",
+                    "provenance": "episode",
+                    "content": "Expanded member memory item",
+                    "metadata": {"kind": "member"},
+                    "created_at": created_at.isoformat(),
+                    "updated_at": created_at.isoformat(),
+                }
+            ],
+        }
+    ]
+    assert payload["result"]["details"]["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "group_id": "summary:memory_summary_first",
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "memory_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(episode_id)],
+            "child_episode_count": 1,
+            "child_episode_ordering": "returned_episode_order",
+            "child_episode_groups_emitted": True,
+            "child_episode_groups_emission_reason": "memory_items_enabled",
+            "summaries": [
+                {
+                    "memory_summary_id": str(memory_summary_id),
+                    "episode_id": str(episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "summary_text": "Canonical summary selected first",
+                    "summary_kind": "episode_summary",
+                    "metadata": {"kind": "canonical"},
+                    "member_memory_count": 1,
+                    "member_memory_ids": [str(member_memory_id)],
+                    "member_memory_items": [
+                        {
+                            "memory_id": str(member_memory_id),
+                            "workspace_id": str(workflow_id),
+                            "episode_id": str(episode_id),
+                            "type": "episode_note",
+                            "provenance": "episode",
+                            "content": "Expanded member memory item",
+                            "metadata": {"kind": "member"},
+                            "created_at": created_at.isoformat(),
+                            "updated_at": created_at.isoformat(),
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+    assert len(fake_memory_service.calls) == 1
 
 
 def test_http_mcp_rpc_tools_call_returns_workspace_register_success_payload() -> None:
