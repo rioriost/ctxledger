@@ -36,7 +36,24 @@ The project currently follows a lightweight, human-maintained changelog style.
     - `CTXLEDGER_DB_AGE_GRAPH_NAME`
   - an explicit prototype bootstrap command:
     - `ctxledger bootstrap-age-graph`
+- first constrained canonical summary hierarchy slice for `0.6.0`, including:
+  - canonical `memory_summaries` persistence
+  - canonical `memory_summary_memberships` persistence
+  - summary and summary-membership repository contracts
+  - in-memory and PostgreSQL summary repository implementations
+  - workflow-backed summary repository wiring
+  - first `memory_summary_first` retrieval path in `memory_get_context`
+  - direct summary-member memory-item expansion
+  - explicit episode-scoped summary building through:
+    - `ctxledger build-episode-summary`
+  - replace-or-rebuild behavior for matching episode summaries
+  - PostgreSQL-backed builder-to-retrieval integration coverage
 - documentation for the constrained AGE prototype boundary, setup approach, implementation plan, and graph bootstrap/population model
+- hierarchy-memory design notes for:
+  - minimal hierarchy model
+  - first `memory_get_context` hierarchical retrieval improvement
+  - minimal hierarchy schema/repository design
+  - minimal summary write/build path
 - README guidance for the constrained AGE prototype controls and bootstrap command
 
 ### Changed
@@ -50,6 +67,8 @@ The project currently follows a lightweight, human-maintained changelog style.
 - the repository-owned PostgreSQL image path was validated on PostgreSQL 17 after aligning the pgvector build with the upstream portability-oriented approach:
   - `make OPTFLAGS=""`
 - `memory_get_context` related-item collection can now use the narrow `supports` target lookup boundary without changing the visible retrieval contract
+- `memory_get_context` can now prefer canonical summaries through the first constrained `memory_summary_first` path when canonical summaries exist and summaries are enabled
+- canonical summary-first retrieval now has focused service, serializer, MCP, HTTP, and PostgreSQL integration coverage
 - constrained relation-auxiliary parity was preserved across the prototype path by keeping:
   - first-seen-by-source distinct target ordering
   - relation metadata continuity for grouped relation outputs
@@ -74,12 +93,28 @@ The project currently follows a lightweight, human-maintained changelog style.
 - focused AGE prototype validation passed:
   - `python -m pytest tests/cli/test_cli_main.py tests/cli/test_cli_schema.py tests/config/test_config.py tests/postgres/test_db_helpers.py tests/memory/test_memory_context_related_items.py -q`
   - `86 passed`
+- focused hierarchy and summary-builder validation passed across:
+  - memory service core
+  - memory context details
+  - memory serialization
+  - MCP memory tool handlers
+  - HTTP MCP runtime transport
+  - PostgreSQL repository and integration coverage
+- full repository validation passed after the summary hierarchy, builder, CLI, and PostgreSQL integration slices:
+  - `python -m pytest -q`
+  - `916 passed, 1 skipped`
 
 ### Notes
 
 - the current AGE work should still be read as a constrained graph-backed prototype rather than broad graph adoption
 - relational PostgreSQL tables remain canonical; AGE graph state is still derived and rebuildable
 - the explicit bootstrap path remains prototype-grade and rebuild-first rather than a full graph lifecycle or incremental sync framework
+- the current `0.6.0` hierarchy work should be read as:
+  - canonical-relational summary ownership
+  - first constrained summary-first retrieval
+  - first explicit episode-scoped summary builder
+  - replace-or-rebuild summary semantics
+  - graph support remaining optional at the summary build/read boundary
 - the validated local default is now:
   - `small`
   - HTTPS
