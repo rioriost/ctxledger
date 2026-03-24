@@ -49,6 +49,10 @@ Current PostgreSQL/graph setup commands:
 - `ctxledger bootstrap-age-graph`
 - `ctxledger age-graph-readiness`
 
+Current hierarchy build command:
+
+- `ctxledger build-episode-summary`
+
 ---
 
 ## Quick Start
@@ -218,6 +222,37 @@ python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-toke
 ```
 
 If you are using a `.env` file and do not want to export the token into your shell first, pass the actual token value directly.
+
+### Step 5.1 — Optionally build one canonical episode summary explicitly
+
+The current `0.6.0` hierarchy slice includes an explicit episode summary build
+command:
+
+- `ctxledger build-episode-summary`
+
+This command builds one canonical relational summary for a selected episode from
+that episode's current memory items.
+
+Minimal example:
+
+```/dev/null/sh#L1-4
+python -m ctxledger.__init__ build-episode-summary \
+  --episode-id <episode-uuid> \
+  --summary-kind episode_summary \
+  --format json
+```
+
+By default, this path uses replace-or-rebuild behavior for the selected
+`summary_kind`.
+
+To keep existing summaries of the same kind instead of replacing them:
+
+```/dev/null/sh#L1-4
+python -m ctxledger.__init__ build-episode-summary \
+  --episode-id <episode-uuid> \
+  --summary-kind episode_summary \
+  --no-replace-existing
+```
 
 ### Step 6 — Verify Grafana
 
