@@ -123,6 +123,11 @@ class MemorySummaryRepository(Protocol):
 
     def create(self, summary: MemorySummaryRecord) -> MemorySummaryRecord: ...
 
+    def delete_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+    ) -> None: ...
+
     def list_by_workspace_id(
         self,
         workspace_id: UUID,
@@ -151,6 +156,11 @@ class MemorySummaryMembershipRepository(Protocol):
         self,
         membership: MemorySummaryMembershipRecord,
     ) -> MemorySummaryMembershipRecord: ...
+
+    def delete_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+    ) -> None: ...
 
     def list_by_summary_id(
         self,

@@ -435,6 +435,14 @@ class InMemoryMemorySummaryRepository:
         self._summaries.append(summary)
         return summary
 
+    def delete_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+    ) -> None:
+        self._summaries = [
+            summary for summary in self._summaries if summary.memory_summary_id != memory_summary_id
+        ]
+
     def list_by_workspace_id(
         self,
         workspace_id: UUID,
@@ -486,6 +494,16 @@ class InMemoryMemorySummaryMembershipRepository:
     ) -> MemorySummaryMembershipRecord:
         self._memberships.append(membership)
         return membership
+
+    def delete_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+    ) -> None:
+        self._memberships = [
+            membership
+            for membership in self._memberships
+            if membership.memory_summary_id != memory_summary_id
+        ]
 
     def list_by_summary_id(
         self,

@@ -137,6 +137,34 @@ class MemorySummaryMembershipRecord:
 
 
 @dataclass(slots=True, frozen=True)
+class BuildEpisodeSummaryRequest:
+    """Request shape for explicit episode-scoped summary building."""
+
+    episode_id: str
+    summary_kind: str = "episode_summary"
+    replace_existing: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True, frozen=True)
+class BuildEpisodeSummaryResult:
+    """Result returned by the minimal episode summary build path."""
+
+    feature: MemoryFeature
+    implemented: bool
+    message: str
+    status: str = "ok"
+    available_in_version: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    summary: MemorySummaryRecord | None = None
+    memberships: tuple[MemorySummaryMembershipRecord, ...] = ()
+    summary_built: bool = False
+    skipped_reason: str | None = None
+    replaced_existing_summary: bool = False
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True, frozen=True)
 class RememberEpisodeResponse:
     """Response returned when an episode is persisted."""
 

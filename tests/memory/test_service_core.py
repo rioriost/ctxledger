@@ -12,6 +12,7 @@ from ctxledger.memory.embeddings import (
     EmbeddingResult,
 )
 from ctxledger.memory.service import (
+    BuildEpisodeSummaryRequest,
     EpisodeRecord,
     GetMemoryContextRequest,
     InMemoryEpisodeRepository,
@@ -448,6 +449,288 @@ def test_memory_service_summary_first_selection_prefers_canonical_memory_summari
     assert summary_group["selection_route"] == "summary_first"
     assert summary_group["child_episode_ids"] == [str(episode.episode_id)]
     assert summary_group["child_episode_count"] == 1
+
+
+def test_memory_service_build_episode_summary_creates_canonical_summary_and_memberships() -> None:
+    workflow_id = uuid4()
+    workspace_id = UUID("00000000-0000-0000-0000-000000000092")
+    created_at = datetime(2024, 2, 7, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_summary_repository = InMemoryMemorySummaryRepository()
+    memory_summary_membership_repository = InMemoryMemorySummaryMembershipRepository()
+    workflow_lookup = InMemoryWorkflowLookupRepository(
+        workflow_ids={workflow_id},
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": str(workspace_id),
+                "ticket_id": "TICKET-SUMMARY-BUILD-1",
+            }
+        },
+    )
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode summary source text",
+        attempt_id=None,
+        metadata={"kind": "episode"},
+        status="recorded",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="First explicit child item",
+        metadata={"rank": 1},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Second explicit child item",
+        metadata={"rank": 2},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_summary_repository=memory_summary_repository,
+        memory_summary_membership_repository=memory_summary_membership_repository,
+        workflow_lookup=workflow_lookup,
+        workspace_lookup=workflow_lookup,
+    )
+
+    result = service.build_episode_summary(
+        BuildEpisodeSummaryRequest(
+            episode_id=str(episode.episode_id),
+            summary_kind="episode_summary",
+            replace_existing=True,
+            metadata={"requested_by": "test"},
+        )
+    )
+
+    assert result.feature == MemoryFeature.GET_CONTEXT
+    assert result.implemented is True
+    assert result.status == "built"
+    assert result.available_in_version == "0.6.0"
+    assert result.summary_built is True
+    assert result.skipped_reason is None
+    assert result.replaced_existing_summary is False
+    assert result.summary is not None
+    assert result.summary.workspace_id == workspace_id
+    assert result.summary.episode_id == episode.episode_id
+    assert result.summary.summary_kind == "episode_summary"
+    assert result.summary.metadata == {
+        "builder": "minimal_episode_summary_builder",
+        "build_scope": "episode",
+        "source_episode_id": str(episode.episode_id),
+        "source_memory_item_count": 2,
+        "build_version": "0.6.0-first-slice",
+        "requested_by": "test",
+    }
+    assert result.summary.summary_text == (
+        "Episode summary source text\n\nIncluded memory items:\n- "
+        "Second explicit child item\n- First explicit child item"
+    )
+    assert len(result.memberships) == 2
+    assert [membership.membership_order for membership in result.memberships] == [1, 2]
+    assert [membership.memory_id for membership in result.memberships] == [
+        second_memory_item.memory_id,
+        first_memory_item.memory_id,
+    ]
+    assert result.details == {
+        "episode_id": str(episode.episode_id),
+        "summary_kind": "episode_summary",
+        "member_memory_count": 2,
+        "member_memory_ids": [
+            str(second_memory_item.memory_id),
+            str(first_memory_item.memory_id),
+        ],
+    }
+    assert len(memory_summary_repository.summaries) == 1
+    assert len(memory_summary_membership_repository.memberships) == 2
+
+
+def test_memory_service_build_episode_summary_skips_when_episode_has_no_memory_items() -> None:
+    workflow_id = uuid4()
+    workspace_id = UUID("00000000-0000-0000-0000-000000000093")
+    created_at = datetime(2024, 2, 8, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_summary_repository = InMemoryMemorySummaryRepository()
+    memory_summary_membership_repository = InMemoryMemorySummaryMembershipRepository()
+    workflow_lookup = InMemoryWorkflowLookupRepository(
+        workflow_ids={workflow_id},
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": str(workspace_id),
+                "ticket_id": "TICKET-SUMMARY-BUILD-2",
+            }
+        },
+    )
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode without child memory items",
+        attempt_id=None,
+        metadata={"kind": "empty"},
+        status="recorded",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_summary_repository=memory_summary_repository,
+        memory_summary_membership_repository=memory_summary_membership_repository,
+        workflow_lookup=workflow_lookup,
+        workspace_lookup=workflow_lookup,
+    )
+
+    result = service.build_episode_summary(
+        BuildEpisodeSummaryRequest(
+            episode_id=str(episode.episode_id),
+        )
+    )
+
+    assert result.feature == MemoryFeature.GET_CONTEXT
+    assert result.implemented is True
+    assert result.status == "skipped"
+    assert result.available_in_version == "0.6.0"
+    assert result.summary is None
+    assert result.memberships == ()
+    assert result.summary_built is False
+    assert result.skipped_reason == "no_episode_memory_items"
+    assert result.replaced_existing_summary is False
+    assert result.details == {
+        "episode_id": str(episode.episode_id),
+        "summary_kind": "episode_summary",
+        "member_memory_count": 0,
+    }
+    assert memory_summary_repository.summaries == ()
+    assert memory_summary_membership_repository.memberships == ()
+
+
+def test_memory_service_build_episode_summary_marks_replace_existing_when_summary_kind_already_exists() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = UUID("00000000-0000-0000-0000-000000000094")
+    created_at = datetime(2024, 2, 9, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_summary_repository = InMemoryMemorySummaryRepository()
+    memory_summary_membership_repository = InMemoryMemorySummaryMembershipRepository()
+    workflow_lookup = InMemoryWorkflowLookupRepository(
+        workflow_ids={workflow_id},
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": str(workspace_id),
+                "ticket_id": "TICKET-SUMMARY-BUILD-3",
+            }
+        },
+    )
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode with pre-existing summary",
+        attempt_id=None,
+        metadata={"kind": "replace"},
+        status="recorded",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    episode_repository.create(episode)
+
+    memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Current child item",
+        metadata={"kind": "note"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    memory_item_repository.create(memory_item)
+
+    existing_summary = memory_summary_repository.create(
+        MemorySummaryRecord(
+            memory_summary_id=uuid4(),
+            workspace_id=workspace_id,
+            episode_id=episode.episode_id,
+            summary_text="Older summary",
+            summary_kind="episode_summary",
+            metadata={"builder": "older"},
+            created_at=created_at.replace(hour=2),
+            updated_at=created_at.replace(hour=2),
+        )
+    )
+    memory_summary_membership_repository.create(
+        MemorySummaryMembershipRecord(
+            memory_summary_membership_id=uuid4(),
+            memory_summary_id=existing_summary.memory_summary_id,
+            memory_id=memory_item.memory_id,
+            membership_order=1,
+            metadata={"builder": "older"},
+            created_at=created_at.replace(hour=2),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_summary_repository=memory_summary_repository,
+        memory_summary_membership_repository=memory_summary_membership_repository,
+        workflow_lookup=workflow_lookup,
+        workspace_lookup=workflow_lookup,
+    )
+
+    result = service.build_episode_summary(
+        BuildEpisodeSummaryRequest(
+            episode_id=str(episode.episode_id),
+            summary_kind="episode_summary",
+            replace_existing=True,
+        )
+    )
+
+    assert result.status == "built"
+    assert result.summary_built is True
+    assert result.replaced_existing_summary is True
+    assert result.summary is not None
+    assert result.summary.summary_kind == "episode_summary"
+    assert len(memory_summary_repository.summaries) == 1
+    assert (
+        memory_summary_repository.summaries[0].memory_summary_id == result.summary.memory_summary_id
+    )
+    assert len(memory_summary_membership_repository.memberships) == 1
+    assert (
+        memory_summary_membership_repository.memberships[0].memory_summary_id
+        == result.summary.memory_summary_id
+    )
 
 
 def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:

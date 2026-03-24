@@ -59,6 +59,8 @@ from .repositories import (
 )
 from .service_core import MemoryService
 from .types import (
+    BuildEpisodeSummaryRequest,
+    BuildEpisodeSummaryResult,
     EpisodeRecord,
     GetContextResponse,
     GetMemoryContextRequest,
@@ -94,6 +96,8 @@ __all__ = [
     "MemoryRelationRecord",
     "MemoryService",
     "MemoryServiceError",
+    "BuildEpisodeSummaryRequest",
+    "BuildEpisodeSummaryResult",
     "MemorySummaryMembershipRecord",
     "MemorySummaryRecord",
     "RememberEpisodeRequest",

@@ -1593,6 +1593,19 @@ class PostgresMemorySummaryRepository:
 
         return _memory_summary_row_to_record(row)
 
+    def delete_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+    ) -> None:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM memory_summaries
+                WHERE memory_summary_id = %s
+                """,
+                (memory_summary_id,),
+            )
+
     def list_by_workspace_id(
         self,
         workspace_id: UUID,
@@ -1725,6 +1738,19 @@ class PostgresMemorySummaryMembershipRepository:
             raise PersistenceError("Failed to create memory summary membership")
 
         return _memory_summary_membership_row_to_record(row)
+
+    def delete_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+    ) -> None:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM memory_summary_memberships
+                WHERE memory_summary_id = %s
+                """,
+                (memory_summary_id,),
+            )
 
     def list_by_summary_id(
         self,

@@ -55,6 +55,8 @@ from .repositories import (
     UnitOfWorkWorkspaceLookupRepository,
 )
 from .types import (
+    BuildEpisodeSummaryRequest,
+    BuildEpisodeSummaryResult,
     EpisodeRecord,
     GetContextResponse,
     GetMemoryContextRequest,
@@ -227,6 +229,164 @@ class MemoryService:
                 "workflow_instance_id": str(episode.workflow_instance_id),
                 "attempt_id": (str(episode.attempt_id) if episode.attempt_id is not None else None),
                 **embedding_outcome,
+            },
+        )
+
+    def build_episode_summary(
+        self,
+        request: BuildEpisodeSummaryRequest,
+    ) -> BuildEpisodeSummaryResult:
+        """Build one explicit canonical summary for a selected episode."""
+
+        self._require_non_empty(
+            request.episode_id,
+            field_name="episode_id",
+            feature=MemoryFeature.GET_CONTEXT,
+        )
+
+        episode_id = self._parse_uuid(
+            request.episode_id,
+            field_name="episode_id",
+            feature=MemoryFeature.GET_CONTEXT,
+        )
+
+        episode = self._get_episode_by_id(episode_id)
+        if episode is None:
+            raise MemoryServiceError(
+                code=MemoryErrorCode.INVALID_REQUEST,
+                feature=MemoryFeature.GET_CONTEXT,
+                message="episode_id was not found.",
+                details={"episode_id": str(episode_id)},
+            )
+
+        memory_items = self._memory_item_repository.list_by_episode_id(
+            episode_id,
+            limit=100,
+        )
+        if not memory_items:
+            return BuildEpisodeSummaryResult(
+                feature=MemoryFeature.GET_CONTEXT,
+                implemented=True,
+                message="Episode summary build skipped.",
+                status="skipped",
+                available_in_version="0.6.0",
+                summary=None,
+                memberships=(),
+                summary_built=False,
+                skipped_reason="no_episode_memory_items",
+                replaced_existing_summary=False,
+                details={
+                    "episode_id": str(episode_id),
+                    "summary_kind": request.summary_kind,
+                    "member_memory_count": 0,
+                },
+            )
+
+        summary_text = self._build_episode_summary_text(
+            episode=episode,
+            memory_items=memory_items,
+        )
+        if summary_text is None:
+            return BuildEpisodeSummaryResult(
+                feature=MemoryFeature.GET_CONTEXT,
+                implemented=True,
+                message="Episode summary build skipped.",
+                status="skipped",
+                available_in_version="0.6.0",
+                summary=None,
+                memberships=(),
+                summary_built=False,
+                skipped_reason="summary_text_unavailable",
+                replaced_existing_summary=False,
+                details={
+                    "episode_id": str(episode_id),
+                    "summary_kind": request.summary_kind,
+                    "member_memory_count": len(memory_items),
+                },
+            )
+
+        existing_summaries = self._memory_summary_repository.list_by_episode_id(
+            episode_id,
+            limit=100,
+        )
+        existing_matching_summaries = tuple(
+            summary
+            for summary in existing_summaries
+            if summary.summary_kind == request.summary_kind
+        )
+        replaced_existing_summary = bool(request.replace_existing and existing_matching_summaries)
+
+        if request.replace_existing:
+            for existing_summary in existing_matching_summaries:
+                self._memory_summary_membership_repository.delete_by_summary_id(
+                    existing_summary.memory_summary_id
+                )
+                self._memory_summary_repository.delete_by_summary_id(
+                    existing_summary.memory_summary_id
+                )
+
+        summary_metadata = {
+            "builder": "minimal_episode_summary_builder",
+            "build_scope": "episode",
+            "source_episode_id": str(episode_id),
+            "source_memory_item_count": len(memory_items),
+            "build_version": "0.6.0-first-slice",
+            **dict(request.metadata),
+        }
+
+        now = datetime.now(timezone.utc)
+        summary = self._memory_summary_repository.create(
+            MemorySummaryRecord(
+                memory_summary_id=uuid4(),
+                workspace_id=self._resolve_workspace_id(episode.workflow_instance_id)
+                or (
+                    memory_items[0].workspace_id
+                    if memory_items[0].workspace_id is not None
+                    else UUID(int=0)
+                ),
+                episode_id=episode_id,
+                summary_text=summary_text,
+                summary_kind=request.summary_kind,
+                metadata=summary_metadata,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        memberships: list[MemorySummaryMembershipRecord] = []
+        for index, memory_item in enumerate(memory_items, start=1):
+            memberships.append(
+                self._memory_summary_membership_repository.create(
+                    MemorySummaryMembershipRecord(
+                        memory_summary_membership_id=uuid4(),
+                        memory_summary_id=summary.memory_summary_id,
+                        memory_id=memory_item.memory_id,
+                        membership_order=index,
+                        metadata={
+                            "builder": "minimal_episode_summary_builder",
+                            "build_scope": "episode",
+                        },
+                        created_at=now,
+                    )
+                )
+            )
+
+        return BuildEpisodeSummaryResult(
+            feature=MemoryFeature.GET_CONTEXT,
+            implemented=True,
+            message="Episode summary built successfully.",
+            status="built",
+            available_in_version="0.6.0",
+            summary=summary,
+            memberships=tuple(memberships),
+            summary_built=True,
+            skipped_reason=None,
+            replaced_existing_summary=replaced_existing_summary,
+            details={
+                "episode_id": str(episode_id),
+                "summary_kind": request.summary_kind,
+                "member_memory_count": len(memory_items),
+                "member_memory_ids": [str(memory_item.memory_id) for memory_item in memory_items],
             },
         )
 
@@ -1256,6 +1416,69 @@ class MemoryService:
             )
 
         return tuple(explanations)
+
+    def _get_episode_by_id(
+        self,
+        episode_id: UUID,
+    ) -> EpisodeRecord | None:
+        if self._workflow_lookup is None:
+            return None
+
+        workflow_ids = self._workflow_lookup.workflow_ids_by_workspace_id(
+            str(self._resolve_workspace_id_from_episode_scan(episode_id) or UUID(int=0)),
+            limit=100,
+        )
+        episodes = self._collect_episode_context(
+            workflow_ids=workflow_ids,
+            limit=100,
+        )
+        for episode in episodes:
+            if episode.episode_id == episode_id:
+                return episode
+        return None
+
+    def _resolve_workspace_id_from_episode_scan(
+        self,
+        episode_id: UUID,
+    ) -> UUID | None:
+        if self._workflow_lookup is None:
+            return None
+
+        candidate_workflows: list[UUID] = []
+        if isinstance(self._workflow_lookup, InMemoryWorkflowLookupRepository):
+            candidate_workflows.extend(self._workflow_lookup._workflow_ids)  # type: ignore[attr-defined]
+            candidate_workflows.extend(self._workflow_lookup._workflows_by_id.keys())  # type: ignore[attr-defined]
+
+        for workflow_id in candidate_workflows:
+            episodes = self._episode_repository.list_by_workflow_id(
+                workflow_id,
+                limit=100,
+            )
+            if any(episode.episode_id == episode_id for episode in episodes):
+                return self._resolve_workspace_id(workflow_id)
+        return None
+
+    def _build_episode_summary_text(
+        self,
+        *,
+        episode: EpisodeRecord,
+        memory_items: tuple[MemoryItemRecord, ...],
+    ) -> str | None:
+        normalized_episode_summary = episode.summary.strip()
+        normalized_memory_contents = [
+            memory_item.content.strip()
+            for memory_item in memory_items
+            if memory_item.content.strip()
+        ]
+        if normalized_episode_summary and normalized_memory_contents:
+            return f"{normalized_episode_summary}\n\nIncluded memory items:\n- " + "\n- ".join(
+                normalized_memory_contents
+            )
+        if normalized_episode_summary:
+            return normalized_episode_summary
+        if normalized_memory_contents:
+            return "\n".join(normalized_memory_contents)
+        return None
 
     def _build_summary_details_for_episodes(
         self,
