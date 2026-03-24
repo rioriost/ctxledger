@@ -202,6 +202,135 @@ def test_apply_schema_reports_driver_import_failure(
     assert "Failed to import PostgreSQL driver. Install psycopg[binary] first." in captured.err
 
 
+def test_apply_schema_reports_connect_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    call_log: list[tuple[str, object]] = []
+
+    def fake_load_postgres_schema_sql() -> str:
+        call_log.append(("load_postgres_schema_sql", None))
+        return "SELECT 1;"
+
+    def fake_connect(database_url: str) -> object:
+        call_log.append(("connect", database_url))
+        raise RuntimeError(f"connect exploded: {database_url}")
+
+    fake_psycopg = SimpleNamespace(connect=fake_connect)
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.load_postgres_schema_sql",
+        fake_load_postgres_schema_sql,
+    )
+
+    exit_code = cli_module._apply_schema(
+        argparse.Namespace(database_url="postgresql://explicit/db")
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to apply schema: connect exploded: postgresql://explicit/db" in captured.err
+    assert call_log == [
+        ("load_postgres_schema_sql", None),
+        ("connect", "postgresql://explicit/db"),
+    ]
+
+
+def test_apply_schema_reports_cursor_execute_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class ExplodingCursor:
+        def __enter__(self) -> "ExplodingCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str) -> None:
+            raise RuntimeError("cursor execute exploded")
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> ExplodingCursor:
+            return ExplodingCursor()
+
+        def commit(self) -> None:
+            raise AssertionError("commit should not be reached")
+
+    fake_psycopg = SimpleNamespace(connect=lambda database_url: FakeConnection())
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.load_postgres_schema_sql",
+        lambda: "SELECT 1;",
+    )
+
+    exit_code = cli_module._apply_schema(
+        argparse.Namespace(database_url="postgresql://explicit/db")
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to apply schema: cursor execute exploded" in captured.err
+
+
+def test_apply_schema_reports_commit_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    executed_sql: list[str] = []
+
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str) -> None:
+            executed_sql.append(query)
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def commit(self) -> None:
+            raise RuntimeError("commit exploded")
+
+    fake_psycopg = SimpleNamespace(connect=lambda database_url: FakeConnection())
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.load_postgres_schema_sql",
+        lambda: "SELECT 1;",
+    )
+
+    exit_code = cli_module._apply_schema(
+        argparse.Namespace(database_url="postgresql://explicit/db")
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to apply schema: commit exploded" in captured.err
+    assert executed_sql == ["SELECT 1;"]
+
+
 def test_bootstrap_age_graph_reports_missing_database_url(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1031,6 +1160,152 @@ def test_bootstrap_age_graph_uses_mapping_count_rows(
     assert commit_calls == ["commit"]
 
 
+def test_bootstrap_age_graph_uses_tuple_count_rows(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    executed_queries: list[tuple[str, object | None]] = []
+    commit_calls: list[str] = []
+
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.fetchone_results: list[object] = [
+                (1,),
+                ("4",),
+                ("5",),
+            ]
+
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            executed_queries.append((query, params))
+
+        def fetchone(self) -> object:
+            return self.fetchone_results.pop(0)
+
+        def fetchall(self) -> list[object]:
+            last_query = executed_queries[-1][0]
+            if "SELECT memory_id" in last_query:
+                return []
+            if "SELECT\n                        mr.memory_relation_id" in last_query:
+                return []
+            return []
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def commit(self) -> None:
+            commit_calls.append("commit")
+
+    fake_psycopg = SimpleNamespace(connect=lambda database_url: FakeConnection())
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
+
+    exit_code = cli_module._bootstrap_age_graph(
+        argparse.Namespace(
+            database_url="postgresql://explicit/db",
+            graph_name="ctxledger_test_graph",
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert captured.out.strip() == (
+        "AGE graph bootstrap completed for 'ctxledger_test_graph' "
+        "(memory_item nodes repopulated=4, supports edges repopulated=5)."
+    )
+    assert commit_calls == ["commit"]
+
+
+def test_apply_schema_reports_missing_database_url_from_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url=""),
+    )
+
+    exit_code = cli_module._apply_schema(argparse.Namespace(database_url=None))
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert (
+        "Database URL is required. Set CTXLEDGER_DATABASE_URL or pass --database-url."
+        in captured.err
+    )
+
+
+def test_apply_schema_uses_settings_database_url_when_argument_is_none(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    connect_calls: list[str] = []
+    executed_sql: list[str] = []
+    commit_calls: list[str] = []
+
+    class FakeCursor:
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str) -> None:
+            executed_sql.append(query)
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def commit(self) -> None:
+            commit_calls.append("commit")
+
+    fake_psycopg = SimpleNamespace(
+        connect=lambda database_url: connect_calls.append(database_url) or FakeConnection()
+    )
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url="postgresql://from-settings/db"),
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.load_postgres_schema_sql",
+        lambda: "SELECT 42;",
+    )
+
+    exit_code = cli_module._apply_schema(argparse.Namespace(database_url=None))
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.out.strip() == "Schema applied successfully."
+    assert captured.err == ""
+    assert connect_calls == ["postgresql://from-settings/db"]
+    assert executed_sql == ["SELECT 42;"]
+    assert commit_calls == ["commit"]
+
+
 def test_stats_reraises_unexpected_runtime_error_from_builder(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1146,6 +1421,34 @@ def test_main_unknown_command_uses_parser_error(monkeypatch: pytest.MonkeyPatch)
         cli_module.main(["mystery"])
 
     assert exc_info.value.code == 2
+    assert parser_calls == ["Unknown command: mystery"]
+
+
+def test_main_unknown_command_returns_two_when_parser_error_does_not_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parser_calls: list[str] = []
+    build_calls: list[str] = []
+    parse_calls: list[list[str] | None] = []
+
+    class FakeParser:
+        def parse_args(self, argv: list[str] | None) -> argparse.Namespace:
+            parse_calls.append(argv)
+            assert argv == ["mystery"]
+            return argparse.Namespace(command="mystery")
+
+        def error(self, message: str) -> None:
+            parser_calls.append(message)
+
+    def fake_build_parser() -> FakeParser:
+        build_calls.append("built")
+        return FakeParser()
+
+    monkeypatch.setattr(cli_module, "_build_parser", fake_build_parser)
+
+    assert cli_module.main(["mystery"]) == 2
+    assert build_calls == ["built"]
+    assert parse_calls == [["mystery"]]
     assert parser_calls == ["Unknown command: mystery"]
 
 
