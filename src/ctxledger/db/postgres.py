@@ -1270,6 +1270,35 @@ class PostgresMemoryEpisodeRepository(MemoryEpisodeRepository):
 
         return self._row_to_episode(row)
 
+    def get_by_episode_id(
+        self,
+        episode_id: UUID,
+    ) -> EpisodeRecord | None:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    episode_id,
+                    workflow_instance_id,
+                    attempt_id,
+                    summary,
+                    status,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM episodes
+                WHERE episode_id = %s
+                LIMIT 1
+                """,
+                (episode_id,),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            return None
+
+        return self._row_to_episode(row)
+
     def list_by_workflow_id(
         self,
         workflow_instance_id: UUID,

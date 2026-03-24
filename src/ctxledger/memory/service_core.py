@@ -250,7 +250,7 @@ class MemoryService:
             feature=MemoryFeature.GET_CONTEXT,
         )
 
-        episode = self._get_episode_by_id(episode_id)
+        episode = self._episode_repository.get_by_episode_id(episode_id)
         if episode is None:
             raise MemoryServiceError(
                 code=MemoryErrorCode.INVALID_REQUEST,
@@ -1416,47 +1416,6 @@ class MemoryService:
             )
 
         return tuple(explanations)
-
-    def _get_episode_by_id(
-        self,
-        episode_id: UUID,
-    ) -> EpisodeRecord | None:
-        if self._workflow_lookup is None:
-            return None
-
-        workflow_ids = self._workflow_lookup.workflow_ids_by_workspace_id(
-            str(self._resolve_workspace_id_from_episode_scan(episode_id) or UUID(int=0)),
-            limit=100,
-        )
-        episodes = self._collect_episode_context(
-            workflow_ids=workflow_ids,
-            limit=100,
-        )
-        for episode in episodes:
-            if episode.episode_id == episode_id:
-                return episode
-        return None
-
-    def _resolve_workspace_id_from_episode_scan(
-        self,
-        episode_id: UUID,
-    ) -> UUID | None:
-        if self._workflow_lookup is None:
-            return None
-
-        candidate_workflows: list[UUID] = []
-        if isinstance(self._workflow_lookup, InMemoryWorkflowLookupRepository):
-            candidate_workflows.extend(self._workflow_lookup._workflow_ids)  # type: ignore[attr-defined]
-            candidate_workflows.extend(self._workflow_lookup._workflows_by_id.keys())  # type: ignore[attr-defined]
-
-        for workflow_id in candidate_workflows:
-            episodes = self._episode_repository.list_by_workflow_id(
-                workflow_id,
-                limit=100,
-            )
-            if any(episode.episode_id == episode_id for episode in episodes):
-                return self._resolve_workspace_id(workflow_id)
-        return None
 
     def _build_episode_summary_text(
         self,

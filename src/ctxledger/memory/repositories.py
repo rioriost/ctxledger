@@ -122,6 +122,13 @@ class UnitOfWorkWorkflowLookupRepository:
                 ),
             }
 
+    def workspace_id_by_workflow_id(self, workflow_instance_id: UUID) -> UUID | None:
+        with self._uow_factory() as uow:
+            workflow = uow.workflow_instances.get_by_id(workflow_instance_id)
+            if workflow is None:
+                return None
+            return workflow.workspace_id
+
 
 class UnitOfWorkEpisodeRepository:
     """Episode repository backed by PostgreSQL tables through the unit of work."""
@@ -141,6 +148,22 @@ class UnitOfWorkEpisodeRepository:
             created = uow.memory_episodes.create(episode)
             uow.commit()
             return created
+
+    def get_by_episode_id(
+        self,
+        episode_id: UUID,
+    ) -> EpisodeRecord | None:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_episodes"):
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Episode persistence repository is not configured.",
+                    details={},
+                )
+            if hasattr(uow.memory_episodes, "get_by_episode_id"):
+                return uow.memory_episodes.get_by_episode_id(episode_id)
+            return None
 
     def list_by_workflow_id(
         self,
@@ -257,6 +280,15 @@ class InMemoryEpisodeRepository:
     def create(self, episode: EpisodeRecord) -> EpisodeRecord:
         self._episodes.append(episode)
         return episode
+
+    def get_by_episode_id(
+        self,
+        episode_id: UUID,
+    ) -> EpisodeRecord | None:
+        for episode in self._episodes:
+            if episode.episode_id == episode_id:
+                return episode
+        return None
 
     def list_by_workflow_id(
         self,
@@ -589,6 +621,25 @@ class UnitOfWorkMemoryItemRepository:
                 limit=limit,
             )
 
+    def list_workspace_root_items(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_items") or uow.memory_items is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory item repository is not configured.",
+                    details={},
+                )
+            return uow.memory_items.list_workspace_root_items(
+                workspace_id,
+                limit=limit,
+            )
+
     def list_by_episode_id(
         self,
         episode_id: UUID,
@@ -622,6 +673,22 @@ class UnitOfWorkMemoryItemRepository:
                 )
             return uow.memory_items.list_by_episode_ids(episode_ids)
 
+    def list_by_memory_ids(
+        self,
+        memory_ids: tuple[UUID, ...],
+        *,
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_items") or uow.memory_items is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory item repository is not configured.",
+                    details={},
+                )
+            return uow.memory_items.list_by_memory_ids(memory_ids)
+
 
 class UnitOfWorkMemorySummaryRepository:
     """Memory summary repository backed by PostgreSQL tables through the unit of work."""
@@ -641,6 +708,21 @@ class UnitOfWorkMemorySummaryRepository:
             created = uow.memory_summaries.create(summary)
             uow.commit()
             return created
+
+    def delete_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+    ) -> None:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_summaries") or uow.memory_summaries is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory summary repository is not configured.",
+                    details={},
+                )
+            uow.memory_summaries.delete_by_summary_id(memory_summary_id)
+            uow.commit()
 
     def list_by_workspace_id(
         self,
@@ -719,6 +801,24 @@ class UnitOfWorkMemorySummaryMembershipRepository:
             created = uow.memory_summary_memberships.create(membership)
             uow.commit()
             return created
+
+    def delete_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+    ) -> None:
+        with self._uow_factory() as uow:
+            if (
+                not hasattr(uow, "memory_summary_memberships")
+                or uow.memory_summary_memberships is None
+            ):
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory summary membership repository is not configured.",
+                    details={},
+                )
+            uow.memory_summary_memberships.delete_by_summary_id(memory_summary_id)
+            uow.commit()
 
     def list_by_summary_id(
         self,

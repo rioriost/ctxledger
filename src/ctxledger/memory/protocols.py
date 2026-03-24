@@ -51,6 +51,11 @@ class EpisodeRepository(Protocol):
 
     def create(self, episode: EpisodeRecord) -> EpisodeRecord: ...
 
+    def get_by_episode_id(
+        self,
+        episode_id: UUID,
+    ) -> EpisodeRecord | None: ...
+
     def list_by_workflow_id(
         self,
         workflow_instance_id: UUID,

@@ -277,6 +277,9 @@ class InMemoryMemoryEpisodeRepository:
         self._episodes_by_id[episode.episode_id] = episode
         return episode
 
+    def get_by_episode_id(self, episode_id: object) -> EpisodeRecord | None:
+        return self._episodes_by_id.get(episode_id)
+
     def list_by_workflow_id(
         self,
         workflow_instance_id: object,
