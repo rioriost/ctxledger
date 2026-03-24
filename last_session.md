@@ -2,22 +2,22 @@
 
 ## Summary
 
-This continuation moved the `0.6.0` hierarchical-memory work from
-**design canonicalization** into the first real **implementation slices**.
+This continuation advanced the `0.6.0` hierarchical-memory work from the first
+read-side summary slice into a more complete **read/write summary loop**.
 
-The key result is that the repository now has a coherent first vertical slice
-for the chosen hierarchy direction:
+The key result is that the repository now has a coherent first canonical summary
+path that covers:
 
-- canonical Phase A / B / first-retrieval decisions are documented and linked
-- canonical summary and summary-membership types now exist
-- in-memory and PostgreSQL persistence support now exist
-- workflow-backed memory service wiring now includes summary repositories
-- `memory_get_context` now has an initial constrained
-  **summary-first + direct member expansion** path when canonical summaries exist
-- focused validation for the new hierarchy slices passed
-- broader full-suite validation also passed
+- documented Phase A / Phase B / first retrieval decisions
+- canonical summary and summary-membership persistence
+- summary-first retrieval through `memory_get_context`
+- transport-surface coverage through serializer, MCP, and HTTP layers
+- an explicit minimal episode-scoped summary builder
+- replace-or-rebuild behavior for episode summaries
+- focused builder-to-retrieval integration coverage
+- green full-suite validation after each major follow-up wave
 
-This continuation changed both docs and `src/` code.
+This continuation changed docs, `src/` code, and tests.
 
 ---
 
@@ -25,8 +25,8 @@ This continuation changed both docs and `src/` code.
 
 ### 1. Canonicalized the planning state for `0.6.0`
 
-The continuation first consolidated the hierarchy planning state so the current
-work is no longer spread across loosely connected notes.
+The hierarchy planning state was consolidated so the current work is no longer
+spread across loosely connected notes.
 
 The main canonical decision records now are:
 
@@ -34,7 +34,7 @@ The main canonical decision records now are:
 - `docs/memory/minimal_hierarchy_model_decision.md`
 - `docs/memory/first_memory_get_context_hierarchical_improvement_decision.md`
 
-And the plan now points to those decisions directly:
+And the plan points to those decisions directly:
 
 - `docs/plans/hierarchical_memory_0_6_0_plan.md`
 
@@ -62,24 +62,40 @@ That note defines the minimal implementation direction as:
 - no graph-native truth
 - no summary-membership overload into generic `memory_relations`
 
+A second follow-up design note was added for the next write-side slice:
+
+- `docs/memory/minimal_summary_write_build_path.md`
+
+That note defines the minimal write direction as:
+
+- explicit summary building
+- episode-scoped first build target
+- deterministic summary text construction
+- replace-or-rebuild semantics
+- no read-path side effects
+- no automatic build on every episode write
+- no graph-native summary generation
+
 ### 3. Added canonical summary types and repository protocols
 
 The type layer now includes:
 
 - `MemorySummaryRecord`
 - `MemorySummaryMembershipRecord`
+- `BuildEpisodeSummaryRequest`
+- `BuildEpisodeSummaryResult`
 
 The protocol layer now includes:
 
 - `MemorySummaryRepository`
 - `MemorySummaryMembershipRepository`
 
-These were added in:
+These were added or extended in:
 
 - `src/ctxledger/memory/types.py`
 - `src/ctxledger/memory/protocols.py`
 
-The new summary protocols were also marked runtime-checkable so they can
+The summary repository protocols were also marked runtime-checkable so they can
 participate in existing contract-style tests.
 
 ### 4. Added in-memory summary repositories and backing-store wiring
@@ -184,7 +200,7 @@ So the workflow-backed path now constructs `MemoryService` with:
 
 ### 9. Added the first constrained service-layer summary-first retrieval slice
 
-The main service-layer behavior change is in:
+The main service-layer read behavior change is in:
 
 - `src/ctxledger/memory/service_core.py`
 
@@ -215,7 +231,7 @@ to exist.
 
 ### 10. Preserved existing narrowing and fallback behavior
 
-The first service slice was intentionally constrained.
+The first summary retrieval slice was intentionally constrained.
 
 Important preserved behavior:
 
@@ -231,78 +247,171 @@ Important preserved behavior:
 This keeps the new behavior aligned with the earlier Phase A and Phase D
 decisions.
 
+### 11. Added summary-first coverage across service and transport surfaces
+
+Focused tests were added or expanded for:
+
+- canonical summary-first selection
+- fallback to episode-derived summaries
+- suppression under `include_summaries = false`
+- preservation of the narrow `include_episodes = false` path
+- multiple canonical summaries ordered by `created_at DESC`
+- membership-order-preserving member expansion
+- empty-membership summaries staying on the canonical summary path
+- serializer preservation of summary-first grouped/details payloads
+- MCP tool-handler preservation of summary-first grouped/details payloads
+- HTTP MCP RPC preservation of summary-first grouped/details payloads
+
+Relevant files include:
+
+- `tests/memory/test_service_core.py`
+- `tests/memory/test_service_context_details.py`
+- `tests/memory/test_service_context_serialization.py`
+- `tests/mcp/test_tool_handlers_memory.py`
+- `tests/http/test_server_http.py`
+
+### 12. Added the first explicit episode summary builder
+
+The write-side hierarchy path now exists in minimal form through:
+
+- `MemoryService.build_episode_summary(...)`
+
+Implemented in:
+
+- `src/ctxledger/memory/service_core.py`
+
+This builder currently provides:
+
+- explicit invocation through `BuildEpisodeSummaryRequest`
+- episode-scoped summary construction
+- deterministic summary text construction from:
+  - the episode summary text
+  - direct episode memory-item contents
+- canonical summary creation
+- canonical summary membership creation
+- no-items skip behavior
+- replace-or-rebuild support
+
+### 13. Added replace-or-rebuild behavior for summaries
+
+The builder originally only detected existing summaries.
+
+It now performs actual replace-or-rebuild behavior when:
+
+- `replace_existing = true`
+
+This required adding delete support for summaries and summary memberships
+through:
+
+- repository protocols
+- in-memory repositories
+- PostgreSQL repositories
+
+The builder now:
+
+1. finds existing summaries for the target episode
+2. filters by the requested `summary_kind`
+3. deletes memberships for matching summaries
+4. deletes those summaries
+5. writes the rebuilt summary
+6. writes rebuilt memberships
+
+This means old matching summaries no longer silently accumulate on reruns.
+
+### 14. Closed the first builder-to-retrieval loop with focused tests
+
+Focused tests were added to prove that:
+
+- a builder-created canonical summary is immediately used by
+  `memory_get_context`
+- a rebuilt summary replaces the older summary in retrieval
+- the retrieval path now reflects the rebuilt canonical summary instead of stale
+  prior summary state
+
+This closes the first meaningful loop of:
+
+- canonical memory items
+- explicit summary build
+- canonical summary persistence
+- canonical summary-first retrieval
+
 ---
 
 ## Validation performed
 
-Focused validation was run with:
+Focused validation was run in multiple waves during this continuation.
+
+### Focused hierarchy validation
+Command:
 
 - `python -m pytest tests/memory/test_service_core.py tests/memory/test_service_context_details.py tests/postgres/test_db_repositories.py tests/postgres/test_db_uow.py -q`
 
-Final result:
+Result at that stage:
 
 - **79 passed**
 
-During validation, a few issues were found and fixed:
+### Transport-focused validation
+Command:
 
-### 1. Summary member expansion needed `list_by_memory_ids(..., limit=...)`
-The new summary expansion path initially called `list_by_memory_ids(...)`
-without the required keyword-only `limit`.
+- `python -m pytest tests/memory/test_service_context_serialization.py tests/mcp/test_tool_handlers_memory.py -q`
 
-This was corrected in `MemoryService`.
+Result:
 
-### 2. `_build_summary_selection_details(...)` broke older direct test calls
-The helper had been made keyword-only with a new required argument, which broke
-existing tests.
+- **10 passed**
 
-It was adjusted so:
+### HTTP summary-first validation
+Command:
 
-- `memory_item_details` remains callable positionally as before
-- `summary_details` defaults to `()`
+- `python -m pytest tests/http/test_server_http.py -q`
 
-This preserved older test expectations while enabling the new path.
+Result:
 
-### 3. Unit-of-work summary protocol checks needed runtime-checkable protocols
-The new summary repository protocols were used in `isinstance(...)` assertions in
-tests, so they were updated to support that.
+- **45 passed**
 
-### 4. One new grouped-output assertion was too strict
-A new summary-disabled test initially asserted the exact entire group shape,
-including fields that were not stable in the current contract.
+### Focused builder validation
+Command:
 
-The test was relaxed to assert the stable fields that matter for the contract:
+- `python -m pytest tests/memory/test_service_core.py -q`
 
-- route
-- scope
-- parentage
-- visible memory items
+Results across the builder follow-up waves:
 
-### 5. One direct-episode test expected the wrong `selection_kind`
-The actual current grouped contract uses:
+- **24 passed**
+- then **26 passed** after builder-to-retrieval integration tests were added
 
-- `direct_episode`
+### Full-suite validation checkpoints
 
-not:
+The full suite was rerun after each major follow-up wave and remained green.
 
-- `direct_episode_context`
-
-The test was corrected to match the real current behavior.
-
----
-
-### 6. Full-suite validation also passed
-
-After the focused hierarchy validation and follow-up fixes, the continuation also
-ran the full test suite:
-
-- `python -m pytest -q`
-
-Final result:
+Observed full-suite checkpoints in this continuation included:
 
 - **900 passed, 1 skipped**
+- **905 passed, 1 skipped**
+- **906 passed, 1 skipped**
+- **909 passed, 1 skipped**
+- **911 passed, 1 skipped**
 
-This confirms that the new hierarchy slices did not regress the broader
-repository test suite.
+The latest full-suite state at handoff is:
+
+- **911 passed, 1 skipped**
+
+### Notable fixes made during validation
+
+A few issues were found and corrected during the validation loop:
+
+1. Summary member expansion initially called `list_by_memory_ids(...)`
+   without the required keyword-only `limit`.
+2. `_build_summary_selection_details(...)` temporarily broke older direct test
+   calls and was adjusted to preserve backward compatibility.
+3. Summary protocols needed runtime-checkable behavior for `isinstance(...)`
+   assertions in contract tests.
+4. Some grouped-output assertions were initially too strict and were narrowed to
+   stable contract fields.
+5. One direct-episode test expected `direct_episode_context` when the actual
+   current grouped contract uses `direct_episode`.
+6. The HTTP MCP RPC test initially expected a JSON content wrapper, but the
+   actual current surface uses a text content wrapper around JSON.
+
+All of those were resolved before the final green validation state.
 
 ---
 
@@ -315,6 +424,7 @@ At handoff, the repository now has this effective hierarchy stack:
 - Phase B canonical minimal hierarchy note
 - first hierarchical retrieval improvement note
 - implementation bridge note
+- minimal write/build path note
 - plan cross-references updated accordingly
 
 ### Canonical persistence layer
@@ -324,6 +434,8 @@ At handoff, the repository now has this effective hierarchy stack:
 ### Python type / protocol layer
 - `MemorySummaryRecord`
 - `MemorySummaryMembershipRecord`
+- `BuildEpisodeSummaryRequest`
+- `BuildEpisodeSummaryResult`
 - summary repository protocols
 
 ### In-memory implementation layer
@@ -334,13 +446,26 @@ At handoff, the repository now has this effective hierarchy stack:
 - schema support
 - PostgreSQL repositories
 - PostgreSQL UoW wiring
+- summary delete support for rebuild behavior
 
-### Service layer
+### Read-side service layer
 - initial summary-first selection path
 - direct member expansion
 - fallback to episode-derived summary behavior where canonical summaries do not exist
 - suppression under `include_summaries = false`
 - preservation of the narrow `include_episodes = false` path
+
+### Write-side service layer
+- explicit episode summary builder
+- deterministic summary text construction
+- canonical summary creation
+- canonical membership creation
+- no-item skip behavior
+- replace-or-rebuild behavior
+
+### Integration layer
+- builder-created summaries are now covered through retrieval-loop tests
+- serializer, MCP, and HTTP surfaces have summary-first coverage
 
 ---
 
@@ -348,14 +473,16 @@ At handoff, the repository now has this effective hierarchy stack:
 
 This continuation did **not** yet:
 
-- add summary-generation write behavior
-- add service logic to create canonical summaries automatically
 - add summary-to-summary recursion
+- add workspace-wide summary building
+- add automatic summary generation on ordinary episode writes
+- add automatic summary generation during ordinary reads
+- integrate the summary builder into `workflow_complete` auto-memory
 - add graph mirroring for summary nodes or summary-membership edges
 - redesign the grouped contract wholesale
-- add serializer- or HTTP-level contract tests specifically for the new
-  summary-first path
-- make a git commit
+- add a dedicated CLI command for the summary builder
+- add a fully separate summary-builder service class
+- make the builder lookup boundary as clean as a future dedicated summary-build service likely would
 
 The current work is still a **small constrained hierarchy slice**, not the full
 `0.6.0` closeout.
@@ -364,13 +491,16 @@ The current work is still a **small constrained hierarchy slice**, not the full
 
 ## Important current interpretation
 
-The first hierarchy implementation should currently be read as:
+The hierarchy implementation should currently be read as:
 
 - canonical summaries are now a real persistence concept
 - canonical summary membership is now a real persistence concept
 - `memory_get_context` can now prefer canonical summary selection when summaries
   exist and summaries are enabled
 - direct member memory-item expansion is now part of that first hierarchy route
+- an explicit episode-scoped summary builder now exists
+- that builder can now replace matching prior summaries on rebuild
+- the first write/read summary loop is now exercised through focused tests
 - compatibility / fallback behavior is still intentionally preserved
 - the service contract is still transitional and not yet fully redesigned around
   canonical summaries
@@ -381,32 +511,40 @@ This is the intended incremental state.
 
 ## Recommended next session
 
-The next session should continue from **focused hierarchy validation and small
-integration follow-through**, not from a new broad redesign.
+The next session should continue from **cleaning and extending the write-side
+summary loop** rather than reopening the already-settled Phase A / B boundaries.
 
 Recommended order:
 
-### 1. Add a small next wave of summary-first tests
+### 1. Improve the builder boundary
+The most obvious cleanup target is the current episode lookup path used by
+`build_episode_summary(...)`.
 
+A future slice should prefer a cleaner explicit episode lookup boundary over the
+current helper approach.
+
+### 2. Decide whether to add an operator-facing summary build entry point
+The builder now exists, but it is not yet exposed through a dedicated CLI or
+similar explicit operational path.
+
+A narrow explicit entry point would make the builder easier to use and validate.
+
+### 3. Add more focused builder/retrieval follow-up tests
 Useful next focused cases include:
 
-- multiple canonical summaries for one episode
-- multiple episodes with canonical summaries across the same workflow
-- canonical summary with empty membership
-- deterministic ordering across multiple summaries and memberships
-- runtime-backed `memory_get_context` smoke behavior through the workflow-backed
-  construction path
+- multiple rebuilds of the same episode summary
+- replace-existing disabled behavior
+- different `summary_kind` coexistence behavior
+- retrieval after rebuild across multiple episodes in one workflow
+- PostgreSQL-backed builder-to-retrieval integration
 
-### 2. Decide whether to add summary-aware transport-surface validation
-The service slice now exists, but serializer / MCP / HTTP validation for the new
-summary-first route is still light.
-
-### 3. Only after that, decide the next implementation slice
+### 4. Only after that, decide the next implementation slice
 The most natural next implementation step is one of:
 
-- add summary write/build support
-- refine grouped summary/member output
-- add graph mirroring for summaries only if a concrete traversal benefit is now
+- dedicated summary build command / entry point
+- cleaner summary-build service boundary
+- summary build integration with later workflow-oriented automation
+- optional derived AGE mirroring for summaries if a concrete traversal benefit is
   clear
 
 ---
@@ -419,22 +557,29 @@ State at handoff:
 - summary persistence is implemented in-memory and in PostgreSQL
 - workflow-backed `MemoryService` wiring includes summaries
 - the first constrained summary-first retrieval slice is implemented
-- focused hierarchy-related validation passed:
-  - **79 passed**
-- full-suite validation also passed:
-  - **900 passed, 1 skipped**
-- no git commit was made in this continuation
+- the first explicit episode summary builder is implemented
+- replace-or-rebuild summary behavior is implemented
+- builder-to-retrieval loop coverage is implemented
+- transport validation exists across serializer, MCP, and HTTP layers
+- full-suite validation passed at the latest checkpoint:
+  - **911 passed, 1 skipped**
+- no git commit was made for this specific handoff update
+- there are known out-of-band local changes unrelated to the main hierarchy work
+  that should continue to be treated separately
 
 If the next session continues this work, start from:
 
 1. `src/ctxledger/memory/service_core.py`
 2. `src/ctxledger/memory/repositories.py`
-3. `src/ctxledger/db/postgres.py`
-4. `schemas/postgres.sql`
-5. `tests/memory/test_service_context_details.py`
+3. `src/ctxledger/memory/types.py`
+4. `src/ctxledger/memory/protocols.py`
+5. `src/ctxledger/db/postgres.py`
 6. `tests/memory/test_service_core.py`
+7. `docs/memory/minimal_summary_write_build_path.md`
 
 And treat the current branch of work as:
 
 - **first constrained hierarchy implementation landed**
-- **next step is validation expansion and careful follow-through**
+- **first explicit summary builder landed**
+- **first write/read summary loop is validated**
+- **next step is boundary cleanup and explicit build-path follow-through**
