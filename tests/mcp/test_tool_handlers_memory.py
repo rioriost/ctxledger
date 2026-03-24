@@ -9,6 +9,7 @@ from ctxledger.mcp.tool_handlers import (
     build_memory_search_tool_handler,
 )
 from ctxledger.memory.service import (
+    GetContextResponse,
     MemoryFeature,
 )
 
@@ -77,9 +78,7 @@ def test_build_memory_remember_episode_tool_handler_maps_memory_error() -> None:
     }
 
 
-def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_values() -> (
-    None
-):
+def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_values() -> None:
     service = FakeMemoryService(search_result=make_search_memory_response())
     handler = build_memory_search_tool_handler(service)
 
@@ -98,10 +97,7 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
     assert payload["ok"] is True
     assert result["feature"] == "memory_search"
     assert result["implemented"] is True
-    assert (
-        result["message"]
-        == "Hybrid lexical and semantic memory search completed successfully."
-    )
+    assert result["message"] == "Hybrid lexical and semantic memory search completed successfully."
     assert result["status"] == "ok"
     assert result["available_in_version"] == "0.3.0"
     assert result["details"]["query"] == "needle"
@@ -173,9 +169,7 @@ def test_build_memory_search_tool_handler_maps_memory_error() -> None:
     }
 
 
-def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values() -> (
-    None
-):
+def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values() -> None:
     workflow_instance_id = uuid4()
     service = FakeMemoryService(context_result=make_get_context_response())
     handler = build_memory_get_context_tool_handler(service)
@@ -199,9 +193,7 @@ def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values
     assert payload["ok"] is True
     assert result["feature"] == MemoryFeature.GET_CONTEXT.value
     assert result["implemented"] is True
-    assert (
-        result["message"] == "Episode-oriented memory context retrieved successfully."
-    )
+    assert result["message"] == "Episode-oriented memory context retrieved successfully."
     assert result["status"] == "ok"
     assert result["available_in_version"] == "0.2.0"
     assert result["details"] == {
@@ -247,3 +239,192 @@ def test_build_memory_get_context_tool_handler_maps_memory_error() -> None:
             "details": {"field": "workspace_id"},
         },
     }
+
+
+def test_build_memory_get_context_tool_handler_serializes_canonical_summary_first_payload() -> None:
+    workflow_id = uuid4()
+    episode_id = uuid4()
+    memory_summary_id = uuid4()
+    member_memory_id = uuid4()
+    created_at = datetime(2024, 10, 12, 4, 5, 6, tzinfo=UTC)
+
+    service = FakeMemoryService(
+        context_result=GetContextResponse(
+            feature=MemoryFeature.GET_CONTEXT,
+            implemented=True,
+            message="Episode-oriented memory context retrieved successfully.",
+            status="ok",
+            available_in_version="0.2.0",
+            timestamp=created_at,
+            episodes=(),
+            details={
+                "episodes_returned": 0,
+                "summary_selection_applied": True,
+                "summary_selection_kind": "memory_summary_first",
+                "retrieval_routes_present": ["summary_first"],
+                "primary_retrieval_routes_present": ["summary_first"],
+                "memory_context_groups": [
+                    {
+                        "scope": "summary",
+                        "scope_id": None,
+                        "group_id": "summary:memory_summary_first",
+                        "parent_scope": "workflow_instance",
+                        "parent_scope_id": str(workflow_id),
+                        "selection_kind": "memory_summary_first",
+                        "selection_route": "summary_first",
+                        "child_episode_ids": [str(episode_id)],
+                        "child_episode_count": 1,
+                        "child_episode_ordering": "returned_episode_order",
+                        "child_episode_groups_emitted": True,
+                        "child_episode_groups_emission_reason": "memory_items_enabled",
+                        "summaries": [
+                            {
+                                "memory_summary_id": str(memory_summary_id),
+                                "episode_id": str(episode_id),
+                                "workflow_instance_id": str(workflow_id),
+                                "summary_text": "Canonical summary selected first",
+                                "summary_kind": "episode_summary",
+                                "metadata": {"kind": "canonical"},
+                                "member_memory_count": 1,
+                                "member_memory_ids": [str(member_memory_id)],
+                                "member_memory_items": [
+                                    {
+                                        "memory_id": str(member_memory_id),
+                                        "workspace_id": str(workflow_id),
+                                        "episode_id": str(episode_id),
+                                        "type": "episode_note",
+                                        "provenance": "episode",
+                                        "content": "Expanded member memory item",
+                                        "metadata": {"kind": "member"},
+                                        "created_at": created_at.isoformat(),
+                                        "updated_at": created_at.isoformat(),
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "summaries": [
+                    {
+                        "memory_summary_id": str(memory_summary_id),
+                        "episode_id": str(episode_id),
+                        "workflow_instance_id": str(workflow_id),
+                        "summary_text": "Canonical summary selected first",
+                        "summary_kind": "episode_summary",
+                        "metadata": {"kind": "canonical"},
+                        "member_memory_count": 1,
+                        "member_memory_ids": [str(member_memory_id)],
+                        "member_memory_items": [
+                            {
+                                "memory_id": str(member_memory_id),
+                                "workspace_id": str(workflow_id),
+                                "episode_id": str(episode_id),
+                                "type": "episode_note",
+                                "provenance": "episode",
+                                "content": "Expanded member memory item",
+                                "metadata": {"kind": "member"},
+                                "created_at": created_at.isoformat(),
+                                "updated_at": created_at.isoformat(),
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+    )
+    handler = build_memory_get_context_tool_handler(service)
+
+    response = handler(
+        {
+            "workflow_instance_id": str(workflow_id),
+            "limit": 10,
+            "include_episodes": True,
+            "include_memory_items": True,
+            "include_summaries": True,
+        }
+    )
+
+    assert response.payload["ok"] is True
+    result = response.payload["result"]
+    assert result["feature"] == "memory_get_context"
+    assert result["implemented"] is True
+    assert result["status"] == "ok"
+    assert result["available_in_version"] == "0.2.0"
+    assert result["details"]["summary_selection_applied"] is True
+    assert result["details"]["summary_selection_kind"] == "memory_summary_first"
+    assert result["details"]["retrieval_routes_present"] == ["summary_first"]
+    assert result["details"]["primary_retrieval_routes_present"] == ["summary_first"]
+    assert result["details"]["summaries"] == [
+        {
+            "memory_summary_id": str(memory_summary_id),
+            "episode_id": str(episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "summary_text": "Canonical summary selected first",
+            "summary_kind": "episode_summary",
+            "metadata": {"kind": "canonical"},
+            "member_memory_count": 1,
+            "member_memory_ids": [str(member_memory_id)],
+            "member_memory_items": [
+                {
+                    "memory_id": str(member_memory_id),
+                    "workspace_id": str(workflow_id),
+                    "episode_id": str(episode_id),
+                    "type": "episode_note",
+                    "provenance": "episode",
+                    "content": "Expanded member memory item",
+                    "metadata": {"kind": "member"},
+                    "created_at": created_at.isoformat(),
+                    "updated_at": created_at.isoformat(),
+                }
+            ],
+        }
+    ]
+    assert result["details"]["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "group_id": "summary:memory_summary_first",
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "memory_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(episode_id)],
+            "child_episode_count": 1,
+            "child_episode_ordering": "returned_episode_order",
+            "child_episode_groups_emitted": True,
+            "child_episode_groups_emission_reason": "memory_items_enabled",
+            "summaries": [
+                {
+                    "memory_summary_id": str(memory_summary_id),
+                    "episode_id": str(episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "summary_text": "Canonical summary selected first",
+                    "summary_kind": "episode_summary",
+                    "metadata": {"kind": "canonical"},
+                    "member_memory_count": 1,
+                    "member_memory_ids": [str(member_memory_id)],
+                    "member_memory_items": [
+                        {
+                            "memory_id": str(member_memory_id),
+                            "workspace_id": str(workflow_id),
+                            "episode_id": str(episode_id),
+                            "type": "episode_note",
+                            "provenance": "episode",
+                            "content": "Expanded member memory item",
+                            "metadata": {"kind": "member"},
+                            "created_at": created_at.isoformat(),
+                            "updated_at": created_at.isoformat(),
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+
+    assert service.context_calls is not None
+    call = service.context_calls[0]
+    assert call.workflow_instance_id == str(workflow_id)
+    assert call.limit == 10
+    assert call.include_episodes is True
+    assert call.include_memory_items is True
+    assert call.include_summaries is True
