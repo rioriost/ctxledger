@@ -430,6 +430,57 @@ CREATE INDEX IF NOT EXISTS idx_memory_embeddings_embedding_hnsw
   ON memory_embeddings
   USING hnsw (embedding vector_l2_ops);
 
+CREATE TABLE IF NOT EXISTS memory_summaries (
+  memory_summary_id UUID PRIMARY KEY,
+  workspace_id UUID NOT NULL REFERENCES workspaces(workspace_id) ON DELETE CASCADE,
+  episode_id UUID REFERENCES episodes(episode_id) ON DELETE CASCADE,
+  summary_text TEXT NOT NULL,
+  summary_kind TEXT NOT NULL,
+  metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT memory_summaries_summary_text_not_empty
+    CHECK (btrim(summary_text) <> ''),
+  CONSTRAINT memory_summaries_summary_kind_not_empty
+    CHECK (btrim(summary_kind) <> '')
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_summaries_workspace_created_desc
+  ON memory_summaries (workspace_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_memory_summaries_episode_created_desc
+  ON memory_summaries (episode_id, created_at DESC);
+
+DROP TRIGGER IF EXISTS trg_memory_summaries_set_updated_at ON memory_summaries;
+CREATE TRIGGER trg_memory_summaries_set_updated_at
+BEFORE UPDATE ON memory_summaries
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS memory_summary_memberships (
+  memory_summary_membership_id UUID PRIMARY KEY,
+  memory_summary_id UUID NOT NULL REFERENCES memory_summaries(memory_summary_id) ON DELETE CASCADE,
+  memory_id UUID NOT NULL REFERENCES memory_items(memory_id) ON DELETE CASCADE,
+  membership_order INTEGER,
+  metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT memory_summary_memberships_unique_summary_member
+    UNIQUE (memory_summary_id, memory_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_summary_memberships_summary_order_created
+  ON memory_summary_memberships (
+    memory_summary_id,
+    membership_order,
+    created_at,
+    memory_id
+  );
+
+CREATE INDEX IF NOT EXISTS idx_memory_summary_memberships_memory_created_desc
+  ON memory_summary_memberships (memory_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS memory_relations (
   memory_relation_id UUID PRIMARY KEY,
   source_memory_id UUID NOT NULL REFERENCES memory_items(memory_id) ON DELETE CASCADE,

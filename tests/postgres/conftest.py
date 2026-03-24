@@ -6,6 +6,14 @@ from datetime import UTC, datetime
 from types import TracebackType
 from uuid import UUID, uuid4
 
+from ctxledger.memory.protocols import (
+    MemorySummaryMembershipRepository,
+    MemorySummaryRepository,
+)
+from ctxledger.memory.types import (
+    MemorySummaryMembershipRecord,
+    MemorySummaryRecord,
+)
 from ctxledger.workflow.service import (
     MemoryEmbeddingRecord,
     MemoryEmbeddingRepository,
@@ -43,9 +51,7 @@ class FakeCursor(AbstractContextManager["FakeCursor"]):
     ) -> None:
         self.closed = True
 
-    def execute(
-        self, query: str, params: tuple[object, ...] | None = None
-    ) -> FakeCursor:
+    def execute(self, query: str, params: tuple[object, ...] | None = None) -> FakeCursor:
         self.connection.executed.append((query, params))
         return self
 
@@ -208,11 +214,7 @@ class WorkspaceRepoStub(WorkspaceRepository):
         return None
 
     def get_by_repo_url(self, repo_url: str) -> list[Workspace]:
-        return [
-            workspace
-            for workspace in self.items.values()
-            if workspace.repo_url == repo_url
-        ]
+        return [workspace for workspace in self.items.values() if workspace.repo_url == repo_url]
 
     def create(self, workspace: Workspace) -> Workspace:
         self.items[workspace.workspace_id] = workspace
@@ -230,9 +232,7 @@ class WorkflowInstanceRepoStub(WorkflowInstanceRepository):
     def get_by_id(self, workflow_instance_id: UUID) -> WorkflowInstance | None:
         return self.items.get(workflow_instance_id)
 
-    def get_running_by_workspace_id(
-        self, workspace_id: UUID
-    ) -> WorkflowInstance | None:
+    def get_running_by_workspace_id(self, workspace_id: UUID) -> WorkflowInstance | None:
         candidates = [
             workflow
             for workflow in self.items.values()
@@ -243,9 +243,7 @@ class WorkflowInstanceRepoStub(WorkflowInstanceRepository):
 
     def get_latest_by_workspace_id(self, workspace_id: UUID) -> WorkflowInstance | None:
         candidates = [
-            workflow
-            for workflow in self.items.values()
-            if workflow.workspace_id == workspace_id
+            workflow for workflow in self.items.values() if workflow.workspace_id == workspace_id
         ]
         return max(candidates, key=lambda item: item.updated_at, default=None)
 
@@ -265,9 +263,7 @@ class WorkflowAttemptRepoStub(WorkflowAttemptRepository):
     def get_by_id(self, attempt_id: UUID) -> WorkflowAttempt | None:
         return self.items.get(attempt_id)
 
-    def get_running_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowAttempt | None:
+    def get_running_by_workflow_id(self, workflow_instance_id: UUID) -> WorkflowAttempt | None:
         candidates = [
             attempt
             for attempt in self.items.values()
@@ -276,9 +272,7 @@ class WorkflowAttemptRepoStub(WorkflowAttemptRepository):
         ]
         return max(candidates, key=lambda item: item.started_at, default=None)
 
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowAttempt | None:
+    def get_latest_by_workflow_id(self, workflow_instance_id: UUID) -> WorkflowAttempt | None:
         candidates = [
             attempt
             for attempt in self.items.values()
@@ -309,9 +303,7 @@ class WorkflowCheckpointRepoStub(WorkflowCheckpointRepository):
     def __init__(self) -> None:
         self.items: dict[UUID, WorkflowCheckpoint] = {}
 
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: UUID
-    ) -> WorkflowCheckpoint | None:
+    def get_latest_by_workflow_id(self, workflow_instance_id: UUID) -> WorkflowCheckpoint | None:
         candidates = [
             checkpoint
             for checkpoint in self.items.values()
@@ -321,9 +313,7 @@ class WorkflowCheckpointRepoStub(WorkflowCheckpointRepository):
 
     def get_latest_by_attempt_id(self, attempt_id: UUID) -> WorkflowCheckpoint | None:
         candidates = [
-            checkpoint
-            for checkpoint in self.items.values()
-            if checkpoint.attempt_id == attempt_id
+            checkpoint for checkpoint in self.items.values() if checkpoint.attempt_id == attempt_id
         ]
         return max(candidates, key=lambda item: item.created_at, default=None)
 
@@ -337,9 +327,7 @@ class VerifyReportRepoStub(VerifyReportRepository):
         self.items: dict[UUID, VerifyReport] = {}
 
     def get_latest_by_attempt_id(self, attempt_id: UUID) -> VerifyReport | None:
-        candidates = [
-            report for report in self.items.values() if report.attempt_id == attempt_id
-        ]
+        candidates = [report for report in self.items.values() if report.attempt_id == attempt_id]
         return max(candidates, key=lambda item: item.created_at, default=None)
 
     def create(self, verify_report: VerifyReport) -> VerifyReport:
@@ -384,6 +372,106 @@ class MemoryItemRepoStub(MemoryItemRepository):
         return tuple(candidates[:limit])
 
 
+class MemorySummaryRepoStub(MemorySummaryRepository):
+    def __init__(self) -> None:
+        self.items: dict[UUID, MemorySummaryRecord] = {}
+
+    def create(self, summary: MemorySummaryRecord) -> MemorySummaryRecord:
+        self.items[summary.memory_summary_id] = summary
+        return summary
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        candidates = [
+            summary for summary in self.items.values() if summary.workspace_id == workspace_id
+        ]
+        candidates.sort(key=lambda item: item.created_at, reverse=True)
+        return tuple(candidates[:limit])
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        candidates = [
+            summary for summary in self.items.values() if summary.episode_id == episode_id
+        ]
+        candidates.sort(key=lambda item: item.created_at, reverse=True)
+        return tuple(candidates[:limit])
+
+    def list_by_summary_ids(
+        self,
+        summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryRecord, ...]:
+        summary_id_set = set(summary_ids)
+        candidates = [
+            summary
+            for summary in self.items.values()
+            if summary.memory_summary_id in summary_id_set
+        ]
+        candidates.sort(key=lambda item: item.created_at, reverse=True)
+        return tuple(candidates)
+
+
+class MemorySummaryMembershipRepoStub(MemorySummaryMembershipRepository):
+    def __init__(self) -> None:
+        self.items: dict[UUID, MemorySummaryMembershipRecord] = {}
+
+    def create(
+        self,
+        membership: MemorySummaryMembershipRecord,
+    ) -> MemorySummaryMembershipRecord:
+        self.items[membership.memory_summary_membership_id] = membership
+        return membership
+
+    def list_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        candidates = [
+            membership
+            for membership in self.items.values()
+            if membership.memory_summary_id == memory_summary_id
+        ]
+        candidates.sort(
+            key=lambda item: (
+                item.membership_order is None,
+                item.membership_order if item.membership_order is not None else 0,
+                item.created_at,
+                item.memory_summary_membership_id,
+            )
+        )
+        return tuple(candidates[:limit])
+
+    def list_by_summary_ids(
+        self,
+        memory_summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        summary_id_set = set(memory_summary_ids)
+        candidates = [
+            membership
+            for membership in self.items.values()
+            if membership.memory_summary_id in summary_id_set
+        ]
+        candidates.sort(
+            key=lambda item: (
+                item.memory_summary_id,
+                item.membership_order is None,
+                item.membership_order if item.membership_order is not None else 0,
+                item.created_at,
+                item.memory_summary_membership_id,
+            )
+        )
+        return tuple(candidates)
+
+
 class MemoryEmbeddingRepoStub(MemoryEmbeddingRepository):
     def __init__(self) -> None:
         self.items: dict[UUID, MemoryEmbeddingRecord] = {}
@@ -399,9 +487,7 @@ class MemoryEmbeddingRepoStub(MemoryEmbeddingRepository):
         limit: int,
     ) -> tuple[MemoryEmbeddingRecord, ...]:
         matches = [
-            embedding
-            for embedding in self.items.values()
-            if embedding.memory_id == memory_id
+            embedding for embedding in self.items.values() if embedding.memory_id == memory_id
         ]
         matches.sort(key=lambda embedding: embedding.created_at, reverse=True)
         return tuple(matches[:limit])

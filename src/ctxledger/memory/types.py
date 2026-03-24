@@ -111,6 +111,32 @@ class MemoryRelationRecord:
 
 
 @dataclass(slots=True, frozen=True)
+class MemorySummaryRecord:
+    """Canonical summary record for the first hierarchy layer."""
+
+    memory_summary_id: UUID
+    workspace_id: UUID
+    episode_id: UUID | None = None
+    summary_text: str = ""
+    summary_kind: str = "episode_summary"
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True, frozen=True)
+class MemorySummaryMembershipRecord:
+    """Canonical membership record linking summaries to memory items."""
+
+    memory_summary_membership_id: UUID
+    memory_summary_id: UUID
+    memory_id: UUID
+    membership_order: int | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True, frozen=True)
 class RememberEpisodeResponse:
     """Response returned when an episode is persisted."""
 

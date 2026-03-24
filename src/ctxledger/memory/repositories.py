@@ -21,6 +21,8 @@ from .types import (
     MemoryItemRecord,
     MemoryRelationRecord,
     MemoryServiceError,
+    MemorySummaryMembershipRecord,
+    MemorySummaryRecord,
 )
 
 
@@ -419,6 +421,118 @@ class InMemoryMemoryEmbeddingRepository:
         return tuple(embedding for _, embedding in scored_embeddings[:limit])
 
 
+class InMemoryMemorySummaryRepository:
+    """Simple append-only in-memory summary repository."""
+
+    def __init__(self) -> None:
+        self._summaries: list[MemorySummaryRecord] = []
+
+    @property
+    def summaries(self) -> tuple[MemorySummaryRecord, ...]:
+        return tuple(self._summaries)
+
+    def create(self, summary: MemorySummaryRecord) -> MemorySummaryRecord:
+        self._summaries.append(summary)
+        return summary
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        matches = [summary for summary in self._summaries if summary.workspace_id == workspace_id]
+        matches.sort(key=lambda summary: summary.created_at, reverse=True)
+        return tuple(matches[:limit])
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        matches = [summary for summary in self._summaries if summary.episode_id == episode_id]
+        matches.sort(key=lambda summary: summary.created_at, reverse=True)
+        return tuple(matches[:limit])
+
+    def list_by_summary_ids(
+        self,
+        summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryRecord, ...]:
+        if not summary_ids:
+            return ()
+
+        summary_id_set = set(summary_ids)
+        matches = [
+            summary for summary in self._summaries if summary.memory_summary_id in summary_id_set
+        ]
+        matches.sort(key=lambda summary: summary.created_at, reverse=True)
+        return tuple(matches)
+
+
+class InMemoryMemorySummaryMembershipRepository:
+    """Simple append-only in-memory summary membership repository."""
+
+    def __init__(self) -> None:
+        self._memberships: list[MemorySummaryMembershipRecord] = []
+
+    @property
+    def memberships(self) -> tuple[MemorySummaryMembershipRecord, ...]:
+        return tuple(self._memberships)
+
+    def create(
+        self,
+        membership: MemorySummaryMembershipRecord,
+    ) -> MemorySummaryMembershipRecord:
+        self._memberships.append(membership)
+        return membership
+
+    def list_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        matches = [
+            membership
+            for membership in self._memberships
+            if membership.memory_summary_id == memory_summary_id
+        ]
+        matches.sort(
+            key=lambda membership: (
+                membership.membership_order is None,
+                membership.membership_order if membership.membership_order is not None else 0,
+                membership.created_at,
+                membership.memory_summary_membership_id,
+            )
+        )
+        return tuple(matches[:limit])
+
+    def list_by_summary_ids(
+        self,
+        memory_summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        if not memory_summary_ids:
+            return ()
+
+        summary_id_set = set(memory_summary_ids)
+        matches = [
+            membership
+            for membership in self._memberships
+            if membership.memory_summary_id in summary_id_set
+        ]
+        matches.sort(
+            key=lambda membership: (
+                membership.memory_summary_id,
+                membership.membership_order is None,
+                membership.membership_order if membership.membership_order is not None else 0,
+                membership.created_at,
+                membership.memory_summary_membership_id,
+            )
+        )
+        return tuple(matches)
+
+
 class UnitOfWorkMemoryItemRepository:
     """Memory item repository backed by PostgreSQL tables through the unit of work."""
 
@@ -489,6 +603,143 @@ class UnitOfWorkMemoryItemRepository:
                     details={},
                 )
             return uow.memory_items.list_by_episode_ids(episode_ids)
+
+
+class UnitOfWorkMemorySummaryRepository:
+    """Memory summary repository backed by PostgreSQL tables through the unit of work."""
+
+    def __init__(self, uow_factory: Callable[[], UnitOfWork]) -> None:
+        self._uow_factory = uow_factory
+
+    def create(self, summary: MemorySummaryRecord) -> MemorySummaryRecord:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_summaries") or uow.memory_summaries is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory summary repository is not configured.",
+                    details={},
+                )
+            created = uow.memory_summaries.create(summary)
+            uow.commit()
+            return created
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_summaries") or uow.memory_summaries is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory summary repository is not configured.",
+                    details={},
+                )
+            return uow.memory_summaries.list_by_workspace_id(
+                workspace_id,
+                limit=limit,
+            )
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_summaries") or uow.memory_summaries is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory summary repository is not configured.",
+                    details={},
+                )
+            return uow.memory_summaries.list_by_episode_id(
+                episode_id,
+                limit=limit,
+            )
+
+    def list_by_summary_ids(
+        self,
+        summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_summaries") or uow.memory_summaries is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory summary repository is not configured.",
+                    details={},
+                )
+            return uow.memory_summaries.list_by_summary_ids(summary_ids)
+
+
+class UnitOfWorkMemorySummaryMembershipRepository:
+    """Memory summary membership repository backed by PostgreSQL tables through the unit of work."""
+
+    def __init__(self, uow_factory: Callable[[], UnitOfWork]) -> None:
+        self._uow_factory = uow_factory
+
+    def create(
+        self,
+        membership: MemorySummaryMembershipRecord,
+    ) -> MemorySummaryMembershipRecord:
+        with self._uow_factory() as uow:
+            if (
+                not hasattr(uow, "memory_summary_memberships")
+                or uow.memory_summary_memberships is None
+            ):
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory summary membership repository is not configured.",
+                    details={},
+                )
+            created = uow.memory_summary_memberships.create(membership)
+            uow.commit()
+            return created
+
+    def list_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        with self._uow_factory() as uow:
+            if (
+                not hasattr(uow, "memory_summary_memberships")
+                or uow.memory_summary_memberships is None
+            ):
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory summary membership repository is not configured.",
+                    details={},
+                )
+            return uow.memory_summary_memberships.list_by_summary_id(
+                memory_summary_id,
+                limit=limit,
+            )
+
+    def list_by_summary_ids(
+        self,
+        memory_summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        with self._uow_factory() as uow:
+            if (
+                not hasattr(uow, "memory_summary_memberships")
+                or uow.memory_summary_memberships is None
+            ):
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory summary membership repository is not configured.",
+                    details={},
+                )
+            return uow.memory_summary_memberships.list_by_summary_ids(memory_summary_ids)
 
 
 class UnitOfWorkWorkspaceLookupRepository:

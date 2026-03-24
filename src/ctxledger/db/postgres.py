@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from ctxledger.memory.service import MemoryRelationRecord
+from ctxledger.memory.service import (
+    MemoryRelationRecord,
+    MemorySummaryMembershipRecord,
+    MemorySummaryRecord,
+)
 from ctxledger.workflow.service import (
     EpisodeRecord,
     MemoryEmbeddingRecord,
@@ -170,6 +174,34 @@ def _memory_embedding_row_to_record(row: dict[str, Any]) -> MemoryEmbeddingRecor
         embedding_model=str(row["embedding_model"]),
         embedding=embedding_values,
         content_hash=str(row["content_hash"]) if row.get("content_hash") is not None else None,
+        created_at=_to_datetime(row["created_at"]),
+    )
+
+
+def _memory_summary_row_to_record(row: dict[str, Any]) -> MemorySummaryRecord:
+    return MemorySummaryRecord(
+        memory_summary_id=_to_uuid(row["memory_summary_id"]),
+        workspace_id=_to_uuid(row["workspace_id"]),
+        episode_id=(_to_uuid(row["episode_id"]) if row.get("episode_id") is not None else None),
+        summary_text=str(row["summary_text"]),
+        summary_kind=str(row["summary_kind"]),
+        metadata=_json_loads(row["metadata_json"]),
+        created_at=_to_datetime(row["created_at"]),
+        updated_at=_to_datetime(row["updated_at"]),
+    )
+
+
+def _memory_summary_membership_row_to_record(
+    row: dict[str, Any],
+) -> MemorySummaryMembershipRecord:
+    return MemorySummaryMembershipRecord(
+        memory_summary_membership_id=_to_uuid(row["memory_summary_membership_id"]),
+        memory_summary_id=_to_uuid(row["memory_summary_id"]),
+        memory_id=_to_uuid(row["memory_id"]),
+        membership_order=(
+            int(row["membership_order"]) if row.get("membership_order") is not None else None
+        ),
+        metadata=_json_loads(row["metadata_json"]),
         created_at=_to_datetime(row["created_at"]),
     )
 
@@ -1514,6 +1546,246 @@ class PostgresMemoryItemRepository(MemoryItemRepository):
         return tuple(_memory_item_row_to_record(row) for row in rows)
 
 
+class PostgresMemorySummaryRepository:
+    def __init__(self, conn: Connection) -> None:
+        self._conn = conn
+
+    def create(self, summary: MemorySummaryRecord) -> MemorySummaryRecord:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO memory_summaries (
+                    memory_summary_id,
+                    workspace_id,
+                    episode_id,
+                    summary_text,
+                    summary_kind,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                RETURNING
+                    memory_summary_id,
+                    workspace_id,
+                    episode_id,
+                    summary_text,
+                    summary_kind,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                """,
+                (
+                    summary.memory_summary_id,
+                    summary.workspace_id,
+                    summary.episode_id,
+                    summary.summary_text,
+                    summary.summary_kind,
+                    _json_dumps(summary.metadata),
+                    summary.created_at,
+                    summary.updated_at,
+                ),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            raise PersistenceError("Failed to create memory summary")
+
+        return _memory_summary_row_to_record(row)
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_summary_id,
+                    workspace_id,
+                    episode_id,
+                    summary_text,
+                    summary_kind,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM memory_summaries
+                WHERE workspace_id = %s
+                ORDER BY created_at DESC, memory_summary_id DESC
+                LIMIT %s
+                """,
+                (workspace_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_summary_row_to_record(row) for row in rows)
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_summary_id,
+                    workspace_id,
+                    episode_id,
+                    summary_text,
+                    summary_kind,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM memory_summaries
+                WHERE episode_id = %s
+                ORDER BY created_at DESC, memory_summary_id DESC
+                LIMIT %s
+                """,
+                (episode_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_summary_row_to_record(row) for row in rows)
+
+    def list_by_summary_ids(
+        self,
+        summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryRecord, ...]:
+        if not summary_ids:
+            return ()
+
+        placeholders = ", ".join(["%s"] * len(summary_ids))
+        with self._conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    memory_summary_id,
+                    workspace_id,
+                    episode_id,
+                    summary_text,
+                    summary_kind,
+                    metadata_json,
+                    created_at,
+                    updated_at
+                FROM memory_summaries
+                WHERE memory_summary_id IN ({placeholders})
+                ORDER BY created_at DESC, memory_summary_id DESC
+                """,
+                summary_ids,
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_summary_row_to_record(row) for row in rows)
+
+
+class PostgresMemorySummaryMembershipRepository:
+    def __init__(self, conn: Connection) -> None:
+        self._conn = conn
+
+    def create(
+        self,
+        membership: MemorySummaryMembershipRecord,
+    ) -> MemorySummaryMembershipRecord:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO memory_summary_memberships (
+                    memory_summary_membership_id,
+                    memory_summary_id,
+                    memory_id,
+                    membership_order,
+                    metadata_json,
+                    created_at
+                )
+                VALUES (%s, %s, %s, %s, %s::jsonb, %s)
+                RETURNING
+                    memory_summary_membership_id,
+                    memory_summary_id,
+                    memory_id,
+                    membership_order,
+                    metadata_json,
+                    created_at
+                """,
+                (
+                    membership.memory_summary_membership_id,
+                    membership.memory_summary_id,
+                    membership.memory_id,
+                    membership.membership_order,
+                    _json_dumps(membership.metadata),
+                    membership.created_at,
+                ),
+            )
+            row = cur.fetchone()
+
+        if row is None:
+            raise PersistenceError("Failed to create memory summary membership")
+
+        return _memory_summary_membership_row_to_record(row)
+
+    def list_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_summary_membership_id,
+                    memory_summary_id,
+                    memory_id,
+                    membership_order,
+                    metadata_json,
+                    created_at
+                FROM memory_summary_memberships
+                WHERE memory_summary_id = %s
+                ORDER BY membership_order ASC NULLS LAST, created_at ASC, memory_summary_membership_id ASC
+                LIMIT %s
+                """,
+                (memory_summary_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_summary_membership_row_to_record(row) for row in rows)
+
+    def list_by_summary_ids(
+        self,
+        memory_summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        if not memory_summary_ids:
+            return ()
+
+        placeholders = ", ".join(["%s"] * len(memory_summary_ids))
+        with self._conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    memory_summary_membership_id,
+                    memory_summary_id,
+                    memory_id,
+                    membership_order,
+                    metadata_json,
+                    created_at
+                FROM memory_summary_memberships
+                WHERE memory_summary_id IN ({placeholders})
+                ORDER BY
+                    memory_summary_id ASC,
+                    membership_order ASC NULLS LAST,
+                    created_at ASC,
+                    memory_summary_membership_id ASC
+                """,
+                memory_summary_ids,
+            )
+            rows = cur.fetchall()
+
+        return tuple(_memory_summary_membership_row_to_record(row) for row in rows)
+
+
 class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
@@ -1998,6 +2270,8 @@ class PostgresUnitOfWork(UnitOfWork, AbstractContextManager["PostgresUnitOfWork"
         self.verify_reports = PostgresVerifyReportRepository(self._conn)
         self.memory_episodes = PostgresMemoryEpisodeRepository(self._conn)
         self.memory_items = PostgresMemoryItemRepository(self._conn)
+        self.memory_summaries = PostgresMemorySummaryRepository(self._conn)
+        self.memory_summary_memberships = PostgresMemorySummaryMembershipRepository(self._conn)
         self.memory_embeddings = PostgresMemoryEmbeddingRepository(self._conn)
         self.memory_relations = PostgresMemoryRelationRepository(self._conn)
         self._committed = False

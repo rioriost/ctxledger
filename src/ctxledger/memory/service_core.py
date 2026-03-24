@@ -35,6 +35,8 @@ from .protocols import (
     MemoryRelationMemoryItemLookupRepository,
     MemoryRelationRepository,
     MemoryRelationSupportsTargetLookupRepository,
+    MemorySummaryMembershipRepository,
+    MemorySummaryRepository,
     WorkflowLookupRepository,
     WorkspaceLookupRepository,
 )
@@ -43,6 +45,8 @@ from .repositories import (
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
     InMemoryMemoryRelationRepository,
+    InMemoryMemorySummaryMembershipRepository,
+    InMemoryMemorySummaryRepository,
     InMemoryWorkflowLookupRepository,
     UnitOfWorkEpisodeRepository,
     UnitOfWorkMemoryEmbeddingRepository,
@@ -60,6 +64,8 @@ from .types import (
     MemoryItemRecord,
     MemoryRelationRecord,
     MemoryServiceError,
+    MemorySummaryMembershipRecord,
+    MemorySummaryRecord,
     RememberEpisodeRequest,
     RememberEpisodeResponse,
     SearchMemoryRequest,
@@ -117,6 +123,8 @@ class MemoryService:
         *,
         episode_repository: EpisodeRepository | None = None,
         memory_item_repository: MemoryItemRepository | None = None,
+        memory_summary_repository: MemorySummaryRepository | None = None,
+        memory_summary_membership_repository: MemorySummaryMembershipRepository | None = None,
         memory_embedding_repository: MemoryEmbeddingRepository | None = None,
         memory_relation_repository: MemoryRelationRepository | None = None,
         embedding_generator: EmbeddingGenerator | None = None,
@@ -125,6 +133,12 @@ class MemoryService:
     ) -> None:
         self._episode_repository = episode_repository or InMemoryEpisodeRepository()
         self._memory_item_repository = memory_item_repository or InMemoryMemoryItemRepository()
+        self._memory_summary_repository = (
+            memory_summary_repository or InMemoryMemorySummaryRepository()
+        )
+        self._memory_summary_membership_repository = (
+            memory_summary_membership_repository or InMemoryMemorySummaryMembershipRepository()
+        )
         self._memory_embedding_repository = memory_embedding_repository
         self._memory_relation_repository = (
             memory_relation_repository or InMemoryMemoryRelationRepository()
@@ -846,8 +860,16 @@ class MemoryService:
             memory_item_details = tuple(memory_item_details_before_query_filter)
 
         matched_episode_count = len(episodes)
+        summary_details = (
+            self._build_summary_details_for_episodes(episodes=episodes)
+            if request.include_summaries
+            else ()
+        )
         summaries, summary_selection_applied, summary_selection_kind = (
-            self._build_summary_selection_details(memory_item_details)
+            self._build_summary_selection_details(
+                memory_item_details=memory_item_details,
+                summary_details=summary_details,
+            )
         )
         inherited_memory_items = inherited_workspace_items
 
@@ -1235,6 +1257,72 @@ class MemoryService:
 
         return tuple(explanations)
 
+    def _build_summary_details_for_episodes(
+        self,
+        *,
+        episodes: tuple[EpisodeRecord, ...],
+    ) -> tuple[dict[str, Any], ...]:
+        if not episodes:
+            return ()
+
+        summary_details: list[dict[str, Any]] = []
+        summary_lookup_by_episode_id: dict[UUID, tuple[MemorySummaryRecord, ...]] = {}
+
+        for episode in episodes:
+            summaries = self._memory_summary_repository.list_by_episode_id(
+                episode.episode_id,
+                limit=100,
+            )
+            summary_lookup_by_episode_id[episode.episode_id] = summaries
+
+        for episode in episodes:
+            summaries = summary_lookup_by_episode_id.get(episode.episode_id, ())
+            if not summaries:
+                continue
+
+            summary_ids = tuple(summary.memory_summary_id for summary in summaries)
+            memberships = self._memory_summary_membership_repository.list_by_summary_ids(
+                summary_ids
+            )
+            memberships_by_summary_id: dict[UUID, list[MemorySummaryMembershipRecord]] = {}
+            for membership in memberships:
+                memberships_by_summary_id.setdefault(membership.memory_summary_id, []).append(
+                    membership
+                )
+
+            for summary in summaries:
+                summary_memberships = tuple(
+                    memberships_by_summary_id.get(summary.memory_summary_id, [])
+                )
+                member_memory_ids = tuple(
+                    membership.memory_id for membership in summary_memberships
+                )
+                member_memory_items = self._memory_item_repository.list_by_memory_ids(
+                    member_memory_ids,
+                    limit=100,
+                )
+
+                summary_details.append(
+                    {
+                        "memory_summary_id": str(summary.memory_summary_id),
+                        "episode_id": str(episode.episode_id),
+                        "workflow_instance_id": str(episode.workflow_instance_id),
+                        "summary_text": summary.summary_text,
+                        "summary_kind": summary.summary_kind,
+                        "metadata": dict(summary.metadata),
+                        "member_memory_count": len(member_memory_items),
+                        "member_memory_ids": [
+                            str(memory_item.memory_id) for memory_item in member_memory_items
+                        ],
+                        "member_memory_items": [
+                            self._serialize_memory_item(memory_item)
+                            for memory_item in member_memory_items
+                        ],
+                    }
+                )
+
+        return tuple(summary_details)
+
     def _build_memory_item_details_for_episodes(
         self,
         *,
@@ -1471,14 +1559,20 @@ class MemoryService:
     def _build_summary_selection_details(
         self,
         memory_item_details: tuple[dict[str, Any], ...],
+        summary_details: tuple[dict[str, Any], ...] = (),
     ) -> tuple[tuple[dict[str, Any], ...], bool, str | None]:
-        summaries = tuple(
-            detail["summary"]
-            for detail in memory_item_details
-            if isinstance(detail.get("summary"), dict)
-        )
+        if summary_details:
+            summaries = summary_details
+            summary_selection_kind = "memory_summary_first"
+        else:
+            summaries = tuple(
+                detail["summary"]
+                for detail in memory_item_details
+                if isinstance(detail.get("summary"), dict)
+            )
+            summary_selection_kind = "episode_summary_first" if summaries else None
+
         summary_selection_applied = bool(summaries)
-        summary_selection_kind = "episode_summary_first" if summary_selection_applied else None
         return summaries, summary_selection_applied, summary_selection_kind
 
     def _build_retrieval_route_details(

@@ -13,6 +13,8 @@ from ..memory.service import (
     UnitOfWorkEpisodeRepository,
     UnitOfWorkMemoryEmbeddingRepository,
     UnitOfWorkMemoryItemRepository,
+    UnitOfWorkMemorySummaryMembershipRepository,
+    UnitOfWorkMemorySummaryRepository,
     UnitOfWorkWorkflowLookupRepository,
     UnitOfWorkWorkspaceLookupRepository,
 )
@@ -377,9 +379,7 @@ def build_workflow_start_tool_handler(
 
         return build_mcp_success_response(
             {
-                "workflow_instance_id": str(
-                    result.workflow_instance.workflow_instance_id
-                ),
+                "workflow_instance_id": str(result.workflow_instance.workflow_instance_id),
                 "attempt_id": str(result.attempt.attempt_id),
                 "workspace_id": str(result.workflow_instance.workspace_id),
                 "ticket_id": result.workflow_instance.ticket_id,
@@ -463,9 +463,7 @@ def build_workflow_checkpoint_tool_handler(
         return build_mcp_success_response(
             {
                 "checkpoint_id": str(result.checkpoint.checkpoint_id),
-                "workflow_instance_id": str(
-                    result.workflow_instance.workflow_instance_id
-                ),
+                "workflow_instance_id": str(result.workflow_instance.workflow_instance_id),
                 "attempt_id": str(result.attempt.attempt_id),
                 "step_name": result.checkpoint.step_name,
                 "created_at": result.checkpoint.created_at.isoformat(),
@@ -549,11 +547,8 @@ def build_workflow_complete_tool_handler(
                 if server.workflow_service is not None
                 else False,
                 "workflow_memory_bridge_type": (
-                    type(
-                        getattr(server.workflow_service, "_workflow_memory_bridge")
-                    ).__name__
-                    if getattr(server.workflow_service, "_workflow_memory_bridge", None)
-                    is not None
+                    type(getattr(server.workflow_service, "_workflow_memory_bridge")).__name__
+                    if getattr(server.workflow_service, "_workflow_memory_bridge", None) is not None
                     else None
                 )
                 if server.workflow_service is not None
@@ -598,9 +593,7 @@ def build_workflow_complete_tool_handler(
         logger.info(
             "workflow_complete MCP handler succeeded",
             extra={
-                "workflow_instance_id": str(
-                    result.workflow_instance.workflow_instance_id
-                ),
+                "workflow_instance_id": str(result.workflow_instance.workflow_instance_id),
                 "attempt_id": str(result.attempt.attempt_id),
                 "workflow_status": result.workflow_instance.status.value,
                 "attempt_status": result.attempt.status.value,
@@ -611,9 +604,7 @@ def build_workflow_complete_tool_handler(
 
         return build_mcp_success_response(
             {
-                "workflow_instance_id": str(
-                    result.workflow_instance.workflow_instance_id
-                ),
+                "workflow_instance_id": str(result.workflow_instance.workflow_instance_id),
                 "attempt_id": str(result.attempt.attempt_id),
                 "workflow_status": result.workflow_instance.status.value,
                 "attempt_status": result.attempt.status.value,
@@ -661,17 +652,13 @@ def build_memory_remember_episode_tool_handler(
                         else None
                     ),
                     metadata=(
-                        arguments["metadata"]
-                        if isinstance(arguments.get("metadata"), dict)
-                        else {}
+                        arguments["metadata"] if isinstance(arguments.get("metadata"), dict) else {}
                     ),
                 )
             )
             from ..runtime.serializers import serialize_remember_episode_response
 
-            return build_mcp_success_response(
-                serialize_remember_episode_response(response)
-            )
+            return build_mcp_success_response(serialize_remember_episode_response(response))
         except MemoryServiceError as exc:
             return build_mcp_error_response(
                 code=exc.code.value,
@@ -695,23 +682,15 @@ def build_memory_search_tool_handler(
                         if arguments.get("workspace_id") is not None
                         else None
                     ),
-                    limit=(
-                        arguments["limit"]
-                        if isinstance(arguments.get("limit"), int)
-                        else 10
-                    ),
+                    limit=(arguments["limit"] if isinstance(arguments.get("limit"), int) else 10),
                     filters=(
-                        arguments["filters"]
-                        if isinstance(arguments.get("filters"), dict)
-                        else {}
+                        arguments["filters"] if isinstance(arguments.get("filters"), dict) else {}
                     ),
                 )
             )
             from ..runtime.serializers import serialize_search_memory_response
 
-            return build_mcp_success_response(
-                serialize_search_memory_response(response)
-            )
+            return build_mcp_success_response(serialize_search_memory_response(response))
         except MemoryServiceError as exc:
             return build_mcp_error_response(
                 code=exc.code.value,
@@ -729,11 +708,7 @@ def build_memory_get_context_tool_handler(
         try:
             response = memory_service.get_context(
                 GetMemoryContextRequest(
-                    query=(
-                        str(arguments["query"])
-                        if arguments.get("query") is not None
-                        else None
-                    ),
+                    query=(str(arguments["query"]) if arguments.get("query") is not None else None),
                     workspace_id=(
                         str(arguments["workspace_id"])
                         if arguments.get("workspace_id") is not None
@@ -749,11 +724,7 @@ def build_memory_get_context_tool_handler(
                         if arguments.get("ticket_id") is not None
                         else None
                     ),
-                    limit=(
-                        arguments["limit"]
-                        if isinstance(arguments.get("limit"), int)
-                        else 10
-                    ),
+                    limit=(arguments["limit"] if isinstance(arguments.get("limit"), int) else 10),
                     include_episodes=(
                         arguments["include_episodes"]
                         if isinstance(arguments.get("include_episodes"), bool)
@@ -794,6 +765,10 @@ def build_workflow_backed_memory_service(
     return MemoryService(
         episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
         memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_summary_repository=UnitOfWorkMemorySummaryRepository(uow_factory),
+        memory_summary_membership_repository=UnitOfWorkMemorySummaryMembershipRepository(
+            uow_factory
+        ),
         memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
         workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
         workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),

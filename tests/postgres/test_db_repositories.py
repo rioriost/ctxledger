@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from ctxledger.memory.types import MemorySummaryMembershipRecord, MemorySummaryRecord
 from ctxledger.workflow.service import (
     MemoryEmbeddingRecord,
     MemoryItemRecord,
@@ -365,9 +366,7 @@ def test_postgres_workflow_attempt_repository_create_update_and_next_number() ->
             "updated_at": updated_attempt.updated_at,
         }
     )
-    assert (
-        repo.get_latest_by_workflow_id(attempt.workflow_instance_id) == updated_attempt
-    )
+    assert repo.get_latest_by_workflow_id(attempt.workflow_instance_id) == updated_attempt
 
     connection.fetchone_results.append({"max_attempt_number": 3})
     assert repo.get_next_attempt_number(attempt.workflow_instance_id) == 4
@@ -435,10 +434,7 @@ def test_postgres_checkpoint_verify_episode_repositories_create_and_lookup() -> 
             "created_at": checkpoint.created_at,
         }
     )
-    assert (
-        checkpoint_repo.get_latest_by_workflow_id(workflow.workflow_instance_id)
-        == checkpoint
-    )
+    assert checkpoint_repo.get_latest_by_workflow_id(workflow.workflow_instance_id) == checkpoint
 
     connection.fetchone_results.append(
         {
@@ -503,9 +499,7 @@ def test_postgres_checkpoint_verify_episode_repositories_create_and_lookup() -> 
             }
         ]
     )
-    assert episode_repo.list_by_workflow_id(workflow.workflow_instance_id, limit=5) == (
-        episode,
-    )
+    assert episode_repo.list_by_workflow_id(workflow.workflow_instance_id, limit=5) == (episode,)
 
 
 def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> None:
@@ -621,9 +615,7 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
             }
         ]
     )
-    assert item_repo.list_by_workspace_id(memory_item.workspace_id, limit=5) == (
-        memory_item,
-    )
+    assert item_repo.list_by_workspace_id(memory_item.workspace_id, limit=5) == (memory_item,)
 
     connection.fetchall_results.append(
         [
@@ -728,9 +720,7 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
             }
         ]
     )
-    assert item_repo.list_by_episode_id(memory_item.episode_id, limit=5) == (
-        memory_item,
-    )
+    assert item_repo.list_by_episode_id(memory_item.episode_id, limit=5) == (memory_item,)
 
     connection.fetchall_results.append(
         [
@@ -841,3 +831,169 @@ def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> No
     connection.fetchone_results.append(None)
     with pytest.raises(PersistenceError, match="Failed to create memory embedding"):
         embedding_repo.create(embedding)
+
+
+def test_postgres_memory_summary_and_membership_repositories_create_and_list() -> None:
+    from ctxledger.db.postgres import (
+        PostgresMemorySummaryMembershipRepository,
+        PostgresMemorySummaryRepository,
+    )
+
+    connection = FakeConnection()
+    summary_repo = PostgresMemorySummaryRepository(connection)
+    membership_repo = PostgresMemorySummaryMembershipRepository(connection)
+
+    workspace = sample_workspace()
+    workflow = sample_workflow(workspace.workspace_id)
+
+    episode = importlib.import_module("ctxledger.memory.types").EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow.workflow_instance_id,
+        summary="Episode summary",
+        attempt_id=None,
+        metadata={"kind": "checkpoint"},
+        status="recorded",
+        created_at=datetime(2024, 1, 8, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 8, tzinfo=UTC),
+    )
+    memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace.workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Remember to retain summary membership ordering",
+        metadata={"topic": "hierarchy"},
+        created_at=datetime(2024, 1, 9, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 9, tzinfo=UTC),
+    )
+    summary = MemorySummaryRecord(
+        memory_summary_id=uuid4(),
+        workspace_id=workspace.workspace_id,
+        episode_id=episode.episode_id,
+        summary_text="Summary over the selected episode notes",
+        summary_kind="episode_summary",
+        metadata={"scope": "episode"},
+        created_at=datetime(2024, 1, 10, tzinfo=UTC),
+        updated_at=datetime(2024, 1, 10, tzinfo=UTC),
+    )
+    membership = MemorySummaryMembershipRecord(
+        memory_summary_membership_id=uuid4(),
+        memory_summary_id=summary.memory_summary_id,
+        memory_id=memory_item.memory_id,
+        membership_order=1,
+        metadata={"source": "test"},
+        created_at=datetime(2024, 1, 11, tzinfo=UTC),
+    )
+
+    connection.fetchone_results.append(
+        {
+            "memory_summary_id": summary.memory_summary_id,
+            "workspace_id": summary.workspace_id,
+            "episode_id": summary.episode_id,
+            "summary_text": summary.summary_text,
+            "summary_kind": summary.summary_kind,
+            "metadata_json": summary.metadata,
+            "created_at": summary.created_at,
+            "updated_at": summary.updated_at,
+        }
+    )
+    created_summary = summary_repo.create(summary)
+    assert created_summary == summary
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_summary_id": summary.memory_summary_id,
+                "workspace_id": summary.workspace_id,
+                "episode_id": summary.episode_id,
+                "summary_text": summary.summary_text,
+                "summary_kind": summary.summary_kind,
+                "metadata_json": summary.metadata,
+                "created_at": summary.created_at,
+                "updated_at": summary.updated_at,
+            }
+        ]
+    )
+    assert summary_repo.list_by_workspace_id(summary.workspace_id, limit=5) == (summary,)
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_summary_id": summary.memory_summary_id,
+                "workspace_id": summary.workspace_id,
+                "episode_id": summary.episode_id,
+                "summary_text": summary.summary_text,
+                "summary_kind": summary.summary_kind,
+                "metadata_json": summary.metadata,
+                "created_at": summary.created_at,
+                "updated_at": summary.updated_at,
+            }
+        ]
+    )
+    assert summary_repo.list_by_episode_id(summary.episode_id, limit=5) == (summary,)
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_summary_id": summary.memory_summary_id,
+                "workspace_id": summary.workspace_id,
+                "episode_id": summary.episode_id,
+                "summary_text": summary.summary_text,
+                "summary_kind": summary.summary_kind,
+                "metadata_json": summary.metadata,
+                "created_at": summary.created_at,
+                "updated_at": summary.updated_at,
+            }
+        ]
+    )
+    assert summary_repo.list_by_summary_ids((summary.memory_summary_id,)) == (summary,)
+
+    connection.fetchone_results.append(
+        {
+            "memory_summary_membership_id": membership.memory_summary_membership_id,
+            "memory_summary_id": membership.memory_summary_id,
+            "memory_id": membership.memory_id,
+            "membership_order": membership.membership_order,
+            "metadata_json": membership.metadata,
+            "created_at": membership.created_at,
+        }
+    )
+    created_membership = membership_repo.create(membership)
+    assert created_membership == membership
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_summary_membership_id": membership.memory_summary_membership_id,
+                "memory_summary_id": membership.memory_summary_id,
+                "memory_id": membership.memory_id,
+                "membership_order": membership.membership_order,
+                "metadata_json": membership.metadata,
+                "created_at": membership.created_at,
+            }
+        ]
+    )
+    assert membership_repo.list_by_summary_id(summary.memory_summary_id, limit=5) == (membership,)
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_summary_membership_id": membership.memory_summary_membership_id,
+                "memory_summary_id": membership.memory_summary_id,
+                "memory_id": membership.memory_id,
+                "membership_order": membership.membership_order,
+                "metadata_json": membership.metadata,
+                "created_at": membership.created_at,
+            }
+        ]
+    )
+    assert membership_repo.list_by_summary_ids((summary.memory_summary_id,)) == (membership,)
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to create memory summary"):
+        summary_repo.create(summary)
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to create memory summary membership"):
+        membership_repo.create(membership)

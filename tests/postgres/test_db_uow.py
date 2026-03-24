@@ -6,6 +6,10 @@ from types import SimpleNamespace, TracebackType
 
 import pytest
 
+from ctxledger.memory.protocols import (
+    MemorySummaryMembershipRepository,
+    MemorySummaryRepository,
+)
 from ctxledger.workflow.service import (
     MemoryEmbeddingRepository,
     MemoryItemRepository,
@@ -23,6 +27,8 @@ from .conftest import (
     FakeConnectionPool,
     MemoryEmbeddingRepoStub,
     MemoryItemRepoStub,
+    MemorySummaryMembershipRepoStub,
+    MemorySummaryRepoStub,
     VerifyReportRepoStub,
     WorkflowAttemptRepoStub,
     WorkflowCheckpointRepoStub,
@@ -45,6 +51,8 @@ def test_unit_of_work_contract_shape_can_be_satisfied_by_postgres_impl() -> None
             self.workflow_checkpoints = WorkflowCheckpointRepoStub()
             self.verify_reports = VerifyReportRepoStub()
             self.memory_items = MemoryItemRepoStub()
+            self.memory_summaries = MemorySummaryRepoStub()
+            self.memory_summary_memberships = MemorySummaryMembershipRepoStub()
             self.memory_embeddings = MemoryEmbeddingRepoStub()
             self.committed = False
             self.rolled_back = False
@@ -63,6 +71,8 @@ def test_unit_of_work_contract_shape_can_be_satisfied_by_postgres_impl() -> None
     assert isinstance(uow.workflow_checkpoints, WorkflowCheckpointRepository)
     assert isinstance(uow.verify_reports, VerifyReportRepository)
     assert isinstance(uow.memory_items, MemoryItemRepository)
+    assert isinstance(uow.memory_summaries, MemorySummaryRepository)
+    assert isinstance(uow.memory_summary_memberships, MemorySummaryMembershipRepository)
     assert isinstance(uow.memory_embeddings, MemoryEmbeddingRepository)
 
     uow.commit()
@@ -145,16 +155,12 @@ def test_resume_workflow_debug_logging_includes_uow_timing_metadata(
             )
             self.workflow_instances = SimpleNamespace(
                 get_by_id=lambda workflow_instance_id: (
-                    workflow
-                    if workflow_instance_id == workflow.workflow_instance_id
-                    else None
+                    workflow if workflow_instance_id == workflow.workflow_instance_id else None
                 )
             )
             self.workflow_attempts = SimpleNamespace(
                 get_running_by_workflow_id=lambda workflow_instance_id: (
-                    attempt
-                    if workflow_instance_id == workflow.workflow_instance_id
-                    else None
+                    attempt if workflow_instance_id == workflow.workflow_instance_id else None
                 ),
                 get_latest_by_workflow_id=lambda workflow_instance_id: attempt,
             )
@@ -187,9 +193,7 @@ def test_resume_workflow_debug_logging_includes_uow_timing_metadata(
 
     service = workflow_module.WorkflowService(lambda: ResumeLoggingUow())
     service.resume_workflow(
-        workflow_module.ResumeWorkflowInput(
-            workflow_instance_id=workflow.workflow_instance_id
-        )
+        workflow_module.ResumeWorkflowInput(workflow_instance_id=workflow.workflow_instance_id)
     )
 
     uow_enter_extras = [
@@ -208,9 +212,7 @@ def test_resume_workflow_debug_logging_includes_uow_timing_metadata(
     assert enter_extra["duration_ms"] == 23
 
     complete_extras = [
-        extra
-        for message, extra in debug_messages
-        if message == "resume_workflow complete"
+        extra for message, extra in debug_messages if message == "resume_workflow complete"
     ]
     assert len(complete_extras) == 1
     complete_extra = complete_extras[0]
@@ -258,6 +260,8 @@ def test_postgres_unit_of_work_and_factory_cover_pool_lifecycle() -> None:
 
     with uow as current:
         assert current.workspaces is not None
+        assert current.memory_summaries is not None
+        assert current.memory_summary_memberships is not None
         assert current.workflow_instances is not None
         assert current.workflow_attempts is not None
         assert current.workflow_checkpoints is not None

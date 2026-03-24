@@ -16,6 +16,8 @@ from .types import (
     MemoryEmbeddingRecord,
     MemoryItemRecord,
     MemoryRelationRecord,
+    MemorySummaryMembershipRecord,
+    MemorySummaryRecord,
 )
 
 
@@ -113,6 +115,54 @@ class MemoryEmbeddingRepository(Protocol):
         limit: int,
         workspace_id: UUID | None = None,
     ) -> tuple[MemoryEmbeddingRecord, ...]: ...
+
+
+@runtime_checkable
+class MemorySummaryRepository(Protocol):
+    """Persistence contract for canonical summary records."""
+
+    def create(self, summary: MemorySummaryRecord) -> MemorySummaryRecord: ...
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]: ...
+
+    def list_by_episode_id(
+        self,
+        episode_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]: ...
+
+    def list_by_summary_ids(
+        self,
+        summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryRecord, ...]: ...
+
+
+@runtime_checkable
+class MemorySummaryMembershipRepository(Protocol):
+    """Persistence contract for summary-to-memory-item membership records."""
+
+    def create(
+        self,
+        membership: MemorySummaryMembershipRecord,
+    ) -> MemorySummaryMembershipRecord: ...
+
+    def list_by_summary_id(
+        self,
+        memory_summary_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryMembershipRecord, ...]: ...
+
+    def list_by_summary_ids(
+        self,
+        memory_summary_ids: tuple[UUID, ...],
+    ) -> tuple[MemorySummaryMembershipRecord, ...]: ...
 
 
 class MemoryRelationRepository(Protocol):

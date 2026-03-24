@@ -7,6 +7,7 @@ from ctxledger.db.postgres import (
     PostgresDatabaseHealthChecker,
     PostgresUnitOfWork,
 )
+from ctxledger.memory.types import MemorySummaryMembershipRecord, MemorySummaryRecord
 from ctxledger.workflow.service import (
     EpisodeRecord,
     MemoryEmbeddingRecord,
@@ -72,9 +73,7 @@ class InMemoryWorkspaceRepository(WorkspaceRepository):
 
     def create(self, workspace: Workspace) -> Workspace:
         self._workspaces_by_id[workspace.workspace_id] = workspace
-        self._workspaces_by_canonical_path[workspace.canonical_path] = (
-            workspace.workspace_id
-        )
+        self._workspaces_by_canonical_path[workspace.canonical_path] = workspace.workspace_id
         return workspace
 
     def update(self, workspace: Workspace) -> Workspace:
@@ -83,9 +82,7 @@ class InMemoryWorkspaceRepository(WorkspaceRepository):
             self._workspaces_by_canonical_path.pop(existing.canonical_path, None)
 
         self._workspaces_by_id[workspace.workspace_id] = workspace
-        self._workspaces_by_canonical_path[workspace.canonical_path] = (
-            workspace.workspace_id
-        )
+        self._workspaces_by_canonical_path[workspace.canonical_path] = workspace.workspace_id
         return workspace
 
 
@@ -96,22 +93,17 @@ class InMemoryWorkflowInstanceRepository(WorkflowInstanceRepository):
     def get_by_id(self, workflow_instance_id: object) -> WorkflowInstance | None:
         return self._workflows_by_id.get(workflow_instance_id)
 
-    def get_running_by_workspace_id(
-        self, workspace_id: object
-    ) -> WorkflowInstance | None:
+    def get_running_by_workspace_id(self, workspace_id: object) -> WorkflowInstance | None:
         return _latest_or_none(
             (
                 workflow
                 for workflow in self._workflows_by_id.values()
-                if workflow.workspace_id == workspace_id
-                and workflow.status.value == "running"
+                if workflow.workspace_id == workspace_id and workflow.status.value == "running"
             ),
             key=lambda workflow: workflow.created_at,
         )
 
-    def get_latest_by_workspace_id(
-        self, workspace_id: object
-    ) -> WorkflowInstance | None:
+    def get_latest_by_workspace_id(self, workspace_id: object) -> WorkflowInstance | None:
         return _latest_or_none(
             (
                 workflow
@@ -189,9 +181,7 @@ class InMemoryWorkflowAttemptRepository(WorkflowAttemptRepository):
     def get_by_id(self, attempt_id: object) -> WorkflowAttempt | None:
         return self._attempts_by_id.get(attempt_id)
 
-    def get_running_by_workflow_id(
-        self, workflow_instance_id: object
-    ) -> WorkflowAttempt | None:
+    def get_running_by_workflow_id(self, workflow_instance_id: object) -> WorkflowAttempt | None:
         return _latest_or_none(
             (
                 attempt
@@ -204,9 +194,7 @@ class InMemoryWorkflowAttemptRepository(WorkflowAttemptRepository):
             key=lambda attempt: attempt.started_at,
         )
 
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: object
-    ) -> WorkflowAttempt | None:
+    def get_latest_by_workflow_id(self, workflow_instance_id: object) -> WorkflowAttempt | None:
         return _latest_or_none(
             (
                 attempt
@@ -237,9 +225,7 @@ class InMemoryWorkflowCheckpointRepository(WorkflowCheckpointRepository):
     def __init__(self, checkpoints_by_id: dict[object, WorkflowCheckpoint]) -> None:
         self._checkpoints_by_id = checkpoints_by_id
 
-    def get_latest_by_workflow_id(
-        self, workflow_instance_id: object
-    ) -> WorkflowCheckpoint | None:
+    def get_latest_by_workflow_id(self, workflow_instance_id: object) -> WorkflowCheckpoint | None:
         return _latest_or_none(
             (
                 checkpoint
@@ -355,6 +341,128 @@ class InMemoryMemoryItemRepository(MemoryItemRepository):
         return counts
 
 
+class InMemoryMemorySummaryRepository:
+    def __init__(self, memory_summaries_by_id: dict[object, MemorySummaryRecord]) -> None:
+        self._memory_summaries_by_id = memory_summaries_by_id
+
+    def create(self, summary: MemorySummaryRecord) -> MemorySummaryRecord:
+        self._memory_summaries_by_id[summary.memory_summary_id] = summary
+        return summary
+
+    def list_by_workspace_id(
+        self,
+        workspace_id: object,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        return _sorted_limited(
+            (
+                summary
+                for summary in self._memory_summaries_by_id.values()
+                if summary.workspace_id == workspace_id
+            ),
+            key=lambda summary: summary.created_at,
+            limit=limit,
+        )
+
+    def list_by_episode_id(
+        self,
+        episode_id: object,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryRecord, ...]:
+        return _sorted_limited(
+            (
+                summary
+                for summary in self._memory_summaries_by_id.values()
+                if summary.episode_id == episode_id
+            ),
+            key=lambda summary: summary.created_at,
+            limit=limit,
+        )
+
+    def list_by_summary_ids(
+        self,
+        summary_ids: tuple[object, ...],
+    ) -> tuple[MemorySummaryRecord, ...]:
+        if not summary_ids:
+            return ()
+
+        summary_id_set = set(summary_ids)
+        return tuple(
+            sorted(
+                (
+                    summary
+                    for summary in self._memory_summaries_by_id.values()
+                    if summary.memory_summary_id in summary_id_set
+                ),
+                key=lambda summary: summary.created_at,
+                reverse=True,
+            )
+        )
+
+
+class InMemoryMemorySummaryMembershipRepository:
+    def __init__(
+        self,
+        memory_summary_memberships_by_id: dict[object, MemorySummaryMembershipRecord],
+    ) -> None:
+        self._memory_summary_memberships_by_id = memory_summary_memberships_by_id
+
+    def create(
+        self,
+        membership: MemorySummaryMembershipRecord,
+    ) -> MemorySummaryMembershipRecord:
+        self._memory_summary_memberships_by_id[membership.memory_summary_membership_id] = membership
+        return membership
+
+    def list_by_summary_id(
+        self,
+        memory_summary_id: object,
+        *,
+        limit: int,
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        memberships = sorted(
+            (
+                membership
+                for membership in self._memory_summary_memberships_by_id.values()
+                if membership.memory_summary_id == memory_summary_id
+            ),
+            key=lambda membership: (
+                membership.membership_order is None,
+                membership.membership_order if membership.membership_order is not None else 0,
+                membership.created_at,
+                membership.memory_summary_membership_id,
+            ),
+        )
+        return tuple(memberships[:limit])
+
+    def list_by_summary_ids(
+        self,
+        memory_summary_ids: tuple[object, ...],
+    ) -> tuple[MemorySummaryMembershipRecord, ...]:
+        if not memory_summary_ids:
+            return ()
+
+        summary_id_set = set(memory_summary_ids)
+        return tuple(
+            sorted(
+                (
+                    membership
+                    for membership in self._memory_summary_memberships_by_id.values()
+                    if membership.memory_summary_id in summary_id_set
+                ),
+                key=lambda membership: (
+                    membership.memory_summary_id,
+                    membership.membership_order is None,
+                    membership.membership_order if membership.membership_order is not None else 0,
+                    membership.created_at,
+                    membership.memory_summary_membership_id,
+                ),
+            )
+        )
+
+
 class InMemoryMemoryEmbeddingRepository(MemoryEmbeddingRepository):
     def __init__(
         self,
@@ -395,27 +503,27 @@ class InMemoryUnitOfWork(UnitOfWork):
         verify_reports_by_id: dict[object, VerifyReport] | None = None,
         episodes_by_id: dict[object, EpisodeRecord] | None = None,
         memory_items_by_id: dict[object, MemoryItemRecord] | None = None,
+        memory_summaries_by_id: dict[object, MemorySummaryRecord] | None = None,
+        memory_summary_memberships_by_id: dict[object, MemorySummaryMembershipRecord] | None = None,
         memory_embeddings_by_id: dict[object, MemoryEmbeddingRecord] | None = None,
     ) -> None:
-        self._workspaces_by_id = (
-            workspaces_by_id if workspaces_by_id is not None else {}
-        )
+        self._workspaces_by_id = workspaces_by_id if workspaces_by_id is not None else {}
         self._workspaces_by_canonical_path = (
-            workspaces_by_canonical_path
-            if workspaces_by_canonical_path is not None
-            else {}
+            workspaces_by_canonical_path if workspaces_by_canonical_path is not None else {}
         )
         self._workflows_by_id = workflows_by_id if workflows_by_id is not None else {}
         self._attempts_by_id = attempts_by_id if attempts_by_id is not None else {}
-        self._checkpoints_by_id = (
-            checkpoints_by_id if checkpoints_by_id is not None else {}
-        )
+        self._checkpoints_by_id = checkpoints_by_id if checkpoints_by_id is not None else {}
         self._verify_reports_by_id = (
             verify_reports_by_id if verify_reports_by_id is not None else {}
         )
         self._episodes_by_id = episodes_by_id if episodes_by_id is not None else {}
-        self._memory_items_by_id = (
-            memory_items_by_id if memory_items_by_id is not None else {}
+        self._memory_items_by_id = memory_items_by_id if memory_items_by_id is not None else {}
+        self._memory_summaries_by_id = (
+            memory_summaries_by_id if memory_summaries_by_id is not None else {}
+        )
+        self._memory_summary_memberships_by_id = (
+            memory_summary_memberships_by_id if memory_summary_memberships_by_id is not None else {}
         )
         self._memory_embeddings_by_id = (
             memory_embeddings_by_id if memory_embeddings_by_id is not None else {}
@@ -428,19 +536,17 @@ class InMemoryUnitOfWork(UnitOfWork):
             self._workspaces_by_id,
             self._workspaces_by_canonical_path,
         )
-        self.workflow_instances = InMemoryWorkflowInstanceRepository(
-            self._workflows_by_id
-        )
+        self.workflow_instances = InMemoryWorkflowInstanceRepository(self._workflows_by_id)
         self.workflow_attempts = InMemoryWorkflowAttemptRepository(self._attempts_by_id)
-        self.workflow_checkpoints = InMemoryWorkflowCheckpointRepository(
-            self._checkpoints_by_id
-        )
+        self.workflow_checkpoints = InMemoryWorkflowCheckpointRepository(self._checkpoints_by_id)
         self.verify_reports = InMemoryVerifyReportRepository(self._verify_reports_by_id)
         self.memory_episodes = InMemoryMemoryEpisodeRepository(self._episodes_by_id)
         self.memory_items = InMemoryMemoryItemRepository(self._memory_items_by_id)
-        self.memory_embeddings = InMemoryMemoryEmbeddingRepository(
-            self._memory_embeddings_by_id
+        self.memory_summaries = InMemoryMemorySummaryRepository(self._memory_summaries_by_id)
+        self.memory_summary_memberships = InMemoryMemorySummaryMembershipRepository(
+            self._memory_summary_memberships_by_id
         )
+        self.memory_embeddings = InMemoryMemoryEmbeddingRepository(self._memory_embeddings_by_id)
 
     def __enter__(self) -> InMemoryUnitOfWork:
         return self
@@ -466,6 +572,8 @@ class InMemoryStore:
     verify_reports_by_id: dict[object, VerifyReport]
     episodes_by_id: dict[object, EpisodeRecord]
     memory_items_by_id: dict[object, MemoryItemRecord]
+    memory_summaries_by_id: dict[object, MemorySummaryRecord]
+    memory_summary_memberships_by_id: dict[object, MemorySummaryMembershipRecord]
     memory_embeddings_by_id: dict[object, MemoryEmbeddingRecord]
 
     @classmethod
@@ -479,6 +587,8 @@ class InMemoryStore:
             verify_reports_by_id={},
             episodes_by_id={},
             memory_items_by_id={},
+            memory_summaries_by_id={},
+            memory_summary_memberships_by_id={},
             memory_embeddings_by_id={},
         )
 
@@ -492,6 +602,8 @@ class InMemoryStore:
             verify_reports_by_id=dict(self.verify_reports_by_id),
             episodes_by_id=dict(self.episodes_by_id),
             memory_items_by_id=dict(self.memory_items_by_id),
+            memory_summaries_by_id=dict(self.memory_summaries_by_id),
+            memory_summary_memberships_by_id=dict(self.memory_summary_memberships_by_id),
             memory_embeddings_by_id=dict(self.memory_embeddings_by_id),
         )
 
@@ -511,6 +623,8 @@ def build_in_memory_uow_factory(
             verify_reports_by_id=backing_store.verify_reports_by_id,
             episodes_by_id=backing_store.episodes_by_id,
             memory_items_by_id=backing_store.memory_items_by_id,
+            memory_summaries_by_id=backing_store.memory_summaries_by_id,
+            memory_summary_memberships_by_id=backing_store.memory_summary_memberships_by_id,
             memory_embeddings_by_id=backing_store.memory_embeddings_by_id,
         )
 
@@ -521,6 +635,8 @@ __all__ = [
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryEpisodeRepository,
     InMemoryMemoryItemRepository,
+    InMemoryMemorySummaryMembershipRepository,
+    InMemoryMemorySummaryRepository,
     InMemoryStore,
     "InMemoryUnitOfWork",
     "InMemoryVerifyReportRepository",

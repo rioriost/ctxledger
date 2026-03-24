@@ -8,9 +8,13 @@ from ctxledger.memory.service import (
     GetMemoryContextRequest,
     InMemoryEpisodeRepository,
     InMemoryMemoryItemRepository,
+    InMemoryMemorySummaryMembershipRepository,
+    InMemoryMemorySummaryRepository,
     InMemoryWorkflowLookupRepository,
     MemoryItemRecord,
     MemoryService,
+    MemorySummaryMembershipRecord,
+    MemorySummaryRecord,
 )
 
 
@@ -742,6 +746,352 @@ def test_memory_get_context_summary_only_primary_path_differs_from_episode_less_
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
     }
+
+
+def test_memory_get_context_falls_back_to_episode_summary_when_canonical_summary_is_absent() -> (
+    None
+):
+    workflow_id = uuid4()
+    created_at = datetime(2024, 10, 6, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Fallback episode summary remains the summary source",
+        metadata={"kind": "fallback"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    episode_repository.create(episode)
+
+    memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID("00000000-0000-0000-0000-000000000101"),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Direct item should support the fallback episode summary path",
+        metadata={"kind": "episode-note"},
+        created_at=created_at.replace(hour=3),
+        updated_at=created_at.replace(hour=3),
+    )
+    memory_item_repository.create(memory_item)
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=True,
+        )
+    )
+
+    assert response.details["summary_selection_applied"] is True
+    assert response.details["summary_selection_kind"] == "episode_summary_first"
+    assert response.details["summaries"] == [
+        {
+            "episode_id": str(episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "memory_item_count": 1,
+            "memory_item_types": [
+                "episode_note",
+            ],
+            "memory_item_provenance": [
+                "episode",
+            ],
+        }
+    ]
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "group_id": "summary:episode_summary_first",
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [
+                str(episode.episode_id),
+            ],
+            "child_episode_count": 1,
+            "child_episode_ordering": "returned_episode_order",
+            "child_episode_groups_emitted": False,
+            "child_episode_groups_emission_reason": "memory_items_disabled",
+            "summaries": [
+                {
+                    "episode_id": str(episode.episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": [
+                        "episode_note",
+                    ],
+                    "memory_item_provenance": [
+                        "episode",
+                    ],
+                }
+            ],
+        }
+    ]
+
+
+def test_memory_get_context_include_summaries_false_suppresses_canonical_summary_first_path() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = UUID("00000000-0000-0000-0000-000000000102")
+    created_at = datetime(2024, 10, 8, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_summary_repository = InMemoryMemorySummaryRepository()
+    memory_summary_membership_repository = InMemoryMemorySummaryMembershipRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Canonical summary exists but include_summaries is false",
+        metadata={"kind": "suppressed-summary"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    episode_repository.create(episode)
+
+    memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Direct memory item should remain on the episode path",
+        metadata={"kind": "episode-note"},
+        created_at=created_at.replace(hour=3),
+        updated_at=created_at.replace(hour=3),
+    )
+    memory_item_repository.create(memory_item)
+
+    summary = MemorySummaryRecord(
+        memory_summary_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=episode.episode_id,
+        summary_text="This canonical summary should be ignored when summaries are disabled",
+        summary_kind="episode_summary",
+        metadata={"kind": "canonical-summary"},
+        created_at=created_at.replace(hour=4),
+        updated_at=created_at.replace(hour=4),
+    )
+    memory_summary_repository.create(summary)
+    memory_summary_membership_repository.create(
+        MemorySummaryMembershipRecord(
+            memory_summary_membership_id=uuid4(),
+            memory_summary_id=summary.memory_summary_id,
+            memory_id=memory_item.memory_id,
+            membership_order=1,
+            metadata={"kind": "membership"},
+            created_at=created_at.replace(hour=5),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_summary_repository=memory_summary_repository,
+        memory_summary_membership_repository=memory_summary_membership_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": str(workspace_id),
+                    "ticket_id": "TICKET-CONTEXT-SUMMARIES-DISABLED",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert response.details["summaries"] == []
+    assert response.details["summary_selection_applied"] is False
+    assert response.details["summary_selection_kind"] is None
+    assert response.details["retrieval_routes_present"] == [
+        "episode_direct",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == [
+        "episode_direct",
+    ]
+    assert response.details["retrieval_route_group_counts"] == {
+        "summary_first": 0,
+        "episode_direct": 1,
+        "workspace_inherited_auxiliary": 0,
+        "relation_supports_auxiliary": 0,
+    }
+    assert len(response.details["memory_context_groups"]) == 1
+    episode_group = response.details["memory_context_groups"][0]
+    assert episode_group["scope"] == "episode"
+    assert episode_group["scope_id"] == str(episode.episode_id)
+    assert episode_group["parent_scope"] == "workflow_instance"
+    assert episode_group["parent_scope_id"] == str(workflow_id)
+    assert episode_group["selection_kind"] == "direct_episode"
+    assert episode_group["selection_route"] == "episode_direct"
+    assert episode_group["memory_items"] == [
+        {
+            "memory_id": str(memory_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": str(episode.episode_id),
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "Direct memory item should remain on the episode path",
+            "metadata": {"kind": "episode-note"},
+            "created_at": memory_item.created_at.isoformat(),
+            "updated_at": memory_item.updated_at.isoformat(),
+        }
+    ]
+
+
+def test_memory_get_context_include_episodes_false_keeps_canonical_summary_path_narrowed() -> None:
+    workflow_id = uuid4()
+    workspace_id = "00000000-0000-0000-0000-000000000103"
+    created_at = datetime(2024, 10, 9, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_summary_repository = InMemoryMemorySummaryRepository()
+    memory_summary_membership_repository = InMemoryMemorySummaryMembershipRepository()
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Canonical summary exists but episode-less shaping stays narrow",
+        metadata={"kind": "episode-less"},
+        created_at=created_at.replace(hour=2),
+        updated_at=created_at.replace(hour=2),
+    )
+    episode_repository.create(episode)
+
+    episode_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Episode child item should stay hidden in episode-less shaping",
+        metadata={"kind": "episode-note"},
+        created_at=created_at.replace(hour=3),
+        updated_at=created_at.replace(hour=3),
+    )
+    inherited_workspace_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=None,
+        type="workspace_note",
+        provenance="workspace",
+        content="Workspace item remains the only visible grouped output",
+        metadata={"kind": "workspace-item"},
+        created_at=created_at.replace(hour=1),
+        updated_at=created_at.replace(hour=1),
+    )
+    memory_item_repository.create(episode_memory_item)
+    memory_item_repository.create(inherited_workspace_item)
+
+    summary = MemorySummaryRecord(
+        memory_summary_id=uuid4(),
+        workspace_id=UUID(workspace_id),
+        episode_id=episode.episode_id,
+        summary_text="Canonical summary should not surface in episode-less mode",
+        summary_kind="episode_summary",
+        metadata={"kind": "canonical-summary"},
+        created_at=created_at.replace(hour=4),
+        updated_at=created_at.replace(hour=4),
+    )
+    memory_summary_repository.create(summary)
+    memory_summary_membership_repository.create(
+        MemorySummaryMembershipRecord(
+            memory_summary_membership_id=uuid4(),
+            memory_summary_id=summary.memory_summary_id,
+            memory_id=episode_memory_item.memory_id,
+            membership_order=1,
+            metadata={"kind": "membership"},
+            created_at=created_at.replace(hour=5),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_summary_repository=memory_summary_repository,
+        memory_summary_membership_repository=memory_summary_membership_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TICKET-CONTEXT-EPISODE-LESS-CANONICAL-SUMMARY",
+                }
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=False,
+            include_memory_items=True,
+            include_summaries=True,
+        )
+    )
+
+    assert response.episodes == ()
+    assert response.details["summaries"] == []
+    assert response.details["summary_selection_applied"] is False
+    assert response.details["summary_selection_kind"] is None
+    assert "summary_first_has_episode_groups" not in response.details
+    assert "summary_first_is_summary_only" not in response.details
+    assert response.details["memory_context_groups"] == [
+        {
+            "scope": "workspace",
+            "scope_id": workspace_id,
+            "parent_scope": None,
+            "parent_scope_id": None,
+            "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
+            "memory_items": [
+                {
+                    "memory_id": str(inherited_workspace_item.memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": None,
+                    "type": "workspace_note",
+                    "provenance": "workspace",
+                    "content": "Workspace item remains the only visible grouped output",
+                    "metadata": {"kind": "workspace-item"},
+                    "created_at": inherited_workspace_item.created_at.isoformat(),
+                    "updated_at": inherited_workspace_item.updated_at.isoformat(),
+                }
+            ],
+        }
+    ]
+    assert response.details["retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == []
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
 
 
 def test_memory_get_context_summary_only_primary_path_differs_from_all_filtered_auxiliary_only_path() -> (

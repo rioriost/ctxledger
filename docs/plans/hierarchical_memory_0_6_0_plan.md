@@ -313,9 +313,19 @@ It is:
 AGE usage should be:
 
 - additive
-- optional at the implementation-layer boundary if feasible
 - shielded by repository/service abstractions
 - observable enough that failures can be diagnosed
+- governed by the canonical Phase A boundary decision:
+  - `docs/memory/first_age_slice_boundary_decision.md`
+
+At the current `0.6.0` stage, that canonical decision should be read as:
+
+- PostgreSQL relational storage remains canonical
+- AGE graph state is supplementary, derived, and rebuildable
+- setup/bootstrap/readiness responsibilities must remain explicit
+- graph-backed paths must degrade cleanly to the relational baseline
+- deployment-default AGE enablement does not, by itself, make ordinary memory
+  behavior graph-required
 
 ## 8.4 AGE operational questions to answer
 
@@ -422,6 +432,11 @@ It does need to demonstrate at least one meaningful retrieval improvement such a
 ### Deliverables
 - schema plan
 - AGE setup approach
+  - canonical decision record:
+    - `docs/memory/first_age_slice_boundary_decision.md`
+  - supporting notes:
+    - `docs/memory/age_setup_first_slice.md`
+    - `docs/memory/age_graph_population_bootstrap.md`
   - first-slice reading should remain boundary-first, bootstrap-first, and behavior-preserving
   - the minimum setup approach should clarify:
     - graph ownership boundary
@@ -430,6 +445,8 @@ It does need to demonstrate at least one meaningful retrieval improvement such a
     - failure/degradation expectations for local/dev/test and later graph-oriented work
   - this deliverable should not yet imply graph-backed retrieval behavior
 - storage boundary decision note
+  - for the current stage, treat `docs/memory/first_age_slice_boundary_decision.md`
+    as the canonical Phase A decision note for Plan `17.3`
 
 ---
 
@@ -441,13 +458,24 @@ It does need to demonstrate at least one meaningful retrieval improvement such a
 
 ### Tasks
 - define summary entities and relationships
-- define summary-to-item and summary-to-summary links
+- define summary-to-item links first
+- defer summary-to-summary links unless a later slice proves they are needed
 - introduce minimal write/read repository interfaces
 - keep naming explicit and domain-local
 
 ### Deliverables
+- canonical decision record:
+  - `docs/memory/minimal_hierarchy_model_decision.md`
 - first canonical hierarchy model
+  - for the current stage, treat the canonical minimal model as:
+    - canonical relational memory summaries
+    - canonical relational summary-to-memory-item membership mappings
+    - a shallow first hierarchy shape of:
+      - `summary -> memory_item`
+    - no required summary-to-summary recursion in the first slice
 - first graph-backed relation representation where useful
+  - graph mirroring should remain derived/supporting and only expand when a
+    concrete traversal benefit is established
 
 ---
 
@@ -485,7 +513,16 @@ It does need to demonstrate at least one meaningful retrieval improvement such a
 - ensure behavior remains debuggable and explainable
 
 ### Deliverables
+- canonical decision record:
+  - `docs/memory/first_memory_get_context_hierarchical_improvement_decision.md`
 - first integrated hierarchical `memory_get_context` behavior
+  - for the current stage, treat the first constrained retrieval improvement as:
+    - summary-first selection
+    - direct summary-member memory-item expansion
+    - grouped hierarchy output remaining the primary surface
+    - no required graph-backed traversal in the first improvement
+    - no required summary-to-summary recursion in the first improvement
+    - no broad response redesign in the first improvement
 
 ---
 
@@ -649,11 +686,25 @@ Avoid:
 1. update roadmap and continuation notes to mark `0.6.0` active
 2. define the minimal hierarchical memory entity/relationship model
 3. decide the first AGE-backed graph slice
+   - current status:
+     - materially decided at the Phase A boundary level
+     - canonicalized in:
+       - `docs/memory/first_age_slice_boundary_decision.md`
    - for the current stage, prefer a boundary-first, bootstrap-first, behavior-preserving first slice
    - clarify graph ownership, bootstrap responsibility, and degradation expectations before changing retrieval behavior
+   - treat further work here as follow-through on the canonical Phase A decision,
+     not as a fresh open-ended design question
 4. identify the first `memory_get_context` hierarchical retrieval improvement
+   - current status:
+     - materially decided at the first constrained behavior level
+     - canonicalized in:
+       - `docs/memory/first_memory_get_context_hierarchical_improvement_decision.md`
    - for the current stage, prefer a clearly framed small behavior choice over another narrow metadata addition
-   - the current episode-less `include_episodes = false` choice is to keep that path narrow rather than surfacing a limited summary-first grouped view
-   - after the AGE boundary decision, the next retrieval improvement should remain constrained and behavior-preserving
+   - the chosen first improvement should be:
+     - summary-first selection
+     - followed by direct summary-member memory-item expansion
+   - the current episode-less `include_episodes = false` choice remains to keep that path narrow rather than surfacing a limited summary-first grouped view
+   - treat further work here as follow-through on the canonical first-improvement decision, not as a fresh open-ended design question
+   - the first retrieval improvement should remain constrained and behavior-preserving outside the active target area
 5. add focused tests before expanding scope
 6. defer Mnemis comparison and alignment decisions to `0.7.0`

@@ -18,6 +18,8 @@ from ctxledger.memory.service import (
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
     InMemoryMemoryRelationRepository,
+    InMemoryMemorySummaryMembershipRepository,
+    InMemoryMemorySummaryRepository,
     InMemoryWorkflowLookupRepository,
     MemoryEmbeddingRecord,
     MemoryErrorCode,
@@ -26,6 +28,8 @@ from ctxledger.memory.service import (
     MemoryRelationRecord,
     MemoryService,
     MemoryServiceError,
+    MemorySummaryMembershipRecord,
+    MemorySummaryRecord,
     RememberEpisodeRequest,
     RememberEpisodeResponse,
     SearchMemoryRequest,
@@ -279,6 +283,171 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         "semantic_only_discount_applied": True,
     }
     assert search_response.results[1].semantic_score == 1.0
+
+
+def test_memory_service_summary_first_selection_prefers_canonical_memory_summaries() -> None:
+    workflow_id = uuid4()
+    workspace_id = UUID("00000000-0000-0000-0000-000000000091")
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_summary_repository = InMemoryMemorySummaryRepository()
+    memory_summary_membership_repository = InMemoryMemorySummaryMembershipRepository()
+    workflow_lookup = InMemoryWorkflowLookupRepository(
+        workflows_by_id={
+            workflow_id: {
+                "workspace_id": str(workspace_id),
+                "ticket_id": "TICKET-SUMMARY-1",
+            }
+        }
+    )
+
+    episode = EpisodeRecord(
+        episode_id=uuid4(),
+        workflow_instance_id=workflow_id,
+        summary="Episode-level summary text should no longer be the primary summary route",
+        attempt_id=None,
+        metadata={"kind": "episode"},
+        status="recorded",
+        created_at=datetime(2024, 2, 1, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 1, tzinfo=UTC),
+    )
+    episode_repository.create(episode)
+
+    first_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="First child memory item for canonical summary expansion",
+        metadata={"rank": 1},
+        created_at=datetime(2024, 2, 2, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 2, tzinfo=UTC),
+    )
+    second_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=episode.episode_id,
+        type="episode_note",
+        provenance="episode",
+        content="Second child memory item for canonical summary expansion",
+        metadata={"rank": 2},
+        created_at=datetime(2024, 2, 3, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 3, tzinfo=UTC),
+    )
+    memory_item_repository.create(first_memory_item)
+    memory_item_repository.create(second_memory_item)
+
+    summary = MemorySummaryRecord(
+        memory_summary_id=uuid4(),
+        workspace_id=workspace_id,
+        episode_id=episode.episode_id,
+        summary_text="Canonical memory summary chosen before direct episode summary shaping",
+        summary_kind="episode_summary",
+        metadata={"source": "test"},
+        created_at=datetime(2024, 2, 4, tzinfo=UTC),
+        updated_at=datetime(2024, 2, 4, tzinfo=UTC),
+    )
+    memory_summary_repository.create(summary)
+
+    memory_summary_membership_repository.create(
+        MemorySummaryMembershipRecord(
+            memory_summary_membership_id=uuid4(),
+            memory_summary_id=summary.memory_summary_id,
+            memory_id=first_memory_item.memory_id,
+            membership_order=1,
+            metadata={"source": "test"},
+            created_at=datetime(2024, 2, 5, tzinfo=UTC),
+        )
+    )
+    memory_summary_membership_repository.create(
+        MemorySummaryMembershipRecord(
+            memory_summary_membership_id=uuid4(),
+            memory_summary_id=summary.memory_summary_id,
+            memory_id=second_memory_item.memory_id,
+            membership_order=2,
+            metadata={"source": "test"},
+            created_at=datetime(2024, 2, 6, tzinfo=UTC),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_summary_repository=memory_summary_repository,
+        memory_summary_membership_repository=memory_summary_membership_repository,
+        workflow_lookup=workflow_lookup,
+        workspace_lookup=workflow_lookup,
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=True,
+        )
+    )
+
+    assert response.feature == MemoryFeature.GET_CONTEXT
+    assert response.status == "ok"
+    assert response.episodes == (episode,)
+    assert response.details["summary_selection_applied"] is True
+    assert response.details["summary_selection_kind"] == "memory_summary_first"
+    assert response.details["retrieval_routes_present"][0] == "summary_first"
+    assert response.details["primary_retrieval_routes_present"][0] == "summary_first"
+    assert response.details["retrieval_route_group_counts"]["summary_first"] == 1
+    assert response.details["retrieval_route_item_counts"]["summary_first"] == 1
+    assert response.details["summary_first_child_episode_count"] == 1
+    assert response.details["summary_first_child_episode_ids"] == [str(episode.episode_id)]
+
+    assert response.details["summaries"] == [
+        {
+            "memory_summary_id": str(summary.memory_summary_id),
+            "episode_id": str(episode.episode_id),
+            "workflow_instance_id": str(workflow_id),
+            "summary_text": "Canonical memory summary chosen before direct episode summary shaping",
+            "summary_kind": "episode_summary",
+            "metadata": {"source": "test"},
+            "member_memory_count": 2,
+            "member_memory_ids": [
+                str(second_memory_item.memory_id),
+                str(first_memory_item.memory_id),
+            ],
+            "member_memory_items": [
+                {
+                    "memory_id": str(second_memory_item.memory_id),
+                    "workspace_id": str(workspace_id),
+                    "episode_id": str(episode.episode_id),
+                    "type": "episode_note",
+                    "provenance": "episode",
+                    "content": "Second child memory item for canonical summary expansion",
+                    "metadata": {"rank": 2},
+                    "created_at": second_memory_item.created_at.isoformat(),
+                    "updated_at": second_memory_item.updated_at.isoformat(),
+                },
+                {
+                    "memory_id": str(first_memory_item.memory_id),
+                    "workspace_id": str(workspace_id),
+                    "episode_id": str(episode.episode_id),
+                    "type": "episode_note",
+                    "provenance": "episode",
+                    "content": "First child memory item for canonical summary expansion",
+                    "metadata": {"rank": 1},
+                    "created_at": first_memory_item.created_at.isoformat(),
+                    "updated_at": first_memory_item.updated_at.isoformat(),
+                },
+            ],
+        }
+    ]
+
+    summary_group = response.details["memory_context_groups"][0]
+    assert summary_group["scope"] == "summary"
+    assert summary_group["selection_kind"] == "memory_summary_first"
+    assert summary_group["selection_route"] == "summary_first"
+    assert summary_group["child_episode_ids"] == [str(episode.episode_id)]
+    assert summary_group["child_episode_count"] == 1
 
 
 def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:
