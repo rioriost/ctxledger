@@ -158,6 +158,32 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the AGE graph name instead of using CTXLEDGER_DB_AGE_GRAPH_NAME",
     )
 
+    build_episode_summary_parser = subparsers.add_parser(
+        "build-episode-summary",
+        help="Build one canonical episode summary from the episode's memory items",
+    )
+    build_episode_summary_parser.add_argument(
+        "--episode-id",
+        required=True,
+        help="Episode ID to summarize",
+    )
+    build_episode_summary_parser.add_argument(
+        "--summary-kind",
+        default="episode_summary",
+        help="Summary kind to build",
+    )
+    build_episode_summary_parser.add_argument(
+        "--no-replace-existing",
+        action="store_true",
+        help="Keep existing summaries of the same kind instead of replacing them",
+    )
+    build_episode_summary_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format",
+    )
+
     resume_workflow_parser = subparsers.add_parser(
         "resume-workflow",
         help="Display resumable workflow state for a workflow instance",
@@ -894,6 +920,122 @@ def _memory_stats(args: argparse.Namespace) -> int:
         return 1
 
 
+def _build_episode_summary(args: argparse.Namespace) -> int:
+    try:
+        from .memory import service as memory_service_module
+
+        try:
+            _, _, connection_pool = _build_postgres_workflow_service()
+        except RuntimeError as exc:
+            if str(exc) == "missing_database_url":
+                return _print_missing_database_url()
+            raise
+
+        try:
+            from .config import get_settings
+            from .db.postgres import PostgresConfig, build_postgres_uow_factory
+
+            settings = get_settings()
+            postgres_config = PostgresConfig.from_settings(settings)
+            uow_factory = build_postgres_uow_factory(postgres_config, connection_pool)
+
+            memory_service = memory_service_module.MemoryService(
+                episode_repository=memory_service_module.UnitOfWorkEpisodeRepository(uow_factory),
+                memory_item_repository=memory_service_module.UnitOfWorkMemoryItemRepository(
+                    uow_factory
+                ),
+                memory_summary_repository=memory_service_module.UnitOfWorkMemorySummaryRepository(
+                    uow_factory
+                ),
+                memory_summary_membership_repository=(
+                    memory_service_module.UnitOfWorkMemorySummaryMembershipRepository(uow_factory)
+                ),
+                workflow_lookup=memory_service_module.UnitOfWorkWorkflowLookupRepository(
+                    uow_factory
+                ),
+                workspace_lookup=memory_service_module.UnitOfWorkWorkspaceLookupRepository(
+                    uow_factory
+                ),
+            )
+
+            result = memory_service.build_episode_summary(
+                memory_service_module.BuildEpisodeSummaryRequest(
+                    episode_id=args.episode_id,
+                    summary_kind=args.summary_kind,
+                    replace_existing=not args.no_replace_existing,
+                )
+            )
+        finally:
+            connection_pool.close()
+
+        payload = {
+            "feature": result.feature.value,
+            "implemented": result.implemented,
+            "message": result.message,
+            "status": result.status,
+            "available_in_version": result.available_in_version,
+            "timestamp": result.timestamp.isoformat(),
+            "summary_built": result.summary_built,
+            "skipped_reason": result.skipped_reason,
+            "replaced_existing_summary": result.replaced_existing_summary,
+            "summary": (
+                {
+                    "memory_summary_id": str(result.summary.memory_summary_id),
+                    "workspace_id": str(result.summary.workspace_id),
+                    "episode_id": (
+                        str(result.summary.episode_id)
+                        if result.summary.episode_id is not None
+                        else None
+                    ),
+                    "summary_text": result.summary.summary_text,
+                    "summary_kind": result.summary.summary_kind,
+                    "metadata": result.summary.metadata,
+                    "created_at": result.summary.created_at.isoformat(),
+                    "updated_at": result.summary.updated_at.isoformat(),
+                }
+                if result.summary is not None
+                else None
+            ),
+            "memberships": [
+                {
+                    "memory_summary_membership_id": str(membership.memory_summary_membership_id),
+                    "memory_summary_id": str(membership.memory_summary_id),
+                    "memory_id": str(membership.memory_id),
+                    "membership_order": membership.membership_order,
+                    "metadata": membership.metadata,
+                    "created_at": membership.created_at.isoformat(),
+                }
+                for membership in result.memberships
+            ],
+            "details": result.details,
+        }
+
+        if args.format == "json":
+            print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
+            return 0
+
+        print("Build episode summary")
+        print(f"Episode: {args.episode_id}")
+        print(f"Summary kind: {args.summary_kind}")
+        print(f"Status: {result.status}")
+        print(f"Summary built: {'yes' if result.summary_built else 'no'}")
+        print(f"Replaced existing summary: {'yes' if result.replaced_existing_summary else 'no'}")
+        print(f"Skipped reason: {result.skipped_reason or 'none'}")
+
+        if result.summary is not None:
+            print(f"Summary ID: {result.summary.memory_summary_id}")
+            print(f"Workspace ID: {result.summary.workspace_id}")
+            print(f"Summary text: {result.summary.summary_text}")
+        else:
+            print("Summary ID: none")
+
+        print(f"Membership count: {len(result.memberships)}")
+        return 0
+    except Exception as exc:
+        print(f"Failed to build episode summary: {exc}", file=sys.stderr)
+        return 1
+
+
 def _resume_workflow(args: argparse.Namespace) -> int:
     try:
         from .runtime.serializers import serialize_workflow_resume
@@ -1003,6 +1145,8 @@ def main(argv: list[str] | None = None) -> int:
         return _bootstrap_age_graph(args)
     if command == "age-graph-readiness":
         return _age_graph_readiness(args)
+    if command == "build-episode-summary":
+        return _build_episode_summary(args)
     if command == "resume-workflow":
         return _resume_workflow(args)
     if command == "version":

@@ -1452,6 +1452,75 @@ def test_main_unknown_command_returns_two_when_parser_error_does_not_exit(
     assert parser_calls == ["Unknown command: mystery"]
 
 
+def test_main_dispatches_build_episode_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[tuple[str, str, bool, str]] = []
+
+    def fake_build_episode_summary(args: argparse.Namespace) -> int:
+        received.append(
+            (
+                args.episode_id,
+                args.summary_kind,
+                args.no_replace_existing,
+                args.format,
+            )
+        )
+        return 12
+
+    monkeypatch.setattr(cli_module, "_build_episode_summary", fake_build_episode_summary)
+
+    result = cli_module.main(
+        [
+            "build-episode-summary",
+            "--episode-id",
+            "11111111-1111-1111-1111-111111111111",
+            "--summary-kind",
+            "episode_summary",
+            "--no-replace-existing",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result == 12
+    assert received == [
+        (
+            "11111111-1111-1111-1111-111111111111",
+            "episode_summary",
+            True,
+            "json",
+        )
+    ]
+
+
+def test_build_episode_summary_reports_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    episode_id = uuid4()
+
+    monkeypatch.setattr(
+        cli_module,
+        "_build_postgres_workflow_service",
+        lambda: (_ for _ in ()).throw(RuntimeError("builder exploded")),
+    )
+
+    exit_code = cli_module._build_episode_summary(
+        argparse.Namespace(
+            episode_id=str(episode_id),
+            summary_kind="episode_summary",
+            no_replace_existing=True,
+            format="text",
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to build episode summary: builder exploded" in captured.err
+
+
 def test_main_dispatches_to_resume_workflow(monkeypatch: pytest.MonkeyPatch) -> None:
     args = argparse.Namespace(command="resume-workflow")
     parser = SimpleNamespace(parse_args=lambda argv: args)

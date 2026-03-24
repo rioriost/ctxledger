@@ -28,6 +28,7 @@ def test_build_parser_includes_expected_subcommands() -> None:
         "apply-schema",
         "bootstrap-age-graph",
         "age-graph-readiness",
+        "build-episode-summary",
         "resume-workflow",
         "version",
     }
@@ -98,12 +99,10 @@ def test_main_dispatches_bootstrap_age_graph(
 def test_main_dispatches_age_graph_readiness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    received_database_urls: list[str | None] = []
-    received_graph_names: list[str | None] = []
+    received: list[tuple[str | None, str | None]] = []
 
     def fake_age_graph_readiness(args: argparse.Namespace) -> int:
-        received_database_urls.append(args.database_url)
-        received_graph_names.append(args.graph_name)
+        received.append((args.database_url, args.graph_name))
         return 11
 
     monkeypatch.setattr(cli_module, "_age_graph_readiness", fake_age_graph_readiness)
@@ -119,8 +118,49 @@ def test_main_dispatches_age_graph_readiness(
     )
 
     assert result == 11
-    assert received_database_urls == ["postgresql://override/db"]
-    assert received_graph_names == ["ctxledger_test_graph"]
+    assert received == [("postgresql://override/db", "ctxledger_test_graph")]
+
+
+def test_main_dispatches_build_episode_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[tuple[str, str, bool, str]] = []
+
+    def fake_build_episode_summary(args: argparse.Namespace) -> int:
+        received.append(
+            (
+                args.episode_id,
+                args.summary_kind,
+                args.no_replace_existing,
+                args.format,
+            )
+        )
+        return 12
+
+    monkeypatch.setattr(cli_module, "_build_episode_summary", fake_build_episode_summary)
+
+    result = cli_module.main(
+        [
+            "build-episode-summary",
+            "--episode-id",
+            "11111111-1111-1111-1111-111111111111",
+            "--summary-kind",
+            "episode_summary",
+            "--no-replace-existing",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result == 12
+    assert received == [
+        (
+            "11111111-1111-1111-1111-111111111111",
+            "episode_summary",
+            True,
+            "json",
+        )
+    ]
 
 
 def test_main_dispatches_version(

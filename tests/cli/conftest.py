@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -54,6 +57,26 @@ def make_settings(
             enabled=False,
         ),
     )
+
+
+@dataclass
+class FakeBuildEpisodeSummaryResult:
+    feature: object
+    implemented: bool
+    message: str
+    status: str = "ok"
+    available_in_version: str | None = None
+    timestamp: datetime = datetime(2024, 1, 1, tzinfo=UTC)
+    summary: object | None = None
+    memberships: tuple[object, ...] = ()
+    summary_built: bool = False
+    skipped_reason: str | None = None
+    replaced_existing_summary: bool = False
+    details: dict[str, object] | None = None
+
+    def __post_init__(self) -> None:
+        if self.details is None:
+            self.details = {}
 
 
 class FakeWorkflowService:
