@@ -13,10 +13,12 @@ The key result is that the repository now has:
 - clearer readiness/degraded-operation documentation for derived summary graph
   state
 - preserved canonical relational summary ownership with derived AGE graph support
+- a verified local `small` stack bring-up after fixing an AGE bootstrap failure
 - a cleaner handoff point for any final `0.6.0` closeout or the next milestone
   decision
 
-This continuation changed tests, docs, and supporting validation expectations.
+This continuation changed tests, docs, supporting validation expectations, and
+the AGE bootstrap implementation used during local startup.
 
 ---
 
@@ -125,6 +127,53 @@ The current docs now more explicitly say:
 This should reduce operator confusion about whether graph-summary state is
 required for correctness.
 
+### 6. Fixed AGE bootstrap for the verified local `small` stack
+
+A local startup validation run exposed a real bootstrap failure in the AGE graph
+creation path.
+
+The observed failure was effectively:
+
+- `Failed to bootstrap AGE graph: name 'memory_id' is not defined`
+
+The root cause was an f-string/Cypher property-map escaping mistake in the AGE
+bootstrap command path.
+
+That was fixed by correcting the Cypher property-map literals used during:
+
+- `memory_item` node creation
+- `supports` edge creation
+
+This restored the expected startup-time bootstrap behavior for the default local
+deployment path.
+
+### 7. Verified the authenticated local `small` stack after the bootstrap fix
+
+After the AGE bootstrap fix, the local authenticated `small` stack was rerun and
+confirmed healthy.
+
+The practical verification result was:
+
+- `ctxledger-postgres` healthy
+- `ctxledger-auth-small` healthy
+- `ctxledger-server-private` healthy
+- `ctxledger-grafana` healthy
+- `ctxledger-traefik` started
+
+Additional in-environment verification confirmed:
+
+- `ctxledger age-graph-readiness`
+  - `age_graph_status = graph_ready`
+- `/debug/runtime`
+  - summary graph mirroring details present
+  - workflow summary automation details present
+  - `implementation_status = available`
+
+This means the repository now has both:
+
+- green automated validation
+- successful local stack validation for the current AGE-backed startup path
+
 ---
 
 ## Validation performed
@@ -150,6 +199,24 @@ Result:
 
 - **78 passed**
 
+### Local stack validation
+
+The authenticated local `small` deployment path was also rerun after the AGE
+bootstrap fix.
+
+Representative operational validation included:
+
+- `envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate`
+- in-container `ctxledger age-graph-readiness`
+- in-container `/debug/runtime` inspection
+
+Result:
+
+- the local `small` stack came up healthy after the bootstrap fix
+- `age_graph_status` reported `graph_ready`
+- runtime `age_prototype` details reported the expected summary graph mirroring
+  and workflow summary automation fields
+
 ---
 
 ## Current implemented state at handoff
@@ -173,6 +240,7 @@ At handoff, the current `0.6.0` hierarchical memory state should be read as:
 - narrow graph-backed auxiliary summary-member traversal
 - explicit rebuild path through:
   - `ctxledger refresh-age-summary-graph`
+- startup bootstrap path repaired for the current AGE graph creation flow
 - degraded graph behavior treated as optional support loss, not canonical loss
 
 ### Workflow automation layer
@@ -237,3 +305,9 @@ If another session continues from here, the next best step is one of:
 The important point is that the current branch should now be treated as a
 validated, documented, bounded implementation slice rather than as an
 experimental partial scaffold.
+
+The local startup path should also now be treated as:
+
+- repaired for the current AGE bootstrap bug
+- verified on the authenticated `small` stack
+- suitable as the current operator-facing local validation path for this slice
