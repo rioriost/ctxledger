@@ -47,7 +47,7 @@ This is the best document for answering:
 ---
 
 ### Step 2 — Current Security Posture
-2. `docs/SECURITY.md`
+2. `docs/operations/security/SECURITY.md`
 
 Read this next to understand the current security model:
 
@@ -66,7 +66,7 @@ This is the best document for answering:
 ---
 
 ### Step 3 — Current Deployment Model
-3. `docs/deployment.md`
+3. `docs/operations/deployment/deployment.md`
 
 Read this for the deployment-oriented interpretation of the system:
 
@@ -86,7 +86,7 @@ This is the best document for answering:
 ---
 
 ### Step 4 — Auth Strategy Across Phases
-4. `docs/plans/auth_proxy_scaling_plan.md`
+4. `docs/project/releases/plans/auth_proxy_scaling_plan.md`
 
 Read this to understand the overall auth strategy:
 
@@ -105,7 +105,7 @@ This is the best document for answering:
 ---
 
 ### Step 5 — Current Small-Pattern Operator Procedure
-5. `docs/small_auth_operator_runbook.md`
+5. `docs/operations/runbooks/small_auth_operator_runbook.md`
 
 Read this when you need the actual small-pattern operating procedure.
 
@@ -129,7 +129,7 @@ This is the best document for answering:
 ---
 
 ### Step 6 — Large-Pattern Evaluation Prep
-6. `docs/plans/auth_large_gateway_evaluation_memo.md`
+6. `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
 
 Read this when you need the current design-prep comparison frame for future large-pattern gateway work.
 
@@ -148,7 +148,7 @@ It captures:
 
 For a worked example of how that rubric can be applied before any final decision record exists, also read:
 
-- `docs/plans/auth_large_gateway_shortlist_example.md`
+- `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
 
 This is the best document for answering:
 
@@ -160,7 +160,7 @@ This is the best document for answering:
 ---
 
 ### Step 7 — Future Large-Pattern Decision Record
-7. `docs/plans/auth_large_gateway_decision_record_template.md`
+7. `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
 
 Read this only when the project is actually ready to choose a large-pattern gateway.
 
@@ -193,26 +193,26 @@ Use this section if you do not want to read everything in order.
 - `README.md`
 
 ### “What is the current security boundary?”
-- `docs/SECURITY.md`
+- `docs/operations/security/SECURITY.md`
 
 ### “How should this be deployed today?”
-- `docs/deployment.md`
+- `docs/operations/deployment/deployment.md`
 
 ### “What is the official small-vs-large auth plan?”
-- `docs/plans/auth_proxy_scaling_plan.md`
+- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
 
 ### “How do I actually operate the small auth pattern?”
-- `docs/small_auth_operator_runbook.md`
+- `docs/operations/runbooks/small_auth_operator_runbook.md`
 
 ### “How are future large-pattern gateways being compared?”
-- `docs/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
 
 ### “How should we score or shortlist gateway candidates before final selection?”
-- `docs/plans/auth_large_gateway_evaluation_memo.md`
-- `docs/plans/auth_large_gateway_shortlist_example.md`
+- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
 
 ### “Where should the final large-pattern gateway choice be recorded?”
-- `docs/plans/auth_large_gateway_decision_record_template.md`
+- `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
 
 ---
 
@@ -222,40 +222,40 @@ Use this section if you do not want to read everything in order.
 Read:
 
 1. `README.md`
-2. `docs/SECURITY.md`
-3. `docs/deployment.md`
-4. `docs/plans/auth_proxy_scaling_plan.md`
+2. `docs/operations/security/SECURITY.md`
+3. `docs/operations/deployment/deployment.md`
+4. `docs/project/releases/plans/auth_proxy_scaling_plan.md`
 
 ### Operator working on the current small pattern
 Read:
 
 1. `README.md`
-2. `docs/small_auth_operator_runbook.md`
-3. `docs/SECURITY.md`
-4. `docs/deployment.md`
+2. `docs/operations/runbooks/small_auth_operator_runbook.md`
+3. `docs/operations/security/SECURITY.md`
+4. `docs/operations/deployment/deployment.md`
 
 ### Reviewer validating auth/deployment consistency
 Read:
 
-1. `docs/SECURITY.md`
-2. `docs/deployment.md`
-3. `docs/plans/auth_proxy_scaling_plan.md`
-4. `docs/small_auth_operator_runbook.md`
+1. `docs/operations/security/SECURITY.md`
+2. `docs/operations/deployment/deployment.md`
+3. `docs/project/releases/plans/auth_proxy_scaling_plan.md`
+4. `docs/operations/runbooks/small_auth_operator_runbook.md`
 
 ### Planner preparing future large-pattern work
 Read:
 
-1. `docs/plans/auth_proxy_scaling_plan.md`
-2. `docs/plans/auth_large_gateway_evaluation_memo.md`
-3. `docs/plans/auth_large_gateway_decision_record_template.md`
-4. `docs/roadmap.md`
+1. `docs/project/releases/plans/auth_proxy_scaling_plan.md`
+2. `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
+3. `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
+4. `docs/project/product/roadmap.md`
 
 For shortlist preparation specifically, use:
 
 - the scoring rubric and worksheet in:
-  - `docs/plans/auth_large_gateway_evaluation_memo.md`
+  - `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
 - the worked shortlist example in:
-  - `docs/plans/auth_large_gateway_shortlist_example.md`
+  - `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
 
 ---
 
@@ -272,11 +272,11 @@ It does **not** by itself define:
 
 For adjacent topics, see:
 
-- `docs/mcp-api.md`
-- `docs/workflow-model.md`
-- `docs/specification.md`
-- `docs/roadmap.md`
-- `docs/plans/mcp_planning_index.md`
+- `docs/project/product/mcp-api.md`
+- `docs/project/product/workflow-model.md`
+- `docs/project/product/specification.md`
+- `docs/project/product/roadmap.md`
+- `docs/project/releases/plans/mcp_planning_index.md`
 
 ---
 

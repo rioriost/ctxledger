@@ -10,7 +10,7 @@ It exists to answer one practical question for each PR in the rewrite stream:
 
 The intent is to keep the rewrite honest to the repository contract established by:
 
-- `docs/specification.md`
+- `docs/project/product/specification.md`
 
 and to prevent the project from drifting back toward:
 
@@ -20,16 +20,16 @@ and to prevent the project from drifting back toward:
 
 This checklist is downstream of:
 
-- `docs/plans/mcp_2025_03_26_compliance_remediation_plan.md`
-- `docs/plans/mcp_2025_03_26_conformance_audit.md`
-- `docs/plans/mcp_transport_rewrite_decision_memo.md`
-- `docs/plans/mcp_transport_rewrite_execution_plan.md`
-- `docs/plans/mcp_transport_cutover_checklist.md`
-- `docs/plans/mcp_module_split_proposal.md`
-- `docs/plans/mcp_first_patch_plan.md`
-- `docs/plans/mcp_second_patch_plan.md`
-- `docs/plans/mcp_third_patch_plan.md`
-- `docs/plans/mcp_pr_sequence_overview.md`
+- `docs/project/releases/plans/mcp_2025_03_26_compliance_remediation_plan.md`
+- `docs/project/releases/plans/mcp_2025_03_26_conformance_audit.md`
+- `docs/project/releases/plans/mcp_transport_rewrite_decision_memo.md`
+- `docs/project/releases/plans/mcp_transport_rewrite_execution_plan.md`
+- `docs/project/releases/plans/mcp_transport_cutover_checklist.md`
+- `docs/project/releases/plans/mcp_module_split_proposal.md`
+- `docs/project/releases/plans/mcp_first_patch_plan.md`
+- `docs/project/releases/plans/mcp_second_patch_plan.md`
+- `docs/project/releases/plans/mcp_third_patch_plan.md`
+- `docs/project/releases/plans/mcp_pr_sequence_overview.md`
 
 ---
 

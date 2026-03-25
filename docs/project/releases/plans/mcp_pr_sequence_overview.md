@@ -12,16 +12,16 @@ This overview is a coordination artifact for implementation sequencing, review s
 
 It is downstream of:
 
-- `docs/specification.md`
-- `docs/plans/mcp_2025_03_26_compliance_remediation_plan.md`
-- `docs/plans/mcp_2025_03_26_conformance_audit.md`
-- `docs/plans/mcp_transport_rewrite_decision_memo.md`
-- `docs/plans/mcp_transport_rewrite_execution_plan.md`
-- `docs/plans/mcp_transport_cutover_checklist.md`
-- `docs/plans/mcp_module_split_proposal.md`
-- `docs/plans/mcp_first_patch_plan.md`
-- `docs/plans/mcp_second_patch_plan.md`
-- `docs/plans/mcp_third_patch_plan.md`
+- `docs/project/product/specification.md`
+- `docs/project/releases/plans/mcp_2025_03_26_compliance_remediation_plan.md`
+- `docs/project/releases/plans/mcp_2025_03_26_conformance_audit.md`
+- `docs/project/releases/plans/mcp_transport_rewrite_decision_memo.md`
+- `docs/project/releases/plans/mcp_transport_rewrite_execution_plan.md`
+- `docs/project/releases/plans/mcp_transport_cutover_checklist.md`
+- `docs/project/releases/plans/mcp_module_split_proposal.md`
+- `docs/project/releases/plans/mcp_first_patch_plan.md`
+- `docs/project/releases/plans/mcp_second_patch_plan.md`
+- `docs/project/releases/plans/mcp_third_patch_plan.md`
 
 ---
 
@@ -315,11 +315,11 @@ Modify or review:
 - `src/ctxledger/server.py`
 - any remaining transitional MCP code
 - `README.md`
-- `docs/mcp-api.md`
-- `docs/architecture.md`
-- `docs/deployment.md`
-- `docs/CHANGELOG.md`
-- `docs/imple_plan_review_0.1.0.md`
+- `docs/project/product/mcp-api.md`
+- `docs/project/product/architecture.md`
+- `docs/operations/deployment/deployment.md`
+- `docs/project/releases/CHANGELOG.md`
+- `docs/project/history/imple_plan_review_0.1.0.md`
 - `docs/v0.1.0_acceptance_evidence.md`
 - relevant tests
 

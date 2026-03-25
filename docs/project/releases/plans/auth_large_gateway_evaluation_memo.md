@@ -15,13 +15,13 @@ Its purpose is to:
 
 This memo is downstream of:
 
-- `docs/plans/auth_proxy_scaling_plan.md`
-- `docs/roadmap.md`
+- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
+- `docs/project/product/roadmap.md`
 - the current small-pattern proxy-only authentication model
 
 When the project is ready to move from design preparation to an actual large-pattern gateway selection, the follow-on decision should be recorded using:
 
-- `docs/plans/auth_large_gateway_decision_record_template.md`
+- `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
 
 ---
 
@@ -495,7 +495,7 @@ When large-pattern work becomes timely, the next documentation artifact should b
 
 The repository now includes a template for that follow-up artifact at:
 
-- `docs/plans/auth_large_gateway_decision_record_template.md`
+- `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
 
 That follow-up artifact should be created only when the roadmap gate is actually reached.
 

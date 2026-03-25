@@ -6,7 +6,7 @@ This document defines the remediation plan required to bring `ctxledger` into co
 
 It is based on two facts:
 
-1. `docs/specification.md` explicitly requires:
+1. `docs/project/product/specification.md` explicitly requires:
    - **MCP 2025-03-26 compatible interface**
    - **Streamable HTTP (primary)**
    - `stdio` as development-only support
@@ -38,7 +38,7 @@ Therefore, remediation must restore the release target to the original requireme
 
 ## 3. Current State Summary
 
-Based on the current repository direction described in `docs/specification.md` and the visible implementation trajectory, the likely current state is:
+Based on the current repository direction described in `docs/project/product/specification.md` and the visible implementation trajectory, the likely current state is:
 
 - HTTP `/mcp` currently handles JSON-RPC-like requests directly
 - visible method support likely includes:
@@ -77,7 +77,7 @@ The blocker is now more precise:
 
 ## 4.2 Out of Scope
 
-- changing `docs/specification.md`
+- changing `docs/project/product/specification.md`
 - weakening the compliance requirement
 - introducing a project-specific transport variant as a substitute for MCP compliance
 - broad memory subsystem expansion unrelated to protocol compliance
@@ -200,7 +200,7 @@ Convert the current broad concern into a precise gap list against MCP `2025-03-2
 
 ### Tasks
 
-1. Read `docs/specification.md` as the repository’s non-negotiable contract.
+1. Read `docs/project/product/specification.md` as the repository’s non-negotiable contract.
 2. Compare current HTTP `/mcp` behavior against MCP `2025-03-26` requirements, especially:
    - Base Protocol
    - Lifecycle
@@ -382,7 +382,7 @@ Decide and implement resource behavior through the compliant MCP transport.
 
 ### Required Resource Candidates
 
-From `docs/specification.md`:
+From `docs/project/product/specification.md`:
 
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`

@@ -13,13 +13,13 @@ It is intentionally:
 
 Its purpose is to show how the evaluation criteria in:
 
-- `docs/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
 
 can be applied in a more concrete way before the project reaches an actual gateway selection decision.
 
 The final decision, when the roadmap gate is reached, should still be recorded separately using:
 
-- `docs/plans/auth_large_gateway_decision_record_template.md`
+- `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
 
 ---
 
@@ -336,7 +336,7 @@ When the project actually reaches the large-pattern implementation phase, the ne
 3. confirm whether downstream identity propagation is required
 4. confirm whether app-layer authorization remains deferred or must be introduced
 5. record the result in:
-   - `docs/plans/auth_large_gateway_decision_record_template.md`
+   - `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
 
 ---
 

@@ -106,7 +106,7 @@ This is the best document for answering:
 ---
 
 ### Step 6 — File/Function-Level Cutover
-6. `docs/plans/mcp_transport_cutover_checklist.md`
+6. `docs/project/releases/plans/mcp_transport_cutover_checklist.md`
 
 Read this when you need to work directly in code.
 It maps current implementation responsibilities into:
@@ -122,7 +122,7 @@ This is the best document for answering:
 ---
 
 ### Step 7 — Module Structure Direction
-7. `docs/plans/mcp_module_split_proposal.md`
+7. `docs/project/releases/plans/mcp_module_split_proposal.md`
 
 Read this when you need to decide where code should live after the rewrite.
 
@@ -141,7 +141,7 @@ This is the best document for answering:
 ---
 
 ### Step 8 — PR-by-PR Implementation Sequence
-8. `docs/plans/mcp_pr_sequence_overview.md`
+8. `docs/project/releases/plans/mcp_pr_sequence_overview.md`
 
 Read this for the practical review/implementation order:
 
@@ -157,9 +157,9 @@ This is the best document for answering:
 ---
 
 ### Step 9 — Patch-Level Planning
-9. `docs/plans/mcp_first_patch_plan.md`
-10. `docs/plans/mcp_second_patch_plan.md`
-11. `docs/plans/mcp_third_patch_plan.md`
+9. `docs/project/releases/plans/mcp_first_patch_plan.md`
+10. `docs/project/releases/plans/mcp_second_patch_plan.md`
+11. `docs/project/releases/plans/mcp_third_patch_plan.md`
 
 Read these only after the higher-level documents above.
 
@@ -175,7 +175,7 @@ These are the best documents for answering:
 ---
 
 ### Step 10 — Review Gates
-12. `docs/plans/mcp_review_gate_checklist.md`
+12. `docs/project/releases/plans/mcp_review_gate_checklist.md`
 
 Read this before opening or reviewing any MCP rewrite PR.
 
@@ -192,7 +192,7 @@ This is the best document for answering:
 ---
 
 ### Step 11 — Final Release Gate
-13. `docs/plans/mcp_release_acceptance_checklist.md`
+13. `docs/project/releases/plans/mcp_release_acceptance_checklist.md`
 
 Read this last.
 
@@ -213,37 +213,37 @@ This is the best document for answering:
 Use this section if you do not want to read everything in order.
 
 ### “What is the binding contract?”
-- `docs/specification.md`
+- `docs/project/product/specification.md`
 
 ### “Why is the current `/mcp` not enough?”
-- `docs/plans/mcp_2025_03_26_compliance_remediation_plan.md`
-- `docs/plans/mcp_2025_03_26_conformance_audit.md`
+- `docs/project/releases/plans/mcp_2025_03_26_compliance_remediation_plan.md`
+- `docs/project/releases/plans/mcp_2025_03_26_conformance_audit.md`
 
 ### “Are we rewriting or patching?”
-- `docs/plans/mcp_transport_rewrite_decision_memo.md`
+- `docs/project/releases/plans/mcp_transport_rewrite_decision_memo.md`
 
 ### “What is the implementation strategy?”
-- `docs/plans/mcp_transport_rewrite_execution_plan.md`
+- `docs/project/releases/plans/mcp_transport_rewrite_execution_plan.md`
 
 ### “What in the current code should be preserved or replaced?”
-- `docs/plans/mcp_transport_cutover_checklist.md`
+- `docs/project/releases/plans/mcp_transport_cutover_checklist.md`
 
 ### “How should the code be split into modules?”
-- `docs/plans/mcp_module_split_proposal.md`
+- `docs/project/releases/plans/mcp_module_split_proposal.md`
 
 ### “What order should PRs land in?”
-- `docs/plans/mcp_pr_sequence_overview.md`
+- `docs/project/releases/plans/mcp_pr_sequence_overview.md`
 
 ### “What should Patch 1 / Patch 2 / Patch 3 do?”
-- `docs/plans/mcp_first_patch_plan.md`
-- `docs/plans/mcp_second_patch_plan.md`
-- `docs/plans/mcp_third_patch_plan.md`
+- `docs/project/releases/plans/mcp_first_patch_plan.md`
+- `docs/project/releases/plans/mcp_second_patch_plan.md`
+- `docs/project/releases/plans/mcp_third_patch_plan.md`
 
 ### “What must be true before merging a PR?”
-- `docs/plans/mcp_review_gate_checklist.md`
+- `docs/project/releases/plans/mcp_review_gate_checklist.md`
 
 ### “What must be true before release closeout?”
-- `docs/plans/mcp_release_acceptance_checklist.md`
+- `docs/project/releases/plans/mcp_release_acceptance_checklist.md`
 
 ---
 
@@ -252,37 +252,37 @@ Use this section if you do not want to read everything in order.
 ### For a new implementer
 Read in this order:
 
-1. `docs/specification.md`
-2. `docs/plans/mcp_2025_03_26_compliance_remediation_plan.md`
-3. `docs/plans/mcp_2025_03_26_conformance_audit.md`
-4. `docs/plans/mcp_transport_rewrite_decision_memo.md`
-5. `docs/plans/mcp_transport_cutover_checklist.md`
-6. `docs/plans/mcp_module_split_proposal.md`
+1. `docs/project/product/specification.md`
+2. `docs/project/releases/plans/mcp_2025_03_26_compliance_remediation_plan.md`
+3. `docs/project/releases/plans/mcp_2025_03_26_conformance_audit.md`
+4. `docs/project/releases/plans/mcp_transport_rewrite_decision_memo.md`
+5. `docs/project/releases/plans/mcp_transport_cutover_checklist.md`
+6. `docs/project/releases/plans/mcp_module_split_proposal.md`
 7. the relevant patch plan
 
 ### For a reviewer
 Read in this order:
 
-1. `docs/specification.md`
-2. `docs/plans/mcp_pr_sequence_overview.md`
+1. `docs/project/product/specification.md`
+2. `docs/project/releases/plans/mcp_pr_sequence_overview.md`
 3. the relevant patch plan
-4. `docs/plans/mcp_review_gate_checklist.md`
+4. `docs/project/releases/plans/mcp_review_gate_checklist.md`
 
 ### For a release approver
 Read in this order:
 
-1. `docs/specification.md`
-2. `docs/plans/mcp_2025_03_26_conformance_audit.md`
-3. `docs/plans/mcp_transport_rewrite_decision_memo.md`
-4. `docs/plans/mcp_release_acceptance_checklist.md`
+1. `docs/project/product/specification.md`
+2. `docs/project/releases/plans/mcp_2025_03_26_conformance_audit.md`
+3. `docs/project/releases/plans/mcp_transport_rewrite_decision_memo.md`
+4. `docs/project/releases/plans/mcp_release_acceptance_checklist.md`
 
 ### For a future session handoff
 At minimum, read:
 
-1. `docs/specification.md`
-2. `docs/plans/mcp_transport_rewrite_decision_memo.md`
-3. `docs/plans/mcp_transport_cutover_checklist.md`
-4. `docs/plans/mcp_pr_sequence_overview.md`
+1. `docs/project/product/specification.md`
+2. `docs/project/releases/plans/mcp_transport_rewrite_decision_memo.md`
+3. `docs/project/releases/plans/mcp_transport_cutover_checklist.md`
+4. `docs/project/releases/plans/mcp_pr_sequence_overview.md`
 
 ---
 
@@ -291,27 +291,27 @@ At minimum, read:
 The current MCP planning set is organized into five layers.
 
 ### Layer 1 — Contract
-- `docs/specification.md`
+- `docs/project/product/specification.md`
 
 ### Layer 2 — Problem and Assessment
-- `docs/plans/mcp_2025_03_26_compliance_remediation_plan.md`
-- `docs/plans/mcp_2025_03_26_conformance_audit.md`
+- `docs/project/releases/plans/mcp_2025_03_26_compliance_remediation_plan.md`
+- `docs/project/releases/plans/mcp_2025_03_26_conformance_audit.md`
 
 ### Layer 3 — Architectural Direction
-- `docs/plans/mcp_transport_rewrite_decision_memo.md`
-- `docs/plans/mcp_module_split_proposal.md`
+- `docs/project/releases/plans/mcp_transport_rewrite_decision_memo.md`
+- `docs/project/releases/plans/mcp_module_split_proposal.md`
 
 ### Layer 4 — Execution and Patch Planning
-- `docs/plans/mcp_transport_rewrite_execution_plan.md`
-- `docs/plans/mcp_transport_cutover_checklist.md`
-- `docs/plans/mcp_first_patch_plan.md`
-- `docs/plans/mcp_second_patch_plan.md`
-- `docs/plans/mcp_third_patch_plan.md`
-- `docs/plans/mcp_pr_sequence_overview.md`
+- `docs/project/releases/plans/mcp_transport_rewrite_execution_plan.md`
+- `docs/project/releases/plans/mcp_transport_cutover_checklist.md`
+- `docs/project/releases/plans/mcp_first_patch_plan.md`
+- `docs/project/releases/plans/mcp_second_patch_plan.md`
+- `docs/project/releases/plans/mcp_third_patch_plan.md`
+- `docs/project/releases/plans/mcp_pr_sequence_overview.md`
 
 ### Layer 5 — Review and Release Gates
-- `docs/plans/mcp_review_gate_checklist.md`
-- `docs/plans/mcp_release_acceptance_checklist.md`
+- `docs/project/releases/plans/mcp_review_gate_checklist.md`
+- `docs/project/releases/plans/mcp_release_acceptance_checklist.md`
 
 ---
 
@@ -319,11 +319,11 @@ The current MCP planning set is organized into five layers.
 
 If you only have time to read a minimal subset before implementation, read these five files:
 
-1. `docs/specification.md`
-2. `docs/plans/mcp_2025_03_26_conformance_audit.md`
-3. `docs/plans/mcp_transport_rewrite_decision_memo.md`
-4. `docs/plans/mcp_transport_cutover_checklist.md`
-5. `docs/plans/mcp_review_gate_checklist.md`
+1. `docs/project/product/specification.md`
+2. `docs/project/releases/plans/mcp_2025_03_26_conformance_audit.md`
+3. `docs/project/releases/plans/mcp_transport_rewrite_decision_memo.md`
+4. `docs/project/releases/plans/mcp_transport_cutover_checklist.md`
+5. `docs/project/releases/plans/mcp_review_gate_checklist.md`
 
 That subset is the fastest way to understand:
 

@@ -10,7 +10,7 @@ It is intended to answer one final question:
 
 This checklist is specifically aligned to the non-negotiable requirement established by:
 
-- `docs/specification.md`
+- `docs/project/product/specification.md`
 
 That requirement includes:
 
@@ -57,7 +57,7 @@ The release must remain blocked if any of the following are true:
 - [ ] required workflow tools are not discoverable through the compliant MCP path
 - [ ] required workflow tools are not invokable through the compliant MCP path
 - [ ] transport-oriented tests do not prove the compliant path
-- [ ] repository docs outside `docs/specification.md` still weaken or contradict the MCP `2025-03-26` + Streamable HTTP requirement
+- [ ] repository docs outside `docs/project/product/specification.md` still weaken or contradict the MCP `2025-03-26` + Streamable HTTP requirement
 
 If any of the above remain unresolved, the release is not acceptable.
 
@@ -299,14 +299,14 @@ These areas may exist without defining the release by themselves.
 
 ## 12. Documentation Acceptance
 
-The following docs must agree with `docs/specification.md` and with the implementation reality:
+The following docs must agree with `docs/project/product/specification.md` and with the implementation reality:
 
 - `README.md`
-- `docs/mcp-api.md`
-- `docs/architecture.md`
-- `docs/deployment.md`
-- `docs/CHANGELOG.md`
-- `docs/imple_plan_review_0.1.0.md`
+- `docs/project/product/mcp-api.md`
+- `docs/project/product/architecture.md`
+- `docs/operations/deployment/deployment.md`
+- `docs/project/releases/CHANGELOG.md`
+- `docs/project/history/imple_plan_review_0.1.0.md`
 - `docs/v0.1.0_acceptance_evidence.md`
 
 ### 12.1 Required Documentation Conditions

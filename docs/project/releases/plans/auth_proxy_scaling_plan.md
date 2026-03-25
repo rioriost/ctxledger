@@ -28,7 +28,7 @@ It also records the current product posture explicitly:
 - current durable workflow and MCP surfaces are not yet designed around per-user ownership, per-user authorization, or tenant isolation
 - the **small pattern** is the immediate implementation target
 - the **large pattern** is intentionally deferred and should be treated as a later roadmap item, expected only **after roadmap `0.4`**, and possibly later depending on product priorities
-- early comparison criteria for that later phase are captured in `docs/plans/auth_large_gateway_evaluation_memo.md`
+- early comparison criteria for that later phase are captured in `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
 
 ---
 
@@ -445,7 +445,7 @@ Current readiness note:
 - that means large-pattern work no longer needs to prove the reverse-proxy shape itself
 - instead, large-pattern work should focus on identity model, gateway choice, client compatibility, and downstream authorization implications
 - roadmap `0.4` remains the earliest intended point for active implementation, not for immediate build-out now
-- the current comparison frame for gateway candidates is documented in `docs/plans/auth_large_gateway_evaluation_memo.md`
+- the current comparison frame for gateway candidates is documented in `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
 
 ---
 
@@ -658,7 +658,7 @@ The recommended implementation order is:
 4. document IDE client configuration for proxied MCP access
 5. prepare a replaceable auth-service boundary in compose and docs
 6. record large-pattern readiness questions and constraints
-7. evaluate large-pattern auth gateway candidates, using `docs/plans/auth_large_gateway_evaluation_memo.md` as the design-prep baseline
+7. evaluate large-pattern auth gateway candidates, using `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md` as the design-prep baseline
 8. decide whether app-layer authorization changes are required alongside gateway rollout
 9. implement the chosen large-pattern auth layer
 10. validate multi-user deployment behavior

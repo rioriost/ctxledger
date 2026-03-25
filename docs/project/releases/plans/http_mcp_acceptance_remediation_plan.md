@@ -402,13 +402,13 @@ Bring docs into alignment with the actual HTTP acceptance state.
 Update at least:
 
 - `README.md`
-- `docs/mcp-api.md`
-- `docs/deployment.md`
-- `docs/specification.md`
-- `docs/architecture.md`
-- `docs/imple_plan_review_0.1.0.md`
+- `docs/project/product/mcp-api.md`
+- `docs/operations/deployment/deployment.md`
+- `docs/project/product/specification.md`
+- `docs/project/product/architecture.md`
+- `docs/project/history/imple_plan_review_0.1.0.md`
 - `docs/v0.1.0_acceptance_evidence.md`
-- `docs/CHANGELOG.md`
+- `docs/project/releases/CHANGELOG.md`
 
 ### Required corrections
 Docs must clearly distinguish:

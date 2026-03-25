@@ -10,9 +10,9 @@ This template should be completed after the relevant roadmap and readiness gates
 
 Related documents:
 
-- `docs/plans/auth_proxy_scaling_plan.md`
-- `docs/plans/auth_large_gateway_evaluation_memo.md`
-- `docs/roadmap.md`
+- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
+- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/project/product/roadmap.md`
 
 ---
 
