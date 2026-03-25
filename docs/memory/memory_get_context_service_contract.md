@@ -92,6 +92,7 @@ The current contract distinguishes between retrieval routes, including:
 - `episode_direct`
 - `workspace_inherited_auxiliary`
 - `relation_supports_auxiliary`
+- `graph_summary_auxiliary`
 
 These routes are exposed through additive metadata in `details`.
 
@@ -206,18 +207,25 @@ interpretation is:
     auxiliary-route reading
 
 When `include_episodes = false`, the current episode-less shaping path is
-narrower still:
-the response does not currently surface summary-first grouped output, direct
-episode-scoped grouped output, or summary-selection metadata even when a query is
-present and summaries are enabled.
-In that shape, this field should be read from the currently surfaced grouped
-response only, not from a hypothetical summary-first route that would have been
-visible under episode-oriented shaping.
+narrower still.
+Even when a query is present and summaries are enabled, the response currently
+keeps the visible grouped output constrained to the episode-less surface rather
+than surfacing summary-first grouped output or direct episode-scoped grouped
+output.
 
-At the current stage, that narrower episode-less reading should also be taken
-literally at the top-level details layer:
-episode-oriented explanation fields that belong to the episode-shaped primary
-path are not currently surfaced there merely as falsey placeholders.
+At the current stage, the top-level details contract for that narrower shape is
+also deliberately narrow:
+
+- `summary_selection_applied = false`
+- `summary_selection_kind = null`
+
+Those fields should be read literally as the current top-level contract for the
+episode-less path, not as evidence that summary-capable selection logic does not
+exist elsewhere in the service.
+
+At the same time, episode-oriented explanation fields that belong to the
+episode-shaped primary path are not currently surfaced there merely as falsey
+placeholders.
 
 In particular, consumers should not currently expect episode-less responses to
 surface fields such as:
@@ -237,10 +245,8 @@ This same current reading still applies when low-limit shaping also applies to a
 episode-less response:
 low-limit shaping may still truncate the actually emitted auxiliary grouped
 output, but it does not currently restore visible summary-first grouped output,
-direct episode-scoped grouped output, or summary-selection metadata.
-That same narrower reading also means low-limit episode-less responses should not
-currently be re-read as surfacing the episode-oriented top-level explanation
-fields listed above merely in inactive form.
+direct episode-scoped grouped output, or the episode-oriented explanation fields
+listed above.
 
 ---
 
@@ -257,6 +263,74 @@ Other flat or compatibility-oriented fields remain supported, but they should be
 rather than the canonical grouped hierarchy model.
 
 This is an interpretation and contract-direction clarification, not an immediate breaking change.
+
+---
+
+## Current narrowed contract checkpoints worth preserving
+
+The current `0.6.0` summary-first contract is intentionally narrow and should be
+read with the following checkpoints in mind:
+
+### 1. Canonical summary-first remains the first compressed primary path
+
+When canonical summaries exist and summaries are enabled, the current preferred
+primary route remains:
+
+- canonical summary selection first
+- then member-memory expansion from canonical summary membership
+
+This is the current `memory_summary_first` reading.
+
+### 2. Episode-derived summary-first remains the fallback compressed path
+
+When canonical summaries are absent but the response still supports summary-first
+grouped reading, the current fallback remains:
+
+- episode-derived summary selection first
+
+This is the current `episode_summary_first` reading.
+
+### 3. Summary-only primary output is still a primary path, not an auxiliary path
+
+When summary-first selection is active but episode-scoped child groups are not
+emitted, the current contract should still be read as a surviving primary
+summary-first route rather than as an auxiliary-only response.
+
+That is why the current contract distinguishes:
+
+- `summary_first_has_episode_groups = false`
+- `summary_first_is_summary_only = true`
+
+from a true auxiliary-only response.
+
+### 4. Episode-less shaping remains narrower than summary-only primary shaping
+
+The current `include_episodes = false` path should not be conflated with the
+summary-only primary path.
+
+At the current stage:
+
+- summary-only primary shaping may still expose summary-first route metadata
+- episode-less shaping does not currently expose the episode-oriented
+  explanation fields associated with that primary path
+- episode-less shaping keeps the top-level details contract narrower on purpose
+
+### 5. Auxiliary graph-backed summary expansion remains additive
+
+The current graph-backed summary-member lookup path remains additive and
+auxiliary.
+
+It may enrich grouped output and route metadata through
+`graph_summary_auxiliary`, but it does not redefine:
+
+- canonical summary ownership
+- canonical membership ownership
+- the primary summary-first contract
+- the fallback requirement to remain behavior-preserving when graph support is
+  absent, degraded, or unready
+
+These checkpoints are closeout-oriented guardrails for the current `0.6.0`
+contract, not a claim that the response shape is permanently frozen.
 
 ### 1. Summary-scoped output
 

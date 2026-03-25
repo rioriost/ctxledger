@@ -51,16 +51,18 @@ Phase E refinement is about confirming that this first loop is:
 ## Phase E closeout intent
 
 Before treating the current summary hierarchy wave as a solid `0.6.0` slice,
-the repository should be able to answer "yes" to most or all of these:
+the repository should be able to answer "yes" to most or all of these.
 
-1. Is the canonical summary model clearly documented?
-2. Is the summary build path explicit and operator-visible?
-3. Is retrieval behavior explainable and test-backed?
-4. Does the PostgreSQL-backed path behave consistently with the in-memory path?
-5. Are current limitations explicit rather than implicit?
-6. Are failure and degradation expectations understandable?
-7. Is the remaining next work obvious without reopening already-settled
-   boundaries?
+For the current closeout reading, those answers are now:
+
+1. Yes — the canonical summary model is clearly documented.
+2. Yes — the summary build path is explicit and operator-visible.
+3. Yes — retrieval behavior is explainable and test-backed.
+4. Yes — the PostgreSQL-backed path behaves consistently with the in-memory path.
+5. Yes — current limitations are explicit rather than implicit.
+6. Yes — failure and degradation expectations are understandable.
+7. Yes — the remaining next work is obvious without reopening already-settled
+   boundaries.
 
 This checklist is organized around those questions.
 
@@ -69,71 +71,71 @@ This checklist is organized around those questions.
 ## 1. Canonical model confirmation
 
 ### 1.1 Summary ownership
-Confirm that the current implementation and docs consistently reflect:
+Confirmed for the current `0.6.0` closeout reading:
 
 - `memory_summaries` are canonical relational records
 - `memory_summary_memberships` are canonical relational records
-- AGE summary mirroring, if later added, remains derived and optional
+- AGE summary mirroring and graph-backed summary support remain derived and optional
 - summary membership is not treated as generic `memory_relations`
 
 ### 1.2 Scope of the current hierarchy model
-Confirm that docs and code still align on the current first hierarchy shape:
+Confirmed for the current milestone slice:
 
-- `summary -> memory_item`
+- docs and code still align on the current first hierarchy shape:
+  - `summary -> memory_item`
 
-And that the following remain intentionally deferred:
+And the following remain intentionally deferred:
 
 - summary-to-summary recursion
 - graph-native hierarchy truth
 - generic hierarchy node abstraction
 
 ### 1.3 Summary kinds
-Confirm that current summary-kind semantics remain narrow and explicit.
+Confirmed for the current slice:
 
-Questions to verify:
-
-- Is `episode_summary` the current primary supported kind?
-- Are any other summary kinds present in code or docs?
-- If multiple kinds are possible, are their expectations documented clearly
-  enough?
+- `episode_summary` is the current primary supported kind
+- summary-kind semantics remain narrow and explicit enough for `0.6.0`
+- any broader multi-kind expansion should be treated as follow-up work rather
+  than implicit current scope
 
 ---
 
 ## 2. Explicit build path confirmation
 
 ### 2.1 Builder entry points
-Confirm that the current explicit build path is visible and coherent across:
+Confirmed:
 
-- service layer
-- CLI
-- docs
+- the current explicit build path is visible and coherent across:
+  - service layer
+  - CLI
+  - docs
 
-Current expected explicit build path:
+Current explicit build path:
 
 - `MemoryService.build_episode_summary(...)`
 - `ctxledger build-episode-summary`
 
 ### 2.2 Replace-or-rebuild semantics
-Confirm that the current behavior is still clearly defined as:
+Confirmed:
 
-- replace or rebuild matching summary kinds for the selected episode when
-  replacement is enabled
-
-Questions to verify:
-
-- Is replacement behavior consistent between in-memory and PostgreSQL-backed
-  paths?
-- Do tests cover stale-summary removal sufficiently?
-- Is the non-replacement path either covered or explicitly deferred?
+- the current behavior is clearly defined as replace or rebuild matching summary
+  kinds for the selected episode when replacement is enabled
+- replacement behavior is consistent between in-memory and PostgreSQL-backed
+  paths
+- tests cover stale-summary removal and builder-to-retrieval replacement
+  sufficiently for closeout
+- the non-replacement path remains intentionally narrower and does not block the
+  current milestone reading
 
 ### 2.3 Deterministic build behavior
-Confirm that the current first builder remains:
+Confirmed:
 
-- deterministic
-- explainable
-- based on canonical episode + memory items
-- not graph-required
-- not LLM-required
+- the current first builder remains:
+  - deterministic
+  - explainable
+  - based on canonical episode + memory items
+  - not graph-required
+  - not LLM-required
 
 If that changes later, it should be treated as a separate design step.
 
@@ -142,20 +144,20 @@ If that changes later, it should be treated as a separate design step.
 ## 3. Retrieval contract refinement
 
 ### 3.1 Summary-first selection
-Confirm that retrieval still behaves as currently intended:
+Confirmed:
 
 - canonical summaries are preferred when present and summaries are enabled
 - fallback remains the episode-derived summary path when canonical summaries are
   absent
 - `summary_selection_kind` is explicit and test-backed
 
-Expected current values include:
+Current confirmed values include:
 
 - `memory_summary_first`
 - `episode_summary_first`
 
 ### 3.2 Narrow suppression behavior
-Confirm that the current constrained suppression rules still hold:
+Confirmed:
 
 - `include_summaries = false`
   - suppresses canonical summary-first selection
@@ -163,10 +165,11 @@ Confirm that the current constrained suppression rules still hold:
   - preserves the narrow episode-less path
   - does not newly surface canonical summary-first grouped output there
 
-These rules are easy to regress accidentally, so they should remain explicit.
+These rules remain explicit and are now reinforced by focused service and
+transport-contract coverage.
 
 ### 3.3 Grouped output reading
-Confirm that the current grouped-primary interpretation still reads cleanly:
+Confirmed:
 
 - `memory_context_groups` is the primary grouped hierarchy-aware surface
 - summary-scoped grouped output remains understandable
@@ -174,7 +177,7 @@ Confirm that the current grouped-primary interpretation still reads cleanly:
 - summary-first grouped output stays explainable without broad redesign
 
 ### 3.4 Retrieval loop after rebuild
-Confirm that replace-or-rebuild behavior is reflected in retrieval:
+Confirmed:
 
 - rebuilt summaries appear
 - replaced summaries no longer appear as current canonical summaries
@@ -185,7 +188,7 @@ Confirm that replace-or-rebuild behavior is reflected in retrieval:
 ## 4. Validation checklist
 
 ### 4.1 Focused service validation
-Confirm focused coverage exists for:
+Confirmed focused coverage exists for:
 
 - canonical summary-first selection
 - fallback to episode-derived summaries
@@ -200,16 +203,22 @@ Confirm focused coverage exists for:
 - builder-to-retrieval loop behavior
 
 ### 4.2 Transport validation
-Confirm coverage exists for:
+Confirmed coverage exists for:
 
 - serializer output
 - MCP memory tool handler output
 - HTTP MCP RPC output
 
-The goal is to ensure that summary-first payloads survive transport adaptation.
+This now also includes focused transport-contract checks for:
+
+- summary-only primary-path explanation fields
+- narrowed episode-less shaping without summary-first explanation-field leakage
+
+The goal remains to ensure that summary-first payloads survive transport
+adaptation without widening the intended contract.
 
 ### 4.3 PostgreSQL integration validation
-Confirm coverage exists for:
+Confirmed coverage exists for:
 
 - PostgreSQL-backed summary retrieval
 - PostgreSQL-backed summary building
@@ -217,10 +226,10 @@ Confirm coverage exists for:
 - PostgreSQL-backed replacement behavior in retrieval
 
 ### 4.4 Full-suite validation
-Confirm that the broader repository suite has been rerun after the latest summary
-hierarchy slices and remains green.
+Confirmed that the broader repository suite has been rerun after the latest
+summary hierarchy slices and remains green.
 
-The practical closeout expectation is:
+The practical closeout expectation is satisfied:
 
 - current focused suites are green
 - current full suite is green
@@ -230,25 +239,25 @@ The practical closeout expectation is:
 ## 5. Workflow-oriented automation refinement
 
 ### 5.1 Current posture
-Confirm that workflow-oriented summary automation is still correctly understood
-as:
+Confirmed:
 
-- considered
-- bounded
-- not yet broadly automatic
+- workflow-oriented summary automation is still correctly understood as:
+  - considered
+  - bounded
+  - not broadly automatic in an unqualified sense
 
-The current explicit builder should remain the primary write primitive unless a
-later follow-up intentionally changes that.
+The current explicit builder remains the primary write primitive unless a later
+follow-up intentionally changes that.
 
 ### 5.2 Current next decision point
-The current implemented and design-reviewed direction is:
+The current implemented and design-reviewed direction remains:
 
-- workflow completion remains the most plausible first orchestration point
-- but broad automatic summary building should still be deferred
+- workflow completion is the most plausible first orchestration point
+- broad automatic summary building should still be deferred
 - the current explicit CLI/service build path is sufficient for the present
   `0.6.0` summary loop
 
-Questions that still remain worth tracking for a later slice:
+Questions still worth tracking for a later slice remain:
 
 - if workflow completion begins invoking summary building, should that behavior
   be:
@@ -274,56 +283,57 @@ direction remains:
 ## 6. Optional AGE summary mirroring refinement
 
 ### 6.1 Canonical boundary
-Confirm that docs still clearly distinguish:
+Confirmed that docs clearly distinguish:
 
 - relational summary truth
-- optional derived graph mirroring
+- optional derived graph support and mirroring
 
 The current reviewed direction should be treated as:
 
-- summary mirroring remains deferred
 - relational summary build/retrieval is already sufficient for the first
   implemented summary loop
-- graph mirroring should not be added merely because AGE support exists in the
-  repository
+- derived AGE graph support remains supplementary, rebuildable, and non-canonical
+- graph expansion should not be broadened merely because AGE support exists in
+  the repository
 
 ### 6.2 Minimum mirrored shape
-If summary mirroring is revisited later, confirm that the current smallest
-acceptable shape remains:
+If summary mirroring is revisited later, the current smallest acceptable shape
+still remains:
 
 - `memory_summary`
 - `memory_item`
 - `summarizes`
 
-And that broader graph expansion remains deferred.
+And broader graph expansion remains deferred.
 
 ### 6.3 Justification threshold
-Confirm that the repository still requires a concrete traversal benefit before
-adding summary mirroring.
+Confirmed:
 
-That means summary mirroring should not be introduced merely because graph
-support exists in principle.
+- the repository still requires a concrete traversal benefit before broadening
+  summary mirroring
+- summary mirroring should not be introduced merely because graph support exists
+  in principle
 
 At the current stage, the practical answer should be read as:
 
-- no such concrete traversal benefit is yet strong enough to justify
-  implementation
-- therefore summary mirroring remains a design-ready but intentionally deferred
-  follow-up
+- the current bounded derived graph support is sufficient for `0.6.0`
+- no broader traversal benefit is yet strong enough to justify wider graph
+  ownership or hierarchy expansion
+- therefore broader summary mirroring remains intentionally deferred
 
 ---
 
 ## 7. Operator-facing refinement
 
 ### 7.1 README visibility
-Confirm that README guidance is sufficient for the current explicit build path:
+Confirmed that README guidance is sufficient for the current explicit build path:
 
 - command exists in command listings
 - minimal usage example exists
 - replace behavior is explained at least briefly
 
 ### 7.2 CLI output quality
-Confirm that the CLI build command returns usable operator-facing output for:
+Confirmed that the CLI build command returns usable operator-facing output for:
 
 - build success
 - skip/no-op
@@ -331,10 +341,13 @@ Confirm that the CLI build command returns usable operator-facing output for:
 - JSON automation-friendly use
 
 ### 7.3 Need for a dedicated runbook
-Decide whether the current state now justifies a small operator note or runbook
-for summary building, especially if the path is expected to be used repeatedly.
+Current decision:
 
-Possible trigger conditions:
+- the existing operator-facing documentation is sufficient for the present
+  `0.6.0` closeout
+- a dedicated runbook remains optional follow-up work rather than a blocker
+
+Possible future trigger conditions remain:
 
 - repeated manual use in development/test
 - debugging canonical summary retrieval
@@ -375,7 +388,7 @@ Potential refinement:
 
 ## 9. Closeout criteria
 
-The current summary hierarchy slice is in good Phase E shape if:
+The current summary hierarchy slice is now in good Phase E shape because:
 
 - the canonical relational model is clear
 - explicit build and retrieval paths are both present
@@ -407,17 +420,19 @@ Those remain later concerns.
 
 ## 11. Recommended next actions after checklist review
 
-If this checklist is reviewed and the current slice is considered sufficiently
-stable, the next realistic action choices are:
+This checklist now reads as sufficiently satisfied for the current `0.6.0`
+closeout.
+
+The next realistic action choices are:
 
 1. continue with workflow-oriented automation only as a narrow, gated follow-up
    built on top of the explicit builder
-2. add a small operator runbook for summary building if repeated manual use is
-   expected
-3. keep optional derived AGE summary mirroring deferred unless a concrete
+2. add a small operator runbook for summary building only if repeated manual use
+   begins to justify it
+3. keep broader derived AGE summary expansion deferred unless a concrete
    traversal benefit becomes strong enough to justify implementation
-4. stop the current summary hierarchy work loop for now and treat the explicit
-   build/retrieval loop as a valid `0.6.0` milestone slice until a later
+4. treat the explicit build/retrieval loop as a valid `0.6.0` milestone slice
+   until a later bounded follow-up intentionally broadens scope
    automation or graph follow-up is intentionally chosen
 
 ---

@@ -258,6 +258,75 @@ Current investigation framing:
 
 - recent timeout reports show `workspace_register` responding while `workflow_resume` times out, which suggests the server is reachable but the resume path can still block
 - at least one observed client call appears to have passed a `workspace_id` to `workflow_resume`, even though the tool expects a `workflow_instance_id`
+
+## 0.6.0
+
+Planned focus:
+
+- hierarchical memory retrieval foundations
+- canonical summary hierarchy and summary-membership persistence
+- constrained Apache AGE-backed graph support under a derived, rebuildable boundary
+- summary-first context assembly improvements in `memory_get_context`
+- explicit summary build and validation flows for milestone closeout
+
+Current progress already landed toward `0.6.0`:
+
+- canonical relational summary persistence is implemented through:
+  - `memory_summaries`
+  - `memory_summary_memberships`
+- in-memory and PostgreSQL summary and summary-membership repository paths are implemented
+- `memory_get_context` now supports a first constrained summary-first retrieval path
+  - canonical summaries are preferred when present and summaries are enabled
+  - direct summary-member memory-item expansion is supported
+  - episode-derived summary fallback remains available when canonical summaries are absent
+  - grouped hierarchy-aware output remains the primary response surface
+  - additive retrieval-route metadata explains primary and auxiliary context assembly
+- constrained graph-backed support has been added for the current `0.6.0` slice
+  - PostgreSQL remains the canonical system of record
+  - Apache AGE state is treated as derived, supplementary, and rebuildable
+  - graph usage is gated by capability and readiness checks
+  - graph-backed summary-member lookup degrades to the relational path when unavailable or failing
+- explicit summary build paths are implemented through:
+  - `MemoryService.build_episode_summary(...)`
+  - `ctxledger build-episode-summary`
+- replace-or-rebuild behavior for matching episode summaries is implemented
+- workflow-completion-oriented summary automation is implemented in a gated, non-fatal form
+- focused service, transport, and PostgreSQL integration coverage already exists for:
+  - summary-first retrieval
+  - summary-member expansion
+  - narrowed `include_episodes = false` shaping
+  - derived graph-summary auxiliary behavior
+- the current broad repository validation state for this slice is green
+
+Current `0.6.0` positioning:
+
+- the current milestone should be read as a bounded hierarchical memory slice rather than broad graph-first memory redesign
+- the minimal implemented hierarchy remains:
+  - `summary -> memory_item`
+- summary ownership and summary-membership ownership remain canonical and relational
+- Apache AGE currently serves as a constrained derived support layer, not canonical hierarchy truth
+- `memory_get_context` is now hierarchy-aware in a narrow, explainable, behavior-preserving way
+- explicit bootstrap, refresh, readiness, and degraded-operation expectations matter as much as the retrieval behavior itself
+
+Remaining work to close out `0.6.0` more confidently:
+
+- keep the roadmap, closeout notes, and operator-facing docs aligned with the now-implemented `0.6.0` boundary
+- continue verifying that summary-first contract details remain stable across service, MCP, HTTP, and PostgreSQL-backed paths
+- confirm that deliverables and validation notes consistently describe the current milestone as:
+  - canonical relational summary ownership
+  - constrained summary-first retrieval
+  - direct member expansion
+  - derived and degradable graph support
+- avoid broadening the milestone into recursive hierarchy, graph-owned truth, or Mnemis-alignment work before `0.7.0`
+
+Expected themes:
+
+- canonical-relational hierarchy ownership first
+- compressed-then-expand retrieval through summary-first selection
+- explicit and testable grouped response behavior
+- derived graph support only where concretely justified
+- operational clarity around bootstrap, readiness, refresh, and degraded fallback
+- milestone closeout through validation and documentation consistency
 - because `ctxledger` tools are commonly invoked by AI agents that read repository `.rules`, guidance quality in `.rules` is part of the problem space and should be treated as potentially causal rather than merely advisory
 - the current resume path performs synchronous, multi-step PostgreSQL-backed resume assembly, so pool waits, blocking queries, or transport timeout budget mismatches remain relevant suspects even when agent misuse is also present
 

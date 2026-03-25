@@ -21,18 +21,22 @@ landed or explicitly deferred.
 ## Closeout status
 
 **Current reading:** the repository now has a valid `0.6.0` summary hierarchy
-milestone slice.
+milestone slice, and the implemented slice now aligns with the current
+closeout-oriented validation reading for the milestone.
 
 That slice should currently be read as:
 
 - canonical relational summary ownership
 - canonical relational summary-membership ownership
 - first constrained summary-first retrieval
+- direct summary-member memory-item expansion
 - first explicit episode-scoped summary builder
 - replace-or-rebuild semantics for matching episode summaries
 - explicit CLI access for summary building
 - focused service / transport / PostgreSQL integration validation
 - green broad repository validation
+- explicit closeout reading for the current minimal hierarchy model,
+  retrieval contract boundaries, and AGE derived-state boundary
 
 This does **not** mean `0.6.0` is globally “finished forever.”
 
@@ -79,10 +83,12 @@ The current slice does **not** require:
 Current intended behavior includes:
 
 - prefer canonical summaries when they exist and summaries are enabled
+- expand selected canonical summaries to direct member memory items
 - fall back to episode-derived summary behavior when canonical summaries are absent
 - keep grouped hierarchy output primary
 - keep the current narrow `include_episodes = false` behavior
 - preserve compatibility-oriented surfaces where needed
+- keep retrieval-route explainability explicit through additive details metadata
 
 This means the current slice already delivers a meaningful retrieval improvement,
 not just storage primitives.
@@ -172,7 +178,9 @@ test-only.
 ## Why this counts as a valid milestone slice
 
 The current summary hierarchy wave meets the most important closeout conditions
-for a `0.6.0` slice:
+for a `0.6.0` slice and now reads cleanly against the current refinement
+checklist for model clarity, retrieval explainability, validation coverage, and
+bounded next-step framing:
 
 ### 1. It is coherent
 The read path, write path, persistence path, and operator path now connect in a
@@ -211,6 +219,8 @@ The current implemented summary hierarchy loop has been validated through:
 
 - focused service tests
 - focused context-detail tests
+- focused transport-contract tests for summary-first and narrowed episode-less
+  shaping
 - serialization tests
 - MCP transport tests
 - HTTP transport tests
@@ -224,6 +234,22 @@ Current broad validation reading:
 
 At this stage, the summary hierarchy slice should be treated as
 **stability-confirmed enough for milestone closeout**.
+
+The current closeout reading also means the following can now be treated as
+affirmatively answered for this slice:
+
+- the canonical summary model is documented clearly enough for `0.6.0`
+- the first hierarchy shape remains intentionally:
+  - `summary -> memory_item`
+- the first retrieval improvement is concretely implemented as:
+  - summary-first selection
+  - direct summary-member memory-item expansion
+- narrowed shaping behavior remains explicit for:
+  - `include_summaries = false`
+  - `include_episodes = false`
+- transport and integration layers preserve the current summary-first contract
+- broad validation is sufficient to treat the slice as closed unless a new
+  follow-up deliberately broadens scope
 
 ---
 
@@ -245,15 +271,19 @@ That is deferred because it introduces policy questions such as:
 - what should happen on failure
 - how much automation is appropriate in `0.6.0`
 
-## 2. Graph summary mirroring implementation
+## 2. Derived AGE summary support beyond the current bounded slice
 
-The current design direction for optional derived AGE summary mirroring exists.
+The current design direction for derived AGE summary support exists, and the
+current repository already includes a narrow bounded derived-summary traversal
+support path.
 
-The implementation does not.
+What remains intentionally out of scope for this closeout is any broader claim
+that AGE has become canonical summary truth, a generic hierarchy engine, or a
+required correctness layer for ordinary retrieval.
 
-That is deferred because the current first summary loop already works
-relationally, and graph mirroring should be justified by a concrete traversal
-benefit rather than by architectural enthusiasm.
+That broader work remains deferred because the current first summary loop already
+works relationally, and any future graph expansion should still be justified by a
+concrete traversal benefit rather than by architectural enthusiasm.
 
 ## 3. Recursive summary hierarchy
 

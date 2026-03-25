@@ -2,181 +2,175 @@
 
 ## Summary
 
-This continuation closed the next bounded `0.6.0` refinement loop around final
-validation, degraded graph-summary behavior, and release-facing closeout
-polishing.
+This continuation closed the final planned `0.6.0` closeout loop around
+summary-first contract hardening, milestone documentation alignment, and
+repository-level validation confirmation.
 
 The key result is that the repository now has:
 
-- a green full repository test suite after the latest summary-graph follow-up
-- explicit focused validation for degraded graph-summary lookup behavior
-- clearer readiness/degraded-operation documentation for derived summary graph
-  state
-- preserved canonical relational summary ownership with derived AGE graph support
-- a verified local `small` stack bring-up after fixing an AGE bootstrap failure
-- a cleaner handoff point for any final `0.6.0` closeout or the next milestone
-  decision
+- focused transport-level contract coverage for the narrowed
+  `memory_get_context` summary-first behavior
+- explicit documentation of the current episode-less vs summary-only shaping
+  boundary
+- a roadmap entry that now describes the implemented `0.6.0` milestone rather
+  than stopping at earlier release lines
+- a closeout checklist that now reads as affirmatively satisfied for the current
+  bounded summary hierarchy slice
+- a green full repository test suite after the latest focused contract and docs
+  updates
 
-This continuation changed tests, docs, supporting validation expectations, and
-the AGE bootstrap implementation used during local startup.
+This continuation changed focused MCP/HTTP tests and closeout-oriented docs, but
+did not broaden the underlying `0.6.0` retrieval or graph behavior.
 
 ---
 
 ## What was completed
 
-### 1. Reran the full pytest suite
+### 1. Added focused transport-contract tests for narrowed summary-first behavior
 
-The full suite was rerun after the previous targeted summary-graph closeout work
-and the remaining expectation updates.
+Focused MCP and HTTP tests were added to lock the current transport-surface
+contract for two easy-to-regress cases.
 
-Final result for this continuation:
+The first added case confirms that when the primary path remains
+summary-first but episode child groups are not emitted:
 
-- **927 passed, 1 skipped**
+- summary-first still remains a primary path
+- summary-only explanation fields remain present
+- the transport layers preserve:
+  - `summary_first_has_episode_groups = false`
+  - `summary_first_is_summary_only = true`
+  - child episode identity/count details
+  - non-auxiliary interpretation of the surviving summary-only path
 
-This is the current broad repository validation state at handoff.
+The second added case confirms that when `include_episodes = false` keeps the
+response on the narrower episode-less path:
 
----
+- summary-first grouped output is not surfaced
+- episode-oriented summary-first explanation fields are not leaked as inactive
+  placeholders
+- the visible grouped output remains constrained to the actually emitted
+  episode-less auxiliary surface
 
-### 2. Aligned remaining full-suite expectations
+This hardens the current `0.6.0` contract at the transport layer, not only in
+service-level tests.
 
-The full-suite rerun surfaced a small number of remaining repository-wide
-expectation mismatches outside the earlier targeted closeout files.
+Updated test files:
 
-Those were aligned in:
-
-- `tests/http/test_coverage_targets_http.py`
-- `tests/memory/test_service_context_scope.py`
-- `tests/memory/test_service_core.py`
-- `tests/server/test_server.py`
-
-The main issues were:
-
-- expanded `age_prototype` payload expectations after summary graph observability
-  refinement
-- explicit zero-valued retrieval-route accounting for:
-  - `graph_summary_auxiliary`
-- a small direct unit-test callsite update for
-  `_build_retrieval_route_details(...)`
-
-This means the full repository test surface now reflects the current retrieval
-and observability contract rather than only the previously targeted suites.
+- `tests/mcp/test_tool_handlers_memory.py`
+- `tests/http/test_server_http.py`
 
 ---
 
-### 3. Added focused degraded graph-summary tests
+### 2. Fixed the `memory_get_context` service-contract docs to match the current implementation
 
-Focused degraded-path coverage was added for the narrow graph-backed summary
-member lookup path.
+The service-contract note was updated so the current contract reads more
+literally and consistently.
 
-The new focused service-core tests cover cases where:
+The main clarifications are:
 
-- the relation repository is missing
-- the graph summary lookup raises
-- the graph summary lookup returns no members
+- `graph_summary_auxiliary` is now explicitly listed alongside the other current
+  retrieval routes
+- the episode-less top-level details contract is now described more precisely
+- the note now explicitly says that current episode-less shaping keeps:
+  - `summary_selection_applied = false`
+  - `summary_selection_kind = null`
+- the distinction between:
+  - summary-only primary shaping
+  - narrower episode-less shaping
+  is now clearer
+- the current closeout guardrails now explicitly state that:
+  - canonical summary-first remains the first compressed primary path
+  - episode-derived summary-first remains the fallback compressed path
+  - summary-only primary output is still primary rather than auxiliary
+  - graph-backed summary enrichment remains additive and auxiliary
 
-The intended meaning of these tests is:
+Updated doc:
 
-- graph-backed summary-member traversal remains optional
-- degraded graph lookup should not crash ordinary context assembly
-- the system should fall back to returning no graph-summary auxiliary items
-  rather than treating derived graph behavior as mandatory truth
-
-This keeps the current `0.6.0` graph-backed summary slice recoverable and
-behavior-preserving.
-
----
-
-### 4. Preserved the canonical/derived boundary during degraded operation
-
-The current implementation and docs now make the following interpretation more
-explicit:
-
-- relational summary state remains canonical
-- derived summary graph state remains supporting and rebuildable
-- summary graph degradation should be read as reduced enrichment or reduced
-  observability, not canonical summary loss
-- readiness should not fail merely because derived summary graph state is absent,
-  stale, or not refreshed yet
-
-This is now more clearly expressed across runtime/readiness interpretation and
-operator-facing docs.
+- `docs/memory/memory_get_context_service_contract.md`
 
 ---
 
-### 5. Polished docs / observability closeout wording
+### 3. Fixed the summary-hierarchy closeout note to better reflect the implemented slice
 
-Release-facing and operator-facing wording was refined to better describe the
-current implemented behavior.
+The current summary-hierarchy closeout note was revised so it more directly
+matches the now-implemented `0.6.0` slice.
 
-Updated docs include:
+The main improvements are:
 
-- `README.md`
-- `docs/architecture.md`
-- `docs/deployment.md`
+- explicit callout that the current slice includes:
+  - direct summary-member memory-item expansion
+- explicit callout that retrieval-route explainability is part of the current
+  slice rather than incidental metadata
+- stronger statement that the closeout now aligns with the current refinement
+  checklist
+- clearer reading that broader AGE expansion remains deferred even though a
+  bounded derived graph-backed auxiliary path now exists
 
-The current docs now more explicitly say:
+Updated doc:
 
-- the narrow graph-backed summary path is auxiliary
-- `ctxledger refresh-age-summary-graph` is the rebuild path for derived summary
-  graph state
-- derived summary graph degradation is a degraded-but-ready condition when
-  relational state is healthy
-- current `0.6.0` summary retrieval correctness should still be read from the
-  relational canonical path
+- `docs/memory/summary_hierarchy_0_6_0_milestone_slice_closeout.md`
 
-This should reduce operator confusion about whether graph-summary state is
-required for correctness.
+---
 
-### 6. Fixed AGE bootstrap for the verified local `small` stack
+### 4. Rewrote the Phase E refinement checklist as satisfied closeout confirmation
 
-A local startup validation run exposed a real bootstrap failure in the AGE graph
-creation path.
+The Phase E checklist was updated from an open-ended confirmation template into a
+more explicit current-state closeout reading.
 
-The observed failure was effectively:
+It now states, in effect, that the repository can answer “yes” for the current
+bounded slice to questions such as:
 
-- `Failed to bootstrap AGE graph: name 'memory_id' is not defined`
+- is the canonical relational summary model clear?
+- is the explicit build path visible?
+- is retrieval explainable and test-backed?
+- is PostgreSQL-backed behavior aligned with the in-memory path?
+- are degradation and boundary expectations understandable?
+- is the next work obvious without reopening settled decisions?
 
-The root cause was an f-string/Cypher property-map escaping mistake in the AGE
-bootstrap command path.
+The checklist now more clearly records that the current answer for the bounded
+`0.6.0` slice is “yes” across those categories.
 
-That was fixed by correcting the Cypher property-map literals used during:
+Updated doc:
 
-- `memory_item` node creation
-- `supports` edge creation
+- `docs/memory/phase_e_summary_hierarchy_refinement_checklist.md`
 
-This restored the expected startup-time bootstrap behavior for the default local
-deployment path.
+---
 
-### 7. Verified the authenticated local `small` stack after the bootstrap fix
+### 5. Added a dedicated `0.6.0` roadmap section
 
-After the AGE bootstrap fix, the local authenticated `small` stack was rerun and
-confirmed healthy.
+The roadmap now includes a dedicated `0.6.0` section instead of leaving the
+milestone state implied only through changelog and design notes.
 
-The practical verification result was:
+The new roadmap section summarizes:
 
-- `ctxledger-postgres` healthy
-- `ctxledger-auth-small` healthy
-- `ctxledger-server-private` healthy
-- `ctxledger-grafana` healthy
-- `ctxledger-traefik` started
+- canonical relational summary ownership
+- canonical summary-membership persistence
+- summary-first retrieval through `memory_get_context`
+- direct summary-member expansion
+- constrained derived AGE support
+- explicit summary build paths
+- gated/non-fatal workflow-completion summary automation
+- the current bounded interpretation of `0.6.0`
 
-Additional in-environment verification confirmed:
+It also frames what still remains outside the milestone boundary.
 
-- `ctxledger age-graph-readiness`
-  - `age_graph_status = graph_ready`
-- `/debug/runtime`
-  - summary graph mirroring details present
-  - workflow summary automation details present
-  - `implementation_status = available`
+Updated doc:
 
-This means the repository now has both:
-
-- green automated validation
-- successful local stack validation for the current AGE-backed startup path
+- `docs/roadmap.md`
 
 ---
 
 ## Validation performed
+
+### Focused validation
+
+Command:
+
+- `python -m pytest tests/mcp/test_tool_handlers_memory.py tests/http/test_server_http.py tests/memory/test_service_context_details.py -q`
+
+Result:
+
+- **107 passed**
 
 ### Full-suite validation
 
@@ -186,36 +180,7 @@ Command:
 
 Result:
 
-- **927 passed, 1 skipped**
-
-### Focused degraded-graph validation
-
-Representative focused command after the new degraded-path tests and remaining
-expectation alignments:
-
-- `python -m pytest tests/http/test_coverage_targets_http.py tests/memory/test_service_context_scope.py tests/memory/test_service_core.py -q`
-
-Result:
-
-- **78 passed**
-
-### Local stack validation
-
-The authenticated local `small` deployment path was also rerun after the AGE
-bootstrap fix.
-
-Representative operational validation included:
-
-- `envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate`
-- in-container `ctxledger age-graph-readiness`
-- in-container `/debug/runtime` inspection
-
-Result:
-
-- the local `small` stack came up healthy after the bootstrap fix
-- `age_graph_status` reported `graph_ready`
-- runtime `age_prototype` details reported the expected summary graph mirroring
-  and workflow summary automation fields
+- **931 passed, 1 skipped**
 
 ---
 
@@ -230,84 +195,66 @@ At handoff, the current `0.6.0` hierarchical memory state should be read as:
 
 ### Retrieval layer
 - summary-first retrieval through `memory_get_context`
-- relation-aware supporting context
+- canonical summary-first preference when summaries are enabled
+- direct summary-member memory-item expansion
+- episode-derived summary fallback when canonical summaries are absent
 - explicit retrieval-route metadata
 - explicit auxiliary route accounting including:
   - `graph_summary_auxiliary`
+- narrowed episode-less shaping preserved for:
+  - `include_episodes = false`
+
+### Transport contract layer
+- MCP and HTTP transport coverage now explicitly locks:
+  - summary-only primary-path explanation-field serialization
+  - absence of leaked episode-oriented summary-first explanation fields in the
+    narrowed episode-less path
 
 ### Derived graph layer
-- explicit derived AGE summary graph mirroring
-- narrow graph-backed auxiliary summary-member traversal
+- explicit derived AGE summary graph support remains bounded and auxiliary
+- narrow graph-backed auxiliary summary-member traversal remains optional
 - explicit rebuild path through:
   - `ctxledger refresh-age-summary-graph`
-- startup bootstrap path repaired for the current AGE graph creation flow
-- degraded graph behavior treated as optional support loss, not canonical loss
+- degraded graph behavior remains support loss, not canonical loss
 
-### Workflow automation layer
-- gated workflow-completion-triggered summary building
-- additive summary-build policy/result reporting
-- non-fatal summary automation posture preserved
-
-### Observability layer
-- `ctxledger age-graph-readiness`
-- runtime/debug `age_prototype` payload
-- summary graph mirroring details
-- workflow summary automation details
-- clearer degraded-but-ready interpretation in docs
+### Documentation / closeout layer
+- roadmap now includes `0.6.0`
+- service-contract wording better matches current shaping behavior
+- summary-hierarchy closeout wording better matches the implemented slice
+- Phase E checklist now reads as satisfied for the current bounded closeout
 
 ---
 
 ## What remains deferred
 
-The current refinement loop is complete, but broader work is still intentionally
-deferred.
-
-### 1. Recursive hierarchy expansion
-Still deferred:
+The following still remain deferred beyond the current closeout reading:
 
 - summary-to-summary recursion
-- deeper graph traversal semantics
-- recursive summary graph policy
-
-### 2. Broader workflow automation
-Still deferred:
-
-- default summary generation for all workflow closeouts
-- multi-episode workflow summary generation
-- workspace-wide summary regeneration policy
-- broader automation configuration surfaces
-
-### 3. Graph-required retrieval semantics
-Still deferred:
-
-- making graph summary state mandatory for summary retrieval
-- treating graph summary state as canonical
-- automatic graph repair during ordinary reads
-- broad graph-native ranking/planning semantics
-
-### 4. `0.7.0` / Mnemis-oriented evaluation
-Still deferred:
-
-- Mnemis comparison/alignment decisions
-- broader post-`0.6.0` hierarchy strategy decisions
+- arbitrary-depth hierarchy traversal
+- graph-native hierarchy truth
+- broad graph-first retrieval redesign
+- broader AGE ownership expansion beyond the current bounded auxiliary slice
+- Mnemis alignment / comparison work
+- any broadening that would make the current `0.6.0` slice less explicitly
+  bounded
 
 ---
 
-## Suggested next step
+## Recommended next step
 
-If another session continues from here, the next best step is one of:
+The next realistic step after this continuation is not another large `0.6.0`
+feature slice.
 
-1. final `0.6.0` closeout packaging / release note shaping
-2. a very small bounded follow-up around additional degraded-path observability
-3. explicit planning for what moves to `0.7.0` versus what remains frozen in
-   `0.6.0`
+Instead, the best next move is to treat the current `0.6.0` summary hierarchy
+work as operationally closed unless a deliberately bounded follow-up is chosen.
 
-The important point is that the current branch should now be treated as a
-validated, documented, bounded implementation slice rather than as an
-experimental partial scaffold.
+If another bounded follow-up is needed, the most plausible candidates are:
 
-The local startup path should also now be treated as:
+1. a narrow workflow-oriented automation refinement
+2. a small operator/runbook follow-up if repeated manual summary rebuilding
+   becomes common
+3. a separately justified graph follow-up only if a concrete traversal benefit
+   clearly exceeds the current bounded auxiliary path
 
-- repaired for the current AGE bootstrap bug
-- verified on the authenticated `small` stack
-- suitable as the current operator-facing local validation path for this slice
+Otherwise, the repository is in a good state to stop the current `0.6.0`
+closeout loop and move attention to the next milestone decision.

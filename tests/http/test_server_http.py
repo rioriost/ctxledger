@@ -1527,6 +1527,323 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payloa
     assert len(fake_memory_service.calls) == 1
 
 
+def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_only_primary_contract_details() -> (
+    None
+):
+    settings = make_settings()
+    workflow_id = uuid4()
+    episode_id = uuid4()
+    created_at = datetime(2024, 10, 13, 4, 5, 6, tzinfo=UTC)
+
+    _, runtime, _, _ = make_http_runtime(
+        settings=settings,
+        started=True,
+    )
+
+    runtime._server = runtime._server  # keep explicit local reference shape stable
+    runtime._server.workflow_service._uow_factory = lambda: None  # type: ignore[attr-defined]
+
+    memory_service = GetContextResponse(
+        feature=MemoryFeature.GET_CONTEXT,
+        implemented=True,
+        message="Episode-oriented memory context retrieved successfully.",
+        status="ok",
+        available_in_version="0.2.0",
+        timestamp=created_at,
+        episodes=(),
+        details={
+            "episodes_returned": 1,
+            "summary_selection_applied": True,
+            "summary_selection_kind": "episode_summary_first",
+            "summary_first_has_episode_groups": False,
+            "summary_first_is_summary_only": True,
+            "summary_first_child_episode_count": 1,
+            "summary_first_child_episode_ids": [str(episode_id)],
+            "primary_episode_groups_present_after_query_filter": False,
+            "auxiliary_only_after_query_filter": False,
+            "retrieval_routes_present": ["summary_first"],
+            "primary_retrieval_routes_present": ["summary_first"],
+            "auxiliary_retrieval_routes_present": [],
+            "memory_context_groups": [
+                {
+                    "scope": "summary",
+                    "scope_id": None,
+                    "group_id": "summary:episode_summary_first",
+                    "parent_scope": "workflow_instance",
+                    "parent_scope_id": str(workflow_id),
+                    "selection_kind": "episode_summary_first",
+                    "selection_route": "summary_first",
+                    "child_episode_ids": [str(episode_id)],
+                    "child_episode_count": 1,
+                    "child_episode_ordering": "returned_episode_order",
+                    "child_episode_groups_emitted": False,
+                    "child_episode_groups_emission_reason": "memory_items_disabled",
+                    "summaries": [
+                        {
+                            "episode_id": str(episode_id),
+                            "workflow_instance_id": str(workflow_id),
+                            "memory_item_count": 1,
+                            "memory_item_types": ["episode_note"],
+                            "memory_item_provenance": ["episode"],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    runtime._server.workflow_service = runtime._server.workflow_service  # type: ignore[attr-defined]
+
+    from ctxledger.runtime import http_runtime as http_runtime_module
+
+    original_builder = http_runtime_module.build_workflow_backed_memory_service
+
+    class FakeMemoryService:
+        def __init__(self) -> None:
+            self.calls: list[object] = []
+
+        def get_context(self, request: object) -> GetContextResponse:
+            self.calls.append(request)
+            return memory_service
+
+    fake_memory_service = FakeMemoryService()
+    http_runtime_module.build_workflow_backed_memory_service = lambda server: fake_memory_service
+
+    try:
+        response = runtime.dispatch(
+            "mcp_rpc",
+            "/mcp",
+            body=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memory_get_context",
+                        "arguments": {
+                            "workflow_instance_id": str(workflow_id),
+                            "query": "summary-only primary path",
+                            "limit": 10,
+                            "include_episodes": True,
+                            "include_memory_items": False,
+                            "include_summaries": True,
+                        },
+                    },
+                }
+            ),
+        )
+    finally:
+        http_runtime_module.build_workflow_backed_memory_service = original_builder
+
+    assert isinstance(response, McpHttpResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload["jsonrpc"] == "2.0"
+    assert response.payload["id"] == 4
+    result = response.payload["result"]
+    assert result["content"][0]["type"] == "text"
+    payload = json.loads(result["content"][0]["text"])
+
+    assert payload["ok"] is True
+    assert payload["result"]["feature"] == "memory_get_context"
+    assert payload["result"]["details"]["summary_selection_applied"] is True
+    assert payload["result"]["details"]["summary_selection_kind"] == "episode_summary_first"
+    assert payload["result"]["details"]["summary_first_has_episode_groups"] is False
+    assert payload["result"]["details"]["summary_first_is_summary_only"] is True
+    assert payload["result"]["details"]["summary_first_child_episode_count"] == 1
+    assert payload["result"]["details"]["summary_first_child_episode_ids"] == [
+        str(episode_id),
+    ]
+    assert (
+        payload["result"]["details"]["primary_episode_groups_present_after_query_filter"] is False
+    )
+    assert payload["result"]["details"]["auxiliary_only_after_query_filter"] is False
+    assert payload["result"]["details"]["retrieval_routes_present"] == ["summary_first"]
+    assert payload["result"]["details"]["primary_retrieval_routes_present"] == [
+        "summary_first",
+    ]
+    assert payload["result"]["details"]["auxiliary_retrieval_routes_present"] == []
+    assert payload["result"]["details"]["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "group_id": "summary:episode_summary_first",
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(episode_id)],
+            "child_episode_count": 1,
+            "child_episode_ordering": "returned_episode_order",
+            "child_episode_groups_emitted": False,
+            "child_episode_groups_emission_reason": "memory_items_disabled",
+            "summaries": [
+                {
+                    "episode_id": str(episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                }
+            ],
+        }
+    ]
+    assert len(fake_memory_service.calls) == 1
+
+
+def test_http_mcp_rpc_tools_call_returns_memory_get_context_episode_less_narrow_contract_without_summary_first_details() -> (
+    None
+):
+    settings = make_settings()
+    workflow_id = uuid4()
+    workspace_id = str(uuid4())
+    inherited_memory_id = uuid4()
+    created_at = datetime(2024, 10, 14, 4, 5, 6, tzinfo=UTC)
+
+    _, runtime, _, _ = make_http_runtime(
+        settings=settings,
+        started=True,
+    )
+
+    runtime._server = runtime._server  # keep explicit local reference shape stable
+    runtime._server.workflow_service._uow_factory = lambda: None  # type: ignore[attr-defined]
+
+    memory_service = GetContextResponse(
+        feature=MemoryFeature.GET_CONTEXT,
+        implemented=True,
+        message="Episode-oriented memory context retrieved successfully.",
+        status="ok",
+        available_in_version="0.2.0",
+        timestamp=created_at,
+        episodes=(),
+        details={
+            "episodes_returned": 0,
+            "summary_selection_applied": False,
+            "summary_selection_kind": None,
+            "retrieval_routes_present": ["workspace_inherited_auxiliary"],
+            "primary_retrieval_routes_present": [],
+            "auxiliary_retrieval_routes_present": ["workspace_inherited_auxiliary"],
+            "memory_context_groups": [
+                {
+                    "scope": "workspace",
+                    "scope_id": workspace_id,
+                    "parent_scope": None,
+                    "parent_scope_id": None,
+                    "selection_kind": "inherited_workspace",
+                    "selection_route": "workspace_inherited_auxiliary",
+                    "memory_items": [
+                        {
+                            "memory_id": str(inherited_memory_id),
+                            "workspace_id": workspace_id,
+                            "episode_id": None,
+                            "type": "workspace_note",
+                            "provenance": "workspace",
+                            "content": "Inherited workspace item still visible with include_episodes false",
+                            "metadata": {"kind": "workspace-item"},
+                            "created_at": created_at.isoformat(),
+                            "updated_at": created_at.isoformat(),
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    runtime._server.workflow_service = runtime._server.workflow_service  # type: ignore[attr-defined]
+
+    from ctxledger.runtime import http_runtime as http_runtime_module
+
+    original_builder = http_runtime_module.build_workflow_backed_memory_service
+
+    class FakeMemoryService:
+        def __init__(self) -> None:
+            self.calls: list[object] = []
+
+        def get_context(self, request: object) -> GetContextResponse:
+            self.calls.append(request)
+            return memory_service
+
+    fake_memory_service = FakeMemoryService()
+    http_runtime_module.build_workflow_backed_memory_service = lambda server: fake_memory_service
+
+    try:
+        response = runtime.dispatch(
+            "mcp_rpc",
+            "/mcp",
+            body=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "memory_get_context",
+                        "arguments": {
+                            "workflow_instance_id": str(workflow_id),
+                            "query": "hidden shaping",
+                            "limit": 10,
+                            "include_episodes": False,
+                            "include_memory_items": True,
+                            "include_summaries": True,
+                        },
+                    },
+                }
+            ),
+        )
+    finally:
+        http_runtime_module.build_workflow_backed_memory_service = original_builder
+
+    assert isinstance(response, McpHttpResponse)
+    assert response.status_code == 200
+    assert response.headers == {"content-type": "application/json"}
+    assert response.payload["jsonrpc"] == "2.0"
+    assert response.payload["id"] == 5
+    result = response.payload["result"]
+    assert result["content"][0]["type"] == "text"
+    payload = json.loads(result["content"][0]["text"])
+
+    assert payload["ok"] is True
+    assert payload["result"]["feature"] == "memory_get_context"
+    assert payload["result"]["details"]["summary_selection_applied"] is False
+    assert payload["result"]["details"]["summary_selection_kind"] is None
+    assert payload["result"]["details"]["retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert payload["result"]["details"]["primary_retrieval_routes_present"] == []
+    assert payload["result"]["details"]["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert payload["result"]["details"]["memory_context_groups"] == [
+        {
+            "scope": "workspace",
+            "scope_id": workspace_id,
+            "parent_scope": None,
+            "parent_scope_id": None,
+            "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
+            "memory_items": [
+                {
+                    "memory_id": str(inherited_memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": None,
+                    "type": "workspace_note",
+                    "provenance": "workspace",
+                    "content": "Inherited workspace item still visible with include_episodes false",
+                    "metadata": {"kind": "workspace-item"},
+                    "created_at": created_at.isoformat(),
+                    "updated_at": created_at.isoformat(),
+                }
+            ],
+        }
+    ]
+    assert "summary_first_has_episode_groups" not in payload["result"]["details"]
+    assert "summary_first_is_summary_only" not in payload["result"]["details"]
+    assert "summary_first_child_episode_count" not in payload["result"]["details"]
+    assert "summary_first_child_episode_ids" not in payload["result"]["details"]
+    assert "primary_episode_groups_present_after_query_filter" not in payload["result"]["details"]
+    assert "auxiliary_only_after_query_filter" not in payload["result"]["details"]
+    assert len(fake_memory_service.calls) == 1
+
+
 def test_http_mcp_rpc_tools_call_returns_workspace_register_success_payload() -> None:
     settings = make_settings()
     resume = make_resume_fixture()

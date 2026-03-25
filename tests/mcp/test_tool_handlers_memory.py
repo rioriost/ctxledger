@@ -428,3 +428,237 @@ def test_build_memory_get_context_tool_handler_serializes_canonical_summary_firs
     assert call.include_episodes is True
     assert call.include_memory_items is True
     assert call.include_summaries is True
+
+
+def test_build_memory_get_context_tool_handler_serializes_summary_only_primary_contract_details() -> (
+    None
+):
+    workflow_id = uuid4()
+    episode_id = uuid4()
+    created_at = datetime(2024, 10, 13, 4, 5, 6, tzinfo=UTC)
+
+    service = FakeMemoryService(
+        context_result=GetContextResponse(
+            feature=MemoryFeature.GET_CONTEXT,
+            implemented=True,
+            message="Episode-oriented memory context retrieved successfully.",
+            status="ok",
+            available_in_version="0.2.0",
+            timestamp=created_at,
+            episodes=(),
+            details={
+                "episodes_returned": 1,
+                "summary_selection_applied": True,
+                "summary_selection_kind": "episode_summary_first",
+                "summary_first_has_episode_groups": False,
+                "summary_first_is_summary_only": True,
+                "summary_first_child_episode_count": 1,
+                "summary_first_child_episode_ids": [str(episode_id)],
+                "primary_episode_groups_present_after_query_filter": False,
+                "auxiliary_only_after_query_filter": False,
+                "retrieval_routes_present": ["summary_first"],
+                "primary_retrieval_routes_present": ["summary_first"],
+                "auxiliary_retrieval_routes_present": [],
+                "memory_context_groups": [
+                    {
+                        "scope": "summary",
+                        "scope_id": None,
+                        "group_id": "summary:episode_summary_first",
+                        "parent_scope": "workflow_instance",
+                        "parent_scope_id": str(workflow_id),
+                        "selection_kind": "episode_summary_first",
+                        "selection_route": "summary_first",
+                        "child_episode_ids": [str(episode_id)],
+                        "child_episode_count": 1,
+                        "child_episode_ordering": "returned_episode_order",
+                        "child_episode_groups_emitted": False,
+                        "child_episode_groups_emission_reason": "memory_items_disabled",
+                        "summaries": [
+                            {
+                                "episode_id": str(episode_id),
+                                "workflow_instance_id": str(workflow_id),
+                                "memory_item_count": 1,
+                                "memory_item_types": ["episode_note"],
+                                "memory_item_provenance": ["episode"],
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+    )
+    handler = build_memory_get_context_tool_handler(service)
+
+    response = handler(
+        {
+            "workflow_instance_id": str(workflow_id),
+            "query": "summary-only primary path",
+            "limit": 10,
+            "include_episodes": True,
+            "include_memory_items": False,
+            "include_summaries": True,
+        }
+    )
+
+    assert response.payload["ok"] is True
+    result = response.payload["result"]
+    assert result["details"]["summary_selection_applied"] is True
+    assert result["details"]["summary_selection_kind"] == "episode_summary_first"
+    assert result["details"]["summary_first_has_episode_groups"] is False
+    assert result["details"]["summary_first_is_summary_only"] is True
+    assert result["details"]["summary_first_child_episode_count"] == 1
+    assert result["details"]["summary_first_child_episode_ids"] == [str(episode_id)]
+    assert result["details"]["primary_episode_groups_present_after_query_filter"] is False
+    assert result["details"]["auxiliary_only_after_query_filter"] is False
+    assert result["details"]["retrieval_routes_present"] == ["summary_first"]
+    assert result["details"]["primary_retrieval_routes_present"] == ["summary_first"]
+    assert result["details"]["auxiliary_retrieval_routes_present"] == []
+    assert result["details"]["memory_context_groups"] == [
+        {
+            "scope": "summary",
+            "scope_id": None,
+            "group_id": "summary:episode_summary_first",
+            "parent_scope": "workflow_instance",
+            "parent_scope_id": str(workflow_id),
+            "selection_kind": "episode_summary_first",
+            "selection_route": "summary_first",
+            "child_episode_ids": [str(episode_id)],
+            "child_episode_count": 1,
+            "child_episode_ordering": "returned_episode_order",
+            "child_episode_groups_emitted": False,
+            "child_episode_groups_emission_reason": "memory_items_disabled",
+            "summaries": [
+                {
+                    "episode_id": str(episode_id),
+                    "workflow_instance_id": str(workflow_id),
+                    "memory_item_count": 1,
+                    "memory_item_types": ["episode_note"],
+                    "memory_item_provenance": ["episode"],
+                }
+            ],
+        }
+    ]
+
+    assert service.context_calls is not None
+    call = service.context_calls[0]
+    assert call.workflow_instance_id == str(workflow_id)
+    assert call.query == "summary-only primary path"
+    assert call.limit == 10
+    assert call.include_episodes is True
+    assert call.include_memory_items is False
+    assert call.include_summaries is True
+
+
+def test_build_memory_get_context_tool_handler_serializes_episode_less_narrow_contract_without_summary_first_details() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = str(uuid4())
+    inherited_memory_id = uuid4()
+    created_at = datetime(2024, 10, 14, 4, 5, 6, tzinfo=UTC)
+
+    service = FakeMemoryService(
+        context_result=GetContextResponse(
+            feature=MemoryFeature.GET_CONTEXT,
+            implemented=True,
+            message="Episode-oriented memory context retrieved successfully.",
+            status="ok",
+            available_in_version="0.2.0",
+            timestamp=created_at,
+            episodes=(),
+            details={
+                "episodes_returned": 0,
+                "summary_selection_applied": False,
+                "summary_selection_kind": None,
+                "retrieval_routes_present": ["workspace_inherited_auxiliary"],
+                "primary_retrieval_routes_present": [],
+                "auxiliary_retrieval_routes_present": ["workspace_inherited_auxiliary"],
+                "memory_context_groups": [
+                    {
+                        "scope": "workspace",
+                        "scope_id": workspace_id,
+                        "parent_scope": None,
+                        "parent_scope_id": None,
+                        "selection_kind": "inherited_workspace",
+                        "selection_route": "workspace_inherited_auxiliary",
+                        "memory_items": [
+                            {
+                                "memory_id": str(inherited_memory_id),
+                                "workspace_id": workspace_id,
+                                "episode_id": None,
+                                "type": "workspace_note",
+                                "provenance": "workspace",
+                                "content": "Inherited workspace item still visible with include_episodes false",
+                                "metadata": {"kind": "workspace-item"},
+                                "created_at": created_at.isoformat(),
+                                "updated_at": created_at.isoformat(),
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+    )
+    handler = build_memory_get_context_tool_handler(service)
+
+    response = handler(
+        {
+            "workflow_instance_id": str(workflow_id),
+            "query": "hidden shaping",
+            "limit": 10,
+            "include_episodes": False,
+            "include_memory_items": True,
+            "include_summaries": True,
+        }
+    )
+
+    assert response.payload["ok"] is True
+    result = response.payload["result"]
+    assert result["details"]["summary_selection_applied"] is False
+    assert result["details"]["summary_selection_kind"] is None
+    assert result["details"]["retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert result["details"]["primary_retrieval_routes_present"] == []
+    assert result["details"]["auxiliary_retrieval_routes_present"] == [
+        "workspace_inherited_auxiliary",
+    ]
+    assert result["details"]["memory_context_groups"] == [
+        {
+            "scope": "workspace",
+            "scope_id": workspace_id,
+            "parent_scope": None,
+            "parent_scope_id": None,
+            "selection_kind": "inherited_workspace",
+            "selection_route": "workspace_inherited_auxiliary",
+            "memory_items": [
+                {
+                    "memory_id": str(inherited_memory_id),
+                    "workspace_id": workspace_id,
+                    "episode_id": None,
+                    "type": "workspace_note",
+                    "provenance": "workspace",
+                    "content": "Inherited workspace item still visible with include_episodes false",
+                    "metadata": {"kind": "workspace-item"},
+                    "created_at": created_at.isoformat(),
+                    "updated_at": created_at.isoformat(),
+                }
+            ],
+        }
+    ]
+
+    assert "summary_first_has_episode_groups" not in result["details"]
+    assert "summary_first_is_summary_only" not in result["details"]
+    assert "summary_first_child_episode_count" not in result["details"]
+    assert "summary_first_child_episode_ids" not in result["details"]
+    assert "primary_episode_groups_present_after_query_filter" not in result["details"]
+    assert "auxiliary_only_after_query_filter" not in result["details"]
+
+    assert service.context_calls is not None
+    call = service.context_calls[0]
+    assert call.workflow_instance_id == str(workflow_id)
+    assert call.query == "hidden shaping"
+    assert call.limit == 10
+    assert call.include_episodes is False
+    assert call.include_memory_items is True
+    assert call.include_summaries is True
