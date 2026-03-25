@@ -103,10 +103,7 @@ def test_postgres_memory_search_returns_memory_item_based_results(
     assert search.details["memory_items_considered"] == 2
     assert search.details["semantic_candidates_considered"] == 0
     assert search.details["semantic_query_generated"] is False
-    assert (
-        search.details["semantic_generation_skipped_reason"]
-        == "embedding_search_not_configured"
-    )
+    assert search.details["semantic_generation_skipped_reason"] == "embedding_search_not_configured"
     assert search.details["hybrid_scoring"] == {
         "lexical_weight": 1.0,
         "semantic_weight": 1.0,
@@ -127,11 +124,15 @@ def test_postgres_memory_search_returns_memory_item_based_results(
     assert search.results[0].lexical_score > 0
     assert search.results[0].semantic_score == 0.0
     assert search.results[0].score == search.results[0].lexical_score
-    assert search.results[0].ranking_details == {
-        "lexical_component": search.results[0].lexical_score,
-        "semantic_component": 0.0,
-        "score_mode": "lexical_only",
-        "semantic_only_discount_applied": False,
+    assert search.results[0].ranking_details["lexical_component"] == search.results[0].lexical_score
+    assert search.results[0].ranking_details["semantic_component"] == 0.0
+    assert search.results[0].ranking_details["score_mode"] == "lexical_only"
+    assert search.results[0].ranking_details["semantic_only_discount_applied"] is False
+    assert search.results[0].ranking_details["reason_list"][0]["code"] == "lexical_signal_present"
+    assert "task_recall_detail" in search.results[0].ranking_details
+    assert search.results[0].ranking_details["task_recall_detail"]["memory_item_type"] in {
+        "episode_note",
+        "episode_summary",
     }
 
     with uow_factory() as uow:
@@ -284,9 +285,7 @@ def test_postgres_memory_remember_episode_persists_custom_http_embedding(
 
     assert episode_response.episode is not None
     assert len(embedding_generator.requests) == 1
-    assert embedding_generator.requests[0].text == (
-        "Persist custom HTTP embedding for memory item"
-    )
+    assert embedding_generator.requests[0].text == ("Persist custom HTTP embedding for memory item")
     assert embedding_generator.requests[0].metadata == {
         "kind": "checkpoint",
         "component": "memory",
@@ -311,9 +310,7 @@ def test_postgres_memory_remember_episode_persists_custom_http_embedding(
 
     assert created_memory_item.workspace_id == workspace.workspace_id
     assert created_memory_item.episode_id == episode_response.episode.episode_id
-    assert (
-        created_memory_item.content == "Persist custom HTTP embedding for memory item"
-    )
+    assert created_memory_item.content == "Persist custom HTTP embedding for memory item"
     assert created_memory_item.metadata == {
         "kind": "checkpoint",
         "component": "memory",
@@ -397,10 +394,7 @@ def test_postgres_memory_remember_episode_and_search_with_real_openai_embeddings
             "Real OpenAI integration test did not persist the relevant embedding: "
             f"{relevant_episode.details['embedding_generation_skipped_reason']}"
         )
-    if (
-        distractor_episode.details.get("embedding_generation_skipped_reason")
-        is not None
-    ):
+    if distractor_episode.details.get("embedding_generation_skipped_reason") is not None:
         pytest.fail(
             "Real OpenAI integration test did not persist the distractor embedding: "
             f"{distractor_episode.details['embedding_generation_skipped_reason']}"
@@ -429,13 +423,8 @@ def test_postgres_memory_remember_episode_and_search_with_real_openai_embeddings
         embeddings[0].embedding_model == openai_test_model
         for embeddings in embeddings_by_memory_id.values()
     )
-    assert all(
-        len(embeddings[0].embedding) > 0
-        for embeddings in embeddings_by_memory_id.values()
-    )
-    assert all(
-        embeddings[0].content_hash for embeddings in embeddings_by_memory_id.values()
-    )
+    assert all(len(embeddings[0].embedding) > 0 for embeddings in embeddings_by_memory_id.values())
+    assert all(embeddings[0].content_hash for embeddings in embeddings_by_memory_id.values())
 
     search = memory_service.search(
         SearchMemoryRequest(
@@ -456,9 +445,7 @@ def test_postgres_memory_remember_episode_and_search_with_real_openai_embeddings
     assert len(search.results) >= 1
 
     top_result = search.results[0]
-    assert top_result.summary == (
-        "Investigated projection drift root cause in deployment workflow"
-    )
+    assert top_result.summary == ("Investigated projection drift root cause in deployment workflow")
     assert top_result.semantic_score > 0.0
     assert (
         "embedding_similarity" in top_result.matched_fields
@@ -484,10 +471,7 @@ def test_postgres_memory_search_hybrid_results_include_ranking_details(
                     content_hash="query-hash",
                 )
 
-            if (
-                request.text
-                == "Projection drift root cause identified in deployment workflow"
-            ):
+            if request.text == "Projection drift root cause identified in deployment workflow":
                 return EmbeddingResult(
                     provider="test",
                     model="test-hybrid-v1",
@@ -601,20 +585,34 @@ def test_postgres_memory_search_hybrid_results_include_ranking_details(
 
     assert lexical_result.lexical_score > 0.0
     assert lexical_result.semantic_score == 0.0
-    assert lexical_result.ranking_details == {
-        "lexical_component": lexical_result.lexical_score,
-        "semantic_component": 0.0,
-        "score_mode": "lexical_only",
-        "semantic_only_discount_applied": False,
+    assert lexical_result.ranking_details["lexical_component"] == lexical_result.lexical_score
+    assert lexical_result.ranking_details["semantic_component"] == 0.0
+    assert lexical_result.ranking_details["score_mode"] == "lexical_only"
+    assert lexical_result.ranking_details["semantic_only_discount_applied"] is False
+    assert lexical_result.ranking_details["reason_list"][0]["code"] == "lexical_signal_present"
+    assert "task_recall_detail" in lexical_result.ranking_details
+    assert lexical_result.ranking_details["task_recall_detail"]["memory_item_type"] in {
+        "episode_note",
+        "episode_summary",
     }
 
     assert semantic_only_result.lexical_score == 0.0
     assert semantic_only_result.semantic_score == 1.0
-    assert semantic_only_result.ranking_details == {
-        "lexical_component": 0.0,
-        "semantic_component": semantic_only_result.semantic_score,
-        "score_mode": "semantic_only_discounted",
-        "semantic_only_discount_applied": True,
+    assert semantic_only_result.ranking_details["lexical_component"] == 0.0
+    assert (
+        semantic_only_result.ranking_details["semantic_component"]
+        == semantic_only_result.semantic_score
+    )
+    assert semantic_only_result.ranking_details["score_mode"] == "semantic_only_discounted"
+    assert semantic_only_result.ranking_details["semantic_only_discount_applied"] is True
+    assert semantic_only_result.ranking_details["reason_list"][0]["code"] == "lexical_signal_absent"
+    assert (
+        semantic_only_result.ranking_details["reason_list"][1]["code"] == "semantic_signal_present"
+    )
+    assert "task_recall_detail" in semantic_only_result.ranking_details
+    assert semantic_only_result.ranking_details["task_recall_detail"]["memory_item_type"] in {
+        "episode_note",
+        "episode_summary",
     }
     assert lexical_result.score > semantic_only_result.score
 
@@ -643,10 +641,7 @@ def test_postgres_memory_search_result_mode_counts_cover_hybrid_lexical_and_sema
                     content_hash="hybrid-memory-hash",
                 )
 
-            if (
-                request.text
-                == "Projection drift root cause documented without semantic alignment"
-            ):
+            if request.text == "Projection drift root cause documented without semantic alignment":
                 return EmbeddingResult(
                     provider="test",
                     model="test-hybrid-v2",
@@ -753,29 +748,51 @@ def test_postgres_memory_search_result_mode_counts_cover_hybrid_lexical_and_sema
 
     assert hybrid_result.lexical_score > 0.0
     assert hybrid_result.semantic_score > 0.0
-    assert hybrid_result.ranking_details == {
-        "lexical_component": hybrid_result.lexical_score,
-        "semantic_component": hybrid_result.semantic_score,
-        "score_mode": "hybrid",
-        "semantic_only_discount_applied": False,
+    assert hybrid_result.ranking_details["lexical_component"] == hybrid_result.lexical_score
+    assert hybrid_result.ranking_details["semantic_component"] == hybrid_result.semantic_score
+    assert hybrid_result.ranking_details["score_mode"] == "hybrid"
+    assert hybrid_result.ranking_details["semantic_only_discount_applied"] is False
+    assert hybrid_result.ranking_details["reason_list"][0]["code"] == "lexical_signal_present"
+    assert hybrid_result.ranking_details["reason_list"][1]["code"] == "semantic_signal_present"
+    assert "task_recall_detail" in hybrid_result.ranking_details
+    assert hybrid_result.ranking_details["task_recall_detail"]["memory_item_type"] in {
+        "episode_note",
+        "episode_summary",
     }
 
     assert lexical_only_result.lexical_score > 0.0
     assert lexical_only_result.semantic_score == 0.0
-    assert lexical_only_result.ranking_details == {
-        "lexical_component": lexical_only_result.lexical_score,
-        "semantic_component": 0.0,
-        "score_mode": "lexical_only",
-        "semantic_only_discount_applied": False,
+    assert (
+        lexical_only_result.ranking_details["lexical_component"]
+        == lexical_only_result.lexical_score
+    )
+    assert lexical_only_result.ranking_details["semantic_component"] == 0.0
+    assert lexical_only_result.ranking_details["score_mode"] == "lexical_only"
+    assert lexical_only_result.ranking_details["semantic_only_discount_applied"] is False
+    assert lexical_only_result.ranking_details["reason_list"][0]["code"] == "lexical_signal_present"
+    assert "task_recall_detail" in lexical_only_result.ranking_details
+    assert lexical_only_result.ranking_details["task_recall_detail"]["memory_item_type"] in {
+        "episode_note",
+        "episode_summary",
     }
 
     assert semantic_only_result.lexical_score == 0.0
     assert semantic_only_result.semantic_score > 0.0
-    assert semantic_only_result.ranking_details == {
-        "lexical_component": 0.0,
-        "semantic_component": semantic_only_result.semantic_score,
-        "score_mode": "semantic_only_discounted",
-        "semantic_only_discount_applied": True,
+    assert semantic_only_result.ranking_details["lexical_component"] == 0.0
+    assert (
+        semantic_only_result.ranking_details["semantic_component"]
+        == semantic_only_result.semantic_score
+    )
+    assert semantic_only_result.ranking_details["score_mode"] == "semantic_only_discounted"
+    assert semantic_only_result.ranking_details["semantic_only_discount_applied"] is True
+    assert semantic_only_result.ranking_details["reason_list"][0]["code"] == "lexical_signal_absent"
+    assert (
+        semantic_only_result.ranking_details["reason_list"][1]["code"] == "semantic_signal_present"
+    )
+    assert "task_recall_detail" in semantic_only_result.ranking_details
+    assert semantic_only_result.ranking_details["task_recall_detail"]["memory_item_type"] in {
+        "episode_note",
+        "episode_summary",
     }
 
     assert hybrid_result.score > lexical_only_result.score
@@ -809,9 +826,7 @@ def test_postgres_memory_embedding_repository_find_similar_returns_nearest_match
         )
         .remember_episode(
             RememberEpisodeRequest(
-                workflow_instance_id=str(
-                    started.workflow_instance.workflow_instance_id
-                ),
+                workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
                 summary="Episode backing similarity query test",
                 attempt_id=str(started.attempt.attempt_id),
                 metadata={"kind": "integration"},
@@ -929,7 +944,4 @@ def test_postgres_memory_embedding_repository_find_similar_returns_nearest_match
         nearest_memory_id,
         middle_memory_id,
     ]
-    assert all(
-        embedding.embedding_model == "test-embedding-model"
-        for embedding in scoped_matches
-    )
+    assert all(embedding.embedding_model == "test-embedding-model" for embedding in scoped_matches)

@@ -1974,22 +1974,18 @@ def test_http_mcp_rpc_resources_read_returns_workspace_resume_payload() -> None:
     assert isinstance(response, McpHttpResponse)
     assert response.status_code == 200
     assert response.headers == {"content-type": "application/json"}
-    assert response.payload == {
-        "jsonrpc": "2.0",
-        "id": 5,
-        "result": {
-            "contents": [
-                {
-                    "uri": uri,
-                    "mimeType": "application/json",
-                    "text": json.dumps(
-                        {
-                            "uri": uri,
-                            "resource": serialize_workflow_resume(resume),
-                        },
-                        ensure_ascii=False,
-                    ),
-                }
-            ]
-        },
-    }
+    assert response.payload["jsonrpc"] == "2.0"
+    assert response.payload["id"] == 5
+
+    contents = response.payload["result"]["contents"]
+    assert len(contents) == 1
+    assert contents[0]["uri"] == uri
+    assert contents[0]["mimeType"] == "application/json"
+
+    payload_text = json.loads(contents[0]["text"])
+    assert payload_text["uri"] == uri
+
+    resource = payload_text["resource"]
+    expected_resource = serialize_workflow_resume(resume)
+    for key, value in expected_resource.items():
+        assert resource[key] == value

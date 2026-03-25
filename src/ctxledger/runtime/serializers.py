@@ -56,9 +56,7 @@ def serialize_workflow_resume(
         "latest_checkpoint": (
             {
                 "checkpoint_id": str(resume.latest_checkpoint.checkpoint_id),
-                "workflow_instance_id": str(
-                    resume.latest_checkpoint.workflow_instance_id
-                ),
+                "workflow_instance_id": str(resume.latest_checkpoint.workflow_instance_id),
                 "attempt_id": str(resume.latest_checkpoint.attempt_id),
                 "step_name": resume.latest_checkpoint.step_name,
                 "summary": resume.latest_checkpoint.summary,
@@ -119,22 +117,16 @@ def serialize_search_memory_response(
             {
                 "memory_id": str(result.memory_id),
                 "workspace_id": (
-                    str(result.workspace_id)
-                    if result.workspace_id is not None
-                    else None
+                    str(result.workspace_id) if result.workspace_id is not None else None
                 ),
-                "episode_id": (
-                    str(result.episode_id) if result.episode_id is not None else None
-                ),
+                "episode_id": (str(result.episode_id) if result.episode_id is not None else None),
                 "workflow_instance_id": (
                     str(result.workflow_instance_id)
                     if result.workflow_instance_id is not None
                     else None
                 ),
                 "summary": result.summary,
-                "attempt_id": (
-                    str(result.attempt_id) if result.attempt_id is not None else None
-                ),
+                "attempt_id": (str(result.attempt_id) if result.attempt_id is not None else None),
                 "metadata": result.metadata,
                 "score": result.score,
                 "matched_fields": list(result.matched_fields),
@@ -187,6 +179,23 @@ def serialize_get_context_response(
     details.setdefault("memory_items", [])
     details.setdefault("memory_item_counts_by_episode", {})
     details.setdefault("summaries", [])
+    details.setdefault("task_recall_selection_present", False)
+    details.setdefault("task_recall_selected_workflow_instance_id", None)
+    details.setdefault("task_recall_latest_workflow_instance_id", None)
+    details.setdefault("task_recall_running_workflow_instance_id", None)
+    details.setdefault("task_recall_selected_equals_latest", False)
+    details.setdefault("task_recall_selected_equals_running", False)
+    details.setdefault("task_recall_latest_workflow_terminal", False)
+    details.setdefault("task_recall_latest_ticket_detour_like", False)
+    details.setdefault("task_recall_latest_checkpoint_detour_like", False)
+    details.setdefault("task_recall_selected_ticket_detour_like", False)
+    details.setdefault("task_recall_selected_checkpoint_detour_like", False)
+    details.setdefault("task_recall_detour_override_applied", False)
+    details.setdefault("task_recall_explanations_present", False)
+    details.setdefault("task_recall_explanations", [])
+    details.setdefault("task_recall_ranking_details_present", False)
+    details.setdefault("task_recall_ranking_details", [])
+    details.setdefault("task_recall_selected_workflow_terminal", False)
 
     return {
         "feature": response.feature.value,
@@ -200,9 +209,7 @@ def serialize_get_context_response(
                 "episode_id": str(episode.episode_id),
                 "workflow_instance_id": str(episode.workflow_instance_id),
                 "summary": episode.summary,
-                "attempt_id": (
-                    str(episode.attempt_id) if episode.attempt_id is not None else None
-                ),
+                "attempt_id": (str(episode.attempt_id) if episode.attempt_id is not None else None),
                 "metadata": episode.metadata,
                 "status": episode.status,
                 "created_at": episode.created_at.isoformat(),
@@ -228,10 +235,7 @@ def serialize_runtime_introspection(
 def serialize_runtime_introspection_collection(
     introspections: tuple[RuntimeIntrospection, ...],
 ) -> list[dict[str, Any]]:
-    return [
-        serialize_runtime_introspection(introspection)
-        for introspection in introspections
-    ]
+    return [serialize_runtime_introspection(introspection) for introspection in introspections]
 
 
 __all__ = [

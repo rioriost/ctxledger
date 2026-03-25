@@ -1209,6 +1209,23 @@ Representative current response details may include:
 - `group_related_memory_items_are_convenience_output`
 - `summary_selection_applied`
 - `summary_selection_kind`
+- `task_recall_selection_present`
+- `task_recall_selected_workflow_instance_id`
+- `task_recall_latest_workflow_instance_id`
+- `task_recall_running_workflow_instance_id`
+- `task_recall_selected_equals_latest`
+- `task_recall_selected_equals_running`
+- `task_recall_latest_workflow_terminal`
+- `task_recall_latest_ticket_detour_like`
+- `task_recall_latest_checkpoint_detour_like`
+- `task_recall_selected_ticket_detour_like`
+- `task_recall_selected_checkpoint_detour_like`
+- `task_recall_detour_override_applied`
+- `task_recall_explanations_present`
+- `task_recall_explanations`
+- `task_recall_ranking_details_present`
+- `task_recall_ranking_details`
+- `task_recall_selected_workflow_terminal`
 
 When summaries are enabled and returned, grouped consumers may also observe a
 minimal summary-oriented entry in `memory_context_groups`:
@@ -1408,6 +1425,27 @@ That means:
   - when low-limit shaping also applies in that same episode-less path, it still operates only over the actually emitted auxiliary grouped output rather than causing summary-first grouped output or summary-selection metadata to become visible
 - inherited workspace-scoped memory may still be returned as auxiliary context when memory items are enabled
 - inherited workspace-scoped memory may also be returned even when no episode survives query filtering
+- task-recall selection metadata is additive explanation metadata over canonical workflow resolution rather than a separate retrieval route
+- current task-recall details should be read as describing which workflow candidate was surfaced for continuation-oriented context and why:
+  - `task_recall_selection_present`
+  - `task_recall_selected_workflow_instance_id`
+  - `task_recall_latest_workflow_instance_id`
+  - `task_recall_running_workflow_instance_id`
+  - `task_recall_selected_equals_latest`
+  - `task_recall_selected_equals_running`
+  - `task_recall_latest_workflow_terminal`
+  - `task_recall_latest_ticket_detour_like`
+  - `task_recall_latest_checkpoint_detour_like`
+  - `task_recall_selected_ticket_detour_like`
+  - `task_recall_selected_checkpoint_detour_like`
+  - `task_recall_detour_override_applied`
+  - `task_recall_explanations_present`
+  - `task_recall_explanations`
+  - `task_recall_ranking_details_present`
+  - `task_recall_ranking_details`
+  - `task_recall_selected_workflow_terminal`
+- `task_recall_explanations` should be read as compact human-readable explanation records for the current workflow choice
+- `task_recall_ranking_details` should be read as additive candidate-ranking diagnostics for the currently resolved workflow set, not as a stable general-purpose scoring API
 - in that no-episode-match case, grouped consumers should currently read the remaining workspace-scoped auxiliary visibility as preservation of auxiliary support context rather than as revival of filtered primary episode selection
 - when low-limit shaping also applies in that same no-episode-match case, low-limit truncation still applies to the surviving workspace auxiliary route
 - in that shape, only the newest inherited workspace items up to the current limit remain visible

@@ -92,6 +92,23 @@ def test_serialize_get_context_response_serializes_episode_payloads() -> None:
         "memory_items": [],
         "memory_item_counts_by_episode": {},
         "summaries": [],
+        "task_recall_selection_present": False,
+        "task_recall_selected_workflow_instance_id": None,
+        "task_recall_latest_workflow_instance_id": None,
+        "task_recall_running_workflow_instance_id": None,
+        "task_recall_selected_equals_latest": False,
+        "task_recall_selected_equals_running": False,
+        "task_recall_latest_workflow_terminal": False,
+        "task_recall_latest_ticket_detour_like": False,
+        "task_recall_latest_checkpoint_detour_like": False,
+        "task_recall_selected_ticket_detour_like": False,
+        "task_recall_selected_checkpoint_detour_like": False,
+        "task_recall_detour_override_applied": False,
+        "task_recall_explanations_present": False,
+        "task_recall_explanations": [],
+        "task_recall_ranking_details_present": False,
+        "task_recall_ranking_details": [],
+        "task_recall_selected_workflow_terminal": False,
     }
     assert payload["details"]["episode_explanations"][0]["matched"] is True
     assert (

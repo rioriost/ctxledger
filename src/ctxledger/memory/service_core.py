@@ -13,9 +13,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
+from ..runtime.task_recall import (
+    build_memory_context_task_recall_details,
+    checkpoint_is_detour_like,
+    workflow_ticket_is_detour_like,
+)
 from . import service as service_module
 from .embeddings import (
     EmbeddingGenerationError,
@@ -891,74 +897,36 @@ class MemoryService:
         task_recall_selected_workflow_terminal = bool(
             selected_task_recall_signals.get("workflow_is_terminal", False)
         )
-        task_recall_selected_over_latest = (
-            selected_task_recall_workflow_id is not None
-            and latest_task_recall_workflow_id is not None
-            and selected_task_recall_workflow_id != latest_task_recall_workflow_id
-        )
 
-        def _task_recall_detour_like(signal_map: dict[str, Any]) -> bool:
-            candidate_values = (
-                signal_map.get("ticket_id"),
-                signal_map.get("latest_checkpoint_step_name"),
-                signal_map.get("latest_checkpoint_summary"),
+        def _task_recall_detour_like(signal_map: dict[str, Any]) -> tuple[bool, bool, bool]:
+            workflow = SimpleNamespace(ticket_id=signal_map.get("ticket_id"))
+            checkpoint = SimpleNamespace(
+                step_name=signal_map.get("latest_checkpoint_step_name"),
+                summary=signal_map.get("latest_checkpoint_summary"),
+                checkpoint_json={},
             )
-            detour_tokens = ("coverage", "docs", "cleanup", "diagnostic", "detour")
-            normalized_values = " ".join(
-                str(value).lower() for value in candidate_values if value is not None
+            ticket_detour_like = workflow_ticket_is_detour_like(workflow)
+            checkpoint_detour_like = checkpoint_is_detour_like(checkpoint)
+            return (
+                ticket_detour_like,
+                checkpoint_detour_like,
+                ticket_detour_like or checkpoint_detour_like,
             )
-            return any(token in normalized_values for token in detour_tokens)
-
-        task_recall_latest_ticket_detour_like = _task_recall_detour_like(latest_task_recall_signals)
-        task_recall_selected_ticket_detour_like = _task_recall_detour_like(
-            selected_task_recall_signals
-        )
-        task_recall_detour_override_applied = (
-            task_recall_selected_over_latest
-            and task_recall_latest_ticket_detour_like
-            and not task_recall_selected_ticket_detour_like
-        )
 
         task_recall_explanations: list[dict[str, str]] = []
-        if task_recall_selected_over_latest and task_recall_latest_workflow_terminal:
-            task_recall_explanations.extend(
-                [
-                    {
-                        "code": "latest_workflow_terminal",
-                        "message": "latest workflow candidate was terminal",
-                    },
-                    {
-                        "code": "selected_alternative_candidate",
-                        "message": "selected an alternative workflow candidate for continuation",
-                    },
-                ]
-            )
-        if task_recall_detour_override_applied:
-            task_recall_explanations.extend(
-                [
-                    {
-                        "code": "latest_candidate_detour_like",
-                        "message": "latest workflow candidate looked like a detour rather than the primary task line",
-                    },
-                    {
-                        "code": "selected_mainline_candidate",
-                        "message": "selected a less detour-like candidate to better continue the main task",
-                    },
-                ]
-            )
-        if (
-            selected_task_recall_workflow_id is not None
-            and not task_recall_explanations
-            and (task_recall_selected_equals_latest or len(resolved_workflow_ids) == 1)
-        ):
-            task_recall_explanations.append(
-                {
-                    "code": "latest_candidate_retained",
-                    "message": "latest workflow candidate remained the best continuation point",
-                }
-            )
-
         task_recall_ranking_details = []
+
+        (
+            task_recall_latest_ticket_detour_like,
+            task_recall_latest_checkpoint_detour_like,
+            _,
+        ) = _task_recall_detour_like(latest_task_recall_signals)
+        (
+            task_recall_selected_ticket_detour_like,
+            task_recall_selected_checkpoint_detour_like,
+            _,
+        ) = _task_recall_detour_like(selected_task_recall_signals)
+
         for index, workflow_id in enumerate(
             [str(workflow_id) for workflow_id in resolved_workflow_ids]
         ):
@@ -969,7 +937,8 @@ class MemoryService:
             has_latest_checkpoint = bool(signal_map.get("has_latest_checkpoint", False))
             is_latest = workflow_id == latest_task_recall_workflow_id
             selected = workflow_id == selected_task_recall_workflow_id
-            detour_like = _task_recall_detour_like(signal_map)
+
+            _, _, detour_like = _task_recall_detour_like(signal_map)
 
             score = 0
             reason_list: list[dict[str, Any]] = []
@@ -1073,6 +1042,57 @@ class MemoryService:
                 }
             )
 
+        task_recall_detour_override_applied = (
+            selected_task_recall_workflow_id is not None
+            and latest_task_recall_workflow_id is not None
+            and selected_task_recall_workflow_id != latest_task_recall_workflow_id
+            and task_recall_latest_ticket_detour_like
+            and not task_recall_selected_ticket_detour_like
+        )
+
+        if (
+            selected_task_recall_workflow_id is not None
+            and latest_task_recall_workflow_id is not None
+            and selected_task_recall_workflow_id != latest_task_recall_workflow_id
+            and task_recall_latest_workflow_terminal
+        ):
+            task_recall_explanations.extend(
+                [
+                    {
+                        "code": "latest_workflow_terminal",
+                        "message": "latest workflow candidate was terminal",
+                    },
+                    {
+                        "code": "selected_alternative_candidate",
+                        "message": "selected an alternative workflow candidate for continuation",
+                    },
+                ]
+            )
+        if task_recall_detour_override_applied:
+            task_recall_explanations.extend(
+                [
+                    {
+                        "code": "latest_candidate_detour_like",
+                        "message": "latest workflow candidate looked like a detour rather than the primary task line",
+                    },
+                    {
+                        "code": "selected_mainline_candidate",
+                        "message": "selected a less detour-like candidate to better continue the main task",
+                    },
+                ]
+            )
+        if (
+            selected_task_recall_workflow_id is not None
+            and not task_recall_explanations
+            and (task_recall_selected_equals_latest or len(resolved_workflow_ids) == 1)
+        ):
+            task_recall_explanations.append(
+                {
+                    "code": "latest_candidate_retained",
+                    "message": "latest workflow candidate remained the best continuation point",
+                }
+            )
+
         details = {
             "query": request.query,
             "normalized_query": normalized_query,
@@ -1118,23 +1138,32 @@ class MemoryService:
             },
             "resolved_workflow_count": len(resolved_workflow_ids),
             "resolved_workflow_ids": [str(workflow_id) for workflow_id in resolved_workflow_ids],
-            "task_recall_selection_present": selected_task_recall_workflow_id is not None,
-            "task_recall_selected_workflow_instance_id": selected_task_recall_workflow_id,
-            "task_recall_latest_workflow_instance_id": latest_task_recall_workflow_id,
-            "task_recall_running_workflow_instance_id": None,
-            "task_recall_selected_equals_latest": task_recall_selected_equals_latest,
-            "task_recall_selected_equals_running": False,
-            "task_recall_latest_workflow_terminal": task_recall_latest_workflow_terminal,
-            "task_recall_latest_ticket_detour_like": task_recall_latest_ticket_detour_like,
-            "task_recall_latest_checkpoint_detour_like": task_recall_latest_ticket_detour_like,
-            "task_recall_selected_ticket_detour_like": task_recall_selected_ticket_detour_like,
-            "task_recall_selected_checkpoint_detour_like": task_recall_selected_ticket_detour_like,
-            "task_recall_detour_override_applied": task_recall_detour_override_applied,
-            "task_recall_explanations_present": bool(task_recall_explanations),
-            "task_recall_explanations": task_recall_explanations,
-            "task_recall_ranking_details_present": bool(task_recall_ranking_details),
-            "task_recall_ranking_details": task_recall_ranking_details,
-            "task_recall_selected_workflow_terminal": task_recall_selected_workflow_terminal,
+            **build_memory_context_task_recall_details(
+                selected_workflow=(
+                    SimpleNamespace(workflow_instance_id=selected_task_recall_workflow_id)
+                    if selected_task_recall_workflow_id is not None
+                    else None
+                ),
+                latest_workflow=(
+                    SimpleNamespace(workflow_instance_id=latest_task_recall_workflow_id)
+                    if latest_task_recall_workflow_id is not None
+                    else None
+                ),
+                running_workflow=None,
+                selection_signals={
+                    "selected_equals_latest": task_recall_selected_equals_latest,
+                    "selected_equals_running": False,
+                    "latest_workflow_terminal": task_recall_latest_workflow_terminal,
+                    "latest_ticket_detour_like": task_recall_latest_ticket_detour_like,
+                    "latest_checkpoint_detour_like": task_recall_latest_checkpoint_detour_like,
+                    "selected_ticket_detour_like": task_recall_selected_ticket_detour_like,
+                    "selected_checkpoint_detour_like": task_recall_selected_checkpoint_detour_like,
+                    "detour_override_applied": task_recall_detour_override_applied,
+                },
+                explanations=task_recall_explanations,
+                ranking_details=task_recall_ranking_details,
+                selected_workflow_terminal=task_recall_selected_workflow_terminal,
+            ),
         }
 
         if not request.include_episodes:

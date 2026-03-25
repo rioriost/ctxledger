@@ -742,7 +742,8 @@ Current memory state should be read as:
 
 - episodic memory is real
 - semantic search is present in an initial form
-- hierarchical retrieval is future work
+- `memory_get_context` now exposes richer retrieval assembly details, including summary-selection metadata and task-recall workflow-selection diagnostics
+- hierarchical retrieval is still an early, explainable surface rather than a mature relevance-ranked retrieval contract
 
 ### Observability
 Implemented:

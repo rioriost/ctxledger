@@ -144,6 +144,12 @@ EXECUTE FUNCTION set_updated_at();
 -- ---------------------------------------------------------------------------
 -- Workflow checkpoints
 -- ---------------------------------------------------------------------------
+-- `checkpoint_json` is canonical structured checkpoint state.
+-- It may carry fields such as `current_objective` and `next_intended_action`
+-- that help continuation-oriented reads distinguish the main task line from
+-- temporary detours. This supports task_recall heuristics, while the database
+-- remains the canonical source of record and any ranking or explanation layers
+-- remain derived.
 
 CREATE TABLE IF NOT EXISTS workflow_checkpoints (
   checkpoint_id UUID PRIMARY KEY,

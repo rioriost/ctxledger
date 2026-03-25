@@ -240,6 +240,7 @@ def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values
         "task_recall_explanations": [],
         "task_recall_ranking_details_present": False,
         "task_recall_ranking_details": [],
+        "task_recall_selected_workflow_terminal": False,
     }
     assert result["episodes"] == []
 
