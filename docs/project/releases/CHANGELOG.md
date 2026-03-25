@@ -130,9 +130,17 @@ The project currently follows a lightweight, human-maintained changelog style.
 - CLI-focused validation passed for readiness, summary refresh, and summary build surfaces:
   - `python -m pytest tests/cli/test_cli_main.py tests/cli/test_cli_schema.py -q`
   - `84 passed`
-- full repository validation passed after the final summary hierarchy closeout, transport-contract, and documentation alignment slices:
+- full repository validation passed after the final summary hierarchy closeout, transport-contract, documentation alignment, and docs-taxonomy follow-up slices:
   - `python -m pytest -q`
-  - `931 passed, 1 skipped`
+  - `932 passed, 1 skipped`
+- `0.6.0` acceptance review now has an explicit release-facing assessment artifact:
+  - `docs/project/releases/0.6.0_acceptance_review.md`
+  - current reading:
+    - bounded `0.6.0` summary hierarchy slice accepted
+    - targeted and full validation green
+    - PostgreSQL canonical behavior preserved
+    - AGE boundary documented as derived and degradable
+    - `0.7.0` Mnemis-oriented evaluation remains explicitly deferred
 
 ### Notes
 
