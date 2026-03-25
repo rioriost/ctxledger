@@ -16,3 +16,4 @@ docker/traefik/certs/
 # Virtual environments
 .venv
 .envrc
+.env
