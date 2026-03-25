@@ -98,6 +98,18 @@ _LATEST_CHECKPOINT_PRESENT_BONUS_REASON = {
     "message": "candidate has checkpoint history for resumability",
     "impact": 5,
 }
+_LATEST_ATTEMPT_PRESENT_EXPLANATION = {
+    "code": "latest_attempt_present",
+    "message": "candidate has a latest attempt signal that improves resumability confidence",
+}
+_LATEST_ATTEMPT_TERMINAL_EXPLANATION = {
+    "code": "latest_attempt_terminal",
+    "message": "candidate's latest attempt was terminal, reducing resumability confidence",
+}
+_LATEST_CHECKPOINT_PRESENT_EXPLANATION = {
+    "code": "latest_checkpoint_present",
+    "message": "candidate has checkpoint history that improves resumability confidence",
+}
 
 
 def workflow_status_value(workflow: Any | None) -> str | None:
@@ -273,6 +285,18 @@ def build_latest_attempt_terminal_penalty_reason() -> dict[str, Any]:
 
 def build_latest_checkpoint_present_bonus_reason() -> dict[str, Any]:
     return dict(_LATEST_CHECKPOINT_PRESENT_BONUS_REASON)
+
+
+def build_latest_attempt_present_explanations() -> list[dict[str, str]]:
+    return [dict(_LATEST_ATTEMPT_PRESENT_EXPLANATION)]
+
+
+def build_latest_attempt_terminal_explanations() -> list[dict[str, str]]:
+    return [dict(_LATEST_ATTEMPT_TERMINAL_EXPLANATION)]
+
+
+def build_latest_checkpoint_present_explanations() -> list[dict[str, str]]:
+    return [dict(_LATEST_CHECKPOINT_PRESENT_EXPLANATION)]
 
 
 def build_memory_context_task_recall_details(
@@ -716,8 +740,11 @@ __all__ = [
     "build_latest_candidate_reason",
     "build_latest_candidate_retained_explanations",
     "build_latest_attempt_present_bonus_reason",
+    "build_latest_attempt_present_explanations",
     "build_latest_attempt_terminal_penalty_reason",
+    "build_latest_attempt_terminal_explanations",
     "build_latest_checkpoint_present_bonus_reason",
+    "build_latest_checkpoint_present_explanations",
     "build_mainline_like_bonus_reason",
     "build_memory_context_task_recall_details",
     "build_running_workflow_priority_reason",

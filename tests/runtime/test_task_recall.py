@@ -7,10 +7,13 @@ from ctxledger.runtime.task_recall import (
     build_checkpoint_detour_like_penalty_reason,
     build_detour_like_signal_details,
     build_latest_attempt_present_bonus_reason,
+    build_latest_attempt_present_explanations,
+    build_latest_attempt_terminal_explanations,
     build_latest_attempt_terminal_penalty_reason,
     build_latest_candidate_reason,
     build_latest_candidate_retained_explanations,
     build_latest_checkpoint_present_bonus_reason,
+    build_latest_checkpoint_present_explanations,
     build_mainline_like_bonus_reason,
     build_running_workflow_priority_reason,
     build_selected_candidate_reason,
@@ -106,6 +109,27 @@ def test_remaining_shared_ranking_reason_helpers_return_expected_payloads() -> N
         "message": "candidate has checkpoint history for resumability",
         "impact": 5,
     }
+
+
+def test_resumability_explanation_helpers_return_expected_payloads() -> None:
+    assert build_latest_attempt_present_explanations() == [
+        {
+            "code": "latest_attempt_present",
+            "message": "candidate has a latest attempt signal that improves resumability confidence",
+        }
+    ]
+    assert build_latest_attempt_terminal_explanations() == [
+        {
+            "code": "latest_attempt_terminal",
+            "message": "candidate's latest attempt was terminal, reducing resumability confidence",
+        }
+    ]
+    assert build_latest_checkpoint_present_explanations() == [
+        {
+            "code": "latest_checkpoint_present",
+            "message": "candidate has checkpoint history that improves resumability confidence",
+        }
+    ]
 
 
 def test_build_detour_like_signal_details_returns_expected_flags() -> None:

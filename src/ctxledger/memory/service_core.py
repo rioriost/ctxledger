@@ -20,7 +20,10 @@ from uuid import UUID, uuid4
 from ..runtime.task_recall import (
     build_detour_like_signal_details,
     build_detour_override_explanations,
+    build_latest_attempt_present_explanations,
+    build_latest_attempt_terminal_explanations,
     build_latest_candidate_retained_explanations,
+    build_latest_checkpoint_present_explanations,
     build_memory_context_task_recall_details,
     build_task_recall_detour_override_applied,
     build_task_recall_ranking_entry,
@@ -984,6 +987,16 @@ class MemoryService:
                     include_candidate_reason_details=True,
                 )
             )
+        if (
+            selected_task_recall_workflow_id is not None
+            and selected_task_recall_workflow_id == latest_task_recall_workflow_id
+        ):
+            if bool(selected_task_recall_signals.get("has_latest_attempt", False)):
+                task_recall_explanations.extend(build_latest_attempt_present_explanations())
+            if bool(selected_task_recall_signals.get("latest_attempt_is_terminal", False)):
+                task_recall_explanations.extend(build_latest_attempt_terminal_explanations())
+            if bool(selected_task_recall_signals.get("has_latest_checkpoint", False)):
+                task_recall_explanations.extend(build_latest_checkpoint_present_explanations())
         if (
             selected_task_recall_workflow_id is not None
             and not task_recall_explanations
