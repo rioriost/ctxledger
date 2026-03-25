@@ -432,6 +432,9 @@ def build_workspace_resume_ranking_entry(
     is_latest: bool,
     is_running: bool,
     workflow_terminal: bool,
+    has_latest_attempt: bool,
+    latest_attempt_terminal: bool,
+    has_latest_checkpoint: bool,
     ticket_detour_like: bool,
     checkpoint_detour_like: bool,
 ) -> dict[str, Any]:
@@ -449,6 +452,18 @@ def build_workspace_resume_ranking_entry(
     else:
         score += 25
         reason_list.append(build_workflow_non_terminal_bonus_reason())
+
+    if has_latest_attempt:
+        score += 5
+        reason_list.append(build_latest_attempt_present_bonus_reason())
+
+    if latest_attempt_terminal:
+        score -= 5
+        reason_list.append(build_latest_attempt_terminal_penalty_reason())
+
+    if has_latest_checkpoint:
+        score += 5
+        reason_list.append(build_latest_checkpoint_present_bonus_reason())
 
     if detour_like:
         score -= 10
@@ -468,6 +483,9 @@ def build_workspace_resume_ranking_entry(
         "is_latest": is_latest,
         "is_running": is_running,
         "workflow_terminal": workflow_terminal,
+        "has_latest_attempt": has_latest_attempt,
+        "latest_attempt_terminal": latest_attempt_terminal,
+        "has_latest_checkpoint": has_latest_checkpoint,
         "ticket_detour_like": ticket_detour_like,
         "checkpoint_detour_like": checkpoint_detour_like,
         "detour_like": detour_like,
@@ -534,6 +552,11 @@ def build_workspace_resume_selection(
         workflow_id = str(workflow.workflow_instance_id)
         checkpoint = candidate_checkpoints_by_workflow_id.get(workflow_id)
         workflow_terminal = workflow_status_value(workflow) in _TERMINAL_WORKFLOW_STATUSES
+        latest_attempt = getattr(workflow, "latest_attempt", None)
+        latest_attempt_status = workflow_status_value(latest_attempt)
+        has_latest_attempt = latest_attempt is not None
+        latest_attempt_terminal = latest_attempt_status in _TERMINAL_WORKFLOW_STATUSES
+        has_latest_checkpoint = checkpoint is not None
         (
             ticket_detour_like,
             checkpoint_detour_like,
@@ -550,6 +573,9 @@ def build_workspace_resume_selection(
             is_latest=is_latest,
             is_running=is_running,
             workflow_terminal=workflow_terminal,
+            has_latest_attempt=has_latest_attempt,
+            latest_attempt_terminal=latest_attempt_terminal,
+            has_latest_checkpoint=has_latest_checkpoint,
             ticket_detour_like=ticket_detour_like,
             checkpoint_detour_like=checkpoint_detour_like,
         )
