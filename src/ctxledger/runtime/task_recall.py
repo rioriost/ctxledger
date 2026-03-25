@@ -299,6 +299,24 @@ def build_latest_checkpoint_present_explanations() -> list[dict[str, str]]:
     return [dict(_LATEST_CHECKPOINT_PRESENT_EXPLANATION)]
 
 
+def build_resumability_explanations(
+    *,
+    has_latest_attempt: bool,
+    latest_attempt_terminal: bool,
+    has_latest_checkpoint: bool,
+) -> list[dict[str, str]]:
+    explanations: list[dict[str, str]] = []
+
+    if has_latest_attempt:
+        explanations.extend(build_latest_attempt_present_explanations())
+    if latest_attempt_terminal:
+        explanations.extend(build_latest_attempt_terminal_explanations())
+    if has_latest_checkpoint:
+        explanations.extend(build_latest_checkpoint_present_explanations())
+
+    return explanations
+
+
 def build_memory_context_task_recall_details(
     *,
     selected_workflow: Any | None,
@@ -665,6 +683,16 @@ def build_workspace_resume_selection(
                         include_candidate_reason_details=True,
                     )
                 )
+        elif latest_workflow is not None and selected_workflow == latest_workflow:
+            latest_attempt = getattr(selected_workflow, "latest_attempt", None)
+            latest_attempt_status = workflow_status_value(latest_attempt)
+            explanations.extend(
+                build_resumability_explanations(
+                    has_latest_attempt=latest_attempt is not None,
+                    latest_attempt_terminal=(latest_attempt_status in _TERMINAL_WORKFLOW_STATUSES),
+                    has_latest_checkpoint=latest_checkpoint is not None,
+                )
+            )
 
     if selected_workflow is not None:
         selected_checkpoint = candidate_checkpoints_by_workflow_id.get(
@@ -746,6 +774,7 @@ __all__ = [
     "build_latest_checkpoint_present_bonus_reason",
     "build_latest_checkpoint_present_explanations",
     "build_mainline_like_bonus_reason",
+    "build_resumability_explanations",
     "build_memory_context_task_recall_details",
     "build_running_workflow_priority_reason",
     "build_task_recall_detour_override_applied",

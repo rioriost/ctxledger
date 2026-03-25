@@ -20,11 +20,9 @@ from uuid import UUID, uuid4
 from ..runtime.task_recall import (
     build_detour_like_signal_details,
     build_detour_override_explanations,
-    build_latest_attempt_present_explanations,
-    build_latest_attempt_terminal_explanations,
     build_latest_candidate_retained_explanations,
-    build_latest_checkpoint_present_explanations,
     build_memory_context_task_recall_details,
+    build_resumability_explanations,
     build_task_recall_detour_override_applied,
     build_task_recall_ranking_entry,
     build_terminal_override_explanations,
@@ -991,12 +989,19 @@ class MemoryService:
             selected_task_recall_workflow_id is not None
             and selected_task_recall_workflow_id == latest_task_recall_workflow_id
         ):
-            if bool(selected_task_recall_signals.get("has_latest_attempt", False)):
-                task_recall_explanations.extend(build_latest_attempt_present_explanations())
-            if bool(selected_task_recall_signals.get("latest_attempt_is_terminal", False)):
-                task_recall_explanations.extend(build_latest_attempt_terminal_explanations())
-            if bool(selected_task_recall_signals.get("has_latest_checkpoint", False)):
-                task_recall_explanations.extend(build_latest_checkpoint_present_explanations())
+            task_recall_explanations.extend(
+                build_resumability_explanations(
+                    has_latest_attempt=bool(
+                        selected_task_recall_signals.get("has_latest_attempt", False)
+                    ),
+                    latest_attempt_terminal=bool(
+                        selected_task_recall_signals.get("latest_attempt_is_terminal", False)
+                    ),
+                    has_latest_checkpoint=bool(
+                        selected_task_recall_signals.get("has_latest_checkpoint", False)
+                    ),
+                )
+            )
         if (
             selected_task_recall_workflow_id is not None
             and not task_recall_explanations

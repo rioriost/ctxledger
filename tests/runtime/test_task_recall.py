@@ -15,6 +15,7 @@ from ctxledger.runtime.task_recall import (
     build_latest_checkpoint_present_bonus_reason,
     build_latest_checkpoint_present_explanations,
     build_mainline_like_bonus_reason,
+    build_resumability_explanations,
     build_running_workflow_priority_reason,
     build_selected_candidate_reason,
     build_task_recall_detour_override_applied,
@@ -129,6 +130,24 @@ def test_resumability_explanation_helpers_return_expected_payloads() -> None:
             "code": "latest_checkpoint_present",
             "message": "candidate has checkpoint history that improves resumability confidence",
         }
+    ]
+    assert build_resumability_explanations(
+        has_latest_attempt=True,
+        latest_attempt_terminal=True,
+        has_latest_checkpoint=True,
+    ) == [
+        {
+            "code": "latest_attempt_present",
+            "message": "candidate has a latest attempt signal that improves resumability confidence",
+        },
+        {
+            "code": "latest_attempt_terminal",
+            "message": "candidate's latest attempt was terminal, reducing resumability confidence",
+        },
+        {
+            "code": "latest_checkpoint_present",
+            "message": "candidate has checkpoint history that improves resumability confidence",
+        },
     ]
 
 
@@ -536,6 +555,111 @@ def test_build_workspace_resume_ranking_entry_returns_expected_payload_for_lates
             },
         ],
     }
+
+
+def test_workspace_resume_selection_surfaces_resumability_explanations_for_latest_selected_candidate() -> (
+    None
+):
+    latest_workflow = SimpleNamespace(
+        workflow_instance_id=uuid4(),
+        status="running",
+        ticket_id="TASK-PRIMARY-RESUME-1",
+        latest_attempt=SimpleNamespace(status="running"),
+    )
+    latest_checkpoint = SimpleNamespace(
+        summary="Resume primary workflow implementation",
+        step_name="implement_task_recall",
+        checkpoint_json={},
+    )
+
+    (
+        selected_workflow,
+        selected_reason,
+        selection_signals,
+        explanations,
+        ranking_details,
+    ) = build_workspace_resume_selection(
+        running_workflow=None,
+        latest_workflow=latest_workflow,
+        workflow_candidates=(latest_workflow,),
+        latest_checkpoint=latest_checkpoint,
+        candidate_checkpoints_by_workflow_id={
+            str(latest_workflow.workflow_instance_id): latest_checkpoint,
+        },
+    )
+
+    assert selected_workflow is latest_workflow
+    assert selected_reason == "selected latest workflow because no running workflow was available"
+    assert selection_signals == {
+        "running_workflow_available": False,
+        "latest_workflow_terminal": False,
+        "non_terminal_candidate_available": True,
+        "selected_equals_latest": True,
+        "selected_equals_running": False,
+        "latest_ticket_detour_like": False,
+        "latest_checkpoint_detour_like": False,
+        "selected_ticket_detour_like": False,
+        "selected_checkpoint_detour_like": False,
+        "detour_override_applied": False,
+        "ranking_details_present": True,
+        "explanations_present": True,
+    }
+    assert explanations == [
+        {
+            "code": "latest_attempt_present",
+            "message": "candidate has a latest attempt signal that improves resumability confidence",
+        },
+        {
+            "code": "latest_checkpoint_present",
+            "message": "candidate has checkpoint history that improves resumability confidence",
+        },
+    ]
+    assert ranking_details == [
+        {
+            "workflow_instance_id": str(latest_workflow.workflow_instance_id),
+            "is_latest": True,
+            "is_running": False,
+            "workflow_terminal": False,
+            "has_latest_attempt": True,
+            "latest_attempt_terminal": False,
+            "has_latest_checkpoint": True,
+            "ticket_detour_like": False,
+            "checkpoint_detour_like": False,
+            "detour_like": False,
+            "score": 45,
+            "reason_list": [
+                {
+                    "code": "workflow_non_terminal_bonus",
+                    "message": "non-terminal workflows are preferred for continuation",
+                    "impact": 25,
+                },
+                {
+                    "code": "latest_attempt_present_bonus",
+                    "message": "candidate has a latest attempt signal available",
+                    "impact": 5,
+                },
+                {
+                    "code": "latest_checkpoint_present_bonus",
+                    "message": "candidate has checkpoint history for resumability",
+                    "impact": 5,
+                },
+                {
+                    "code": "mainline_like_bonus",
+                    "message": "candidate looks aligned with the main task line",
+                    "impact": 10,
+                },
+                {
+                    "code": "latest_candidate",
+                    "message": "candidate is the latest workflow considered for resume",
+                },
+                {
+                    "code": "selected_candidate",
+                    "message": "candidate was selected after applying workspace resume heuristics",
+                },
+            ],
+            "selected": True,
+        }
+    ]
 
 
 def test_build_workspace_resume_ranking_entry_returns_expected_payload_for_running_detour_candidate() -> (
