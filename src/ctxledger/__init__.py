@@ -331,7 +331,7 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                         FROM cypher(
                             {graph_name_literal},
                             $$
-                            CREATE (n:memory_item {memory_id: $memory_id})
+                            CREATE (n:memory_item {{memory_id: $memory_id}})
                             RETURN n
                             $$,
                             %s
@@ -377,13 +377,13 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                         FROM cypher(
                             {graph_name_literal},
                             $$
-                            MATCH (source:memory_item {memory_id: $source_memory_id})
-                            MATCH (target:memory_item {memory_id: $target_memory_id})
-                            CREATE (source)-[r:supports {
-                            memory_relation_id: $memory_relation_id,
+                            MATCH (source:memory_item {{memory_id: $source_memory_id}})
+                            MATCH (target:memory_item {{memory_id: $target_memory_id}})
+                            CREATE (source)-[r:supports {{
+                                memory_relation_id: $memory_relation_id,
                                 source_memory_id: $source_memory_id,
                                 target_memory_id: $target_memory_id
-                            }]->(target)
+                            }}]->(target)
                             RETURN r
                             $$,
                             %s

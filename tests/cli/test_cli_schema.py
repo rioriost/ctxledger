@@ -499,11 +499,14 @@ def test_bootstrap_age_graph_uses_tuple_rows_for_memory_items_and_relations(
     )
     captured = capsys.readouterr()
 
-    assert exit_code == 1
-    assert captured.out == ""
-    assert "Failed to bootstrap AGE graph:" in captured.err
+    assert exit_code == 0
+    assert captured.out.strip() == (
+        "AGE graph bootstrap completed for 'ctxledger_test_graph' "
+        "(memory_item nodes repopulated=0, supports edges repopulated=0)."
+    )
+    assert captured.err == ""
     assert connect_calls == ["postgresql://explicit/db"]
-    assert commit_calls == []
+    assert commit_calls == ["commit"]
     assert executed_queries[0] == ("LOAD 'age'", None)
     assert executed_queries[1] == ('SET search_path = ag_catalog, "$user", public', None)
     assert executed_queries[2][1] == ("ctxledger_test_graph",)
@@ -511,7 +514,14 @@ def test_bootstrap_age_graph_uses_tuple_rows_for_memory_items_and_relations(
     assert executed_queries[3][1] is None
     assert executed_queries[4][1] is None
     assert executed_queries[5][1] is None
-    assert executed_queries[6][1] is None
+    assert any(
+        "CREATE (n:memory_item {memory_id: $memory_id})" in query and params is not None
+        for query, params in executed_queries
+    )
+    assert any(
+        "CREATE (source)-[r:supports {" in query and params is not None
+        for query, params in executed_queries
+    )
 
 
 def test_bootstrap_age_graph_uses_mapping_rows_for_memory_items_and_relations(
@@ -583,11 +593,14 @@ def test_bootstrap_age_graph_uses_mapping_rows_for_memory_items_and_relations(
     )
     captured = capsys.readouterr()
 
-    assert exit_code == 1
-    assert captured.out == ""
-    assert "Failed to bootstrap AGE graph:" in captured.err
+    assert exit_code == 0
+    assert captured.out.strip() == (
+        "AGE graph bootstrap completed for 'ctxledger_test_graph' "
+        "(memory_item nodes repopulated=0, supports edges repopulated=0)."
+    )
+    assert captured.err == ""
     assert connect_calls == ["postgresql://explicit/db"]
-    assert commit_calls == []
+    assert commit_calls == ["commit"]
     assert executed_queries[0] == ("LOAD 'age'", None)
     assert executed_queries[1] == ('SET search_path = ag_catalog, "$user", public', None)
     assert executed_queries[2][1] == ("ctxledger_test_graph",)
@@ -595,7 +608,14 @@ def test_bootstrap_age_graph_uses_mapping_rows_for_memory_items_and_relations(
     assert executed_queries[3][1] is None
     assert executed_queries[4][1] is None
     assert executed_queries[5][1] is None
-    assert executed_queries[6][1] is None
+    assert any(
+        "CREATE (n:memory_item {memory_id: $memory_id})" in query and params is not None
+        for query, params in executed_queries
+    )
+    assert any(
+        "CREATE (source)-[r:supports {" in query and params is not None
+        for query, params in executed_queries
+    )
 
 
 def test_bootstrap_age_graph_skips_create_graph_when_graph_already_exists(
