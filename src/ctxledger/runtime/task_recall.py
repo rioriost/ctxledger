@@ -8,6 +8,11 @@ _DETOUR_LIKE_TOKENS = (
     "docs",
     "cleanup",
     "diagnostic",
+    "runbook",
+    "memo",
+    "checklist",
+    "review",
+    "notes",
 )
 _LATEST_WORKFLOW_TERMINAL_EXPLANATION = {
     "code": "latest_workflow_terminal",
@@ -419,32 +424,6 @@ def build_task_recall_ranking_entry(
         "score": score,
         "reason_list": reason_list,
     }
-
-
-def build_workspace_resume_selection(
-    *,
-    running_workflow: Any | None,
-    latest_workflow: Any | None,
-    workflow_candidates: tuple[Any, ...],
-    latest_checkpoint: Any | None = None,
-    candidate_checkpoints_by_workflow_id: dict[str, Any] | None = None,
-) -> tuple[Any | None, str, dict[str, bool], list[dict[str, str]], list[dict[str, Any]]]:
-    candidate_checkpoints_by_workflow_id = candidate_checkpoints_by_workflow_id or {}
-
-    latest_workflow_terminal = (
-        workflow_status_value(latest_workflow) in _TERMINAL_WORKFLOW_STATUSES
-        if latest_workflow is not None
-        else False
-    )
-    non_terminal_candidate_available = any(
-        workflow_status_value(workflow) not in _TERMINAL_WORKFLOW_STATUSES
-        for workflow in workflow_candidates
-    )
-    latest_ticket_detour_like = workflow_ticket_is_detour_like(latest_workflow)
-    latest_checkpoint_detour_like = checkpoint_is_detour_like(latest_checkpoint)
-    latest_detour_like = latest_ticket_detour_like or latest_checkpoint_detour_like
-
-    explanations: list[dict[str, str]] = []
 
 
 def build_workspace_resume_ranking_entry(

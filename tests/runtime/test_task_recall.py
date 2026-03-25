@@ -140,6 +140,81 @@ def test_build_detour_like_signal_details_returns_expected_flags() -> None:
     ) == (False, False, False)
 
 
+def test_build_detour_like_signal_details_treats_current_objective_as_detour_signal() -> None:
+    assert build_detour_like_signal_details(
+        workflow=SimpleNamespace(ticket_id="TASK-PRIMARY-1"),
+        checkpoint=SimpleNamespace(
+            summary="Continue main implementation",
+            step_name="implement_task_recall",
+            checkpoint_json={
+                "current_objective": "Finish coverage cleanup for task recall helpers",
+            },
+        ),
+    ) == (False, True, True)
+
+
+def test_build_detour_like_signal_details_treats_next_intended_action_as_detour_signal() -> None:
+    assert build_detour_like_signal_details(
+        workflow=SimpleNamespace(ticket_id="TASK-PRIMARY-1"),
+        checkpoint=SimpleNamespace(
+            summary="Continue main implementation",
+            step_name="implement_task_recall",
+            checkpoint_json={
+                "next_intended_action": "Write docs follow-up for workspace resume behavior",
+            },
+        ),
+    ) == (False, True, True)
+
+
+def test_build_detour_like_signal_details_keeps_checkpoint_json_mainline_text_non_detour() -> None:
+    assert build_detour_like_signal_details(
+        workflow=SimpleNamespace(ticket_id="TASK-PRIMARY-1"),
+        checkpoint=SimpleNamespace(
+            summary="Continue main implementation",
+            step_name="implement_task_recall",
+            checkpoint_json={
+                "current_objective": "Finish task recall ranking implementation",
+                "next_intended_action": "Resume primary workflow selection work",
+            },
+        ),
+    ) == (False, False, False)
+
+
+def test_build_detour_like_signal_details_treats_runbook_text_as_detour_signal() -> None:
+    assert build_detour_like_signal_details(
+        workflow=SimpleNamespace(ticket_id="TASK-PRIMARY-1"),
+        checkpoint=SimpleNamespace(
+            summary="Update operator runbook for workspace resume behavior",
+            step_name="runbook_followup",
+            checkpoint_json={},
+        ),
+    ) == (False, True, True)
+
+
+def test_build_detour_like_signal_details_treats_memo_review_and_checklist_text_as_detour_signal() -> (
+    None
+):
+    assert build_detour_like_signal_details(
+        workflow=SimpleNamespace(ticket_id="TASK-PRIMARY-1"),
+        checkpoint=SimpleNamespace(
+            summary="Write design memo for task recall selection",
+            step_name="review_checklist_followup",
+            checkpoint_json={},
+        ),
+    ) == (False, True, True)
+
+
+def test_build_detour_like_signal_details_treats_notes_text_as_detour_signal() -> None:
+    assert build_detour_like_signal_details(
+        workflow=SimpleNamespace(ticket_id="TASK-PRIMARY-1"),
+        checkpoint=SimpleNamespace(
+            summary="Prepare implementation notes for workspace resume heuristics",
+            step_name="notes_followup",
+            checkpoint_json={},
+        ),
+    ) == (False, True, True)
+
+
 def test_build_task_recall_detour_override_applied_returns_expected_flag() -> None:
     assert (
         build_task_recall_detour_override_applied(
