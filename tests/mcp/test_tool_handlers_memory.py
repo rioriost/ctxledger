@@ -137,6 +137,29 @@ def test_build_memory_search_tool_handler_uses_defaults_for_invalid_optional_val
         "semantic_component": 0.0,
         "score_mode": "lexical_only",
         "semantic_only_discount_applied": False,
+        "reason_list": [
+            {
+                "code": "lexical_signal_present",
+                "message": "lexical overlap contributed to the ranking score",
+                "value": 3.0,
+            },
+            {
+                "code": "semantic_signal_absent",
+                "message": "no semantic similarity contributed to the ranking score",
+                "value": 0.0,
+            },
+            {
+                "code": "lexical_only_score_mode",
+                "message": "the result ranked using lexical evidence only",
+            },
+        ],
+        "task_recall_detail": {
+            "matched_fields": ["content"],
+            "memory_item_type": "episode_note",
+            "memory_item_provenance": "episode",
+            "metadata_match_candidates": ["kind checkpoint", "checkpoint"],
+            "workspace_constrained": True,
+        },
     }
 
     assert service.search_calls is not None
@@ -201,6 +224,22 @@ def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values
         "memory_items": [],
         "memory_item_counts_by_episode": {},
         "summaries": [],
+        "task_recall_selection_present": False,
+        "task_recall_selected_workflow_instance_id": None,
+        "task_recall_latest_workflow_instance_id": None,
+        "task_recall_running_workflow_instance_id": None,
+        "task_recall_selected_equals_latest": False,
+        "task_recall_selected_equals_running": False,
+        "task_recall_latest_workflow_terminal": False,
+        "task_recall_latest_ticket_detour_like": False,
+        "task_recall_latest_checkpoint_detour_like": False,
+        "task_recall_selected_ticket_detour_like": False,
+        "task_recall_selected_checkpoint_detour_like": False,
+        "task_recall_detour_override_applied": False,
+        "task_recall_explanations_present": False,
+        "task_recall_explanations": [],
+        "task_recall_ranking_details_present": False,
+        "task_recall_ranking_details": [],
     }
     assert result["episodes"] == []
 

@@ -215,6 +215,29 @@ def make_search_memory_response() -> SearchMemoryResponse:
                     "semantic_component": 0.0,
                     "score_mode": "lexical_only",
                     "semantic_only_discount_applied": False,
+                    "reason_list": [
+                        {
+                            "code": "lexical_signal_present",
+                            "message": "lexical overlap contributed to the ranking score",
+                            "value": 3.0,
+                        },
+                        {
+                            "code": "semantic_signal_absent",
+                            "message": "no semantic similarity contributed to the ranking score",
+                            "value": 0.0,
+                        },
+                        {
+                            "code": "lexical_only_score_mode",
+                            "message": "the result ranked using lexical evidence only",
+                        },
+                    ],
+                    "task_recall_detail": {
+                        "matched_fields": ["content"],
+                        "memory_item_type": "episode_note",
+                        "memory_item_provenance": "episode",
+                        "metadata_match_candidates": ["kind checkpoint", "checkpoint"],
+                        "workspace_constrained": True,
+                    },
                 },
                 created_at=created_at,
                 updated_at=created_at,

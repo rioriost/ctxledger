@@ -100,6 +100,29 @@ def test_serialize_search_memory_response_serializes_results() -> None:
                     "semantic_component": 0.75,
                     "score_mode": "hybrid",
                     "semantic_only_discount_applied": False,
+                    "reason_list": [
+                        {
+                            "code": "lexical_signal_present",
+                            "message": "lexical overlap contributed to the ranking score",
+                            "value": 3.0,
+                        },
+                        {
+                            "code": "semantic_signal_present",
+                            "message": "semantic similarity contributed to the ranking score",
+                            "value": 0.75,
+                        },
+                        {
+                            "code": "hybrid_score_mode",
+                            "message": "both lexical and semantic components were combined",
+                        },
+                    ],
+                    "task_recall_detail": {
+                        "matched_fields": ["content", "embedding_similarity"],
+                        "memory_item_type": "episode_note",
+                        "memory_item_provenance": "episode",
+                        "metadata_match_candidates": ["kind root-cause", "root-cause"],
+                        "workspace_constrained": True,
+                    },
                 },
                 created_at=created_at,
                 updated_at=created_at,
@@ -138,10 +161,7 @@ def test_serialize_search_memory_response_serializes_results() -> None:
 
     assert payload["feature"] == "memory_search"
     assert payload["implemented"] is True
-    assert (
-        payload["message"]
-        == "Hybrid lexical and semantic memory search completed successfully."
-    )
+    assert payload["message"] == "Hybrid lexical and semantic memory search completed successfully."
     assert payload["status"] == "ok"
     assert payload["available_in_version"] == "0.3.0"
     assert payload["timestamp"] == created_at.isoformat()
@@ -190,6 +210,29 @@ def test_serialize_search_memory_response_serializes_results() -> None:
                 "semantic_component": 0.75,
                 "score_mode": "hybrid",
                 "semantic_only_discount_applied": False,
+                "reason_list": [
+                    {
+                        "code": "lexical_signal_present",
+                        "message": "lexical overlap contributed to the ranking score",
+                        "value": 3.0,
+                    },
+                    {
+                        "code": "semantic_signal_present",
+                        "message": "semantic similarity contributed to the ranking score",
+                        "value": 0.75,
+                    },
+                    {
+                        "code": "hybrid_score_mode",
+                        "message": "both lexical and semantic components were combined",
+                    },
+                ],
+                "task_recall_detail": {
+                    "matched_fields": ["content", "embedding_similarity"],
+                    "memory_item_type": "episode_note",
+                    "memory_item_provenance": "episode",
+                    "metadata_match_candidates": ["kind root-cause", "root-cause"],
+                    "workspace_constrained": True,
+                },
             },
             "created_at": created_at.isoformat(),
             "updated_at": created_at.isoformat(),
@@ -217,9 +260,7 @@ def test_build_embedding_generator_returns_disabled_generator_when_disabled() ->
     assert exc_info.value.provider == "disabled"
 
 
-def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest() -> (
-    None
-):
+def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest() -> None:
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()
     memory_item_repository = InMemoryMemoryItemRepository()
@@ -262,9 +303,7 @@ def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest()
     )
     assert memory_embedding_repository.embeddings[0].embedding_model == "local-stub-v1"
     assert len(memory_embedding_repository.embeddings[0].embedding) == 8
-    assert memory_embedding_repository.embeddings[
-        0
-    ].content_hash == compute_content_hash(
+    assert memory_embedding_repository.embeddings[0].content_hash == compute_content_hash(
         "Persist embedding for this memory item",
         {"kind": "checkpoint", "component": "memory"},
     )
@@ -322,13 +361,9 @@ def test_memory_service_persists_openai_embedding_after_memory_item_ingest() -> 
         memory_embedding_repository.embeddings[0].memory_id
         == memory_item_repository.memory_items[0].memory_id
     )
-    assert memory_embedding_repository.embeddings[0].embedding_model == (
-        "text-embedding-3-small"
-    )
+    assert memory_embedding_repository.embeddings[0].embedding_model == ("text-embedding-3-small")
     assert memory_embedding_repository.embeddings[0].embedding == (0.25, -0.5, 1.0)
-    assert memory_embedding_repository.embeddings[
-        0
-    ].content_hash == compute_content_hash(
+    assert memory_embedding_repository.embeddings[0].content_hash == compute_content_hash(
         "External embedding provider remains optional",
         {"kind": "checkpoint", "component": "memory"},
     )
@@ -475,9 +510,7 @@ def test_external_embedding_generator_requires_api_key_at_runtime() -> None:
     assert exc_info.value.details == {"field": "api_key"}
 
 
-def test_external_embedding_generator_rejects_empty_text_before_api_key_validation() -> (
-    None
-):
+def test_external_embedding_generator_rejects_empty_text_before_api_key_validation() -> None:
     generator = ExternalAPIEmbeddingGenerator(
         provider=EmbeddingProvider.OPENAI,
         model="text-embedding-3-small",
@@ -807,9 +840,7 @@ def test_custom_http_embedding_generator_rejects_missing_embedding_vector(
     assert exc_info.value.details == {"field": "embedding"}
 
 
-def test_in_memory_memory_embedding_repository_find_similar_orders_by_similarity() -> (
-    None
-):
+def test_in_memory_memory_embedding_repository_find_similar_orders_by_similarity() -> None:
     repository = InMemoryMemoryEmbeddingRepository()
     first_embedding = MemoryEmbeddingRecord(
         memory_embedding_id=uuid4(),
@@ -845,9 +876,7 @@ def test_in_memory_memory_embedding_repository_find_similar_orders_by_similarity
     assert matches == (first_embedding, second_embedding)
 
 
-def test_in_memory_memory_embedding_repository_find_similar_ignores_dimension_mismatch() -> (
-    None
-):
+def test_in_memory_memory_embedding_repository_find_similar_ignores_dimension_mismatch() -> None:
     repository = InMemoryMemoryEmbeddingRepository()
     matching_embedding = MemoryEmbeddingRecord(
         memory_embedding_id=uuid4(),
@@ -874,9 +903,7 @@ def test_in_memory_memory_embedding_repository_find_similar_ignores_dimension_mi
     assert matches == (matching_embedding,)
 
 
-def test_in_memory_memory_embedding_repository_find_similar_returns_empty_for_empty_query() -> (
-    None
-):
+def test_in_memory_memory_embedding_repository_find_similar_returns_empty_for_empty_query() -> None:
     repository = InMemoryMemoryEmbeddingRepository()
     repository.create(
         MemoryEmbeddingRecord(
