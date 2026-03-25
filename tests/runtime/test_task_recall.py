@@ -407,6 +407,59 @@ def test_build_task_recall_ranking_entry_returns_expected_payload_for_detour_ter
     }
 
 
+def test_task_recall_and_workspace_resume_use_different_mainline_bonus_weights() -> None:
+    task_recall_entry = build_task_recall_ranking_entry(
+        workflow_id="workflow-task-recall-mainline",
+        resolver_order=0,
+        is_latest=False,
+        selected=False,
+        workflow_terminal=False,
+        has_latest_attempt=False,
+        latest_attempt_terminal=False,
+        has_latest_checkpoint=False,
+        ticket_detour_like=False,
+        checkpoint_detour_like=False,
+    )
+    workspace_resume_entry = build_workspace_resume_ranking_entry(
+        workflow_id="workflow-workspace-resume-mainline",
+        is_latest=False,
+        is_running=False,
+        workflow_terminal=False,
+        has_latest_attempt=False,
+        latest_attempt_terminal=False,
+        has_latest_checkpoint=False,
+        ticket_detour_like=False,
+        checkpoint_detour_like=False,
+    )
+
+    assert task_recall_entry["score"] == 30
+    assert workspace_resume_entry["score"] == 35
+    assert task_recall_entry["reason_list"] == [
+        {
+            "code": "workflow_non_terminal_bonus",
+            "message": "non-terminal workflows are preferred for continuation",
+            "impact": 25,
+        },
+        {
+            "code": "mainline_like_bonus",
+            "message": "candidate looks aligned with the main task line",
+            "impact": 5,
+        },
+    ]
+    assert workspace_resume_entry["reason_list"] == [
+        {
+            "code": "workflow_non_terminal_bonus",
+            "message": "non-terminal workflows are preferred for continuation",
+            "impact": 25,
+        },
+        {
+            "code": "mainline_like_bonus",
+            "message": "candidate looks aligned with the main task line",
+            "impact": 10,
+        },
+    ]
+
+
 def test_build_workspace_resume_ranking_entry_returns_expected_payload_for_latest_mainline_candidate() -> (
     None
 ):
