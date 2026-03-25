@@ -40,7 +40,7 @@ pytest -q
 
 If you are working on the proxy-protected small auth pattern, also review:
 
-- `docs/small_auth_operator_runbook.md`
+- `docs/operations/runbooks/small_auth_operator_runbook.md`
 - `docs/project/releases/plans/auth_proxy_scaling_plan.md`
 
 ---
@@ -57,8 +57,8 @@ Read these first when you are new to the repo:
 - `docs/project/product/architecture.md`
 - `docs/project/product/workflow-model.md`
 - `docs/project/product/mcp-api.md`
-- `docs/deployment.md`
-- `docs/SECURITY.md`
+- `docs/operations/deployment/deployment.md`
+- `docs/operations/security/SECURITY.md`
 
 ### MCP transport or protocol work
 If your change affects MCP behavior, HTTP transport, or protocol claims, also read:
@@ -71,7 +71,7 @@ Then follow the linked planning documents from there.
 If your change affects authentication, reverse proxy behavior, protected routes, or deployment guidance, read:
 
 - `docs/project/releases/plans/auth_planning_index.md`
-- `docs/small_auth_operator_runbook.md`
+- `docs/operations/runbooks/small_auth_operator_runbook.md`
 - `docs/project/releases/plans/auth_proxy_scaling_plan.md`
 - `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
 - `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
@@ -312,11 +312,11 @@ Avoid vague messages like:
 Use this quick map when contributing around auth or deployment topics.
 
 ### Small pattern, implemented
-- `docs/small_auth_operator_runbook.md`
+- `docs/operations/runbooks/small_auth_operator_runbook.md`
 - `docs/project/releases/plans/auth_proxy_scaling_plan.md`
 - `README.md`
-- `docs/deployment.md`
-- `docs/SECURITY.md`
+- `docs/operations/deployment/deployment.md`
+- `docs/operations/security/SECURITY.md`
 
 ### Large pattern, design-prep only
 - `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`

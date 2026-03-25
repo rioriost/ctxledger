@@ -280,9 +280,9 @@ For `v0.5.3`:
 
 - `README.md`
 - `docs/project/product/architecture.md`
-- `docs/deployment.md`
+- `docs/operations/deployment/deployment.md`
 - `docs/CONTRIBUTING.md`
-- `docs/SECURITY.md`
+- `docs/operations/security/SECURITY.md`
 - existing implementation plan docs
 
 ### Impact
@@ -302,14 +302,14 @@ Docs need coordinated updates:
 - replace examples that specifically point to `.agent/resume.json`
 - keep the higher-level “derived artifacts vs canonical state” principle, but avoid anchoring the architecture to a removed local file feature
 
-#### `docs/deployment.md`
+#### `docs/operations/deployment/deployment.md`
 - remove projection env vars from supported configuration guidance
 - update environment variable table accordingly
 
 #### `docs/CONTRIBUTING.md`
 - keep architectural direction around canonical-vs-derived separation, but remove any implication that `.agent` artifacts are an active contributor-facing surface
 
-#### `docs/SECURITY.md`
+#### `docs/operations/security/SECURITY.md`
 - likely lower impact
 - keep projection failure route security notes if those routes remain
 - avoid wording that suggests local projection files are a normal operational interface
@@ -462,7 +462,7 @@ Projection-writing environment variables are no longer part of normal product co
 
 1. update `README.md`
 2. update `docs/architecture.md`
-3. update `docs/deployment.md`
+3. update `docs/operations/deployment/deployment.md`
 4. update any implementation-plan or contributor docs that imply `.agent` is supported
 5. remove `.agent` path examples where they describe active behavior
 
@@ -557,7 +557,7 @@ Modify:
 
 - `README.md`
 - `docs/architecture.md`
-- `docs/deployment.md`
+- `docs/operations/deployment/deployment.md`
 - `docker/docker-compose.yml`
 - `docker/docker-compose.small-auth.yml`
 

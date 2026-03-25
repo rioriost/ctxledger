@@ -571,9 +571,9 @@ A precise removal set with low ambiguity and no accidental scope growth.
 
 #### Documentation update targets
 - `docs/architecture.md`
-- `docs/deployment.md`
-- `docs/SECURITY.md`
-- `docs/CHANGELOG.md`
+- `docs/operations/deployment/deployment.md`
+- `docs/operations/security/SECURITY.md`
+- `docs/project/releases/CHANGELOG.md`
 
 For these files:
 - remove active projection feature descriptions

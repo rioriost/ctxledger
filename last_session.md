@@ -2,149 +2,112 @@
 
 ## Summary
 
-This continuation completed the requested reorganization of the memory-specific
-documentation under `docs/memory/`.
+This continuation completed the requested reorganization of the
+operations-oriented documentation under `docs/`.
 
 The main result is that the repository now has a clearer role-based structure for
-memory-topic docs:
+operations-facing docs:
 
-- decision records and closeout/boundary calls are grouped under:
-  - `docs/memory/decisions/`
-- design and implementation-shape material is grouped under:
-  - `docs/memory/design/`
-- operator/developer procedures are grouped under:
-  - `docs/memory/runbooks/`
-- validation-specific scaffolding is grouped under:
-  - `docs/memory/validation/`
+- deployment and runtime-operations guidance is grouped under:
+  - `docs/operations/deployment/`
+- security-boundary and security-posture documentation is grouped under:
+  - `docs/operations/security/`
+- operator/developer runbook-style procedures are grouped under:
+  - `docs/operations/runbooks/`
 
 This continuation focused on file organization, documentation navigation, and
 path repair.
 
-It did **not** change the implemented memory behavior, retrieval contracts,
-summary-building behavior, AGE runtime behavior, or workflow-summary automation
-behavior.
+It did **not** change the implemented deployment behavior, security boundary,
+runtime behavior, memory behavior, or workflow behavior.
 
 ---
 
 ## What was completed
 
-### 1. Added role-based memory documentation subdirectories
+### 1. Added operations-oriented documentation subdirectories
 
-The following new subdirectories were introduced under `docs/memory/`:
+The following new subdirectories were introduced under `docs/operations/`:
 
-- `docs/memory/decisions/`
-- `docs/memory/design/`
-- `docs/memory/runbooks/`
-- `docs/memory/validation/`
+- `docs/operations/deployment/`
+- `docs/operations/security/`
+- `docs/operations/runbooks/`
 
 The intended reading is now:
 
-### `docs/memory/decisions/`
+### `docs/operations/deployment/`
 Use this for:
 
-- decision records
-- retrieval/boundary decisions
-- milestone closeout notes
-- refinement checklists being used as closeout/decision artifacts
-- policy/targeting decisions
+- deployment-model guidance
+- runtime topology expectations
+- environment/bootstrap assumptions
+- local versus production-like deployment notes
+- runtime operational guidance
 
-### `docs/memory/design/`
+### `docs/operations/security/`
 Use this for:
 
-- design notes
-- implementation-shape documents
-- schema/repository design notes
-- prototype design material
-- service-contract design notes
-- design-prep and future-shape exploration
+- current security posture
+- security-boundary interpretation
+- authorization/trust-boundary expectations
+- security limitations and non-goals
+- references to related auth/deployment planning
 
-### `docs/memory/runbooks/`
+### `docs/operations/runbooks/`
 Use this for:
 
 - operator/developer procedures
-- command-oriented workflows
-- operational verification steps
-- practical validation procedures
-
-### `docs/memory/validation/`
-Use this for:
-
-- validation templates
-- validation observations
-- evidence-oriented validation scaffolding
+- local stack bring-up guidance
+- proxy/auth operation workflows
+- Grafana/observability procedures
+- practical troubleshooting or inspection guidance
 
 ---
 
-### 2. Moved memory docs into their new categories
+### 2. Moved operations docs into their new categories
 
-The flat `docs/memory/` layout was reorganized into the new role-based
-directories.
+The previously flat operations-facing top-level docs were moved into the new
+structure.
 
-Representative moves include:
+Moved files:
 
-#### Decisions
-- `docs/memory/decisions/first_age_slice_boundary_decision.md`
-- `docs/memory/decisions/first_memory_get_context_hierarchical_improvement_decision.md`
-- `docs/memory/decisions/minimal_hierarchy_model_decision.md`
-- `docs/memory/decisions/grouped_selection_primary_surface_decision.md`
-- `docs/memory/decisions/auxiliary_groups_top_level_sibling_decision.md`
-- `docs/memory/decisions/episode_less_summary_first_decision.md`
-- `docs/memory/decisions/age_image_selection_decision.md`
-- `docs/memory/decisions/age_image_candidate_decision_record_template.md`
-- `docs/memory/decisions/summary_hierarchy_0_6_0_milestone_slice_closeout.md`
-- `docs/memory/decisions/phase_e_summary_hierarchy_refinement_checklist.md`
-- `docs/memory/decisions/workflow_summary_targeting_policy.md`
+- `docs/operations/deployment/deployment.md`
+- `docs/operations/security/SECURITY.md`
+- `docs/operations/runbooks/small_auth_operator_runbook.md`
+- `docs/operations/runbooks/grafana_operator_runbook.md`
 
-#### Design
-- `docs/memory/design/memory_get_context_service_contract.md`
-- `docs/memory/design/minimal_hierarchy_schema_repository_design.md`
-- `docs/memory/design/minimal_summary_write_build_path.md`
-- `docs/memory/design/next_minimal_hierarchy_primitive_design.md`
-- `docs/memory/design/optional_age_summary_mirroring_design.md`
-- `docs/memory/design/constrained_age_supports_prototype.md`
-- `docs/memory/design/constrained_age_supports_prototype_implementation_plan.md`
-- `docs/memory/design/age_setup_first_slice.md`
-- `docs/memory/design/age_graph_population_bootstrap.md`
-- `docs/memory/design/age_docker_provisioning_plan.md`
-- `docs/memory/design/age_image_selection_note.md`
-- `docs/memory/design/age_image_candidate_prebuilt_record.md`
-- `docs/memory/design/age_image_candidate_prebuilt_concrete_record.md`
-- `docs/memory/design/age_image_candidate_repo_build_record.md`
-- `docs/memory/design/workflow_summary_automation_direction.md`
+This creates a clearer distinction between:
 
-#### Runbooks
-- `docs/memory/runbooks/summary_build_runbook.md`
-- `docs/memory/runbooks/age_prototype_validation_runbook.md`
+- deployment/runtime guidance
+- security posture documentation
+- operator runbooks
 
-#### Validation
-- `docs/memory/validation/age_prototype_validation_observation_template.md`
+rather than keeping all of them mixed together at the top level.
 
 ---
 
-### 3. Added a memory docs index
+### 3. Added an operations docs index
 
 A new index file was added:
 
-- `docs/memory/README.md`
+- `docs/operations/README.md`
 
 This file now explains:
 
-- what belongs in `decisions/`
-- what belongs in `design/`
+- what belongs in `deployment/`
+- what belongs in `security/`
 - what belongs in `runbooks/`
-- what belongs in `validation/`
 - how to choose the right starting point depending on whether the reader wants:
-  - decisions and boundary calls
-  - design/implementation direction
-  - operator guidance
-  - validation scaffolding
+  - deployment/runtime guidance
+  - the current security boundary
+  - practical operator procedures
 
-This should reduce future drift back toward a flat mixed-purpose memory docs
+This should reduce future drift back toward a flat mixed-purpose operations docs
 layout.
 
 ---
 
-### 4. Repaired important memory-doc references
+### 4. Repaired important operations-doc references
 
 After the moves, a number of key references were updated so the reorganized
 layout remains navigable.
@@ -152,18 +115,19 @@ layout remains navigable.
 Updated areas included:
 
 - `README.md`
-- `docs/project/product/mcp-api.md`
-- `docs/project/releases/plans/hierarchical_memory_0_6_0_plan.md`
-- selected moved memory decision docs
-- selected moved memory design docs
-- selected moved memory runbooks
+- `docs/CONTRIBUTING.md`
+- `docs/operations/security/SECURITY.md`
+- `docs/operations/runbooks/grafana_operator_runbook.md`
+- selected moved historical plan files
 
 The main categories of repair were:
 
-- references to moved decision docs now point to `docs/memory/decisions/...`
-- references to moved design docs now point to `docs/memory/design/...`
-- references to moved runbooks now point to `docs/memory/runbooks/...`
-- references to validation templates now point to `docs/memory/validation/...`
+- references to moved deployment docs now point to:
+  - `docs/operations/deployment/deployment.md`
+- references to moved security docs now point to:
+  - `docs/operations/security/SECURITY.md`
+- references to moved runbooks now point to:
+  - `docs/operations/runbooks/...`
 
 ---
 
@@ -193,19 +157,16 @@ Result:
 
 ## Current repository reading after this continuation
 
-At handoff, the memory documentation structure should now be read as:
+At handoff, the operations documentation structure should now be read as:
 
-### Memory decisions and closeout/boundary calls
-- `docs/memory/decisions/...`
+### Deployment and runtime-operations guidance
+- `docs/operations/deployment/...`
 
-### Memory design and implementation-shape material
-- `docs/memory/design/...`
+### Security-boundary and security-posture guidance
+- `docs/operations/security/...`
 
-### Memory operator/developer procedures
-- `docs/memory/runbooks/...`
-
-### Memory validation scaffolding
-- `docs/memory/validation/...`
+### Operator/developer procedures
+- `docs/operations/runbooks/...`
 
 ### Broader repository-wide documentation
 Still use:
@@ -214,42 +175,51 @@ Still use:
 - `docs/project/releases/...`
 - `docs/project/history/...`
 
-This means the memory docs are now organized by **document role**, while the
-project docs are organized by **repository-wide scope**.
+### Memory-specific documentation
+Still use:
+
+- `docs/memory/decisions/...`
+- `docs/memory/design/...`
+- `docs/memory/runbooks/...`
+- `docs/memory/validation/...`
+
+This means the docs are now increasingly organized by **scope and document role**
+rather than by one large flat top-level directory.
 
 ---
 
 ## What remains to watch
 
-The requested memory-doc reorganization is complete, but a few follow-up concerns
-remain worth watching in future sessions:
+The requested operations-doc reorganization is complete, but a few follow-up
+concerns remain worth watching in future sessions:
 
-1. Some deeper memory docs may still contain stale old-path references and could
-   be cleaned incrementally when those files become active again.
-2. Deployment/operator/security docs remain outside this reorganization and may
-   still be candidates for a broader docs information architecture cleanup later.
-3. If future memory docs are added, they should follow the new role-based layout
-   rather than returning to a flat `docs/memory/` structure.
+1. Some deeper release-plan or historical docs may still contain stale old-path
+   references and could be cleaned incrementally if they become active again.
+2. Additional topical sub-areas under `docs/` may still be candidates for future
+   taxonomy cleanup if discoverability becomes an issue.
+3. New operations docs should follow the `deployment/`, `security/`, and
+   `runbooks/` structure rather than returning to a flat top-level layout.
 
 ---
 
 ## Recommended next step
 
 If another session continues from here, the most natural next step is **not**
-more immediate memory-doc restructuring unless a broken link or discoverability
-issue is found.
+more immediate docs restructuring unless a broken link or discoverability issue
+is found.
 
 Instead, the likely sensible next options are:
 
-1. do a light sweep for stale path references across less-active memory docs
-2. decide whether deployment/operator/security docs should also gain a clearer
-   subdirectory taxonomy
-3. return to feature or planning work now that the memory docs are easier to
-   navigate
+1. do a light sweep for stale path references in less-active release/historical
+   docs
+2. return to feature or planning work now that project, memory, and operations
+   docs all have clearer structure
+3. only do further docs information architecture work if another topical area
+   becomes obviously too mixed or hard to navigate
 
 The important handoff point is:
 
-- the requested memory-doc categorization is in place
+- the requested operations-doc categorization is in place
 - key entry-point links were repaired
 - the repository remains green after the reorganization
-- future memory documentation can now be added into a clearer structure
+- future docs additions can now follow a clearer structure

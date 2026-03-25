@@ -772,8 +772,8 @@ For normal local or production-like deployment:
 
 For more detail, see:
 
-- `docs/SECURITY.md`
-- `docs/deployment.md`
+- `docs/operations/security/SECURITY.md`
+- `docs/operations/deployment/deployment.md`
 
 ---
 
@@ -782,11 +782,11 @@ For more detail, see:
 If you are trying to **use** `ctxledger`, go here first:
 
 - local auth HTTPS runbook:
-  - `docs/small_auth_operator_runbook.md`
+  - `docs/operations/runbooks/small_auth_operator_runbook.md`
 - deployment guidance:
-  - `docs/deployment.md`
+  - `docs/operations/deployment/deployment.md`
 - Grafana runbook:
-  - `docs/grafana_operator_runbook.md`
+  - `docs/operations/runbooks/grafana_operator_runbook.md`
 
 If you are trying to **understand the model**, start here:
 
@@ -817,15 +817,15 @@ Core references:
 - `docs/project/product/workflow-model.md`
 - `docs/project/product/mcp-api.md`
 - `docs/project/product/memory-model.md`
-- `docs/deployment.md`
-- `docs/SECURITY.md`
+- `docs/operations/deployment/deployment.md`
+- `docs/operations/security/SECURITY.md`
 - `docs/project/product/design-principles.md`
 - `docs/project/product/roadmap.md`
 
 Operator runbooks:
 
-- `docs/small_auth_operator_runbook.md`
-- `docs/grafana_operator_runbook.md`
+- `docs/operations/runbooks/small_auth_operator_runbook.md`
+- `docs/operations/runbooks/grafana_operator_runbook.md`
 
 Planning docs:
 
