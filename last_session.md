@@ -2,168 +2,141 @@
 
 ## Summary
 
-This continuation completed the remaining planned `0.6.0` follow-up work around
-agent-facing MCP payload guidance and Grafana visibility for the bounded summary
-hierarchy slice.
+This continuation completed the remaining follow-up cleanup around agent-facing
+rules quality and Grafana dashboard pruning after the bounded `0.6.0` summary
+hierarchy slice had already been accepted and documented.
 
 The main result is that the repository now has:
 
-- updated agent rules that explicitly describe how to interpret the richer
-  `0.6.0` MCP payloads
-- a documented follow-up note for the rules/MCP-payload guidance update
-- a documented follow-up note for the Grafana dashboard update
-- Grafana dashboards that now surface canonical summary-layer visibility more
-  directly
-- preserved green targeted and full-suite validation after the docs/rules/dashboard
-  changes
+- a more compact and more command-style `.rules` section for agent guidance
+- removal of unnecessary explicit `0.6.0` version wording from the operational
+  MCP-payload interpretation bullets
+- a documented compression follow-up note for the rules changes
+- removal of the obsolete Grafana `Failure Overview` dashboard
+- preserved green targeted and full-suite validation after the guidance and
+  dashboard cleanup
 
-This continuation focused on guidance quality, observability alignment, and
-release-slice follow-through.
+This continuation focused on:
 
-It did **not** broaden the bounded `0.6.0` implementation into a new larger
-feature slice.
+- agent obedience/readability
+- rule compression
+- operational dashboard cleanup
+- keeping the accepted `0.6.0` slice tidy without broadening scope
+
+It did **not** change the implemented hierarchical-memory behavior, retrieval
+contracts, workflow-summary automation behavior, deployment behavior, or
+acceptance status.
 
 ---
 
 ## What was completed
 
-### 1. Updated `.rules` for `0.6.0` MCP payload interpretation
+### 1. Compressed the `.rules` guidance and removed explicit version wording
 
-The repository rules were updated so future agents are less likely to flatten the
-current `0.6.0` MCP payloads back into older assumptions.
+The earlier `.rules` update correctly captured the richer MCP payload semantics,
+but it was still too verbose and included repeated explicit `0.6.0` wording in
+agent-facing operational bullets.
 
-The new guidance now makes it explicit that agents should:
+That was cleaned up.
 
-- treat `memory_get_context` as a hierarchy-aware, route-explainable tool rather
-  than as a flat episode lookup
-- pay attention to structured `details` fields such as:
-  - `summary_selection_applied`
-  - `summary_selection_kind`
-  - `memory_context_groups`
-  - retrieval-route metadata
-  - summary-first sub-mode fields
-  - post-filter primary/auxiliary interpretation fields
-- treat `memory_context_groups` as the primary grouped hierarchy-aware output
-  surface
-- distinguish:
-  - canonical summary-first selection
-  - episode-derived summary fallback
-  - inherited workspace auxiliary context
-  - relation-derived auxiliary context
-  - graph-backed auxiliary summary enrichment
-- avoid treating `graph_summary_auxiliary` as canonical truth
-- interpret the `include_episodes = false` path narrowly and literally rather than
-  expecting summary-first explanation fields to appear as placeholders
+The result is that the relevant `.rules` guidance now:
 
-The rules were also updated so that agents read workflow-completion payloads more
-literally.
+- removes unnecessary explicit `0.6.0` version references from the operational
+  payload-interpretation bullets
+- reads more like concise commands than explanatory prose
+- still preserves the important distinctions agents need for the current payloads
 
-That new guidance now makes it explicit that when a completion result includes:
+Key behavior that remains explicitly preserved in `.rules`:
 
-- `auto_memory_details`
+- treat `memory_get_context` as hierarchy-aware rather than flat
+- read structured fields before prose summaries
+- use `memory_context_groups` when context structure matters
+- interpret retrieval routes literally
+- never treat `graph_summary_auxiliary` as canonical truth
+- read the `include_episodes = false` path narrowly from the surfaced fields
+- treat `auto_memory_details.summary_build` as the authoritative explanation of
+  bounded summary automation outcomes
+- keep these facts separate:
+  - auto-memory recorded
+  - summary build attempted
+  - summary build succeeded
 
-and especially:
-
-- `auto_memory_details.summary_build`
-
-agents should use that nested structured payload as the authoritative reading of:
-
-- whether summary building was attempted
-- whether it succeeded
-- whether it was requested
-- what trigger and scope applied
-- why it was skipped
-- whether replacement happened
-- which summary artifact was produced
-
-This keeps future agent summaries closer to the actual structured payload instead
-of vague prose guesses.
+The new wording is shorter without losing the highest-value safeguards.
 
 ---
 
-### 2. Added a release-plan follow-up note for the rules change
+### 2. Measured the size of the general agent-rules section
 
-A new bounded follow-up note was added for the rules/MCP-payload interpretation
-work:
+The section beginning at:
 
-- `docs/project/releases/plans/versioned/0.6.0_rules_mcp_payload_followup.md`
+- `# General Agent Workflow Rules for Repositories Using ctxledger`
 
-This note explains:
+was measured before and after compression.
 
-- why the `0.6.0` MCP payload changes required rule updates
-- which structured fields matter operationally
-- why grouped output and retrieval-route metadata should now be read explicitly
-- why workflow-completion `summary_build` metadata should be treated as a
-  separate fact from generic auto-memory recording
-- what the intended acceptance criteria were for the rules follow-up
+Measured size before compression:
 
-This should make the guidance change easier to understand and easier to maintain.
+- approximately **11,905 characters**
+- approximately **1,648 whitespace-separated words**
 
----
+Measured size after compression:
 
-### 3. Added a release-plan follow-up note for the Grafana work
+- approximately **10,513 characters**
+- approximately **1,433 whitespace-separated words**
 
-A new bounded follow-up note was also added for the Grafana side of the `0.6.0`
-work:
+Practical reduction:
 
-- `docs/project/releases/plans/versioned/0.6.0_grafana_dashboard_followup.md`
+- **1,392 fewer characters**
+- **215 fewer words**
 
-This note explains:
+This is not a model-tokenizer-accurate token count, but it is a useful local
+proxy for guidance size and reading burden.
 
-- why the existing dashboards underrepresented the new `0.6.0` summary hierarchy
-  slice
-- what operator questions the dashboards should now help answer
-- why canonical summary-layer visibility matters separately from generic memory
-  totals
-- why Grafana should expose stable aggregate operational state rather than trying
-  to mirror request-level MCP payloads directly
-- what bounded implementation shape is appropriate for the current milestone
+The main reading from this measurement is:
 
-This leaves behind a clear planning/closeout record for the dashboard changes.
+- the guidance is still substantial
+- but it is meaningfully tighter and more scan-friendly than before
+- the newly added payload-interpretation guidance now has a better
+  instruction-to-explanation ratio
 
 ---
 
-### 4. Updated the Grafana dashboards
+### 3. Added a dedicated compression follow-up note
 
-The Grafana dashboard JSONs were updated so the current `0.6.0` summary hierarchy
-slice is visible in the operator-facing dashboards rather than being hidden
-behind broader generic counts.
+A new bounded follow-up note was added to capture:
 
-Updated files:
+- why version wording should be removed from `.rules`
+- why command-style guidance is better for AI agents
+- what payload-interpretation distinctions must be preserved
+- the measured before/after size change
+- the recommended pattern for future `.rules` additions
 
-- `docker/grafana/dashboards/memory_overview.json`
-- `docker/grafana/dashboards/runtime_overview.json`
+Added doc:
 
-The main additions were:
+- `docs/project/releases/plans/versioned/0.6.0_rules_compression_followup.md`
 
-#### Memory dashboard
-New visibility for:
+This gives future sessions a clear explanation of the compression rationale
+instead of forcing them to reconstruct why the rules were tightened.
 
-- canonical summary count
-- canonical summary membership count
-- a simple summary-layer status reading based on:
-  - summary count
-  - summary membership count
+---
 
-This makes it easier for an operator to distinguish:
+### 4. Removed the retired Grafana `Failure Overview` dashboard
 
-- no canonical summaries built yet
-- summaries exist but memberships are absent
-- canonical summary layer is present
+The Grafana `Failure Overview` dashboard was removed:
 
-#### Runtime dashboard
-New visibility for:
+- `docker/grafana/dashboards/failure_overview.json`
 
-- canonical summary count
-- summary-layer status
+This was done because that feature area is already retired and should no longer
+remain in the dashboard set as an active operator-facing surface.
 
-This gives the runtime view a bounded connection to the actual `0.6.0` summary
-slice rather than showing only workflow and attempt counts.
+The active Grafana dashboard set after this continuation is now centered on:
 
-The dashboards still remain intentionally small and do **not** attempt to
-visualize every request-level MCP payload detail.
-They now simply make the bounded `0.6.0` summary layer more operationally
-visible.
+- runtime overview
+- memory overview
+
+rather than carrying the obsolete failure dashboard forward.
+
+This makes the current operator-facing dashboard set better match the repository's
+actual current focus.
 
 ---
 
@@ -191,84 +164,66 @@ Result:
 
 ---
 
-## Current implemented state at handoff
+## Current repository reading after this continuation
 
-At handoff, the `0.6.0` bounded slice should now be read as having all of the
-following in place:
+At handoff, the repository should now be read as having:
 
-### Hierarchical memory / summary layer
-- canonical relational summary ownership
-- canonical summary-membership ownership
-- summary-first retrieval
-- direct summary-member memory-item expansion
-- bounded graph-backed auxiliary summary enrichment
-- explicit summary build / rebuild path
-- bounded workflow-summary automation
+### Accepted bounded `0.6.0` slice
+- explicit acceptance artifact already present
+- closeout/checklist docs already aligned
+- changelog validation already fresh
 
 ### Agent guidance layer
-- `.rules` now describes how to interpret:
-  - hierarchy-aware `memory_get_context` payloads
-  - summary-first sub-modes
-  - retrieval-route metadata
-  - workflow-completion `summary_build` payload details
-- future agents should now be less likely to misread the current MCP outputs
+- `.rules` now matches the richer MCP payloads
+- the new guidance is more imperative and less prose-heavy
+- the highest-value payload distinctions remain explicit
+- the rules are more compact than the previous expanded version
 
-### Dashboard / observability layer
-- Grafana dashboards now expose:
-  - canonical summary count
-  - summary membership count
-  - a simple summary-layer status reading
-- the `0.6.0` summary hierarchy slice is now more visible operationally, not just
-  in service-layer docs and tests
+### Grafana/dashboard layer
+- obsolete `Failure Overview` dashboard removed
+- active operator-facing dashboards remain focused on currently relevant runtime
+  and memory surfaces
 
-### Release/process layer
-- the bounded `0.6.0` slice already had:
-  - closeout note
-  - refinement checklist
-  - explicit acceptance artifact
-- this continuation closes the remaining follow-through around:
-  - rules alignment
-  - dashboard alignment
+### Documentation layer
+- a follow-up note now explains the `.rules` compression rationale and measured
+  size change
 
 ---
 
-## What remains deferred
+## What remains to watch
 
-The following still remain outside the current bounded `0.6.0` scope:
+This follow-up is complete, but a few future concerns remain worth watching:
 
-- summary-to-summary recursion
-- arbitrary-depth hierarchy traversal
-- graph-native hierarchy truth
-- broad graph-first retrieval redesign
-- broad workflow-summary automation rollout
-- Mnemis comparison / alignment work
-- any attempt to mirror every MCP payload detail directly into Grafana
-
-This continuation should not be read as reopening those deferred concerns.
+1. If future work adds more payload-related guidance to `.rules`, it should
+   follow the compressed command-style pattern rather than reverting to verbose
+   prose.
+2. If future dashboard work expands observability again, it should do so from the
+   currently active runtime/memory dashboards rather than restoring retired
+   surfaces casually.
+3. If the general agent-rules section grows again, it may be worth re-measuring
+   length and re-compressing the densest subsections before rule bloat becomes a
+   new source of agent error.
 
 ---
 
 ## Recommended next step
 
-The remaining planned `0.6.0` follow-up work should now be treated as complete.
-
 If another session continues from here, the most natural next step is **not**
-more `0.6.0` cleanup unless a concrete inconsistency is found.
+more `0.6.0` cleanup unless a concrete inconsistency appears.
 
-Instead, the sensible next moves are:
+Instead, the sensible next options are:
 
-1. treat the bounded `0.6.0` slice as fully closed
+1. treat the bounded `0.6.0` slice and its planned follow-up work as fully closed
 2. return to post-`0.6.0` milestone planning or implementation work
 3. only reopen this area if:
-   - a validation mismatch appears
-   - a documentation inconsistency appears
-   - a dashboard signal proves misleading in practice
+   - a payload-guidance mismatch appears
+   - a dashboard regression appears
+   - a future rules addition makes the agent-rules section too bloated again
 
 The important handoff point is:
 
-- the bounded `0.6.0` slice is accepted
-- the agent rules now match the richer MCP payloads
-- the dashboards now better reflect the summary hierarchy slice
+- the accepted `0.6.0` slice is still intact
+- the agent rules are tighter and easier to follow
+- the obsolete failure dashboard is gone
 - the repository remains green
-- future work can proceed without ambiguity about whether these `0.6.0`
-  follow-ups were completed
+- future work can proceed without additional `0.6.0` cleanup pressure
