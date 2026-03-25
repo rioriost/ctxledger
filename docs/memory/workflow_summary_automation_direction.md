@@ -35,7 +35,7 @@ The goal is to define a path that is:
 **Decision status:** implementation-ready direction  
 **Intended phase support:** post-first summary build loop follow-up in `0.6.0`
 
-This note is now intended to be concrete enough to guide a narrow follow-up
+This note is intended to be concrete enough to guide a narrow future
 implementation slice.
 
 At the current stage, workflow-completion-triggered summary building should be
@@ -44,7 +44,8 @@ read as:
 - **considered**
 - **design-framed**
 - **implementation-ready at the policy level**
-- still deferred in code until the follow-up slice is intentionally enabled
+- **still deferred in the current code path**
+- pending a later slice that intentionally enables the gated builder invocation
 
 ---
 
@@ -217,17 +218,19 @@ triggers.
 
 For the current stage, treat workflow completion as:
 
-- the **first intended orchestration point**
+- the **first intended future orchestration point**
 - but only under a narrow gated rule set
+- and still **not yet enabled in the current code path**
 
 The recommended short-term implementation reading is:
 
-- the workflow-completion path may call the explicit builder
+- the workflow-completion path may later call the explicit builder
 - but only when a concrete workflow-scoped targeting policy is satisfied
 - `build-episode-summary` remains the explicit supported path outside that gated
   flow
-- if the gating policy is not satisfied, workflow-completion-triggered summary
-  building should be explicitly skipped rather than inferred silently
+- until that follow-up slice is intentionally enabled, workflow-completion-triggered
+  summary building should be explicitly reported as deferred rather than inferred
+  silently
 
 ---
 
@@ -474,11 +477,14 @@ The next sensible implementation slice is now concrete enough to describe as:
 6. keep workflow completion itself successful even if summary automation skips or
    fails
 7. add focused tests for:
-   - trigger present -> automation invoked
+   - trigger present -> automation eligible
    - trigger absent -> automation skipped
    - auto-memory skipped -> summary automation skipped
    - builder failure -> workflow completion still succeeds with warning/details
-   - repeated completion path -> replacement behavior remains deterministic
+   - repeated completion path -> replacement remains deterministic
+
+At the current repository state, this remains the **next intended slice**, not an
+already-enabled behavior.
 
 This is the smallest meaningful workflow-oriented automation slice that is now
 implementation-ready at the policy level.
@@ -539,6 +545,8 @@ The current direction for workflow-oriented summary automation is:
 - use `summary_kind = "episode_summary"` with replacement enabled
 - keep failures non-fatal to otherwise successful workflow completion
 - keep graph mirroring optional and later
+- keep actual workflow-completion-triggered summary building **deferred in the
+  current code path** until the narrow follow-up slice is intentionally enabled
 
 This is the smallest implementation-ready path from explicit summary building
 toward workflow-oriented automation without prematurely overbuilding the summary

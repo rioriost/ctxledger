@@ -41,6 +41,13 @@ The goal is to define a policy that is:
 This note defines the policy for a future implementation slice.
 It does **not** claim that the described automation is already enabled.
 
+At the current repository state, this policy should be read as:
+
+- explicit
+- implementation-ready
+- suitable for a future narrow follow-up slice
+- still **deferred in actual invocation**
+
 ---
 
 ## Current context
@@ -401,12 +408,15 @@ For the current repository state, this targeting policy should be treated as:
 - not yet a broad always-on behavior
 - still intentionally narrow
 - still intentionally bound to workflow completion auto-memory
+- still **deferred in actual invocation**
 
 That means:
 
 - the policy is ready
 - implementation can be added in a bounded slice
 - no foundational design uncertainty remains about the initial target episode
+- the current codebase should still report this automation as deferred until that
+  bounded slice is intentionally enabled
 
 ---
 
@@ -440,6 +450,13 @@ If this policy is implemented, the next narrow slice should:
 6. record additive success/skip/failure details
 7. keep workflow completion successful even if the build fails
 
+Until that slice is intentionally enabled, the current repository should keep
+reporting workflow-scoped summary automation as:
+
+- policy-ready
+- not silently active
+- explicitly deferred in actual invocation
+
 ### Focused test scenarios
 
 The first implementation should include focused tests for:
@@ -465,6 +482,12 @@ automation slice is:
 - keep replacement enabled
 - keep failure non-fatal to workflow completion
 - keep all outcomes explicit and observable
+
+At the current repository state, this should still be read as:
+
+- **policy ready**
+- **actual invocation deferred**
+- **awaiting an intentionally enabled bounded follow-up slice**
 
 This is the smallest safe policy that can move the system from explicit manual
 summary building toward workflow-oriented automation without prematurely
