@@ -7,6 +7,29 @@ SET default_language = EN
 RULE user_note_language
 ALLOW user_notes_language = JA
 
+SECTION ctxledger_development_housekeeping
+RULE scope
+APPLY housekeeping_rules
+ONLY_IF developing_repository = ctxledger
+
+RULE read_last_session_first
+WHEN new_ctxledger_development_session_starts
+DO read last_session.md first
+
+RULE update_last_session_after_loop
+WHEN ctxledger_development_work_loop_is_done
+DO update last_session.md with concise_continuation_note_for_next_session
+
+RULE keep_git_current
+DO keep_git_repository_up_to_date_with_descriptive_commits
+
+RULE ignore_gitignore_status
+DO ignore_status_of .gitignore
+
+RULE inherit_general_rules
+WHEN developing_repository = ctxledger
+DO also_apply general_agent_workflow_rules
+
 SECTION canonical_posture
 RULE canonical_system_of_record
 DO use ctxledger as canonical_system_of_record for:
