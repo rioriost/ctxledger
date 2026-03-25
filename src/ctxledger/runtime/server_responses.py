@@ -4,6 +4,11 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from ..workflow.service import WorkflowError
+from .task_recall import (
+    build_workspace_resume_selection,
+    build_workspace_resume_selection_payload,
+    default_workspace_resume_selection_signals,
+)
 
 if TYPE_CHECKING:
     from ..server import CtxLedgerServer
@@ -254,6 +259,11 @@ def build_workspace_resume_resource_response(
             headers={"content-type": "application/json"},
         )
 
+    selection: dict[str, Any] | None = None
+    selection_signals = default_workspace_resume_selection_signals()
+    selection_explanations: list[dict[str, str]] = []
+    selection_ranking_details: list[dict[str, Any]] = []
+
     if hasattr(server.workflow_service, "_uow_factory"):
         with server.workflow_service._uow_factory() as uow:
             workspace = uow.workspaces.get_by_id(workspace_id)
@@ -270,9 +280,38 @@ def build_workspace_resume_resource_response(
                 )
 
             running_workflow = uow.workflow_instances.get_running_by_workspace_id(workspace_id)
-            selected_workflow = running_workflow
-            if selected_workflow is None:
-                selected_workflow = uow.workflow_instances.get_latest_by_workspace_id(workspace_id)
+            latest_workflow = uow.workflow_instances.get_latest_by_workspace_id(workspace_id)
+            workflow_candidates = uow.workflow_instances.list_by_workspace_id(
+                workspace_id,
+                limit=10,
+            )
+            candidate_count = len(workflow_candidates)
+            latest_checkpoint = (
+                uow.workflow_checkpoints.get_latest_by_workflow_id(
+                    latest_workflow.workflow_instance_id
+                )
+                if latest_workflow is not None
+                else None
+            )
+            candidate_checkpoints_by_workflow_id = {
+                str(
+                    workflow.workflow_instance_id
+                ): uow.workflow_checkpoints.get_latest_by_workflow_id(workflow.workflow_instance_id)
+                for workflow in workflow_candidates
+            }
+            (
+                selected_workflow,
+                selected_reason,
+                selection_signals,
+                selection_explanations,
+                selection_ranking_details,
+            ) = build_workspace_resume_selection(
+                running_workflow=running_workflow,
+                latest_workflow=latest_workflow,
+                workflow_candidates=workflow_candidates,
+                latest_checkpoint=latest_checkpoint,
+                candidate_checkpoints_by_workflow_id=candidate_checkpoints_by_workflow_id,
+            )
 
         if selected_workflow is None:
             return McpResourceResponse(
@@ -286,17 +325,30 @@ def build_workspace_resume_resource_response(
                 headers={"content-type": "application/json"},
             )
 
+        selection = build_workspace_resume_selection_payload(
+            strategy="running_or_latest",
+            candidate_count=candidate_count,
+            selected_workflow=selected_workflow,
+            running_workflow=running_workflow,
+            latest_workflow=latest_workflow,
+            selected_reason=selected_reason,
+            selection_signals=selection_signals,
+            explanations=selection_explanations,
+            ranking_details=selection_ranking_details,
+        )
+
         workflow_response = build_workflow_resume_response(
             server,
             selected_workflow.workflow_instance_id,
         )
     else:
+        selected_workflow_instance_id = getattr(
+            server.workflow_service.resume_result.workflow_instance,
+            "workflow_instance_id",
+        )
         workflow_response = build_workflow_resume_response(
             server,
-            getattr(
-                server.workflow_service.resume_result.workflow_instance,
-                "workflow_instance_id",
-            ),
+            selected_workflow_instance_id,
         )
         if workflow_response.status_code == 200:
             response_workspace_id = workflow_response.payload.get("workspace", {}).get(
@@ -313,6 +365,18 @@ def build_workspace_resume_resource_response(
                     },
                     headers={"content-type": "application/json"},
                 )
+            selection_signals["selected_equals_latest"] = True
+            selection = build_workspace_resume_selection_payload(
+                strategy="resume_result",
+                candidate_count=1,
+                selected_workflow=server.workflow_service.resume_result.workflow_instance,
+                running_workflow=None,
+                latest_workflow=server.workflow_service.resume_result.workflow_instance,
+                selected_reason="used workflow returned by resume result branch",
+                selection_signals=selection_signals,
+                explanations=selection_explanations,
+                ranking_details=selection_ranking_details,
+            )
 
     if workflow_response.status_code != 200:
         return McpResourceResponse(
@@ -326,6 +390,7 @@ def build_workspace_resume_resource_response(
         payload={
             "uri": f"workspace://{workspace_id}/resume",
             "resource": workflow_response.payload,
+            "selection": selection,
         },
         headers={"content-type": "application/json"},
     )

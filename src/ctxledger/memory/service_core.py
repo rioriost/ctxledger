@@ -18,9 +18,13 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from ..runtime.task_recall import (
+    build_detour_like_signal_details,
+    build_detour_override_explanations,
+    build_latest_candidate_retained_explanations,
     build_memory_context_task_recall_details,
-    checkpoint_is_detour_like,
-    workflow_ticket_is_detour_like,
+    build_task_recall_detour_override_applied,
+    build_task_recall_ranking_entry,
+    build_terminal_override_explanations,
 )
 from . import service as service_module
 from .embeddings import (
@@ -905,12 +909,9 @@ class MemoryService:
                 summary=signal_map.get("latest_checkpoint_summary"),
                 checkpoint_json={},
             )
-            ticket_detour_like = workflow_ticket_is_detour_like(workflow)
-            checkpoint_detour_like = checkpoint_is_detour_like(checkpoint)
-            return (
-                ticket_detour_like,
-                checkpoint_detour_like,
-                ticket_detour_like or checkpoint_detour_like,
+            return build_detour_like_signal_details(
+                workflow=workflow,
+                checkpoint=checkpoint,
             )
 
         task_recall_explanations: list[dict[str, str]] = []
@@ -938,116 +939,34 @@ class MemoryService:
             is_latest = workflow_id == latest_task_recall_workflow_id
             selected = workflow_id == selected_task_recall_workflow_id
 
-            _, _, detour_like = _task_recall_detour_like(signal_map)
-
-            score = 0
-            reason_list: list[dict[str, Any]] = []
-
-            if is_latest:
-                reason_list.append(
-                    {
-                        "code": "latest_candidate",
-                        "message": "candidate is the freshest workflow in resolver order",
-                    }
-                )
-
-            if workflow_terminal:
-                score -= 25
-                reason_list.append(
-                    {
-                        "code": "workflow_terminal_penalty",
-                        "message": "terminal workflows are less suitable for continuation",
-                        "impact": -25,
-                    }
-                )
-            else:
-                score += 25
-                reason_list.append(
-                    {
-                        "code": "workflow_non_terminal_bonus",
-                        "message": "non-terminal workflows are preferred for continuation",
-                        "impact": 25,
-                    }
-                )
-
-            if has_latest_attempt:
-                score += 5
-                reason_list.append(
-                    {
-                        "code": "latest_attempt_present_bonus",
-                        "message": "candidate has a latest attempt signal available",
-                        "impact": 5,
-                    }
-                )
-
-            if latest_attempt_terminal:
-                score -= 5
-                reason_list.append(
-                    {
-                        "code": "latest_attempt_terminal_penalty",
-                        "message": "latest attempt is terminal, reducing continuation confidence",
-                        "impact": -5,
-                    }
-                )
-
-            if has_latest_checkpoint:
-                score += 5
-                reason_list.append(
-                    {
-                        "code": "latest_checkpoint_present_bonus",
-                        "message": "candidate has checkpoint history for resumability",
-                        "impact": 5,
-                    }
-                )
-
-            if detour_like:
-                score -= 10
-                reason_list.append(
-                    {
-                        "code": "detour_like_penalty",
-                        "message": "candidate looks detour-like based on task-recall signals",
-                        "impact": -10,
-                    }
-                )
-            else:
-                score += 5
-                reason_list.append(
-                    {
-                        "code": "mainline_like_bonus",
-                        "message": "candidate looks aligned with the main task line",
-                        "impact": 5,
-                    }
-                )
-
-            if selected:
-                reason_list.append(
-                    {
-                        "code": "selected_candidate",
-                        "message": "candidate was selected after applying task recall heuristics",
-                    }
-                )
+            (
+                ticket_detour_like,
+                checkpoint_detour_like,
+                _,
+            ) = _task_recall_detour_like(signal_map)
 
             task_recall_ranking_details.append(
-                {
-                    "workflow_instance_id": workflow_id,
-                    "resolver_order": index,
-                    "selected": selected,
-                    "is_latest": is_latest,
-                    "workflow_terminal": workflow_terminal,
-                    "has_latest_attempt": has_latest_attempt,
-                    "latest_attempt_terminal": latest_attempt_terminal,
-                    "has_latest_checkpoint": has_latest_checkpoint,
-                    "score": score,
-                    "reason_list": reason_list,
-                }
+                build_task_recall_ranking_entry(
+                    workflow_id=workflow_id,
+                    resolver_order=index,
+                    is_latest=is_latest,
+                    selected=selected,
+                    workflow_terminal=workflow_terminal,
+                    has_latest_attempt=has_latest_attempt,
+                    latest_attempt_terminal=latest_attempt_terminal,
+                    has_latest_checkpoint=has_latest_checkpoint,
+                    ticket_detour_like=ticket_detour_like,
+                    checkpoint_detour_like=checkpoint_detour_like,
+                )
             )
 
-        task_recall_detour_override_applied = (
-            selected_task_recall_workflow_id is not None
-            and latest_task_recall_workflow_id is not None
-            and selected_task_recall_workflow_id != latest_task_recall_workflow_id
-            and task_recall_latest_ticket_detour_like
-            and not task_recall_selected_ticket_detour_like
+        task_recall_detour_override_applied = build_task_recall_detour_override_applied(
+            selected_workflow_id=selected_task_recall_workflow_id,
+            latest_workflow_id=latest_task_recall_workflow_id,
+            latest_ticket_detour_like=task_recall_latest_ticket_detour_like,
+            latest_checkpoint_detour_like=task_recall_latest_checkpoint_detour_like,
+            selected_ticket_detour_like=task_recall_selected_ticket_detour_like,
+            selected_checkpoint_detour_like=task_recall_selected_checkpoint_detour_like,
         )
 
         if (
@@ -1056,42 +975,21 @@ class MemoryService:
             and selected_task_recall_workflow_id != latest_task_recall_workflow_id
             and task_recall_latest_workflow_terminal
         ):
-            task_recall_explanations.extend(
-                [
-                    {
-                        "code": "latest_workflow_terminal",
-                        "message": "latest workflow candidate was terminal",
-                    },
-                    {
-                        "code": "selected_alternative_candidate",
-                        "message": "selected an alternative workflow candidate for continuation",
-                    },
-                ]
-            )
+            task_recall_explanations.extend(build_terminal_override_explanations())
         if task_recall_detour_override_applied:
             task_recall_explanations.extend(
-                [
-                    {
-                        "code": "latest_candidate_detour_like",
-                        "message": "latest workflow candidate looked like a detour rather than the primary task line",
-                    },
-                    {
-                        "code": "selected_mainline_candidate",
-                        "message": "selected a less detour-like candidate to better continue the main task",
-                    },
-                ]
+                build_detour_override_explanations(
+                    latest_ticket_detour_like=task_recall_latest_ticket_detour_like,
+                    latest_checkpoint_detour_like=task_recall_latest_checkpoint_detour_like,
+                    include_candidate_reason_details=True,
+                )
             )
         if (
             selected_task_recall_workflow_id is not None
             and not task_recall_explanations
             and (task_recall_selected_equals_latest or len(resolved_workflow_ids) == 1)
         ):
-            task_recall_explanations.append(
-                {
-                    "code": "latest_candidate_retained",
-                    "message": "latest workflow candidate remained the best continuation point",
-                }
-            )
+            task_recall_explanations.extend(build_latest_candidate_retained_explanations())
 
         details = {
             "query": request.query,
