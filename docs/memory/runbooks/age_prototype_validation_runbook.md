@@ -2,11 +2,11 @@
 
 For a fill-in template that records one concrete validation pass, see:
 
-- `docs/memory/age_prototype_validation_observation_template.md`
+- `docs/memory/validation/age_prototype_validation_observation_template.md`
 
 For the planned optional AGE-capable local/dev environment path, see:
 
-- `docs/memory/age_docker_provisioning_plan.md`
+- `docs/memory/design/age_docker_provisioning_plan.md`
 
 ## Purpose
 
@@ -615,7 +615,7 @@ Recommended next reading:
 
 For a reusable fill-in template for this record, see:
 
-- `docs/memory/age_prototype_validation_observation_template.md`
+- `docs/memory/validation/age_prototype_validation_observation_template.md`
 
 A useful validation note should include:
 
@@ -695,12 +695,12 @@ The most useful validation signals currently available are:
 
 For a concrete observation note shape that records those signals together, see:
 
-- `docs/memory/age_prototype_validation_observation_template.md`
+- `docs/memory/validation/age_prototype_validation_observation_template.md`
 
 For the planned optional AGE-capable Docker/dev path needed to move from
-degraded-path validation into real graph-enabled local validation, see:
+conceptual prototype work toward real graph-enabled local validation, see:
 
-- `docs/memory/age_docker_provisioning_plan.md`
+- `docs/memory/design/age_docker_provisioning_plan.md`
 
 Together, those are enough to support practical constrained validation without
 pretending the prototype is already a broad graph platform.

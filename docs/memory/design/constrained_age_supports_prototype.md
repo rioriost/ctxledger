@@ -50,8 +50,8 @@ retrieval contract too early.
 
 This note follows and narrows the guidance already established in:
 
-- `docs/memory/first_age_slice_boundary_decision.md`
-- `docs/memory/age_setup_first_slice.md`
+- `docs/memory/decisions/first_age_slice_boundary_decision.md`
+- `docs/memory/design/age_setup_first_slice.md`
 
 Those notes already establish that the first AGE-oriented work for the current
 stage should be:

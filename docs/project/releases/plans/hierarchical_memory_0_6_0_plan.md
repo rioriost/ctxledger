@@ -316,7 +316,7 @@ AGE usage should be:
 - shielded by repository/service abstractions
 - observable enough that failures can be diagnosed
 - governed by the canonical Phase A boundary decision:
-  - `docs/memory/first_age_slice_boundary_decision.md`
+  - `docs/memory/decisions/first_age_slice_boundary_decision.md`
 
 At the current `0.6.0` stage, that canonical decision should be read as:
 
@@ -433,10 +433,10 @@ It does need to demonstrate at least one meaningful retrieval improvement such a
 - schema plan
 - AGE setup approach
   - canonical decision record:
-    - `docs/memory/first_age_slice_boundary_decision.md`
+    - `docs/memory/decisions/first_age_slice_boundary_decision.md`
   - supporting notes:
-    - `docs/memory/age_setup_first_slice.md`
-    - `docs/memory/age_graph_population_bootstrap.md`
+    - `docs/memory/design/age_setup_first_slice.md`
+    - `docs/memory/design/age_graph_population_bootstrap.md`
   - first-slice reading should remain boundary-first, bootstrap-first, and behavior-preserving
   - the minimum setup approach should clarify:
     - graph ownership boundary
@@ -445,7 +445,7 @@ It does need to demonstrate at least one meaningful retrieval improvement such a
     - failure/degradation expectations for local/dev/test and later graph-oriented work
   - this deliverable should not yet imply graph-backed retrieval behavior
 - storage boundary decision note
-  - for the current stage, treat `docs/memory/first_age_slice_boundary_decision.md`
+  - for the current stage, treat `docs/memory/decisions/first_age_slice_boundary_decision.md`
     as the canonical Phase A decision note for Plan `17.3`
 
 ---
@@ -465,7 +465,7 @@ It does need to demonstrate at least one meaningful retrieval improvement such a
 
 ### Deliverables
 - canonical decision record:
-  - `docs/memory/minimal_hierarchy_model_decision.md`
+  - `docs/memory/decisions/minimal_hierarchy_model_decision.md`
 - first canonical hierarchy model
   - for the current stage, treat the canonical minimal model as:
     - canonical relational memory summaries
@@ -514,7 +514,7 @@ It does need to demonstrate at least one meaningful retrieval improvement such a
 
 ### Deliverables
 - canonical decision record:
-  - `docs/memory/first_memory_get_context_hierarchical_improvement_decision.md`
+  - `docs/memory/decisions/first_memory_get_context_hierarchical_improvement_decision.md`
 - first integrated hierarchical `memory_get_context` behavior
   - for the current stage, treat the first constrained retrieval improvement as:
     - summary-first selection
@@ -689,7 +689,7 @@ Avoid:
    - current status:
      - materially decided at the Phase A boundary level
      - canonicalized in:
-       - `docs/memory/first_age_slice_boundary_decision.md`
+       - `docs/memory/decisions/first_age_slice_boundary_decision.md`
    - for the current stage, prefer a boundary-first, bootstrap-first, behavior-preserving first slice
    - clarify graph ownership, bootstrap responsibility, and degradation expectations before changing retrieval behavior
    - treat further work here as follow-through on the canonical Phase A decision,
@@ -698,7 +698,7 @@ Avoid:
    - current status:
      - materially decided at the first constrained behavior level
      - canonicalized in:
-       - `docs/memory/first_memory_get_context_hierarchical_improvement_decision.md`
+       - `docs/memory/decisions/first_memory_get_context_hierarchical_improvement_decision.md`
    - for the current stage, prefer a clearly framed small behavior choice over another narrow metadata addition
    - the chosen first improvement should be:
      - summary-first selection

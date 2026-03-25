@@ -6,11 +6,12 @@ This note defines the **minimum summary write/build path** for the current
 `0.6.0` hierarchical-memory implementation.
 
 It follows the currently established design decisions:
+It follows the earlier decisions and design direction recorded in:
 
-- `docs/memory/first_age_slice_boundary_decision.md`
-- `docs/memory/minimal_hierarchy_model_decision.md`
-- `docs/memory/first_memory_get_context_hierarchical_improvement_decision.md`
-- `docs/memory/minimal_hierarchy_schema_repository_design.md`
+- `docs/memory/decisions/first_age_slice_boundary_decision.md`
+- `docs/memory/decisions/minimal_hierarchy_model_decision.md`
+- `docs/memory/decisions/first_memory_get_context_hierarchical_improvement_decision.md`
+- `docs/memory/design/minimal_hierarchy_schema_repository_design.md`
 
 This note answers the next implementation question:
 

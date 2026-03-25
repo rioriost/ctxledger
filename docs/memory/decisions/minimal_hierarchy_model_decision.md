@@ -6,7 +6,7 @@ This note defines the **minimal hierarchy model** for `0.6.0` Phase B.
 
 It follows the Phase A canonical decision recorded in:
 
-- `docs/memory/first_age_slice_boundary_decision.md`
+- `docs/memory/decisions/first_age_slice_boundary_decision.md`
 
 This note is intended to answer the next constrained design question:
 
@@ -28,7 +28,7 @@ The goal is to introduce the smallest durable model that:
 
 **Decision status:** active  
 **Phase:** `0.6.0` Phase B  
-**Depends on:** `docs/memory/first_age_slice_boundary_decision.md`
+**Depends on:** `docs/memory/decisions/first_age_slice_boundary_decision.md`
 
 This note should be treated as the canonical Phase B model decision until a
 later phase intentionally broadens hierarchy structure or retrieval behavior.

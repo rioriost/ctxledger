@@ -1149,7 +1149,7 @@ Either:
 Return auxiliary memory context relevant to a task or workflow.
 
 For the current service-layer retrieval-contract snapshot, see:
-- `docs/memory/memory_get_context_service_contract.md`
+- `docs/memory/design/memory_get_context_service_contract.md`
 
 ### Category
 Tool with read semantics

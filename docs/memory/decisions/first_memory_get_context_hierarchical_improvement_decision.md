@@ -8,9 +8,9 @@ for `memory_get_context` in `0.6.0`.
 It follows the current canonical design decisions already established for this
 milestone:
 
-- `docs/memory/first_age_slice_boundary_decision.md`
-- `docs/memory/minimal_hierarchy_model_decision.md`
-- `docs/memory/grouped_selection_primary_surface_decision.md`
+- `docs/memory/decisions/first_age_slice_boundary_decision.md`
+- `docs/memory/decisions/minimal_hierarchy_model_decision.md`
+- `docs/memory/decisions/grouped_selection_primary_surface_decision.md`
 
 This note answers the next narrow question:
 
@@ -34,9 +34,9 @@ The goal is to choose a behavior slice that is:
 **Decision status:** active  
 **Phase:** `0.6.0` Phase D  
 **Depends on:**
-- `docs/memory/first_age_slice_boundary_decision.md`
-- `docs/memory/minimal_hierarchy_model_decision.md`
-- `docs/memory/grouped_selection_primary_surface_decision.md`
+- `docs/memory/decisions/first_age_slice_boundary_decision.md`
+- `docs/memory/decisions/minimal_hierarchy_model_decision.md`
+- `docs/memory/decisions/grouped_selection_primary_surface_decision.md`
 
 This note should be treated as the canonical decision record for the first
 hierarchical retrieval improvement in `memory_get_context` until a later slice

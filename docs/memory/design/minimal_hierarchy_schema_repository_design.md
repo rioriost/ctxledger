@@ -7,9 +7,9 @@ implement the currently chosen `0.6.0` hierarchy direction.
 
 It follows these canonical design decisions:
 
-- `docs/memory/first_age_slice_boundary_decision.md`
-- `docs/memory/minimal_hierarchy_model_decision.md`
-- `docs/memory/first_memory_get_context_hierarchical_improvement_decision.md`
+- `docs/memory/decisions/first_age_slice_boundary_decision.md`
+- `docs/memory/decisions/minimal_hierarchy_model_decision.md`
+- `docs/memory/decisions/first_memory_get_context_hierarchical_improvement_decision.md`
 
 This note answers the next implementation-preparation question:
 

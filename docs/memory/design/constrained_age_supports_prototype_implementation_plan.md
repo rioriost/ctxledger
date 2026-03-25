@@ -34,7 +34,7 @@ Not yet implemented:
 This note defines the implementation plan for the first repository-scoped
 Apache AGE-backed prototype described in:
 
-- `docs/memory/constrained_age_supports_prototype.md`
+- `docs/memory/design/constrained_age_supports_prototype.md`
 
 Its purpose is to translate the already-chosen AGE direction into a concrete,
 small, and testable engineering slice.

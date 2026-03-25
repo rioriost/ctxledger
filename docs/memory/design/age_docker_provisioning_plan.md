@@ -2,7 +2,7 @@
 
 For the image-selection decision that should precede this provisioning slice, see:
 
-- `docs/memory/age_image_selection_note.md`
+- `docs/memory/design/age_image_selection_note.md`
 
 ## Purpose
 
@@ -148,8 +148,8 @@ treated as explicit rather than implicit.
 
 Use:
 
-- `docs/memory/age_image_selection_note.md`
-- `docs/memory/age_image_candidate_decision_record_template.md`
+- `docs/memory/design/age_image_selection_note.md`
+- `docs/memory/decisions/age_image_candidate_decision_record_template.md`
 
 to decide whether the repository should rely on:
 
@@ -411,7 +411,7 @@ The most likely deliverables for this slice are:
 - README additions for the graph-enabled path
 - validation runbook additions specific to the AGE-capable environment path
 - one recorded validation observation using:
-  - `docs/memory/age_prototype_validation_observation_template.md`
+  - `docs/memory/validation/age_prototype_validation_observation_template.md`
 
 ---
 
@@ -452,9 +452,9 @@ Mitigation:
 
 Once the provisioning path exists, the operator reading flow should likely be:
 
-1. `docs/memory/age_image_selection_note.md`
+1. `docs/memory/design/age_image_selection_note.md`
    - for the chosen AGE-capable image or image strategy
-2. `docs/memory/age_image_candidate_decision_record_template.md`
+2. `docs/memory/decisions/age_image_candidate_decision_record_template.md`
    - for per-candidate evaluation records that support the selection decision
 3. `README.md`
    - for entry-level setup guidance

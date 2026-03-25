@@ -2,155 +2,168 @@
 
 ## Summary
 
-This continuation completed the requested documentation reorganization for
-repository-level product/reference docs and version-oriented planning/release
-artifacts.
+This continuation completed the requested reorganization of the memory-specific
+documentation under `docs/memory/`.
 
-The main result is that the repository now has a clearer top-level documentation
-structure for project-wide material:
+The main result is that the repository now has a clearer role-based structure for
+memory-topic docs:
 
-- current repository/product references are grouped under:
-  - `docs/project/product/`
-- version-specific plans and release-facing artifacts are grouped under:
-  - `docs/project/releases/`
-- historical implementation-plan artifacts are grouped under:
-  - `docs/project/history/`
+- decision records and closeout/boundary calls are grouped under:
+  - `docs/memory/decisions/`
+- design and implementation-shape material is grouped under:
+  - `docs/memory/design/`
+- operator/developer procedures are grouped under:
+  - `docs/memory/runbooks/`
+- validation-specific scaffolding is grouped under:
+  - `docs/memory/validation/`
 
-This continuation focused on file organization, path repair, and documentation
-navigation clarity.
+This continuation focused on file organization, documentation navigation, and
+path repair.
 
-It did **not** change the underlying `0.6.0` hierarchical memory behavior,
-retrieval contracts, AGE runtime behavior, or workflow-summary automation
+It did **not** change the implemented memory behavior, retrieval contracts,
+summary-building behavior, AGE runtime behavior, or workflow-summary automation
 behavior.
 
 ---
 
 ## What was completed
 
-### 1. Added project-level documentation subdirectories
+### 1. Added role-based memory documentation subdirectories
 
-A new project-level docs grouping was introduced:
+The following new subdirectories were introduced under `docs/memory/`:
 
-- `docs/project/product/`
-- `docs/project/releases/`
-- `docs/project/history/`
+- `docs/memory/decisions/`
+- `docs/memory/design/`
+- `docs/memory/runbooks/`
+- `docs/memory/validation/`
 
 The intended reading is now:
 
-### `docs/project/product/`
-Use this for current repository-wide direction and reference material, including:
+### `docs/memory/decisions/`
+Use this for:
 
-- architecture
-- design principles
-- specification
-- workflow model
-- memory model
-- MCP API
-- roadmap
+- decision records
+- retrieval/boundary decisions
+- milestone closeout notes
+- refinement checklists being used as closeout/decision artifacts
+- policy/targeting decisions
 
-### `docs/project/releases/`
-Use this for version-by-version and milestone-oriented material, including:
+### `docs/memory/design/`
+Use this for:
 
-- changelog
-- release evidence
-- versioned plans
-- milestone plans
-- release/remediation/checklist artifacts
+- design notes
+- implementation-shape documents
+- schema/repository design notes
+- prototype design material
+- service-contract design notes
+- design-prep and future-shape exploration
 
-### `docs/project/history/`
-Use this for older implementation-plan material that still matters for traceability
-but should not be read as the current canonical repository description.
+### `docs/memory/runbooks/`
+Use this for:
 
----
+- operator/developer procedures
+- command-oriented workflows
+- operational verification steps
+- practical validation procedures
 
-### 2. Moved current product/reference docs into `docs/project/product/`
+### `docs/memory/validation/`
+Use this for:
 
-The following current repository-wide reference docs were moved under the new
-product directory:
-
-- `docs/project/product/specification.md`
-- `docs/project/product/architecture.md`
-- `docs/project/product/design-principles.md`
-- `docs/project/product/workflow-model.md`
-- `docs/project/product/memory-model.md`
-- `docs/project/product/mcp-api.md`
-- `docs/project/product/roadmap.md`
-
-This means the current repository-wide policy/requirements/modeling material is
-no longer mixed into the same flat directory as historical and version-specific
-plan artifacts.
+- validation templates
+- validation observations
+- evidence-oriented validation scaffolding
 
 ---
 
-### 3. Moved versioned plans and release artifacts into `docs/project/releases/`
+### 2. Moved memory docs into their new categories
 
-The following release/version-oriented artifacts were moved:
+The flat `docs/memory/` layout was reorganized into the new role-based
+directories.
 
-- `docs/project/releases/CHANGELOG.md`
-- `docs/project/releases/v0.1.0_acceptance_evidence.md`
-- `docs/project/releases/plans/...`
+Representative moves include:
 
-This makes the version-by-version planning and milestone material easier to
-recognize as release-oriented or planning-oriented rather than current canonical
-product reference documentation.
+#### Decisions
+- `docs/memory/decisions/first_age_slice_boundary_decision.md`
+- `docs/memory/decisions/first_memory_get_context_hierarchical_improvement_decision.md`
+- `docs/memory/decisions/minimal_hierarchy_model_decision.md`
+- `docs/memory/decisions/grouped_selection_primary_surface_decision.md`
+- `docs/memory/decisions/auxiliary_groups_top_level_sibling_decision.md`
+- `docs/memory/decisions/episode_less_summary_first_decision.md`
+- `docs/memory/decisions/age_image_selection_decision.md`
+- `docs/memory/decisions/age_image_candidate_decision_record_template.md`
+- `docs/memory/decisions/summary_hierarchy_0_6_0_milestone_slice_closeout.md`
+- `docs/memory/decisions/phase_e_summary_hierarchy_refinement_checklist.md`
+- `docs/memory/decisions/workflow_summary_targeting_policy.md`
+
+#### Design
+- `docs/memory/design/memory_get_context_service_contract.md`
+- `docs/memory/design/minimal_hierarchy_schema_repository_design.md`
+- `docs/memory/design/minimal_summary_write_build_path.md`
+- `docs/memory/design/next_minimal_hierarchy_primitive_design.md`
+- `docs/memory/design/optional_age_summary_mirroring_design.md`
+- `docs/memory/design/constrained_age_supports_prototype.md`
+- `docs/memory/design/constrained_age_supports_prototype_implementation_plan.md`
+- `docs/memory/design/age_setup_first_slice.md`
+- `docs/memory/design/age_graph_population_bootstrap.md`
+- `docs/memory/design/age_docker_provisioning_plan.md`
+- `docs/memory/design/age_image_selection_note.md`
+- `docs/memory/design/age_image_candidate_prebuilt_record.md`
+- `docs/memory/design/age_image_candidate_prebuilt_concrete_record.md`
+- `docs/memory/design/age_image_candidate_repo_build_record.md`
+- `docs/memory/design/workflow_summary_automation_direction.md`
+
+#### Runbooks
+- `docs/memory/runbooks/summary_build_runbook.md`
+- `docs/memory/runbooks/age_prototype_validation_runbook.md`
+
+#### Validation
+- `docs/memory/validation/age_prototype_validation_observation_template.md`
 
 ---
 
-### 4. Moved older implementation-plan artifacts into `docs/project/history/`
+### 3. Added a memory docs index
 
-The following older implementation-plan files were moved into the history area:
+A new index file was added:
 
-- `docs/project/history/imple_plan_0.1.0.md`
-- `docs/project/history/imple_plan_review_0.1.0.md`
-- `docs/project/history/imple_plan_0.5.3_projection_deprecation.md`
-- `docs/project/history/imple_plan_0.5.4_projection_removal_cleanup.md`
+- `docs/memory/README.md`
 
-This creates a clearer boundary between:
+This file now explains:
 
-- current-state reference docs
-- active/release-oriented planning docs
-- historical implementation material
+- what belongs in `decisions/`
+- what belongs in `design/`
+- what belongs in `runbooks/`
+- what belongs in `validation/`
+- how to choose the right starting point depending on whether the reader wants:
+  - decisions and boundary calls
+  - design/implementation direction
+  - operator guidance
+  - validation scaffolding
+
+This should reduce future drift back toward a flat mixed-purpose memory docs
+layout.
 
 ---
 
-### 5. Repaired important documentation links
+### 4. Repaired important memory-doc references
 
-After the moves, key documentation references were updated so the new structure
-is navigable.
+After the moves, a number of key references were updated so the reorganized
+layout remains navigable.
 
 Updated areas included:
 
 - `README.md`
-- `docs/CONTRIBUTING.md`
-- `docs/SECURITY.md`
-- `docs/grafana_operator_runbook.md`
-- selected moved historical plan files
+- `docs/project/product/mcp-api.md`
+- `docs/project/releases/plans/hierarchical_memory_0_6_0_plan.md`
+- selected moved memory decision docs
+- selected moved memory design docs
+- selected moved memory runbooks
 
 The main categories of repair were:
 
-- current reference doc links now point to `docs/project/product/...`
-- versioned planning links now point to `docs/project/releases/plans/...`
-- moved historical-doc self-references now point to `docs/project/history/...`
-
----
-
-### 6. Added a new project docs index
-
-A new index file was added:
-
-- `docs/project/README.md`
-
-This file now explains:
-
-- what belongs in `product/`
-- what belongs in `releases/`
-- what belongs in `history/`
-- how to choose the right starting point depending on whether the reader wants:
-  - current repository shape
-  - version/release planning
-  - historical implementation context
-
-This should reduce future drift back toward a flat mixed-purpose docs layout.
+- references to moved decision docs now point to `docs/memory/decisions/...`
+- references to moved design docs now point to `docs/memory/design/...`
+- references to moved runbooks now point to `docs/memory/runbooks/...`
+- references to validation templates now point to `docs/memory/validation/...`
 
 ---
 
@@ -180,71 +193,63 @@ Result:
 
 ## Current repository reading after this continuation
 
-At handoff, the documentation structure should now be read as:
+At handoff, the memory documentation structure should now be read as:
 
-### Current project/product references
+### Memory decisions and closeout/boundary calls
+- `docs/memory/decisions/...`
+
+### Memory design and implementation-shape material
+- `docs/memory/design/...`
+
+### Memory operator/developer procedures
+- `docs/memory/runbooks/...`
+
+### Memory validation scaffolding
+- `docs/memory/validation/...`
+
+### Broader repository-wide documentation
+Still use:
+
 - `docs/project/product/...`
-
-### Versioned plans and release artifacts
 - `docs/project/releases/...`
-
-### Historical implementation-plan context
 - `docs/project/history/...`
 
-### Narrower topic-specific docs that remain outside `docs/project/`
-Still top-level under `docs/` for now:
-
-- deployment/operator guidance
-- security guidance
-- memory-specific design notes and runbooks
-
-This means the reorganization currently applies specifically to:
-
-- ctxledger全体の方針や機能要件、ロードマップ
-- バージョン毎のプランや成果物
-
-rather than to every topical sub-area inside `docs/`.
+This means the memory docs are now organized by **document role**, while the
+project docs are organized by **repository-wide scope**.
 
 ---
 
 ## What remains to watch
 
-The structural reorganization is complete for the requested scope, but a few
-follow-up concerns remain worth watching in future sessions:
+The requested memory-doc reorganization is complete, but a few follow-up concerns
+remain worth watching in future sessions:
 
-1. Some deeper planning docs inside `docs/project/releases/plans/` may still
-   contain old path references and could be cleaned incrementally if they become
-   active again.
-2. Topic-specific docs under `docs/memory/` remain intentionally separate for
-   now; if broader docs taxonomy work happens later, that should be treated as a
-   separate bounded slice.
-3. Operator/security/deployment docs remain top-level and may or may not be
-   reorganized later depending on whether a broader docs information architecture
-   effort is chosen.
+1. Some deeper memory docs may still contain stale old-path references and could
+   be cleaned incrementally when those files become active again.
+2. Deployment/operator/security docs remain outside this reorganization and may
+   still be candidates for a broader docs information architecture cleanup later.
+3. If future memory docs are added, they should follow the new role-based layout
+   rather than returning to a flat `docs/memory/` structure.
 
 ---
 
 ## Recommended next step
 
 If another session continues from here, the most natural next step is **not**
-more immediate restructuring unless a broken link or discoverability issue is
-found.
+more immediate memory-doc restructuring unless a broken link or discoverability
+issue is found.
 
 Instead, the likely sensible next options are:
 
-1. do a light sweep for stale path references inside:
-   - `docs/project/releases/plans/`
-2. decide whether topic-specific docs such as:
-   - `docs/memory/`
-   - operator runbooks
-   should remain where they are or join a broader information architecture
-   cleanup later
-3. return to planning work for the next post-`0.6.0` milestone now that the
-   project-wide docs structure is cleaner
+1. do a light sweep for stale path references across less-active memory docs
+2. decide whether deployment/operator/security docs should also gain a clearer
+   subdirectory taxonomy
+3. return to feature or planning work now that the memory docs are easier to
+   navigate
 
 The important handoff point is:
 
-- the requested docs categorization is in place
-- key top-level links were repaired
+- the requested memory-doc categorization is in place
+- key entry-point links were repaired
 - the repository remains green after the reorganization
-- future documentation cleanup can now proceed from a clearer base structure
+- future memory documentation can now be added into a clearer structure

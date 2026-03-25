@@ -388,19 +388,19 @@ Until that work exists, treat the default `small` deployment as the canonical wa
 
 For a practical step-by-step validation procedure for this prototype, see:
 
-- `docs/memory/age_prototype_validation_runbook.md`
+- `docs/memory/runbooks/age_prototype_validation_runbook.md`
 
 For a fill-in template that records one concrete validation pass, see:
 
-- `docs/memory/age_prototype_validation_observation_template.md`
+- `docs/memory/validation/age_prototype_validation_observation_template.md`
 
 For the repository-owned PostgreSQL 17 AGE image/build path that now underpins
-the default local stack, see:
+validated local graph-capable development, see:
 
-- `docs/memory/age_docker_provisioning_plan.md`
-- `docs/memory/age_image_selection_note.md`
-- `docs/memory/age_image_selection_decision.md`
-- `docs/memory/age_image_candidate_repo_build_record.md`
+- `docs/memory/design/age_docker_provisioning_plan.md`
+- `docs/memory/design/age_image_selection_note.md`
+- `docs/memory/decisions/age_image_selection_decision.md`
+- `docs/memory/design/age_image_candidate_repo_build_record.md`
 
 `ctxledger` now includes a **constrained Apache AGE prototype** for one-hop
 `supports` relation lookup.
@@ -589,21 +589,21 @@ For the current constrained prototype, the most useful observability routes are:
 For a fuller operator-facing validation flow that combines readiness checks,
 bootstrap counts, and runtime introspection, see:
 
-- `docs/memory/age_prototype_validation_runbook.md`
+- `docs/memory/runbooks/age_prototype_validation_runbook.md`
 
 For a reusable fill-in template for recording one validation pass, see:
 
-- `docs/memory/age_prototype_validation_observation_template.md`
+- `docs/memory/validation/age_prototype_validation_observation_template.md`
 
 For the planned optional AGE-capable Docker/dev path needed for real graph-enabled
-local validation, see:
+validation, see:
 
-- `docs/memory/age_docker_provisioning_plan.md`
+- `docs/memory/design/age_docker_provisioning_plan.md`
 
 For the image-selection decision that should precede that provisioning path, see:
 
-- `docs/memory/age_image_selection_note.md`
-- `docs/memory/age_image_selection_decision.md`
+- `docs/memory/design/age_image_selection_note.md`
+- `docs/memory/decisions/age_image_selection_decision.md`
 
 This means the current command should be read as a rebuild-oriented bootstrap
 step for the constrained prototype graph, not as an incremental synchronization

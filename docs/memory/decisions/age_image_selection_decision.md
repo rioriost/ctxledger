@@ -30,12 +30,12 @@ It does **not** make AGE mandatory for the default stack.
 
 This decision should be read together with:
 
-- `docs/memory/age_image_selection_note.md`
-- `docs/memory/age_image_candidate_decision_record_template.md`
-- `docs/memory/age_image_candidate_prebuilt_record.md`
-- `docs/memory/age_image_candidate_prebuilt_concrete_record.md`
-- `docs/memory/age_image_candidate_repo_build_record.md`
-- `docs/memory/age_docker_provisioning_plan.md`
+- `docs/memory/design/age_image_selection_note.md`
+- `docs/memory/decisions/age_image_candidate_decision_record_template.md`
+- `docs/memory/design/age_image_candidate_prebuilt_record.md`
+- `docs/memory/design/age_image_candidate_prebuilt_concrete_record.md`
+- `docs/memory/design/age_image_candidate_repo_build_record.md`
+- `docs/memory/design/age_docker_provisioning_plan.md`
 
 ---
 
@@ -412,7 +412,7 @@ The most practical next artifacts are now:
 
 - one updated repository-owned build record aligned with the validated
   PostgreSQL 17 path
-  - `docs/memory/age_image_candidate_repo_build_record.md`
+  - `docs/memory/design/age_image_candidate_repo_build_record.md`
 - cleanup of older planning notes that still describe:
   - PostgreSQL 18 as the intended default
   - optional AGE overlays
@@ -428,13 +428,13 @@ Use this sequence:
 1. treat the validated PostgreSQL 17 repository-owned path as the preferred
    implementation candidate
 2. update:
-   - `docs/memory/age_image_candidate_repo_build_record.md`
+   - `docs/memory/design/age_image_candidate_repo_build_record.md`
    with the validated assumptions, especially:
    - confirm the preferred PostgreSQL 17 base-image path:
      - `postgres:17`
    - confirm the current Apache AGE source-build method
    - confirm the current pgvector source-build method and portability flags
-3. keep `docs/memory/age_image_candidate_prebuilt_concrete_record.md` as the
+3. keep `docs/memory/design/age_image_candidate_prebuilt_concrete_record.md` as the
    secondary comparison record for `apache/age:dev_snapshot_master`
 4. update this note with the validated preferred-path reading
 5. remove stale references to:
@@ -470,7 +470,7 @@ Current provisional choice:
 - **promote the repository-owned build path to the preferred implementation
   direction**
   - tracked in:
-    - `docs/memory/age_image_candidate_repo_build_record.md`
+    - `docs/memory/design/age_image_candidate_repo_build_record.md`
   - currently read as:
     - arm64-capable PostgreSQL 18 base image
     - explicit Apache AGE installation
@@ -479,7 +479,7 @@ Current provisional choice:
   non-preferred comparison candidate**
   - `apache/age:dev_snapshot_master`
   - tracked in:
-    - `docs/memory/age_image_candidate_prebuilt_concrete_record.md`
+    - `docs/memory/design/age_image_candidate_prebuilt_concrete_record.md`
 
 This is the smallest next decision that can move the repository toward a real
 graph-enabled local/dev validation path without prematurely widening prototype
