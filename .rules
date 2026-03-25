@@ -86,6 +86,58 @@ user_notes: JA allowed
   - the current workflow
   - the current workspace
   - the current ticket or task
+- For the current `0.6.0` hierarchical-memory slice, treat `memory_get_context` as a hierarchy-aware, route-explainable tool rather than as a flat episode lookup.
+- When `memory_get_context` returns current `0.6.0` details fields, read them explicitly instead of collapsing them into a generic “context found / not found” interpretation.
+- In particular, pay attention to:
+  - `summary_selection_applied`
+  - `summary_selection_kind`
+  - `memory_context_groups`
+  - `retrieval_routes_present`
+  - `primary_retrieval_routes_present`
+  - `auxiliary_retrieval_routes_present`
+  - `retrieval_route_presence`
+  - `retrieval_route_group_counts`
+  - `retrieval_route_item_counts`
+  - `summary_first_has_episode_groups`
+  - `summary_first_is_summary_only`
+  - `summary_first_child_episode_count`
+  - `summary_first_child_episode_ids`
+  - `primary_episode_groups_present_after_query_filter`
+  - `auxiliary_only_after_query_filter`
+- Treat `memory_context_groups` as the primary grouped hierarchy-aware output surface when reasoning about returned context.
+- Treat top-level flat or compatibility-oriented fields as supporting or convenience output unless the repository later redefines them as canonical.
+- Interpret current retrieval routes narrowly and literally:
+  - `summary_first`
+    - the current primary compressed path
+  - `episode_direct`
+    - the direct visible episode path
+  - `workspace_inherited_auxiliary`
+    - inherited workspace-side auxiliary context
+  - `relation_supports_auxiliary`
+    - relation-derived auxiliary context
+  - `graph_summary_auxiliary`
+    - derived graph-backed auxiliary summary-member context
+- Do not treat `graph_summary_auxiliary` as canonical truth.
+- For the current stage:
+  - relational summary state remains canonical
+  - graph-backed summary enrichment remains derived and degradable
+  - graph-backed absence or failure should be read as reduced enrichment, not canonical summary loss
+- Distinguish the two current `summary_first` sub-modes:
+  - if `summary_first_has_episode_groups = true`
+    - the grouped output currently includes both summary-scoped and episode-scoped primary groups
+  - if `summary_first_is_summary_only = true`
+    - the grouped output currently preserves a primary summary-first path without episode child groups
+- Do not collapse a summary-only primary result into an auxiliary-only result merely because episode-scoped groups are absent.
+- For the current `0.6.0` narrow path, when `include_episodes = false`:
+  - do not assume summary-first grouped output remains visible
+  - do not expect episode-oriented summary-first explanation fields to appear as false placeholders
+  - read the response from the actually surfaced grouped routes and top-level fields that are present
+- If a task depends on whether current context came from canonical summaries, episode-derived fallback, inherited workspace context, relation support, or graph-backed auxiliary enrichment, use the returned route metadata explicitly instead of guessing from the presence of text alone.
+- When `memory_get_context` returns:
+  - `summary_selection_kind = "memory_summary_first"`
+    - read this as canonical summary-first selection
+  - `summary_selection_kind = "episode_summary_first"`
+    - read this as episode-derived summary fallback
 - Use `memory_search` when:
   - similar work may already have been done before
   - you need to recall prior failures, tradeoffs, or debugging outcomes
@@ -117,3 +169,28 @@ user_notes: JA allowed
 - Prefer explicit state transitions over implicit assumptions.
 - Prefer recoverability over brevity when the two are in tension.
 - When in doubt, leave enough workflow and memory context that another capable agent could continue the work with minimal ambiguity.
+- For the current `0.6.0` MCP/tool payloads, prefer reading structured fields over inferring intent from brief human-readable messages alone.
+- If a workflow-completion result includes `auto_memory_details`, inspect it before summarizing what happened.
+- When present, treat nested `auto_memory_details.summary_build` fields as the authoritative explanation of the current bounded summary-automation result, including:
+  - whether summary building was attempted
+  - whether it succeeded
+  - whether it was requested
+  - why it was skipped
+  - what trigger and scope applied
+  - whether replacement happened
+  - which summary id and membership count were produced
+- Do not compress these cases into a vague “auto memory ran” or “summary was built” statement when the structured payload provides a more exact reading.
+- For the current stage, remember that workflow-summary automation remains:
+  - explicit
+  - checkpoint-gated
+  - non-fatal
+- Read current workflow-summary automation policy metadata literally:
+  - `default_requested = false`
+  - `request_field = latest_checkpoint.checkpoint_json.build_episode_summary`
+  - `trigger = latest_checkpoint.build_episode_summary_true`
+- Do not assume summary building happened on workflow completion merely because auto-memory was recorded.
+- If the payload distinguishes:
+  - auto-memory recorded
+  - summary build attempted
+  - summary build succeeded
+  treat those as separate facts.
