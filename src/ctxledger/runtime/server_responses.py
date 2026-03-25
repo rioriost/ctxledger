@@ -85,7 +85,8 @@ def _age_prototype_runtime_details(server: CtxLedgerServer) -> dict[str, Any]:
         },
         "workflow_summary_automation": {
             "orchestration_point": "workflow_completion_auto_memory",
-            "requested": False,
+            "default_requested": False,
+            "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
             "trigger": "latest_checkpoint.build_episode_summary_true",
             "target_scope": "workflow_completion_auto_memory_episode",
             "summary_kind": "episode_summary",
@@ -104,8 +105,12 @@ def _age_prototype_runtime_details(server: CtxLedgerServer) -> dict[str, Any]:
         policy_helper = getattr(workflow_bridge, "_maybe_build_completion_summary", None)
         if callable(policy_helper):
             details["workflow_summary_automation"]["implementation_status"] = "available"
+            details["workflow_summary_automation"]["policy_status"] = (
+                "available_but_checkpoint_gated"
+            )
         else:
             details["workflow_summary_automation"]["implementation_status"] = "unknown"
+            details["workflow_summary_automation"]["policy_status"] = "unknown"
 
     health_checker = getattr(server, "db_health_checker", None)
     if health_checker is None:

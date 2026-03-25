@@ -10,14 +10,24 @@ It is intended for operators and developers who need to:
 - build one canonical summary for a selected episode
 - rebuild an existing summary after the source memory items changed
 - verify what the summary builder wrote
-- understand what current success, skip, and replacement behavior means
+- verify what retrieval now returns after a rebuild
+- understand what current success, skip, replacement, and graph-refresh
+  behavior means
 
 This runbook covers the current explicit command:
 
 - `ctxledger build-episode-summary`
 
-It does **not** describe automatic workflow-driven summary generation.
-The current `0.6.0` path is still explicit and operator-invoked.
+It also explains how that explicit build path relates to:
+
+- `memory_get_context`
+- `ctxledger refresh-age-summary-graph`
+- `ctxledger age-graph-readiness`
+
+It does **not** describe broad automatic workflow-driven summary generation.
+The current `0.6.0` path remains explicit and operator-invoked, while the
+current workflow-oriented automation follow-up remains narrow, gated, and
+non-fatal.
 
 ---
 
@@ -31,6 +41,8 @@ The current explicit summary build path is:
 - replace-or-rebuild by default
 - independent from ordinary retrieval execution
 - independent from broad graph requirements
+- compatible with later derived graph refresh, but not dependent on graph state
+  for correctness
 
 In practical terms, the command currently:
 
@@ -44,6 +56,21 @@ In practical terms, the command currently:
 The current default summary kind is:
 
 - `episode_summary`
+
+### Canonical vs derived reading
+
+For the current `0.6.0` slice, read the write path as:
+
+- canonical relational summary state is the source of truth
+- derived AGE summary graph state is supplementary and rebuildable
+- summary build success does not depend on graph refresh having already happened
+- graph degradation should be interpreted as reduced auxiliary support or
+  observability, not as canonical summary loss
+
+This distinction matters during verification:
+if canonical summary build succeeds but graph-backed auxiliary behavior is stale
+or absent, the corrective action is graph refresh or graph-readiness inspection,
+not reinterpretation of relational summary state as missing.
 
 ---
 
@@ -170,7 +197,7 @@ Focus on these output fields:
 - `memberships`
 - `details.member_memory_count`
 
-## Step 4 — Inspect the written summary state directly
+## Step 4 — Inspect the written canonical summary state
 
 After a successful build, inspect the returned payload and confirm:
 
@@ -187,7 +214,7 @@ For repeat runs, also confirm:
 - `replaced_existing_summary = false` when the run created a first summary or
   when non-replacement behavior was requested
 
-## Step 5 — Verify retrieval sees the summary
+## Step 5 — Verify retrieval sees the canonical summary
 
 After a successful build, the current expectation is that the canonical summary
 may be preferred by `memory_get_context` when summaries are enabled.
@@ -205,6 +232,54 @@ Also confirm, where relevant:
   `memory_summary_id`
 - the grouped summary output remains present in `memory_context_groups`
 - rebuilt summary content is now visible instead of older matching summary state
+- direct summary-member memory-item expansion reflects the expected member set
+
+## Step 6 — Refresh derived AGE summary graph state when needed
+
+If you are validating graph-backed auxiliary summary-member behavior, refresh the
+derived summary graph after a build or rebuild:
+
+```/dev/null/sh#L1-1
+ctxledger refresh-age-summary-graph
+```
+
+Use this when:
+
+- you want graph-backed auxiliary summary-member traversal to reflect the latest
+  canonical summary state
+- you recently rebuilt canonical summaries and want derived graph state to catch
+  up
+- you are debugging summary-related readiness or observability behavior
+
+Do **not** read this as a requirement for canonical summary correctness.
+The canonical relational summary build is already valid even before derived graph
+state is refreshed.
+
+## Step 7 — Check graph-readiness and degraded-state interpretation when relevant
+
+If you are validating graph-backed auxiliary behavior or derived summary
+observability, check current graph readiness:
+
+```/dev/null/sh#L1-1
+ctxledger age-graph-readiness
+```
+
+Interpret the result this way:
+
+- graph ready
+  - derived summary graph state is available for the current bounded auxiliary
+    path
+- graph not ready / degraded
+  - canonical relational summary state may still be healthy
+  - ordinary summary-first retrieval should still be interpreted from canonical
+    relational state first
+  - the likely impact is reduced auxiliary graph-backed enrichment or reduced
+    graph observability, not summary loss
+
+This keeps the current `0.6.0` boundary explicit:
+
+- canonical build and retrieval correctness come from relational state
+- graph-backed summary behavior remains additive and degradable
 
 ---
 

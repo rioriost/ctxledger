@@ -431,7 +431,8 @@ def test_http_handlers_build_runtime_debug_handlers_accept_query_string() -> Non
             },
             "workflow_summary_automation": {
                 "orchestration_point": "workflow_completion_auto_memory",
-                "requested": False,
+                "default_requested": False,
+                "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
                 "trigger": "latest_checkpoint.build_episode_summary_true",
                 "target_scope": "workflow_completion_auto_memory_episode",
                 "summary_kind": "episode_summary",

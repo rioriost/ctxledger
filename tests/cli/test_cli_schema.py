@@ -986,7 +986,8 @@ def test_age_graph_readiness_uses_explicit_database_url_and_graph_name(
         },
         "workflow_summary_automation": {
             "orchestration_point": "workflow_completion_auto_memory",
-            "requested": False,
+            "default_requested": False,
+            "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
             "trigger": "latest_checkpoint.build_episode_summary_true",
             "target_scope": "workflow_completion_auto_memory_episode",
             "summary_kind": "episode_summary",
@@ -1109,7 +1110,8 @@ def test_age_graph_readiness_serializes_non_enum_status_and_false_age_available(
         },
         "workflow_summary_automation": {
             "orchestration_point": "workflow_completion_auto_memory",
-            "requested": False,
+            "default_requested": False,
+            "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
             "trigger": "latest_checkpoint.build_episode_summary_true",
             "target_scope": "workflow_completion_auto_memory_episode",
             "summary_kind": "episode_summary",

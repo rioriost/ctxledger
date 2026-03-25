@@ -852,7 +852,8 @@ def test_runtime_introspection_response_uses_runtime_collection() -> None:
             },
             "workflow_summary_automation": {
                 "orchestration_point": "workflow_completion_auto_memory",
-                "requested": False,
+                "default_requested": False,
+                "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
                 "trigger": "latest_checkpoint.build_episode_summary_true",
                 "target_scope": "workflow_completion_auto_memory_episode",
                 "summary_kind": "episode_summary",
@@ -1031,8 +1032,9 @@ def test_cli_age_graph_readiness_prints_status_json(
         '"summarizes"], "refresh_command": "ctxledger refresh-age-summary-graph", '
         '"read_path_scope": "narrow_auxiliary_summary_member_traversal", "graph_status": "graph_ready", '
         '"ready": true}, "workflow_summary_automation": {"orchestration_point": '
-        '"workflow_completion_auto_memory", "requested": false, "trigger": '
-        '"latest_checkpoint.build_episode_summary_true", "target_scope": '
+        '"workflow_completion_auto_memory", "default_requested": false, '
+        '"request_field": "latest_checkpoint.checkpoint_json.build_episode_summary", '
+        '"trigger": "latest_checkpoint.build_episode_summary_true", "target_scope": '
         '"workflow_completion_auto_memory_episode", "summary_kind": "episode_summary", '
         '"replace_existing": true, "non_fatal": true}}'
     )
@@ -1117,7 +1119,8 @@ def test_age_prototype_runtime_details_records_age_available_error() -> None:
         },
         "workflow_summary_automation": {
             "orchestration_point": "workflow_completion_auto_memory",
-            "requested": False,
+            "default_requested": False,
+            "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
             "trigger": "latest_checkpoint.build_episode_summary_true",
             "target_scope": "workflow_completion_auto_memory_episode",
             "summary_kind": "episode_summary",
@@ -1174,7 +1177,8 @@ def test_age_prototype_runtime_details_records_age_graph_status_error() -> None:
         },
         "workflow_summary_automation": {
             "orchestration_point": "workflow_completion_auto_memory",
-            "requested": False,
+            "default_requested": False,
+            "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
             "trigger": "latest_checkpoint.build_episode_summary_true",
             "target_scope": "workflow_completion_auto_memory_episode",
             "summary_kind": "episode_summary",
@@ -1232,7 +1236,8 @@ def test_age_prototype_runtime_details_records_age_graph_available_error() -> No
         },
         "workflow_summary_automation": {
             "orchestration_point": "workflow_completion_auto_memory",
-            "requested": False,
+            "default_requested": False,
+            "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
             "trigger": "latest_checkpoint.build_episode_summary_true",
             "target_scope": "workflow_completion_auto_memory_episode",
             "summary_kind": "episode_summary",

@@ -177,7 +177,8 @@ def test_age_prototype_runtime_details_reports_enabled_ready_graph_state() -> No
         },
         "workflow_summary_automation": {
             "orchestration_point": "workflow_completion_auto_memory",
-            "requested": False,
+            "default_requested": False,
+            "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
             "trigger": "latest_checkpoint.build_episode_summary_true",
             "target_scope": "workflow_completion_auto_memory_episode",
             "summary_kind": "episode_summary",
@@ -233,7 +234,8 @@ def test_age_prototype_runtime_details_reports_disabled_graph_state() -> None:
         },
         "workflow_summary_automation": {
             "orchestration_point": "workflow_completion_auto_memory",
-            "requested": False,
+            "default_requested": False,
+            "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
             "trigger": "latest_checkpoint.build_episode_summary_true",
             "target_scope": "workflow_completion_auto_memory_episode",
             "summary_kind": "episode_summary",
@@ -295,7 +297,8 @@ def test_build_runtime_introspection_response_includes_age_prototype_details() -
         },
         "workflow_summary_automation": {
             "orchestration_point": "workflow_completion_auto_memory",
-            "requested": False,
+            "default_requested": False,
+            "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
             "trigger": "latest_checkpoint.build_episode_summary_true",
             "target_scope": "workflow_completion_auto_memory_episode",
             "summary_kind": "episode_summary",
@@ -598,7 +601,8 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
             },
             "workflow_summary_automation": {
                 "orchestration_point": "workflow_completion_auto_memory",
-                "requested": False,
+                "default_requested": False,
+                "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
                 "trigger": "latest_checkpoint.build_episode_summary_true",
                 "target_scope": "workflow_completion_auto_memory_episode",
                 "summary_kind": "episode_summary",
@@ -655,7 +659,8 @@ def test_build_runtime_introspection_response_returns_empty_runtime_list_when_ru
             },
             "workflow_summary_automation": {
                 "orchestration_point": "workflow_completion_auto_memory",
-                "requested": False,
+                "default_requested": False,
+                "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
                 "trigger": "latest_checkpoint.build_episode_summary_true",
                 "target_scope": "workflow_completion_auto_memory_episode",
                 "summary_kind": "episode_summary",
@@ -709,7 +714,8 @@ def test_build_runtime_introspection_http_handler_returns_success_response() -> 
             },
             "workflow_summary_automation": {
                 "orchestration_point": "workflow_completion_auto_memory",
-                "requested": False,
+                "default_requested": False,
+                "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
                 "trigger": "latest_checkpoint.build_episode_summary_true",
                 "target_scope": "workflow_completion_auto_memory_episode",
                 "summary_kind": "episode_summary",
@@ -806,7 +812,8 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
             },
             "workflow_summary_automation": {
                 "orchestration_point": "workflow_completion_auto_memory",
-                "requested": False,
+                "default_requested": False,
+                "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary",
                 "trigger": "latest_checkpoint.build_episode_summary_true",
                 "target_scope": "workflow_completion_auto_memory_episode",
                 "summary_kind": "episode_summary",

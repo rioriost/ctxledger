@@ -115,15 +115,10 @@ def test_build_workspace_register_tool_handler_rejects_non_dict_metadata() -> No
         }
     )
 
-    assert (
-        response.payload["error"]["message"]
-        == "metadata must be an object when provided"
-    )
+    assert response.payload["error"]["message"] == "metadata must be an object when provided"
 
 
-def test_build_workspace_register_tool_handler_requires_server_workflow_service() -> (
-    None
-):
+def test_build_workspace_register_tool_handler_requires_server_workflow_service() -> None:
     handler = build_workspace_register_tool_handler(make_server(workflow_service=None))
 
     response = handler(
@@ -154,9 +149,7 @@ def test_build_workspace_register_tool_handler_maps_workflow_error() -> None:
             details={"repo_url": "https://example.com/repo.git"},
         )
     )
-    handler = build_workspace_register_tool_handler(
-        make_server(workflow_service=service)
-    )
+    handler = build_workspace_register_tool_handler(make_server(workflow_service=service))
 
     response = handler(
         {
@@ -167,9 +160,7 @@ def test_build_workspace_register_tool_handler_maps_workflow_error() -> None:
     )
 
     assert response.payload["error"]["code"] == "invalid_request"
-    assert response.payload["error"]["details"] == {
-        "repo_url": "https://example.com/repo.git"
-    }
+    assert response.payload["error"]["details"] == {"repo_url": "https://example.com/repo.git"}
 
 
 def test_build_workspace_register_tool_handler_returns_success() -> None:
@@ -181,9 +172,7 @@ def test_build_workspace_register_tool_handler_returns_success() -> None:
         now=now,
     )
     service = FakeWorkflowService(register_result=workspace)
-    handler = build_workspace_register_tool_handler(
-        make_server(workflow_service=service)
-    )
+    handler = build_workspace_register_tool_handler(make_server(workflow_service=service))
 
     response = handler(
         {
@@ -275,9 +264,7 @@ def test_build_workflow_start_tool_handler_returns_success() -> None:
     assert service.start_calls[0].metadata == {"priority": "high"}
 
 
-def test_build_workflow_checkpoint_tool_handler_rejects_invalid_verify_report_type() -> (
-    None
-):
+def test_build_workflow_checkpoint_tool_handler_rejects_invalid_verify_report_type() -> None:
     handler = build_workflow_checkpoint_tool_handler(
         make_server(workflow_service=FakeWorkflowService())
     )
@@ -291,10 +278,7 @@ def test_build_workflow_checkpoint_tool_handler_rejects_invalid_verify_report_ty
         }
     )
 
-    assert (
-        response.payload["error"]["message"]
-        == "verify_report must be an object when provided"
-    )
+    assert response.payload["error"]["message"] == "verify_report must be an object when provided"
 
 
 def test_build_workflow_checkpoint_tool_handler_requires_service() -> None:
@@ -319,9 +303,7 @@ def test_build_workflow_checkpoint_tool_handler_maps_exception() -> None:
             details={"attempt_id": "x"},
         )
     )
-    handler = build_workflow_checkpoint_tool_handler(
-        make_server(workflow_service=service)
-    )
+    handler = build_workflow_checkpoint_tool_handler(make_server(workflow_service=service))
 
     response = handler(
         {
@@ -335,9 +317,7 @@ def test_build_workflow_checkpoint_tool_handler_maps_exception() -> None:
     assert response.payload["error"]["details"] == {"attempt_id": "x"}
 
 
-def test_build_workflow_checkpoint_tool_handler_returns_verify_report_status_when_present() -> (
-    None
-):
+def test_build_workflow_checkpoint_tool_handler_returns_verify_report_status_when_present() -> None:
     now = datetime(2024, 1, 1, tzinfo=UTC)
     workflow_instance_id = uuid4()
     attempt_id = uuid4()
@@ -356,9 +336,7 @@ def test_build_workflow_checkpoint_tool_handler_returns_verify_report_status_whe
         verify_report=SimpleNamespace(status=VerifyStatus.PASSED),
     )
     service = FakeWorkflowService(checkpoint_result=result)
-    handler = build_workflow_checkpoint_tool_handler(
-        make_server(workflow_service=service)
-    )
+    handler = build_workflow_checkpoint_tool_handler(make_server(workflow_service=service))
 
     response = handler(
         {
@@ -391,9 +369,7 @@ def test_build_workflow_checkpoint_tool_handler_returns_verify_report_status_whe
     assert call.verify_report == {"status": "passed"}
 
 
-def test_build_workflow_checkpoint_tool_handler_falls_back_to_attempt_verify_status() -> (
-    None
-):
+def test_build_workflow_checkpoint_tool_handler_falls_back_to_attempt_verify_status() -> None:
     now = datetime(2024, 1, 1, tzinfo=UTC)
     result = SimpleNamespace(
         checkpoint=SimpleNamespace(
@@ -409,9 +385,7 @@ def test_build_workflow_checkpoint_tool_handler_falls_back_to_attempt_verify_sta
         verify_report=None,
     )
     service = FakeWorkflowService(checkpoint_result=result)
-    handler = build_workflow_checkpoint_tool_handler(
-        make_server(workflow_service=service)
-    )
+    handler = build_workflow_checkpoint_tool_handler(make_server(workflow_service=service))
 
     response = handler(
         {
@@ -424,9 +398,7 @@ def test_build_workflow_checkpoint_tool_handler_falls_back_to_attempt_verify_sta
     assert response.payload["result"]["latest_verify_status"] == "passed"
 
 
-def test_build_workflow_complete_tool_handler_rejects_invalid_verify_report_type() -> (
-    None
-):
+def test_build_workflow_complete_tool_handler_rejects_invalid_verify_report_type() -> None:
     handler = build_workflow_complete_tool_handler(
         make_server(workflow_service=FakeWorkflowService())
     )
@@ -440,10 +412,7 @@ def test_build_workflow_complete_tool_handler_rejects_invalid_verify_report_type
         }
     )
 
-    assert (
-        response.payload["error"]["message"]
-        == "verify_report must be an object when provided"
-    )
+    assert response.payload["error"]["message"] == "verify_report must be an object when provided"
 
 
 def test_build_workflow_complete_tool_handler_requires_service() -> None:
@@ -462,9 +431,7 @@ def test_build_workflow_complete_tool_handler_requires_service() -> None:
 
 def test_build_workflow_complete_tool_handler_maps_exception() -> None:
     service = FakeWorkflowService(complete_exc=RuntimeError("invalid transition"))
-    handler = build_workflow_complete_tool_handler(
-        make_server(workflow_service=service)
-    )
+    handler = build_workflow_complete_tool_handler(make_server(workflow_service=service))
 
     response = handler(
         {
@@ -477,9 +444,7 @@ def test_build_workflow_complete_tool_handler_maps_exception() -> None:
     assert response.payload["error"]["code"] == "invalid_request"
 
 
-def test_build_workflow_complete_tool_handler_returns_verify_report_status_when_present() -> (
-    None
-):
+def test_build_workflow_complete_tool_handler_returns_verify_report_status_when_present() -> None:
     finished_at = datetime(2024, 1, 1, tzinfo=UTC)
     workflow_instance_id = uuid4()
     attempt_id = uuid4()
@@ -499,9 +464,7 @@ def test_build_workflow_complete_tool_handler_returns_verify_report_status_when_
         auto_memory_details=None,
     )
     service = FakeWorkflowService(complete_result=result)
-    handler = build_workflow_complete_tool_handler(
-        make_server(workflow_service=service)
-    )
+    handler = build_workflow_complete_tool_handler(make_server(workflow_service=service))
 
     response = handler(
         {
@@ -536,9 +499,7 @@ def test_build_workflow_complete_tool_handler_returns_verify_report_status_when_
     assert call.failure_reason == "none"
 
 
-def test_build_workflow_complete_tool_handler_falls_back_to_attempt_verify_status() -> (
-    None
-):
+def test_build_workflow_complete_tool_handler_falls_back_to_attempt_verify_status() -> None:
     result = SimpleNamespace(
         workflow_instance=SimpleNamespace(
             workflow_instance_id=uuid4(),
@@ -555,9 +516,7 @@ def test_build_workflow_complete_tool_handler_falls_back_to_attempt_verify_statu
         auto_memory_details=None,
     )
     service = FakeWorkflowService(complete_result=result)
-    handler = build_workflow_complete_tool_handler(
-        make_server(workflow_service=service)
-    )
+    handler = build_workflow_complete_tool_handler(make_server(workflow_service=service))
 
     response = handler(
         {
@@ -571,6 +530,70 @@ def test_build_workflow_complete_tool_handler_falls_back_to_attempt_verify_statu
     assert response.payload["result"]["latest_verify_status"] == "failed"
     assert response.payload["result"]["warnings"] == []
     assert response.payload["result"]["auto_memory_details"] is None
+
+
+def test_build_workflow_complete_tool_handler_preserves_summary_build_metadata() -> None:
+    workflow_instance_id = uuid4()
+    attempt_id = uuid4()
+    finished_at = datetime(2024, 1, 2, tzinfo=UTC)
+    auto_memory_details = {
+        "auto_memory_recorded": True,
+        "summary_build": {
+            "summary_build_attempted": True,
+            "summary_build_succeeded": True,
+            "summary_build_requested": True,
+            "summary_build_status": "built",
+            "summary_build_skipped_reason": None,
+            "summary_build_trigger": "latest_checkpoint.build_episode_summary_true",
+            "summary_build_scope": "workflow_completion_auto_memory_episode",
+            "summary_build_kind": "episode_summary",
+            "summary_build_replace_existing": True,
+            "summary_build_non_fatal": True,
+            "summary_build_replaced_existing_summary": False,
+            "built_memory_summary_id": str(uuid4()),
+            "built_summary_kind": "episode_summary",
+            "built_summary_membership_count": 1,
+        },
+    }
+    result = SimpleNamespace(
+        workflow_instance=SimpleNamespace(
+            workflow_instance_id=workflow_instance_id,
+            status=WorkflowInstanceStatus.COMPLETED,
+        ),
+        attempt=SimpleNamespace(
+            attempt_id=attempt_id,
+            status=SimpleNamespace(value="completed"),
+            finished_at=finished_at,
+            verify_status=VerifyStatus.PASSED,
+        ),
+        verify_report=SimpleNamespace(status=VerifyStatus.PASSED),
+        warnings=(),
+        auto_memory_details=auto_memory_details,
+    )
+    service = FakeWorkflowService(complete_result=result)
+    handler = build_workflow_complete_tool_handler(make_server(workflow_service=service))
+
+    response = handler(
+        {
+            "workflow_instance_id": str(workflow_instance_id),
+            "attempt_id": str(attempt_id),
+            "workflow_status": "completed",
+        }
+    )
+
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workflow_instance_id": str(workflow_instance_id),
+            "attempt_id": str(attempt_id),
+            "workflow_status": "completed",
+            "attempt_status": "completed",
+            "finished_at": finished_at.isoformat(),
+            "latest_verify_status": "passed",
+            "warnings": [],
+            "auto_memory_details": auto_memory_details,
+        },
+    }
 
 
 def test_build_workspace_register_tool_handler_rejects_missing_repo_url() -> None:
@@ -640,9 +663,7 @@ def test_build_workspace_register_tool_handler_rejects_missing_default_branch() 
 
 
 def test_build_workflow_start_tool_handler_rejects_missing_workspace_id() -> None:
-    handler = build_workflow_start_tool_handler(
-        make_server(workflow_service=FakeWorkflowService())
-    )
+    handler = build_workflow_start_tool_handler(make_server(workflow_service=FakeWorkflowService()))
 
     response = handler({"ticket_id": "T-1"})
 
@@ -657,9 +678,7 @@ def test_build_workflow_start_tool_handler_rejects_missing_workspace_id() -> Non
 
 
 def test_build_workflow_start_tool_handler_rejects_missing_ticket_id() -> None:
-    handler = build_workflow_start_tool_handler(
-        make_server(workflow_service=FakeWorkflowService())
-    )
+    handler = build_workflow_start_tool_handler(make_server(workflow_service=FakeWorkflowService()))
 
     response = handler({"workspace_id": str(uuid4())})
 
@@ -673,9 +692,7 @@ def test_build_workflow_start_tool_handler_rejects_missing_ticket_id() -> None:
     }
 
 
-def test_build_workflow_checkpoint_tool_handler_rejects_missing_workflow_instance_id() -> (
-    None
-):
+def test_build_workflow_checkpoint_tool_handler_rejects_missing_workflow_instance_id() -> None:
     handler = build_workflow_checkpoint_tool_handler(
         make_server(workflow_service=FakeWorkflowService())
     )
@@ -741,9 +758,7 @@ def test_build_workflow_checkpoint_tool_handler_rejects_missing_step_name() -> N
     }
 
 
-def test_build_workflow_complete_tool_handler_rejects_missing_workflow_instance_id() -> (
-    None
-):
+def test_build_workflow_complete_tool_handler_rejects_missing_workflow_instance_id() -> None:
     handler = build_workflow_complete_tool_handler(
         make_server(workflow_service=FakeWorkflowService())
     )

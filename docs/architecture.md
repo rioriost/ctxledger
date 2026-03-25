@@ -745,6 +745,23 @@ They are used for:
 
 They are not replacements for canonical raw memory.
 
+For the current `0.6.0` hierarchical memory slice, the canonical summary source
+remains relational PostgreSQL state, especially:
+
+- `memory_summaries`
+- `memory_summary_memberships`
+
+Any graph-backed summary structure should be read as derived support state rather
+than canonical hierarchy truth.
+
+That means:
+
+- summary absence in derived graph state does not imply canonical summary loss
+- summary staleness in derived graph state affects enrichment quality rather than
+  canonical correctness
+- ordinary summary retrieval correctness should still be interpreted from the
+  canonical relational path
+
 ### 13.6 Memory Relation Graph
 
 `memory_relations` form a canonical relation store across memory entities.

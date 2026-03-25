@@ -2,161 +2,183 @@
 
 ## Summary
 
-This continuation closed the final planned `0.6.0` closeout loop around
-summary-first contract hardening, milestone documentation alignment, and
-repository-level validation confirmation.
+This continuation completed the next bounded post-closeout follow-up after the
+`0.6.0` summary hierarchy milestone was already treated as operationally closed.
 
-The key result is that the repository now has:
+The main result of this continuation is that the repository now has:
 
-- focused transport-level contract coverage for the narrowed
-  `memory_get_context` summary-first behavior
-- explicit documentation of the current episode-less vs summary-only shaping
-  boundary
-- a roadmap entry that now describes the implemented `0.6.0` milestone rather
-  than stopping at earlier release lines
-- a closeout checklist that now reads as affirmatively satisfied for the current
-  bounded summary hierarchy slice
-- a green full repository test suite after the latest focused contract and docs
+- finalized release-facing `0.6.0` closeout wording in the changelog
+- a stronger operator-facing summary build runbook
+- clearer and more consistent canonical-versus-derived AGE boundary wording
+- a narrower and more explicit runtime/readiness description of
+  workflow-completion summary automation
+- green targeted and full-suite validation after the latest docs and metadata
   updates
 
-This continuation changed focused MCP/HTTP tests and closeout-oriented docs, but
-did not broaden the underlying `0.6.0` retrieval or graph behavior.
+This continuation intentionally did **not** broaden the `0.6.0` implementation
+into a new large feature slice.
+
+Instead, it tightened:
+
+- release/closeout framing
+- operator guidance
+- AGE degradation/boundary interpretation
+- workflow-summary automation metadata explainability
 
 ---
 
 ## What was completed
 
-### 1. Added focused transport-contract tests for narrowed summary-first behavior
+### 1. Finalized release-facing `0.6.0` closeout wording
 
-Focused MCP and HTTP tests were added to lock the current transport-surface
-contract for two easy-to-regress cases.
+The release-facing milestone wording was updated so the current `0.6.0` state
+reads more explicitly as a bounded, completed slice rather than an in-progress
+exploration.
 
-The first added case confirms that when the primary path remains
-summary-first but episode child groups are not emitted:
+Updated area:
 
-- summary-first still remains a primary path
-- summary-only explanation fields remain present
-- the transport layers preserve:
-  - `summary_first_has_episode_groups = false`
-  - `summary_first_is_summary_only = true`
-  - child episode identity/count details
-  - non-auxiliary interpretation of the surviving summary-only path
+- `docs/CHANGELOG.md`
 
-The second added case confirms that when `include_episodes = false` keeps the
-response on the narrower episode-less path:
+The main closeout clarifications now include:
 
-- summary-first grouped output is not surfaced
-- episode-oriented summary-first explanation fields are not leaked as inactive
-  placeholders
-- the visible grouped output remains constrained to the actually emitted
-  episode-less auxiliary surface
+- the current `0.6.0` hierarchy slice should be read as operationally closed for
+  its intended bounded scope
+- canonical summary ownership and canonical summary-membership ownership are now
+  called out together
+- direct summary-member memory-item expansion is explicitly named as part of the
+  shipped slice
+- the narrowed retrieval-contract reading is stated more clearly
+- the explicit operator path is now described more concretely:
+  - `ctxledger build-episode-summary`
+  - `ctxledger refresh-age-summary-graph`
+- degraded AGE summary graph state is now described as reduced enrichment rather
+  than canonical summary loss
 
-This hardens the current `0.6.0` contract at the transport layer, not only in
-service-level tests.
+The validation section was also updated to reflect the latest focused and broad
+test results from this continuation.
 
-Updated test files:
+---
 
-- `tests/mcp/test_tool_handlers_memory.py`
+### 2. Expanded the summary build operator runbook
+
+The explicit summary-build runbook was strengthened to better support operator
+and developer usage of the current bounded summary path.
+
+Updated doc:
+
+- `docs/memory/summary_build_runbook.md`
+
+The main additions were:
+
+- explicit canonical-versus-derived interpretation
+- clearer statement that summary build correctness is relational first
+- stronger guidance for verifying retrieval after a build or rebuild
+- explicit instruction for when to run:
+  - `ctxledger refresh-age-summary-graph`
+- explicit instruction for when to inspect:
+  - `ctxledger age-graph-readiness`
+- clearer degraded-state interpretation:
+  - graph degradation means reduced auxiliary support or observability
+  - not canonical relational summary loss
+
+This makes the current explicit build path easier to operate without requiring
+the reader to infer the intended graph boundary from other docs.
+
+---
+
+### 3. Unified AGE boundary / degradation wording
+
+The AGE boundary wording was tightened so the architecture story is more
+consistent with the closeout and runbook language.
+
+Updated doc:
+
+- `docs/architecture.md`
+
+The main clarification added there is that, for the current `0.6.0` slice:
+
+- canonical summary truth remains in relational PostgreSQL state
+- graph-backed summary structure is derived support state
+- graph staleness or absence should affect enrichment quality, not canonical
+  correctness
+- ordinary summary retrieval correctness should still be interpreted from the
+  canonical relational path
+
+This reduces the risk that future readers treat the current bounded AGE support
+as graph-owned hierarchy truth.
+
+---
+
+### 4. Added a narrow workflow-summary automation follow-up
+
+The requested workflow-oriented summary automation follow-up was handled as a
+small explainability improvement rather than as a broad behavior expansion.
+
+Updated implementation areas:
+
+- `src/ctxledger/runtime/server_responses.py`
+- `src/ctxledger/__init__.py`
+
+The main change is that runtime/readiness metadata now describes the current
+automation policy more literally as a checkpoint-gated path.
+
+The new runtime/readiness wording now makes it clearer that:
+
+- workflow summary automation is not “always requested”
+- the default is not to request it
+- the request field is:
+  - `latest_checkpoint.checkpoint_json.build_episode_summary`
+- the active trigger remains:
+  - `latest_checkpoint.build_episode_summary_true`
+
+This keeps the current automation follow-up narrow and aligned with the
+repository’s existing implementation.
+
+No broad new automation policy was added.
+
+No default-always-on automation was introduced.
+
+The current behavior remains:
+
+- explicit
+- gated
+- non-fatal
+
+---
+
+### 5. Added focused validation around automation metadata expectations
+
+To keep the metadata follow-up test-backed, runtime/readiness and workflow tool
+expectations were updated and expanded.
+
+Updated test areas include:
+
+- `tests/cli/test_cli_schema.py`
 - `tests/http/test_server_http.py`
+- `tests/http/test_coverage_targets_http.py`
+- `tests/runtime/test_coverage_targets_runtime.py`
+- `tests/server/test_server.py`
+- `tests/mcp/test_tool_handlers_workflow.py`
 
----
+The main test-facing improvements were:
 
-### 2. Fixed the `memory_get_context` service-contract docs to match the current implementation
+- readiness JSON expectations now reflect:
+  - `default_requested`
+  - `request_field`
+- runtime introspection expectations now reflect the same narrower automation
+  policy wording
+- workflow-complete tool-handler coverage now explicitly preserves nested
+  `summary_build` metadata in `auto_memory_details`
 
-The service-contract note was updated so the current contract reads more
-literally and consistently.
+One important nuance that was confirmed during this follow-up:
 
-The main clarifications are:
+- runtime/readiness helper output only surfaces extra availability/policy-status
+  fields when the relevant workflow bridge/helper is actually present
+- tests that construct lighter server objects without that bridge should continue
+  to expect the narrower default payload
 
-- `graph_summary_auxiliary` is now explicitly listed alongside the other current
-  retrieval routes
-- the episode-less top-level details contract is now described more precisely
-- the note now explicitly says that current episode-less shaping keeps:
-  - `summary_selection_applied = false`
-  - `summary_selection_kind = null`
-- the distinction between:
-  - summary-only primary shaping
-  - narrower episode-less shaping
-  is now clearer
-- the current closeout guardrails now explicitly state that:
-  - canonical summary-first remains the first compressed primary path
-  - episode-derived summary-first remains the fallback compressed path
-  - summary-only primary output is still primary rather than auxiliary
-  - graph-backed summary enrichment remains additive and auxiliary
-
-Updated doc:
-
-- `docs/memory/memory_get_context_service_contract.md`
-
----
-
-### 3. Fixed the summary-hierarchy closeout note to better reflect the implemented slice
-
-The current summary-hierarchy closeout note was revised so it more directly
-matches the now-implemented `0.6.0` slice.
-
-The main improvements are:
-
-- explicit callout that the current slice includes:
-  - direct summary-member memory-item expansion
-- explicit callout that retrieval-route explainability is part of the current
-  slice rather than incidental metadata
-- stronger statement that the closeout now aligns with the current refinement
-  checklist
-- clearer reading that broader AGE expansion remains deferred even though a
-  bounded derived graph-backed auxiliary path now exists
-
-Updated doc:
-
-- `docs/memory/summary_hierarchy_0_6_0_milestone_slice_closeout.md`
-
----
-
-### 4. Rewrote the Phase E refinement checklist as satisfied closeout confirmation
-
-The Phase E checklist was updated from an open-ended confirmation template into a
-more explicit current-state closeout reading.
-
-It now states, in effect, that the repository can answer “yes” for the current
-bounded slice to questions such as:
-
-- is the canonical relational summary model clear?
-- is the explicit build path visible?
-- is retrieval explainable and test-backed?
-- is PostgreSQL-backed behavior aligned with the in-memory path?
-- are degradation and boundary expectations understandable?
-- is the next work obvious without reopening settled decisions?
-
-The checklist now more clearly records that the current answer for the bounded
-`0.6.0` slice is “yes” across those categories.
-
-Updated doc:
-
-- `docs/memory/phase_e_summary_hierarchy_refinement_checklist.md`
-
----
-
-### 5. Added a dedicated `0.6.0` roadmap section
-
-The roadmap now includes a dedicated `0.6.0` section instead of leaving the
-milestone state implied only through changelog and design notes.
-
-The new roadmap section summarizes:
-
-- canonical relational summary ownership
-- canonical summary-membership persistence
-- summary-first retrieval through `memory_get_context`
-- direct summary-member expansion
-- constrained derived AGE support
-- explicit summary build paths
-- gated/non-fatal workflow-completion summary automation
-- the current bounded interpretation of `0.6.0`
-
-It also frames what still remains outside the milestone boundary.
-
-Updated doc:
-
-- `docs/roadmap.md`
+That distinction is now preserved in test expectations rather than being blurred
+into one universal payload shape.
 
 ---
 
@@ -166,11 +188,11 @@ Updated doc:
 
 Command:
 
-- `python -m pytest tests/mcp/test_tool_handlers_memory.py tests/http/test_server_http.py tests/memory/test_service_context_details.py -q`
+- `python -m pytest tests/cli/test_cli_schema.py tests/http/test_server_http.py tests/http/test_coverage_targets_http.py tests/runtime/test_coverage_targets_runtime.py tests/server/test_server.py tests/mcp/test_tool_handlers_workflow.py tests/postgres_integration/test_workflow_auto_memory_integration.py -q`
 
 Result:
 
-- **107 passed**
+- **295 passed**
 
 ### Full-suite validation
 
@@ -180,81 +202,97 @@ Command:
 
 Result:
 
-- **931 passed, 1 skipped**
+- **932 passed, 1 skipped**
 
 ---
 
 ## Current implemented state at handoff
 
-At handoff, the current `0.6.0` hierarchical memory state should be read as:
+At handoff, the current `0.6.0` / immediate-post-closeout hierarchical memory
+state should be read as:
 
 ### Canonical relational layer
 - `memory_summaries`
 - `memory_summary_memberships`
-- relational summary ownership preserved as the system of record
+- relational summary state remains the system of record
 
 ### Retrieval layer
 - summary-first retrieval through `memory_get_context`
-- canonical summary-first preference when summaries are enabled
 - direct summary-member memory-item expansion
 - episode-derived summary fallback when canonical summaries are absent
-- explicit retrieval-route metadata
-- explicit auxiliary route accounting including:
-  - `graph_summary_auxiliary`
 - narrowed episode-less shaping preserved for:
   - `include_episodes = false`
-
-### Transport contract layer
-- MCP and HTTP transport coverage now explicitly locks:
-  - summary-only primary-path explanation-field serialization
-  - absence of leaked episode-oriented summary-first explanation fields in the
-    narrowed episode-less path
+- explicit retrieval-route metadata including:
+  - `graph_summary_auxiliary`
 
 ### Derived graph layer
-- explicit derived AGE summary graph support remains bounded and auxiliary
-- narrow graph-backed auxiliary summary-member traversal remains optional
-- explicit rebuild path through:
+- bounded derived AGE summary support remains auxiliary
+- explicit graph refresh path through:
   - `ctxledger refresh-age-summary-graph`
-- degraded graph behavior remains support loss, not canonical loss
+- graph readiness inspection path through:
+  - `ctxledger age-graph-readiness`
+- degraded graph state should still be interpreted as support loss, not
+  canonical loss
 
-### Documentation / closeout layer
-- roadmap now includes `0.6.0`
-- service-contract wording better matches current shaping behavior
-- summary-hierarchy closeout wording better matches the implemented slice
-- Phase E checklist now reads as satisfied for the current bounded closeout
+### Operator path
+- explicit canonical summary build path remains:
+  - `ctxledger build-episode-summary`
+- runbook guidance now covers:
+  - verification of written canonical state
+  - retrieval verification after rebuild
+  - graph refresh when graph-backed auxiliary behavior is under inspection
+  - degraded-state interpretation
+
+### Workflow automation layer
+- workflow-completion auto-memory remains present
+- summary building remains gated by checkpoint intent
+- runtime/readiness metadata now makes the gating policy more explicit through:
+  - `default_requested = false`
+  - `request_field = latest_checkpoint.checkpoint_json.build_episode_summary`
+  - `trigger = latest_checkpoint.build_episode_summary_true`
+- workflow-summary automation remains non-fatal and bounded
 
 ---
 
 ## What remains deferred
 
-The following still remain deferred beyond the current closeout reading:
+The following still remain deferred beyond the current bounded closeout and
+follow-up work:
 
 - summary-to-summary recursion
 - arbitrary-depth hierarchy traversal
 - graph-native hierarchy truth
 - broad graph-first retrieval redesign
 - broader AGE ownership expansion beyond the current bounded auxiliary slice
+- always-on workflow summary generation
+- broader workflow automation policy rollout
 - Mnemis alignment / comparison work
-- any broadening that would make the current `0.6.0` slice less explicitly
-  bounded
+- any broader milestone work that would reopen the already-bounded `0.6.0`
+  architectural decisions
 
 ---
 
 ## Recommended next step
 
-The next realistic step after this continuation is not another large `0.6.0`
-feature slice.
+The current `0.6.0` closeout and immediate follow-up loop should now be treated
+as complete.
 
-Instead, the best next move is to treat the current `0.6.0` summary hierarchy
-work as operationally closed unless a deliberately bounded follow-up is chosen.
+If another session continues from here, the most sensible next move is **not**
+another incremental `0.6.0` refinement unless a very specific regression or docs
+gap appears.
 
-If another bounded follow-up is needed, the most plausible candidates are:
+Instead, the likely next useful directions are:
 
-1. a narrow workflow-oriented automation refinement
-2. a small operator/runbook follow-up if repeated manual summary rebuilding
-   becomes common
-3. a separately justified graph follow-up only if a concrete traversal benefit
-   clearly exceeds the current bounded auxiliary path
+1. begin explicit planning for the next milestone boundary
+2. choose whether workflow-summary automation should remain as-is or receive a
+   separately bounded future slice
+3. keep AGE work constrained unless a concrete traversal benefit justifies a new
+   graph follow-up
 
-Otherwise, the repository is in a good state to stop the current `0.6.0`
-closeout loop and move attention to the next milestone decision.
+The important handoff point is:
+
+- the current repository state is validated
+- the `0.6.0` summary hierarchy slice is documented as closed
+- the operator path is documented
+- the current automation policy is more explicit
+- the next work can now be chosen deliberately rather than by cleanup drift

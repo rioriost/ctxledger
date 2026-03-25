@@ -121,26 +121,37 @@ The project currently follows a lightweight, human-maintained changelog style.
   - PostgreSQL memory context integration
   - `python -m pytest tests/postgres_integration/test_workflow_auto_memory_integration.py tests/runtime/test_coverage_targets_runtime.py tests/memory/test_service_core.py tests/postgres_integration/test_memory_context_integration.py -q`
   - `116 passed`
+- focused contract validation passed for narrowed summary-first transport behavior across:
+  - MCP memory tool handlers
+  - HTTP MCP runtime transport
+  - memory context detail shaping
+  - `python -m pytest tests/mcp/test_tool_handlers_memory.py tests/http/test_server_http.py tests/memory/test_service_context_details.py -q`
+  - `107 passed`
 - CLI-focused validation passed for readiness, summary refresh, and summary build surfaces:
   - `python -m pytest tests/cli/test_cli_main.py tests/cli/test_cli_schema.py -q`
   - `84 passed`
-- full repository validation passed after the summary hierarchy, builder, CLI, workflow automation, and summary graph follow-up slices:
+- full repository validation passed after the final summary hierarchy closeout, transport-contract, and documentation alignment slices:
   - `python -m pytest -q`
-  - `924 passed, 1 skipped`
+  - `931 passed, 1 skipped`
 
 ### Notes
 
 - the current AGE work should still be read as a constrained graph-backed prototype rather than broad graph adoption
 - relational PostgreSQL tables remain canonical; AGE graph state is still derived and rebuildable
 - the explicit bootstrap/refresh paths remain prototype-grade and rebuild-first rather than a full graph lifecycle or incremental sync framework
-- the current `0.6.0` hierarchy work should be read as:
+- the current `0.6.0` hierarchy work should now be read as operationally closed for its intended bounded slice:
   - canonical-relational summary ownership
+  - canonical summary-membership ownership
   - first constrained summary-first retrieval
+  - direct summary-member memory-item expansion
   - first explicit episode-scoped summary builder
   - replace-or-rebuild summary semantics
   - a narrow optional graph-backed auxiliary summary traversal path
   - workflow-completion-oriented summary automation remaining explicit, gated, and non-fatal
   - graph support remaining optional at the summary build/read boundary
+- the current retrieval contract should also be read as explicitly bounded:
+  - summary-only primary-path shaping remains a primary route, not an auxiliary-only response
+  - `include_episodes = false` keeps the narrower episode-less surface and does not leak episode-oriented summary-first explanation fields as placeholders
 - the validated local default is now:
   - `small`
   - HTTPS
@@ -148,6 +159,10 @@ The project currently follows a lightweight, human-maintained changelog style.
   - Grafana enabled
   - AGE enabled
   - repository-owned PostgreSQL 17 image path
+- the current operator-facing summary workflow should be read as:
+  - explicit `ctxledger build-episode-summary` remains the primary write path
+  - `ctxledger refresh-age-summary-graph` remains the rebuild path for derived summary graph state
+  - degraded or unavailable AGE summary graph state should reduce enrichment, not invalidate canonical summary correctness
 - the planned second deployment pattern remains:
   - `large`
   - HTTPS
