@@ -5,6 +5,7 @@ from typing import Any
 from ..config import AppSettings
 from ..db.postgres import (
     PostgresConfig,
+    PostgresDatabaseHealthChecker,
     build_connection_pool,
     build_postgres_uow_factory,
 )
@@ -13,6 +14,7 @@ from ..memory.service import (
     UnitOfWorkEpisodeRepository,
     UnitOfWorkMemoryEmbeddingRepository,
     UnitOfWorkMemoryItemRepository,
+    UnitOfWorkMemoryRelationRepository,
     UnitOfWorkMemorySummaryMembershipRepository,
     UnitOfWorkMemorySummaryRepository,
     UnitOfWorkWorkflowLookupRepository,
@@ -52,9 +54,16 @@ def build_workflow_service_factory(
             pool=shared_connection_pool,
         )
 
+        postgres_health_checker = PostgresDatabaseHealthChecker(postgres_config)
+
         explicit_summary_builder = MemoryService(
             episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
             memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+            memory_relation_repository=UnitOfWorkMemoryRelationRepository(
+                uow_factory,
+                config=postgres_config,
+                health_checker=postgres_health_checker,
+            ),
             memory_summary_repository=UnitOfWorkMemorySummaryRepository(uow_factory),
             memory_summary_membership_repository=(
                 UnitOfWorkMemorySummaryMembershipRepository(uow_factory)

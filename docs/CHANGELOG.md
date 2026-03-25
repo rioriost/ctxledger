@@ -30,12 +30,15 @@ The project currently follows a lightweight, human-maintained changelog style.
   - relational baseline implementations in in-memory and PostgreSQL repositories
   - AGE capability and graph-readiness checks
   - a PostgreSQL AGE-backed one-hop `supports` lookup path
+  - a narrow derived-summary graph traversal read path for summary-member expansion
   - explicit relational fallback when AGE is disabled, unavailable, unready, or the graph-backed read fails
   - config-gated prototype controls:
     - `CTXLEDGER_DB_AGE_ENABLED`
     - `CTXLEDGER_DB_AGE_GRAPH_NAME`
-  - an explicit prototype bootstrap command:
+  - explicit prototype graph commands:
     - `ctxledger bootstrap-age-graph`
+    - `ctxledger age-graph-readiness`
+    - `ctxledger refresh-age-summary-graph`
 - first constrained canonical summary hierarchy slice for `0.6.0`, including:
   - canonical `memory_summaries` persistence
   - canonical `memory_summary_memberships` persistence
@@ -44,17 +47,25 @@ The project currently follows a lightweight, human-maintained changelog style.
   - workflow-backed summary repository wiring
   - first `memory_summary_first` retrieval path in `memory_get_context`
   - direct summary-member memory-item expansion
+  - a narrow graph-backed auxiliary summary traversal path for derived summary-member lookup
   - explicit episode-scoped summary building through:
     - `ctxledger build-episode-summary`
   - replace-or-rebuild behavior for matching episode summaries
   - PostgreSQL-backed builder-to-retrieval integration coverage
-- documentation for the constrained AGE prototype boundary, setup approach, implementation plan, and graph bootstrap/population model
+- workflow-completion summary automation refinement for `0.6.0`, including:
+  - explicit workflow-completion auto-memory targeting
+  - trigger/policy details surfaced in additive summary-build result fields
+  - non-fatal summary build behavior preserved during workflow completion
+- documentation for the constrained AGE prototype boundary, setup approach, implementation plan, graph bootstrap/population model, and derived summary mirroring/readiness behavior
 - hierarchy-memory design notes for:
   - minimal hierarchy model
   - first `memory_get_context` hierarchical retrieval improvement
   - minimal hierarchy schema/repository design
   - minimal summary write/build path
-- README guidance for the constrained AGE prototype controls and bootstrap command
+  - workflow summary automation direction
+  - workflow summary targeting policy
+  - optional AGE summary mirroring
+- README guidance for the constrained AGE prototype controls, readiness checks, summary graph refresh path, and explicit summary build flow
 
 ### Changed
 
@@ -68,6 +79,9 @@ The project currently follows a lightweight, human-maintained changelog style.
   - `make OPTFLAGS=""`
 - `memory_get_context` related-item collection can now use the narrow `supports` target lookup boundary without changing the visible retrieval contract
 - `memory_get_context` can now prefer canonical summaries through the first constrained `memory_summary_first` path when canonical summaries exist and summaries are enabled
+- `memory_get_context` can now use a narrow graph-backed auxiliary summary traversal path to expand summary-member memory items from derived AGE graph state when available
+- AGE readiness and runtime observability now surface derived summary graph mirroring details and the current workflow summary automation policy alongside graph status
+- workflow-completion summary automation details now explicitly report request, trigger, scope, replace behavior, and non-fatal policy metadata in additive summary-build results
 - canonical summary-first retrieval now has focused service, serializer, MCP, HTTP, and PostgreSQL integration coverage
 - constrained relation-auxiliary parity was preserved across the prototype path by keeping:
   - first-seen-by-source distinct target ordering
@@ -100,20 +114,32 @@ The project currently follows a lightweight, human-maintained changelog style.
   - MCP memory tool handlers
   - HTTP MCP runtime transport
   - PostgreSQL repository and integration coverage
-- full repository validation passed after the summary hierarchy, builder, CLI, and PostgreSQL integration slices:
+- follow-up summary hierarchy validation passed across:
+  - workflow auto-memory integration
+  - runtime coverage targets
+  - memory service core
+  - PostgreSQL memory context integration
+  - `python -m pytest tests/postgres_integration/test_workflow_auto_memory_integration.py tests/runtime/test_coverage_targets_runtime.py tests/memory/test_service_core.py tests/postgres_integration/test_memory_context_integration.py -q`
+  - `116 passed`
+- CLI-focused validation passed for readiness, summary refresh, and summary build surfaces:
+  - `python -m pytest tests/cli/test_cli_main.py tests/cli/test_cli_schema.py -q`
+  - `84 passed`
+- full repository validation passed after the summary hierarchy, builder, CLI, workflow automation, and summary graph follow-up slices:
   - `python -m pytest -q`
-  - `916 passed, 1 skipped`
+  - `924 passed, 1 skipped`
 
 ### Notes
 
 - the current AGE work should still be read as a constrained graph-backed prototype rather than broad graph adoption
 - relational PostgreSQL tables remain canonical; AGE graph state is still derived and rebuildable
-- the explicit bootstrap path remains prototype-grade and rebuild-first rather than a full graph lifecycle or incremental sync framework
+- the explicit bootstrap/refresh paths remain prototype-grade and rebuild-first rather than a full graph lifecycle or incremental sync framework
 - the current `0.6.0` hierarchy work should be read as:
   - canonical-relational summary ownership
   - first constrained summary-first retrieval
   - first explicit episode-scoped summary builder
   - replace-or-rebuild summary semantics
+  - a narrow optional graph-backed auxiliary summary traversal path
+  - workflow-completion-oriented summary automation remaining explicit, gated, and non-fatal
   - graph support remaining optional at the summary build/read boundary
 - the validated local default is now:
   - `small`

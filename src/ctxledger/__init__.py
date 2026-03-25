@@ -483,6 +483,31 @@ def _age_graph_readiness(args: argparse.Namespace) -> int:
                     "age_graph_name": graph_name,
                     "age_available": age_available,
                     "age_graph_status": status_value,
+                    "summary_graph_mirroring": {
+                        "enabled": settings.database.age_enabled,
+                        "canonical_source": [
+                            "memory_summaries",
+                            "memory_summary_memberships",
+                        ],
+                        "derived_graph_labels": [
+                            "memory_summary",
+                            "memory_item",
+                            "summarizes",
+                        ],
+                        "refresh_command": "ctxledger refresh-age-summary-graph",
+                        "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+                        "graph_status": status_value,
+                        "ready": status_value == "graph_ready",
+                    },
+                    "workflow_summary_automation": {
+                        "orchestration_point": "workflow_completion_auto_memory",
+                        "requested": False,
+                        "trigger": "latest_checkpoint.build_episode_summary_true",
+                        "target_scope": "workflow_completion_auto_memory_episode",
+                        "summary_kind": "episode_summary",
+                        "replace_existing": True,
+                        "non_fatal": True,
+                    },
                 }
             )
         )
@@ -1175,11 +1200,16 @@ def _build_episode_summary(args: argparse.Namespace) -> int:
 
         try:
             from .config import get_settings
-            from .db.postgres import PostgresConfig, build_postgres_uow_factory
+            from .db.postgres import (
+                PostgresConfig,
+                PostgresDatabaseHealthChecker,
+                build_postgres_uow_factory,
+            )
 
             settings = get_settings()
             postgres_config = PostgresConfig.from_settings(settings)
             uow_factory = build_postgres_uow_factory(postgres_config, connection_pool)
+            db_health_checker = PostgresDatabaseHealthChecker(postgres_config)
 
             memory_service = memory_service_module.MemoryService(
                 episode_repository=memory_service_module.UnitOfWorkEpisodeRepository(uow_factory),
@@ -1197,6 +1227,13 @@ def _build_episode_summary(args: argparse.Namespace) -> int:
                 ),
                 workspace_lookup=memory_service_module.UnitOfWorkWorkspaceLookupRepository(
                     uow_factory
+                ),
+                memory_relation_repository=(
+                    memory_service_module.UnitOfWorkMemoryRelationRepository(
+                        uow_factory,
+                        config=postgres_config,
+                        health_checker=db_health_checker,
+                    )
                 ),
             )
 

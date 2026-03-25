@@ -890,12 +890,14 @@ class MemoryService:
                             else 0
                         ),
                         "relation_supports_auxiliary": 0,
+                        "graph_summary_auxiliary": 0,
                     },
                     "retrieval_route_item_counts": {
                         "summary_first": 0,
                         "episode_direct": 0,
                         "workspace_inherited_auxiliary": len(inherited_workspace_items),
                         "relation_supports_auxiliary": 0,
+                        "graph_summary_auxiliary": 0,
                     },
                     "retrieval_route_presence": {
                         "summary_first": {
@@ -913,6 +915,10 @@ class MemoryService:
                             "item_present": bool(inherited_workspace_items),
                         },
                         "relation_supports_auxiliary": {
+                            "group_present": False,
+                            "item_present": False,
+                        },
+                        "graph_summary_auxiliary": {
                             "group_present": False,
                             "item_present": False,
                         },
@@ -946,6 +952,12 @@ class MemoryService:
                             "workspace": 0,
                             "relation": 0,
                         },
+                        "graph_summary_auxiliary": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": 0,
+                            "relation": 0,
+                        },
                     },
                     "retrieval_route_scope_item_counts": {
                         "summary_first": {
@@ -972,6 +984,12 @@ class MemoryService:
                             "workspace": 0,
                             "relation": 0,
                         },
+                        "graph_summary_auxiliary": {
+                            "summary": 0,
+                            "episode": 0,
+                            "workspace": 0,
+                            "relation": 0,
+                        },
                     },
                     "retrieval_route_scopes_present": {
                         "summary_first": [],
@@ -982,6 +1000,7 @@ class MemoryService:
                             else []
                         ),
                         "relation_supports_auxiliary": [],
+                        "graph_summary_auxiliary": [],
                     },
                     "memory_context_groups": (
                         [
@@ -1078,6 +1097,10 @@ class MemoryService:
             memory_item_details=memory_item_details,
             limit=request.limit,
         )
+        graph_summary_related_memory_items = self._collect_graph_summary_related_memory_items(
+            memory_item_details=memory_item_details,
+            limit=request.limit,
+        )
         memory_context_groups = self._build_memory_context_groups(
             episodes=episodes,
             memory_item_details=memory_item_details,
@@ -1089,6 +1112,7 @@ class MemoryService:
             resolved_workspace_id=resolved_workspace_id,
             inherited_memory_items=inherited_memory_items,
             related_memory_items=related_memory_items,
+            graph_summary_related_memory_items=graph_summary_related_memory_items,
             include_memory_items=request.include_memory_items,
         )
 
@@ -1131,10 +1155,15 @@ class MemoryService:
                 "inherited_context_returned_as_auxiliary_without_episode_matches": bool(
                     inherited_memory_items and matched_episode_count == 0
                 ),
-                "related_context_is_auxiliary": bool(related_memory_items),
-                "related_context_relation_types": (["supports"] if related_memory_items else []),
+                "related_context_is_auxiliary": bool(
+                    related_memory_items or graph_summary_related_memory_items
+                ),
+                "related_context_relation_types": (["supports"] if related_memory_items else [])
+                + (["summarizes"] if graph_summary_related_memory_items else []),
                 "related_context_selection_route": (
-                    "relation_supports_auxiliary" if related_memory_items else None
+                    "graph_summary_auxiliary"
+                    if graph_summary_related_memory_items
+                    else ("relation_supports_auxiliary" if related_memory_items else None)
                 ),
                 **self._build_retrieval_route_details(
                     memory_item_details=memory_item_details,
@@ -1144,26 +1173,34 @@ class MemoryService:
                     include_memory_items=request.include_memory_items,
                     inherited_memory_items=inherited_memory_items,
                     related_memory_items=related_memory_items,
+                    graph_summary_related_memory_items=graph_summary_related_memory_items,
                 ),
                 "related_context_returned_without_episode_matches": False,
                 "all_episodes_filtered_out_by_query": (all_episodes_filtered_out_by_query),
-                "flat_related_memory_items_is_compatibility_field": bool(related_memory_items),
+                "flat_related_memory_items_is_compatibility_field": bool(
+                    related_memory_items or graph_summary_related_memory_items
+                ),
                 "flat_related_memory_items_matches_grouped_episode_related_items": bool(
-                    related_memory_items
+                    related_memory_items or graph_summary_related_memory_items
                 ),
                 "related_memory_items_by_episode_is_primary_structured_output": False,
                 "related_memory_items_by_episode_are_compatibility_output": bool(
-                    related_memory_items
+                    related_memory_items or graph_summary_related_memory_items
                 ),
-                "relation_memory_context_groups_are_primary_output": bool(related_memory_items),
-                "group_related_memory_items_are_convenience_output": bool(related_memory_items),
+                "relation_memory_context_groups_are_primary_output": bool(
+                    related_memory_items or graph_summary_related_memory_items
+                ),
+                "group_related_memory_items_are_convenience_output": bool(
+                    related_memory_items or graph_summary_related_memory_items
+                ),
                 "memory_context_groups": memory_context_groups,
                 "inherited_memory_items": [
                     self._serialize_memory_item(memory_item)
                     for memory_item in inherited_memory_items
                 ],
                 "related_memory_items": [
-                    self._serialize_memory_item(memory_item) for memory_item in related_memory_items
+                    self._serialize_memory_item(memory_item)
+                    for memory_item in (related_memory_items or graph_summary_related_memory_items)
                 ],
             },
         )
@@ -1479,6 +1516,75 @@ class MemoryService:
         if normalized_memory_contents:
             return "\n".join(normalized_memory_contents)
         return None
+
+    def _collect_graph_summary_related_memory_items(
+        self,
+        *,
+        memory_item_details: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> tuple[MemoryItemRecord, ...]:
+        relation_repository = self._memory_relation_repository
+        if relation_repository is None:
+            return ()
+
+        graph_lookup = getattr(
+            relation_repository,
+            "list_distinct_summary_member_memory_ids_by_source_memory_ids",
+            None,
+        )
+        if not callable(graph_lookup):
+            return ()
+
+        source_memory_ids: list[UUID] = []
+        seen_source_memory_ids: set[UUID] = set()
+        for detail in memory_item_details:
+            for memory_item in detail.get("memory_items", ()):
+                memory_id = getattr(memory_item, "memory_id", None)
+                if memory_id is None or memory_id in seen_source_memory_ids:
+                    continue
+                seen_source_memory_ids.add(memory_id)
+                source_memory_ids.append(memory_id)
+
+        if not source_memory_ids:
+            return ()
+
+        try:
+            graph_summary_member_memory_ids = graph_lookup(tuple(source_memory_ids))
+        except Exception:
+            return ()
+
+        if not graph_summary_member_memory_ids:
+            return ()
+
+        direct_episode_memory_ids = {
+            memory_item.memory_id
+            for detail in memory_item_details
+            for memory_item in detail.get("memory_items", ())
+        }
+
+        graph_summary_related_memory_items: list[MemoryItemRecord] = []
+        seen_memory_ids = set(direct_episode_memory_ids)
+
+        for member_memory_id in graph_summary_member_memory_ids:
+            if member_memory_id in seen_memory_ids:
+                continue
+
+            member_memory_items = self._memory_item_repository.list_by_memory_ids(
+                (member_memory_id,),
+                limit=limit,
+            )
+            if not member_memory_items:
+                continue
+
+            for memory_item in member_memory_items:
+                if memory_item.memory_id in seen_memory_ids:
+                    continue
+                seen_memory_ids.add(memory_item.memory_id)
+                graph_summary_related_memory_items.append(memory_item)
+                if len(graph_summary_related_memory_items) >= limit:
+                    return tuple(graph_summary_related_memory_items)
+
+        return tuple(graph_summary_related_memory_items)
 
     def _build_summary_details_for_episodes(
         self,
@@ -1808,10 +1914,12 @@ class MemoryService:
         include_memory_items: bool,
         inherited_memory_items: tuple[MemoryItemRecord, ...],
         related_memory_items: tuple[MemoryItemRecord, ...],
+        graph_summary_related_memory_items: tuple[MemoryItemRecord, ...],
     ) -> dict[str, Any]:
         episode_direct_group_present = bool(
             include_memory_items and matched_episode_count > 0 and not summary_selection_applied
         )
+        graph_summary_group_present = bool(graph_summary_related_memory_items)
         episode_direct_item_count = (
             sum(len(detail.get("memory_items", [])) for detail in memory_item_details)
             if episode_direct_group_present
@@ -1844,7 +1952,9 @@ class MemoryService:
         )
         auxiliary_only_after_query_filter = bool(
             not primary_episode_groups_present_after_query_filter
-            and (inherited_memory_items or related_memory_items)
+            and (
+                inherited_memory_items or related_memory_items or graph_summary_related_memory_items
+            )
         )
         relation_supports_source_episode_count = len(
             {
@@ -1862,6 +1972,7 @@ class MemoryService:
                     "episode_direct" if episode_direct_group_present else None,
                     ("workspace_inherited_auxiliary" if inherited_memory_items else None),
                     ("relation_supports_auxiliary" if related_memory_items else None),
+                    ("graph_summary_auxiliary" if graph_summary_group_present else None),
                 ]
                 if route is not None
             ],
@@ -1878,6 +1989,7 @@ class MemoryService:
                 for route in [
                     ("workspace_inherited_auxiliary" if inherited_memory_items else None),
                     ("relation_supports_auxiliary" if related_memory_items else None),
+                    ("graph_summary_auxiliary" if graph_summary_group_present else None),
                 ]
                 if route is not None
             ],
@@ -1888,6 +2000,7 @@ class MemoryService:
                 "relation_supports_auxiliary": (
                     matched_episode_count if related_memory_items else 0
                 ),
+                "graph_summary_auxiliary": 1 if graph_summary_group_present else 0,
             },
             "summary_first_has_episode_groups": summary_first_has_episode_groups,
             "summary_first_is_summary_only": summary_first_is_summary_only,
@@ -1909,6 +2022,11 @@ class MemoryService:
                 "relation_supports_auxiliary": (
                     len(related_memory_items) if related_memory_items else 0
                 ),
+                "graph_summary_auxiliary": (
+                    len(graph_summary_related_memory_items)
+                    if graph_summary_related_memory_items
+                    else 0
+                ),
             },
             "retrieval_route_presence": {
                 "summary_first": {
@@ -1929,6 +2047,10 @@ class MemoryService:
                 "relation_supports_auxiliary": {
                     "group_present": bool(related_memory_items),
                     "item_present": bool(related_memory_items),
+                },
+                "graph_summary_auxiliary": {
+                    "group_present": graph_summary_group_present,
+                    "item_present": bool(graph_summary_related_memory_items),
                 },
             },
             "retrieval_route_scope_counts": {
@@ -1956,6 +2078,12 @@ class MemoryService:
                     "workspace": 0,
                     "relation": (1 if related_memory_items else 0),
                 },
+                "graph_summary_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": (1 if graph_summary_group_present else 0),
+                },
             },
             "retrieval_route_scope_item_counts": {
                 "summary_first": {
@@ -1981,6 +2109,16 @@ class MemoryService:
                     "episode": 0,
                     "workspace": 0,
                     "relation": (len(related_memory_items) if related_memory_items else 0),
+                },
+                "graph_summary_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": (
+                        len(graph_summary_related_memory_items)
+                        if graph_summary_related_memory_items
+                        else 0
+                    ),
                 },
             },
             "retrieval_route_scopes_present": {
@@ -2013,6 +2151,13 @@ class MemoryService:
                     ]
                     if scope is not None
                 ],
+                "graph_summary_auxiliary": [
+                    scope
+                    for scope in [
+                        ("relation" if graph_summary_group_present else None),
+                    ]
+                    if scope is not None
+                ],
             },
         }
 
@@ -2029,6 +2174,7 @@ class MemoryService:
         resolved_workspace_id: str | None,
         inherited_memory_items: tuple[MemoryItemRecord, ...],
         related_memory_items: tuple[MemoryItemRecord, ...],
+        graph_summary_related_memory_items: tuple[MemoryItemRecord, ...],
         include_memory_items: bool,
     ) -> list[dict[str, Any]]:
         memory_context_groups: list[dict[str, Any]] = []
@@ -2150,6 +2296,49 @@ class MemoryService:
                     "memory_items": [
                         self._serialize_memory_item(memory_item)
                         for memory_item in related_memory_items
+                    ],
+                }
+            )
+
+        if graph_summary_related_memory_items:
+            relation_group_parent_scope = (
+                "workflow_instance" if len(resolved_workflow_ids) == 1 else None
+            )
+            relation_group_parent_scope_id = (
+                resolved_workflow_instance_id
+                if relation_group_parent_scope == "workflow_instance"
+                else None
+            )
+            memory_context_groups.append(
+                {
+                    "scope": "relation",
+                    "scope_id": "summarizes",
+                    "group_id": "relation:graph_summary_auxiliary",
+                    "parent_scope": relation_group_parent_scope,
+                    "parent_scope_id": relation_group_parent_scope_id,
+                    "parent_group_scope": None,
+                    "parent_group_id": None,
+                    "selection_kind": "graph_summary_related_auxiliary",
+                    "selection_route": "graph_summary_auxiliary",
+                    "relation_type": "summarizes",
+                    "source_memory_ids": sorted(
+                        {
+                            str(memory_item.memory_id)
+                            for detail in memory_item_details
+                            for memory_item in detail.get("memory_items", [])
+                            if getattr(memory_item, "memory_id", None) is not None
+                        }
+                    ),
+                    "source_episode_ids": sorted(
+                        {
+                            detail["episode_id"]
+                            for detail in memory_item_details
+                            if isinstance(detail.get("episode_id"), str)
+                        }
+                    ),
+                    "memory_items": [
+                        self._serialize_memory_item(memory_item)
+                        for memory_item in graph_summary_related_memory_items
                     ],
                 }
             )

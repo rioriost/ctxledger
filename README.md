@@ -18,7 +18,7 @@ It provides:
 - HTTPS-friendly local deployment
 - operator-facing CLI observability
 - default Grafana dashboard deployment in the authenticated local stack
-- a constrained Apache AGE prototype path for graph-backed `supports` lookup with explicit CLI bootstrap, using a repository-owned PostgreSQL image path and now enabled by default in the `small` stack
+- a constrained Apache AGE prototype path for graph-backed `supports` lookup plus a narrow derived-summary traversal read path, with explicit CLI bootstrap/readiness/refresh support, using a repository-owned PostgreSQL image path and now enabled by default in the `small` stack
 
 ---
 
@@ -48,6 +48,7 @@ Current PostgreSQL/graph setup commands:
 - `ctxledger apply-schema`
 - `ctxledger bootstrap-age-graph`
 - `ctxledger age-graph-readiness`
+- `ctxledger refresh-age-summary-graph`
 
 Current hierarchy build command:
 
@@ -253,6 +254,61 @@ python -m ctxledger.__init__ build-episode-summary \
   --summary-kind episode_summary \
   --no-replace-existing
 ```
+
+### Step 5.2 — Optionally refresh the derived AGE summary graph
+
+If you want the current derived summary graph shape mirrored into AGE for the
+narrow graph-backed summary traversal path, refresh it explicitly with:
+
+- `ctxledger refresh-age-summary-graph`
+
+Minimal example:
+
+```/dev/null/sh#L1-3
+python -m ctxledger.__init__ refresh-age-summary-graph \
+  --database-url "$CTXLEDGER_DATABASE_URL" \
+  --graph-name ctxledger_memory
+```
+
+This refresh path rebuilds the current derived summary graph shape from the
+canonical relational summary tables:
+
+- `memory_summaries`
+- `memory_summary_memberships`
+
+The current mirrored shape is intentionally narrow:
+
+- `memory_summary` nodes
+- `memory_item` nodes
+- `summarizes` edges
+
+This graph state is derived and rebuildable.
+Canonical summary ownership remains relational.
+
+### Step 5.3 — Check AGE graph readiness and summary graph observability
+
+You can inspect the current AGE graph readiness state with:
+
+- `ctxledger age-graph-readiness`
+
+Minimal example:
+
+```/dev/null/sh#L1-3
+python -m ctxledger.__init__ age-graph-readiness \
+  --database-url "$CTXLEDGER_DATABASE_URL" \
+  --graph-name ctxledger_memory
+```
+
+The current readiness output is intended to help you verify:
+
+- whether AGE is available
+- whether the configured graph is ready
+- whether derived summary mirroring is in scope for the current environment
+- which explicit refresh command is expected for summary graph rebuilding
+
+The runtime debug surface also reports AGE prototype details, including summary
+graph mirroring observability and the current workflow-completion-oriented
+summary automation policy.
 
 ### Step 6 — Verify Grafana
 

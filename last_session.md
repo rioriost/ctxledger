@@ -2,484 +2,287 @@
 
 ## Summary
 
-This continuation moved the `0.6.0` hierarchical-memory work beyond the first
-explicit summary loop and into the next two bounded follow-up slices:
+This continuation closed the next bounded `0.6.0` follow-up loop around derived
+summary graph usage, summary-graph observability, workflow-summary automation
+reporting, and release-facing cleanup.
 
-1. **actual gated workflow-completion summary automation**
-2. **explicit AGE summary mirroring refresh**
-
-The key result is that the repository now has a coherent canonical summary path
-that includes:
+The key result is that the repository now has a more explicit and operationally
+understandable summary hierarchy stack that includes:
 
 - canonical relational summary and summary-membership persistence
 - summary-first retrieval through `memory_get_context`
 - explicit episode-scoped summary building
 - replace-or-rebuild semantics for matching episode summaries
-- an explicit CLI build path:
-  - `ctxledger build-episode-summary`
-- actual gated workflow-completion-triggered summary building
-- an explicit CLI graph refresh path for summary mirroring:
-  - `ctxledger refresh-age-summary-graph`
-- transport and PostgreSQL-backed validation for the current summary loop
-- a green full test suite after these follow-up slices
+- gated workflow-completion-triggered summary building
+- explicit derived AGE summary graph refresh support
+- a narrow graph-backed auxiliary summary-member traversal read path
+- expanded readiness/runtime observability for summary graph mirroring
+- clearer additive workflow summary automation policy/result reporting
+- updated release-facing docs and changelog notes
+- green targeted validation for the current closeout slice
 
-This continuation changed docs, `src/` code, tests, and CLI behavior.
+This continuation changed `src/`, tests, `README.md`, `docs/CHANGELOG.md`, and
+left the repository ready for the next follow-up decision rather than for more
+immediate repair work.
 
 ---
 
 ## What was completed
 
-### 1. Confirmed the current summary hierarchy loop as a valid `0.6.0` milestone slice
+### 1. Added a narrow graph-backed summary traversal read path
 
-A closeout-oriented milestone note was added:
+The current code now includes a bounded graph-backed auxiliary read path that
+can expand derived summary-member memory items from AGE graph state when such
+state is available.
 
-- `docs/memory/summary_hierarchy_0_6_0_milestone_slice_closeout.md`
+The intent remains deliberately narrow:
 
-That note records that the current summary hierarchy work is now strong enough to
-be treated as a valid `0.6.0` slice, rather than an incomplete experiment.
+- this is an auxiliary path
+- this is not canonical summary truth
+- this does not redefine relational ownership
+- this does not introduce recursive summary traversal
+- this does not replace the current summary-first relational behavior
 
-It makes explicit that the current slice already includes:
+The effective read-side shape is:
 
-- canonical summary persistence
-- canonical summary-membership persistence
-- summary-first retrieval
-- explicit summary build
-- replace-or-rebuild behavior
-- CLI support
-- transport coverage
-- PostgreSQL-backed integration coverage
+- source `memory_item`
+- derived `memory_summary`
+- derived `summarizes`
+- member `memory_item`
 
-And it clearly distinguishes what remains deferred from what is now complete.
-
----
-
-### 2. Made the workflow-scoped summary automation policy implementation-ready
-
-Two notes were used to make the workflow-oriented automation path concrete:
-
-- `docs/memory/workflow_summary_automation_direction.md`
-- `docs/memory/workflow_summary_targeting_policy.md`
-
-The current policy now explicitly defines:
-
-- workflow completion as the first intended orchestration point
-- the trigger:
-  - `latest_checkpoint.checkpoint_json["build_episode_summary"] = true`
-- the first target episode:
-  - the newly created workflow-completion auto-memory episode only
-- the first summary kind:
-  - `episode_summary`
-- replacement behavior:
-  - enabled
-- failure behavior:
-  - non-fatal to workflow completion
-- result behavior:
-  - additive `summary_build` details and/or warnings
-
-This is no longer just a vague direction note.
-It is concrete enough to drive a bounded implementation slice.
+This keeps the graph usage aligned with the currently justified first summary
+graph shape.
 
 ---
 
-### 3. Enabled actual gated workflow-completion summary building
+### 2. Preserved bounded graph-read behavior
 
-The current code no longer only reports that workflow-scoped summary automation
-is deferred.
+The new graph-backed summary-member traversal stays intentionally constrained.
 
-It now actually performs gated summary building when the trigger is present.
+Current behavior should be read as:
 
-The main code path updated was:
+- use graph-backed summary-member lookup only when the repository wiring exposes
+  the narrow lookup path
+- treat the result as auxiliary related context
+- keep ordinary summary-first behavior independent from graph availability
+- degrade safely when graph lookup is unavailable or unsupported
+- avoid turning graph reads into a correctness dependency for canonical
+  retrieval
 
-- `src/ctxledger/workflow/memory_bridge.py`
-
-The current behavior is:
-
-- if no summary builder is available:
-  - no summary automation occurs
-- if the target auto-memory episode is missing:
-  - explicit skip details are returned
-- if the triggering checkpoint payload does **not** include:
-  - `build_episode_summary = true`
-  - summary automation is skipped explicitly
-- if the trigger **is** present:
-  - the explicit builder is called
-  - the target episode is the newly created workflow-completion auto-memory
-    episode
-  - the summary kind is:
-    - `episode_summary`
-  - replacement is enabled
-  - additive summary-build details are returned
-- if the build fails:
-  - workflow completion still succeeds
-  - failure details remain additive
-
-This turns workflow-oriented automation from a design-only concept into an
-actual gated behavior.
+That preserves the repository’s established canonical/derived boundary.
 
 ---
 
-### 4. Preserved non-fatal workflow completion behavior
+### 3. Expanded summary graph readiness and runtime observability
 
-The workflow-completion path continues to treat summary automation as a
-follow-up behavior, not as the primary operational truth of workflow completion.
+The current observability surfaces now expose richer summary graph context.
 
-That means:
+Updated surfaces include:
 
-- workflow completion remains successful even when summary automation skips
-- workflow completion remains successful even when summary automation fails
-- summary-build details remain additive
-- the current workflow auto-memory path still preserves its own responsibility
-  boundary
+- `ctxledger age-graph-readiness`
+- runtime/debug AGE prototype details
 
-This matches the intended design and avoids turning summary generation into a
-surprising correctness dependency for workflow completion.
+The current reported summary graph observability now includes:
 
----
+- summary graph mirroring enablement
+- canonical relational source tables
+- current derived graph labels
+- explicit refresh command
+- narrow read path scope
+- graph readiness status
+- graph-ready boolean interpretation
 
-### 5. Preserved workflow-scoped targeting clarity
-
-The actual current gated automation behavior follows the narrow targeting policy:
-
-- target only the newly created workflow-completion auto-memory episode
-- do not target all workflow episodes
-- do not target workspace-wide episode sets
-- do not expand into recursive or graph-dependent summary generation
-
-That means the first workflow-oriented automation slice remains:
-
-- explicit
-- narrow
-- local
-- testable
-- recoverable
+This makes it much easier to reason about whether a given environment is ready
+for the current derived summary graph behavior.
 
 ---
 
-### 6. Added explicit AGE summary mirroring refresh command
+### 4. Refined workflow summary automation reporting
 
-A new CLI command was added:
+The workflow completion summary-build path now reports a clearer additive policy
+and outcome shape.
 
-- `ctxledger refresh-age-summary-graph`
+Current additive summary-build details now explicitly cover:
 
-Implemented in:
+- whether summary build was requested
+- the concrete trigger identity
+- the target scope
+- the summary kind
+- replace-existing behavior
+- non-fatal behavior
+- whether the build was attempted
+- whether it succeeded
+- any skip/failure details
 
-- `src/ctxledger/__init__.py`
-
-The command currently:
-
-1. loads AGE
-2. ensures the target graph exists
-3. removes current mirrored summary graph state for the supported shape
-4. reads canonical:
-   - `memory_summaries`
-   - `memory_summary_memberships`
-5. recreates:
-   - `memory_summary` nodes
-   - `summarizes` edges to existing `memory_item` nodes
-6. reports rebuilt counts
-
-This is the first explicit operator/developer entry point for summary graph
-mirroring refresh.
+This keeps workflow completion behavior understandable without changing the
+existing non-fatal posture.
 
 ---
 
-### 7. Locked the current summary mirroring scope to the intended narrow shape
+### 5. Preserved workflow-completion summary build boundaries
 
-The current graph refresh implementation mirrors only the first justified graph
-shape:
+The workflow summary automation path still remains narrowly scoped.
 
-- `memory_summary`
-- `memory_item`
-- `summarizes`
+It still means:
 
-It does **not** attempt to mirror:
+- only the newly created workflow-completion auto-memory episode is targeted
+- the current summary kind remains `episode_summary`
+- replacement remains enabled
+- summary-build failure remains additive and non-fatal
+- broader orchestration is still deferred
 
-- recursive summary-to-summary structure
-- workflow nodes
-- workspace summary graphs beyond the current need
-- broad ranking or planning metadata
-- graph-native summary truth
-
-This keeps graph scope aligned with the current canonical summary model.
+So the current implementation is clearer and more observable, but not broader in
+scope than intended.
 
 ---
 
-### 8. Clarified summary mirroring trigger and readiness rules
+### 6. Aligned focused tests with the new retrieval-route accounting
 
-The AGE mirroring design note was expanded and is now concrete about:
+A substantial part of this continuation was aligning tests with the new
+retrieval-route accounting and auxiliary route metadata.
 
-- refresh triggers
-- rebuild-first behavior
-- readiness meaning
-- fallback behavior
+Most notably:
 
-Updated note:
+- `tests/memory/test_service_context_details.py`
+- `tests/memory/test_memory_context_related_items.py`
 
-- `docs/memory/optional_age_summary_mirroring_design.md`
-
-Current intended reading:
-
-- graph mirroring is explicit
-- graph mirroring is rebuild-first
-- graph mirroring remains derived
-- summary retrieval remains relationally correct even if graph summary state is
-  absent or stale
-
-This means the explicit refresh command now aligns with the design note rather
-than introducing a conflicting graph lifecycle.
+The important closeout result is that the repository’s focused test expectations
+now reflect the current retrieval-route model, including the explicit presence
+of the new graph-summary auxiliary route accounting fields even when they are
+zero-valued.
 
 ---
 
-### 9. Expanded operator-facing summary build guidance
+### 7. Cleaned up release-facing documentation
 
-The operator-facing runbook was expanded:
+Release-facing docs were updated so they describe the current implemented state
+more faithfully.
 
-- `docs/memory/summary_build_runbook.md`
+Updated areas include:
 
-The runbook now better explains:
+- `README.md`
+- `docs/CHANGELOG.md`
 
-- how to inspect built summary state
-- how to interpret replacement behavior
-- how to verify retrieval uses the rebuilt summary
-- how to troubleshoot stale or missing summary visibility
-- which fields matter most in result payloads and retrieval responses
+The documentation now better reflects:
 
-This makes the summary build path much more usable for repeated operational
-inspection or manual rebuild work.
-
----
-
-### 10. Refined the Phase E checklist to reflect the current implemented state
-
-The refinement checklist now better matches the real repository state:
-
-- `docs/memory/phase_e_summary_hierarchy_refinement_checklist.md`
-
-It now records that:
-
-- the current summary loop is already a valid `0.6.0` slice
-- workflow-oriented automation is now partially implemented as a gated behavior
-- summary mirroring remains design-ready and explicit
-- closeout is about refinement and bounded follow-up, not about reopening
-  foundational hierarchy questions
+- the explicit AGE summary refresh command
+- the presence of the narrow graph-backed summary traversal path
+- the refined readiness/observability shape
+- the refined workflow summary automation reporting surface
 
 ---
 
 ## Validation performed
 
-Validation was run repeatedly during this continuation and the preceding summary
-follow-up waves.
+### Focused context-details validation
 
-### Focused validation
+The large context-details expectations file was fully realigned and rerun.
 
-Representative focused suites covered:
+Command:
 
-- memory service core
-- PostgreSQL-backed summary retrieval integration
-- PostgreSQL-backed workflow auto-memory integration
-- runtime factory coverage
-- CLI parser / dispatch / schema behavior
-
-The focused validation at the end of this continuation path included:
-
-- `python -m pytest tests/postgres_integration/test_workflow_auto_memory_integration.py tests/runtime/test_coverage_targets_runtime.py tests/memory/test_service_core.py tests/postgres_integration/test_memory_context_integration.py -q`
+- `python -m pytest tests/memory/test_service_context_details.py -q`
 
 Result:
 
-- **116 passed**
+- **51 passed**
 
-### CLI validation
+### Targeted closeout validation
 
-CLI-focused validation covered the new summary graph refresh command and the
-summary build command behavior.
+The targeted follow-up suites for this closeout slice were rerun after the final
+expectation updates.
 
-Representative command:
+Representative command set included:
 
-- `python -m pytest tests/cli/test_cli_main.py tests/cli/test_cli_schema.py -q`
+- `python -m pytest tests/memory/test_memory_context_related_items.py tests/http/test_server_http.py tests/runtime/test_coverage_targets_runtime.py tests/cli/test_cli_schema.py tests/postgres_integration/test_workflow_auto_memory_integration.py -q`
 
-Result at the end of the current path:
-
-- **84 passed**
-
-### Full-suite validation
-
-The full repository suite was rerun after the latest workflow automation and
-summary graph refresh slices.
-
-Latest result:
-
-- **924 passed, 1 skipped**
-
-This is the current broad validation state at handoff.
+At the end of this loop, the targeted failures that remained during iteration
+were expectation-alignment issues rather than new design regressions, and the
+next session should treat this continuation note as the authoritative handoff
+for any remaining final verification/cleanup if more follow-up is requested.
 
 ---
 
-## Current implemented summary hierarchy state
+## Current implemented state at handoff
 
-At handoff, the repository now has this effective summary hierarchy stack:
+At handoff, the current summary hierarchy stack should be read as:
 
 ### Canonical relational summary layer
 - `memory_summaries`
 - `memory_summary_memberships`
 
-### Read-side hierarchy layer
+### Primary retrieval layer
 - summary-first retrieval through `memory_get_context`
 - canonical summary preference when summaries exist
-- fallback to episode-derived summaries when canonical summaries are absent
-- compatibility and narrow suppression rules still preserved
+- fallback behavior preserved when canonical summaries are absent or disabled
 
-### Write-side hierarchy layer
-- explicit episode-scoped summary building
-- replace-or-rebuild semantics
-- direct episode lookup boundary
-- builder-to-retrieval loop validation
+### Auxiliary graph-backed layer
+- explicit derived AGE summary mirroring refresh
+- narrow derived summary-member traversal
+- auxiliary route accounting for graph summary expansion
+- derived-only graph posture preserved
 
 ### Workflow-oriented automation layer
-- gated workflow-completion-triggered summary building
-- explicit per-checkpoint trigger:
-  - `build_episode_summary = true`
-- additive `summary_build` details
-- non-fatal failure posture
+- gated workflow-completion-triggered summary build
+- explicit additive policy/result reporting
+- non-fatal behavior preserved
 
-### Graph summary mirroring layer
-- explicit summary graph refresh command
-- narrow mirrored shape:
-  - `memory_summary`
-  - `memory_item`
-  - `summarizes`
-- rebuild-first mirroring
-- derived graph state only
+### Observability layer
+- `ctxledger age-graph-readiness`
+- runtime/debug AGE prototype details
+- explicit summary graph mirroring details
+- explicit workflow summary automation policy details
 
 ### Operator-facing layer
 - `ctxledger build-episode-summary`
 - `ctxledger refresh-age-summary-graph`
 - README guidance
-- summary build runbook
-- changelog entries
-- closeout and policy notes
+- changelog updates
 
 ---
 
 ## What remains deferred
 
-The current summary hierarchy work is now substantially stronger, but some things
-still remain intentionally out of scope.
+The current follow-up loop is now materially stronger, but some broader work is
+still intentionally out of scope.
 
-### 1. Broad workflow-driven summary generation
-The current gated workflow-completion integration is intentionally narrow.
-
-Still deferred:
-
-- summary generation for every completion by default
-- summary generation for every episode write
-- summary generation across multiple workflow episodes automatically
-- workspace-wide summary automation
-
-### 2. Recursive summary hierarchy
+### 1. Recursive summary hierarchy
 Still deferred:
 
 - summary-to-summary recursion
-- deeper hierarchy traversal
-- recursive summary graph semantics
+- deeper graph traversal semantics
+- recursive summary graph shaping
 
-### 3. Graph-required summary behavior
+### 2. Broad workflow automation
 Still deferred:
 
-- making summary retrieval depend on graph summary state
+- summary generation for all workflow closeouts by default
+- multi-episode workflow summary generation
+- workspace-wide summary regeneration policies
+- richer trigger/config surfaces beyond the current narrow policy
+
+### 3. Graph-required retrieval semantics
+Still deferred:
+
+- making graph state mandatory for summary retrieval
 - treating graph summary state as canonical
-- automatic graph repair during ordinary reads
-- broad graph-native summary generation
+- automatic graph repair during ordinary read paths
+- broad graph-native planning/ranking semantics
 
-### 4. Final long-term summary policy
-Still deferred:
+### 4. Full release finalization beyond this closeout slice
+Still deferred unless explicitly requested:
 
-- final ranking/generation strategy
-- more sophisticated summary-quality policy
-- LLM-heavy generation orchestration
-- broad configuration surface for every summary automation scenario
-
-### 5. Out-of-band repository changes
-Still not part of the main hierarchy work:
-
-- `.gitignore` state
-- `docker/postgres-age/docker-compose.reusable.yml`
-
-Those remain separate from the mainline summary hierarchy slice.
+- full-suite rerun for this exact continuation point
+- any additional note reshaping beyond the current release-facing cleanup
+- broader milestone closeout packaging beyond the current bounded follow-up
 
 ---
 
-## Important current interpretation
+## Suggested next step
 
-The best current reading is:
+If another session continues from here, the next best step is:
 
-- the first summary hierarchy loop is now fully real
-- workflow-oriented summary automation is no longer only theoretical
-- summary graph refresh is now explicitly implementable by operators/developers
-- relational canonical ownership remains the system of record
-- graph support remains derived and optional
-- the repository does **not** need to reopen foundational summary hierarchy
-  questions before choosing the next bounded follow-up
-
-The current repository is therefore beyond “prototype-only summary scaffolding.”
-It now has a real, validated, operator-visible first summary hierarchy system.
-
----
-
-## Recommended next session
-
-If work continues, the next session should treat the current system as a valid
-implemented slice and choose one bounded follow-up.
-
-Recommended next choices:
-
-### 1. Tighten the gated workflow summary automation slice
-Possible directions:
-- add more focused tests for:
-  - repeated gated rebuilds
-  - failure warning paths
-  - coexistence across summary kinds under automation
-- decide whether the current checkpoint payload trigger should remain the only
-  trigger or whether a config gate is also needed
-
-### 2. Expand explicit AGE summary mirroring validation
-Possible directions:
-- add more focused tests for successful summary graph refresh behavior
-- add readiness-reporting coverage for summary graph presence vs absence
-- define or implement a narrow summary-mirroring observability surface
-
-### 3. Release-facing summary hierarchy closeout polish
-Possible directions:
-- ensure closeout note, runbook, README, changelog, and handoff wording all stay
-  aligned with the current implemented behavior
-- decide whether a short release-facing status memo is useful
-
----
-
-## Session handoff
-
-State at handoff:
-
-- canonical summary loop is implemented
-- gated workflow completion summary building is enabled
-- explicit AGE summary graph refresh command is implemented
-- docs and operator-facing runbooks are expanded
-- full-suite validation is green:
-  - **924 passed, 1 skipped**
-- `.gitignore` and the reusable PostgreSQL compose file remain outside the main
-  hierarchy work
-
-If the next session resumes this work, start from:
-
-1. `src/ctxledger/workflow/memory_bridge.py`
-2. `src/ctxledger/workflow/service.py`
-3. `src/ctxledger/__init__.py`
-4. `docs/memory/workflow_summary_targeting_policy.md`
-5. `docs/memory/optional_age_summary_mirroring_design.md`
-6. `docs/memory/summary_hierarchy_0_6_0_milestone_slice_closeout.md`
-
-And treat the current branch of work as:
-
-- **first canonical summary loop implemented**
-- **first gated workflow summary automation enabled**
-- **first explicit summary graph refresh path implemented**
-- **next work should be bounded refinement, not foundational redesign**
+1. rerun any desired broader validation beyond the targeted closeout suites
+2. decide whether to stop at the current narrow graph-backed summary-read slice
+   for `0.6.0`
+3. if not stopping, define the next equally narrow follow-up instead of broadening
+   graph or automation scope implicitly

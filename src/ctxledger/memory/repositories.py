@@ -13,6 +13,7 @@ from typing import Any, Callable
 from uuid import UUID
 
 from ..workflow.service import UnitOfWork
+from .protocols import MemoryRelationSupportsTargetLookupRepository
 from .types import (
     EpisodeRecord,
     MemoryEmbeddingRecord,
@@ -934,7 +935,7 @@ class UnitOfWorkMemoryEmbeddingRepository:
             )
 
 
-class InMemoryMemoryRelationRepository:
+class InMemoryMemoryRelationRepository(MemoryRelationSupportsTargetLookupRepository):
     """Simple append-only in-memory relation repository."""
 
     def __init__(self) -> None:
@@ -1023,3 +1024,141 @@ class InMemoryMemoryRelationRepository:
         ]
         matches.sort(key=lambda relation: relation.created_at, reverse=True)
         return tuple(matches[:limit])
+
+
+class UnitOfWorkMemoryRelationRepository(MemoryRelationSupportsTargetLookupRepository):
+    """Memory relation repository backed by PostgreSQL tables through the unit of work."""
+
+    def __init__(
+        self,
+        uow_factory: Callable[[], UnitOfWork],
+        *,
+        config: Any | None = None,
+        health_checker: Any | None = None,
+    ) -> None:
+        self._uow_factory = uow_factory
+        self._config = config
+        self._health_checker = health_checker
+
+    def create(self, relation: MemoryRelationRecord) -> MemoryRelationRecord:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_relations") or uow.memory_relations is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory relation repository is not configured.",
+                    details={},
+                )
+            created = uow.memory_relations.create(relation)
+            uow.commit()
+            return created
+
+    def list_by_source_memory_id(
+        self,
+        source_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_relations") or uow.memory_relations is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory relation repository is not configured.",
+                    details={},
+                )
+            return uow.memory_relations.list_by_source_memory_id(
+                source_memory_id,
+                limit=limit,
+            )
+
+    def list_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+    ) -> tuple[MemoryRelationRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_relations") or uow.memory_relations is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory relation repository is not configured.",
+                    details={},
+                )
+            if hasattr(uow.memory_relations, "list_by_source_memory_ids"):
+                return uow.memory_relations.list_by_source_memory_ids(source_memory_ids)
+            return ()
+
+    def list_distinct_support_target_memory_ids_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+    ) -> tuple[UUID, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_relations") or uow.memory_relations is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory relation repository is not configured.",
+                    details={},
+                )
+
+            if self._config is not None and hasattr(
+                uow.memory_relations,
+                "list_distinct_support_target_memory_ids_by_source_memory_ids_for_config",
+            ):
+                return uow.memory_relations.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
+                    source_memory_ids,
+                    config=self._config,
+                    health_checker=self._health_checker,
+                )
+
+            return (
+                uow.memory_relations.list_distinct_support_target_memory_ids_by_source_memory_ids(
+                    source_memory_ids
+                )
+            )
+
+    def list_distinct_summary_member_memory_ids_by_source_memory_ids(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+    ) -> tuple[UUID, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_relations") or uow.memory_relations is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory relation repository is not configured.",
+                    details={},
+                )
+
+            if self._config is None or not hasattr(
+                uow.memory_relations,
+                "list_distinct_summary_member_memory_ids_by_source_memory_ids_for_config",
+            ):
+                return ()
+
+            return uow.memory_relations.list_distinct_summary_member_memory_ids_by_source_memory_ids_for_config(
+                source_memory_ids,
+                config=self._config,
+                health_checker=self._health_checker,
+            )
+
+    def list_by_target_memory_id(
+        self,
+        target_memory_id: UUID,
+        *,
+        limit: int,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        with self._uow_factory() as uow:
+            if not hasattr(uow, "memory_relations") or uow.memory_relations is None:
+                raise MemoryServiceError(
+                    code=MemoryErrorCode.NOT_IMPLEMENTED,
+                    feature=MemoryFeature.GET_CONTEXT,
+                    message="Memory relation repository is not configured.",
+                    details={},
+                )
+            if hasattr(uow.memory_relations, "list_by_target_memory_id"):
+                return uow.memory_relations.list_by_target_memory_id(
+                    target_memory_id,
+                    limit=limit,
+                )
+            return ()

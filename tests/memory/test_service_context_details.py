@@ -251,12 +251,14 @@ def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert no_episode_response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert no_episode_response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -272,6 +274,10 @@ def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
             "item_present": False,
         },
         "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "graph_summary_auxiliary": {
             "group_present": False,
             "item_present": False,
         },
@@ -296,6 +302,12 @@ def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -327,12 +339,19 @@ def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert no_episode_response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
         "episode_direct": [],
         "workspace_inherited_auxiliary": [],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert no_episode_response.details["workflow_instance_id"] == str(workflow_id)
 
@@ -455,12 +474,14 @@ def test_memory_get_context_include_episodes_false_keeps_response_episode_less_e
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -476,6 +497,10 @@ def test_memory_get_context_include_episodes_false_keeps_response_episode_less_e
             "item_present": True,
         },
         "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "graph_summary_auxiliary": {
             "group_present": False,
             "item_present": False,
         },
@@ -500,6 +525,12 @@ def test_memory_get_context_include_episodes_false_keeps_response_episode_less_e
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -531,6 +562,12 @@ def test_memory_get_context_include_episodes_false_keeps_response_episode_less_e
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -539,6 +576,7 @@ def test_memory_get_context_include_episodes_false_keeps_response_episode_less_e
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["workflow_instance_id"] == str(workflow_id)
 
@@ -700,6 +738,7 @@ def test_memory_get_context_summary_only_primary_path_differs_from_episode_less_
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
 
     assert episode_less_response.episodes == ()
@@ -747,6 +786,7 @@ def test_memory_get_context_summary_only_primary_path_differs_from_episode_less_
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
 
 
@@ -942,6 +982,7 @@ def test_memory_get_context_include_summaries_false_suppresses_canonical_summary
         "episode_direct": 1,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert len(response.details["memory_context_groups"]) == 1
     episode_group = response.details["memory_context_groups"][0]
@@ -1813,12 +1854,14 @@ def test_memory_get_context_include_episodes_false_query_filter_keeps_response_e
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -1834,6 +1877,10 @@ def test_memory_get_context_include_episodes_false_query_filter_keeps_response_e
             "item_present": True,
         },
         "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "graph_summary_auxiliary": {
             "group_present": False,
             "item_present": False,
         },
@@ -1858,6 +1905,12 @@ def test_memory_get_context_include_episodes_false_query_filter_keeps_response_e
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -1889,6 +1942,12 @@ def test_memory_get_context_include_episodes_false_query_filter_keeps_response_e
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -1897,6 +1956,7 @@ def test_memory_get_context_include_episodes_false_query_filter_keeps_response_e
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["workflow_instance_id"] == str(workflow_id)
 
@@ -2053,12 +2113,14 @@ def test_memory_get_context_include_episodes_false_low_limit_query_keeps_respons
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -2074,6 +2136,10 @@ def test_memory_get_context_include_episodes_false_low_limit_query_keeps_respons
             "item_present": True,
         },
         "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "graph_summary_auxiliary": {
             "group_present": False,
             "item_present": False,
         },
@@ -2098,6 +2164,12 @@ def test_memory_get_context_include_episodes_false_low_limit_query_keeps_respons
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -2129,6 +2201,12 @@ def test_memory_get_context_include_episodes_false_low_limit_query_keeps_respons
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -2137,6 +2215,7 @@ def test_memory_get_context_include_episodes_false_low_limit_query_keeps_respons
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["workflow_instance_id"] == str(workflow_id)
 
@@ -2250,12 +2329,14 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
         "episode_direct": 1,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 1,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -2271,6 +2352,10 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
             "item_present": True,
         },
         "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "graph_summary_auxiliary": {
             "group_present": False,
             "item_present": False,
         },
@@ -2295,6 +2380,12 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -2326,6 +2417,12 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -2336,6 +2433,7 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -2528,12 +2626,14 @@ def test_memory_get_context_query_filter_keeps_workspace_inherited_auxiliary_lim
         "episode_direct": 1,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 1,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -2549,6 +2649,10 @@ def test_memory_get_context_query_filter_keeps_workspace_inherited_auxiliary_lim
             "item_present": True,
         },
         "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "graph_summary_auxiliary": {
             "group_present": False,
             "item_present": False,
         },
@@ -2573,6 +2677,12 @@ def test_memory_get_context_query_filter_keeps_workspace_inherited_auxiliary_lim
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -2604,6 +2714,12 @@ def test_memory_get_context_query_filter_keeps_workspace_inherited_auxiliary_lim
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -2614,6 +2730,7 @@ def test_memory_get_context_query_filter_keeps_workspace_inherited_auxiliary_lim
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -2911,12 +3028,14 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 2,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -2932,6 +3051,10 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "item_present": False,
         },
         "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "graph_summary_auxiliary": {
             "group_present": False,
             "item_present": False,
         },
@@ -2956,6 +3079,12 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -2987,6 +3116,12 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [
@@ -2996,6 +3131,7 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
         "episode_direct": [],
         "workspace_inherited_auxiliary": [],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -3481,12 +3617,14 @@ def test_memory_get_context_summaries_disabled_keeps_primary_path_episode_direct
         "episode_direct": 1,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 2,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -3505,6 +3643,10 @@ def test_memory_get_context_summaries_disabled_keeps_primary_path_episode_direct
             "group_present": False,
             "item_present": False,
         },
+        "graph_summary_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -3513,6 +3655,7 @@ def test_memory_get_context_summaries_disabled_keeps_primary_path_episode_direct
         ],
         "workspace_inherited_auxiliary": [],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -3666,12 +3809,14 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -3690,6 +3835,10 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
             "group_present": False,
             "item_present": False,
         },
+        "graph_summary_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [
@@ -3701,6 +3850,7 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -4002,12 +4152,14 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["hierarchy_applied"] is True
     assert response.details["inherited_context_is_auxiliary"] is True
@@ -4206,12 +4358,14 @@ def test_memory_get_context_summary_first_query_filter_uses_surviving_child_set(
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -4384,12 +4538,14 @@ def test_memory_get_context_query_filter_keeps_summary_first_child_set_when_memo
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -4535,12 +4691,14 @@ def test_memory_get_context_low_limit_query_filter_keeps_summary_first_child_set
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -4886,12 +5044,14 @@ def test_memory_get_context_workspace_only_query_filter_keeps_summary_first_chil
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -5049,12 +5209,14 @@ def test_memory_get_context_ticket_only_query_filter_keeps_summary_first_child_s
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -5209,12 +5371,14 @@ def test_memory_get_context_ticket_only_low_limit_query_filter_summary_first_kee
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -5397,12 +5561,14 @@ def test_memory_get_context_workspace_only_low_limit_query_filter_summary_first_
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -5587,12 +5753,14 @@ def test_memory_get_context_workspace_only_low_limit_query_filter_summary_first_
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -5749,12 +5917,14 @@ def test_memory_get_context_ticket_only_summary_only_low_limit_query_filter_keep
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -5911,12 +6081,14 @@ def test_memory_get_context_ticket_only_query_filter_summary_first_uses_survivin
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -6072,12 +6244,14 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -6093,6 +6267,10 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
             "item_present": True,
         },
         "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "graph_summary_auxiliary": {
             "group_present": False,
             "item_present": False,
         },
@@ -6117,6 +6295,12 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -6148,6 +6332,12 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -6156,6 +6346,7 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["hierarchy_applied"] is True
     assert response.details["inherited_context_is_auxiliary"] is True
@@ -6315,12 +6506,14 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -6329,6 +6522,7 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["hierarchy_applied"] is True
     assert response.details["inherited_context_is_auxiliary"] is True
@@ -6505,18 +6699,21 @@ def test_memory_get_context_workspace_only_query_filter_may_leave_only_workspace
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
         "episode_direct": [],
         "workspace_inherited_auxiliary": [],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["hierarchy_applied"] is False
     assert response.details["inherited_context_is_auxiliary"] is False
@@ -6651,18 +6848,21 @@ def test_memory_get_context_ticket_only_query_filter_may_leave_no_visible_groupe
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
         "episode_direct": [],
         "workspace_inherited_auxiliary": [],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["hierarchy_applied"] is False
     assert response.details["inherited_context_is_auxiliary"] is False
@@ -6773,12 +6973,14 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
         "episode_direct": 1,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 1,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_presence"] == {
         "summary_first": {
@@ -6794,6 +6996,10 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
             "item_present": True,
         },
         "relation_supports_auxiliary": {
+            "group_present": False,
+            "item_present": False,
+        },
+        "graph_summary_auxiliary": {
             "group_present": False,
             "item_present": False,
         },
@@ -6818,6 +7024,12 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -6849,6 +7061,12 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -6859,6 +7077,7 @@ def test_memory_get_context_group_selection_metadata_is_explicit_and_consistent(
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -7296,12 +7515,14 @@ def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_work
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 2,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_scope_counts"] == {
         "summary_first": {
@@ -7323,6 +7544,12 @@ def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_work
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -7354,6 +7581,12 @@ def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_work
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [
@@ -7362,6 +7595,7 @@ def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_work
         "episode_direct": [],
         "workspace_inherited_auxiliary": [],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -7514,12 +7748,14 @@ def test_memory_get_context_multi_workflow_summary_first_with_memory_items_keeps
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 2,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -7725,12 +7961,14 @@ def test_memory_get_context_ticket_only_multi_workflow_summary_first_with_memory
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 2,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -7940,12 +8178,14 @@ def test_memory_get_context_ticket_only_multi_workflow_query_filter_summary_firs
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -8148,12 +8388,14 @@ def test_memory_get_context_workspace_only_multi_workflow_summary_first_with_wor
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 2,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["inherited_memory_items"] == []
     assert response.details["memory_context_groups"] == [
@@ -8533,12 +8775,14 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 2,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_scope_counts"] == {
         "summary_first": {
@@ -8560,6 +8804,12 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -8591,6 +8841,12 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [
@@ -8602,6 +8858,7 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["memory_context_groups"][0] == {
         "scope": "summary",
@@ -8781,12 +9038,14 @@ def test_memory_get_context_marks_episode_groups_as_selected_via_summary_first()
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 2,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_scope_counts"] == {
         "summary_first": {
@@ -8808,6 +9067,12 @@ def test_memory_get_context_marks_episode_groups_as_selected_via_summary_first()
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -8839,6 +9104,12 @@ def test_memory_get_context_marks_episode_groups_as_selected_via_summary_first()
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [
@@ -8848,6 +9119,7 @@ def test_memory_get_context_marks_episode_groups_as_selected_via_summary_first()
         "episode_direct": [],
         "workspace_inherited_auxiliary": [],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert [group["scope"] for group in response.details["memory_context_groups"]] == [
         "summary",
@@ -8939,12 +9211,14 @@ def test_memory_get_context_group_ordering_summary_only_has_no_placeholder_group
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 1,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 0,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_scope_counts"] == {
         "summary_first": {
@@ -8966,6 +9240,12 @@ def test_memory_get_context_group_ordering_summary_only_has_no_placeholder_group
             "relation": 0,
         },
         "relation_supports_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
+        "graph_summary_auxiliary": {
             "summary": 0,
             "episode": 0,
             "workspace": 0,
@@ -8997,6 +9277,12 @@ def test_memory_get_context_group_ordering_summary_only_has_no_placeholder_group
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [
@@ -9005,6 +9291,7 @@ def test_memory_get_context_group_ordering_summary_only_has_no_placeholder_group
         "episode_direct": [],
         "workspace_inherited_auxiliary": [],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert response.details["memory_context_groups"] == [
         {
@@ -9114,12 +9401,14 @@ def test_memory_get_context_group_ordering_workspace_only_has_no_placeholder_gro
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_item_counts"] == {
         "summary_first": 0,
         "episode_direct": 0,
         "workspace_inherited_auxiliary": 1,
         "relation_supports_auxiliary": 0,
+        "graph_summary_auxiliary": 0,
     }
     assert response.details["retrieval_route_scope_counts"] == {
         "summary_first": {
@@ -9146,6 +9435,12 @@ def test_memory_get_context_group_ordering_workspace_only_has_no_placeholder_gro
             "workspace": 0,
             "relation": 0,
         },
+        "graph_summary_auxiliary": {
+            "summary": 0,
+            "episode": 0,
+            "workspace": 0,
+            "relation": 0,
+        },
     }
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [],
@@ -9154,6 +9449,7 @@ def test_memory_get_context_group_ordering_workspace_only_has_no_placeholder_gro
             "workspace",
         ],
         "relation_supports_auxiliary": [],
+        "graph_summary_auxiliary": [],
     }
     assert [group["scope"] for group in response.details["memory_context_groups"]] == ["workspace"]
     assert [group["selection_route"] for group in response.details["memory_context_groups"]] == [

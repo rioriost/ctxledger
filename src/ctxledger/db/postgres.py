@@ -2070,6 +2070,121 @@ class PostgresMemoryRelationRepository:
             graph_status=graph_status,
         )
 
+    def list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+        *,
+        graph_name: str,
+    ) -> tuple[UUID, ...]:
+        if not source_memory_ids:
+            return ()
+
+        with self._conn.cursor() as cur:
+            cur.execute("LOAD 'age'")
+            cur.execute('SET search_path = ag_catalog, "$user", public')
+            cur.execute(
+                """
+                SELECT member_memory_id
+                FROM cypher(
+                    %s,
+                    $$
+                    MATCH (source:memory_item)<-[:summarizes]-(summary:memory_summary)-[:summarizes]->(member:memory_item)
+                    WHERE source.memory_id IN $source_memory_ids
+                    RETURN DISTINCT member.memory_id AS member_memory_id
+                    $$
+                ) AS (
+                    member_memory_id agtype
+                )
+                """,
+                (
+                    graph_name,
+                    json.dumps(
+                        {
+                            "source_memory_ids": [
+                                str(source_memory_id) for source_memory_id in source_memory_ids
+                            ]
+                        },
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ),
+                ),
+            )
+            rows = cur.fetchall()
+
+        member_memory_ids: list[UUID] = []
+        for row in rows:
+            raw_member_memory_id = row["member_memory_id"]
+            if isinstance(raw_member_memory_id, str):
+                normalized_member_memory_id = raw_member_memory_id.strip('"')
+            else:
+                normalized_member_memory_id = str(raw_member_memory_id)
+            member_memory_ids.append(_to_uuid(normalized_member_memory_id))
+
+        return tuple(member_memory_ids)
+
+    def list_distinct_summary_member_memory_ids_by_source_memory_ids_with_fallback(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+        *,
+        graph_name: str,
+        graph_status: AgeGraphStatus,
+    ) -> tuple[UUID, ...]:
+        if graph_status is not AgeGraphStatus.GRAPH_READY:
+            return ()
+
+        try:
+            return self.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age(
+                source_memory_ids,
+                graph_name=graph_name,
+            )
+        except Exception:
+            return ()
+
+    def list_distinct_summary_member_memory_ids_by_source_memory_ids_for_config(
+        self,
+        source_memory_ids: tuple[UUID, ...],
+        *,
+        config: PostgresConfig,
+        health_checker: PostgresDatabaseHealthChecker | None = None,
+    ) -> tuple[UUID, ...]:
+        if not config.age_enabled:
+            return ()
+
+        checker = health_checker or PostgresDatabaseHealthChecker(config)
+        graph_status = checker.age_graph_status(config.age_graph_name)
+
+        return self.list_distinct_summary_member_memory_ids_by_source_memory_ids_with_fallback(
+            source_memory_ids,
+            graph_name=config.age_graph_name,
+            graph_status=graph_status,
+        )
+
+    @staticmethod
+    def workflow_completion_summary_build_requested(
+        checkpoint_payload: object,
+    ) -> bool:
+        if not isinstance(checkpoint_payload, dict):
+            return False
+        return checkpoint_payload.get("build_episode_summary") is True
+
+    @staticmethod
+    def workflow_completion_summary_build_policy(
+        checkpoint_payload: object,
+    ) -> dict[str, object]:
+        requested = PostgresMemoryRelationRepository.workflow_completion_summary_build_requested(
+            checkpoint_payload
+        )
+        return {
+            "summary_build_requested": requested,
+            "summary_build_trigger": (
+                "latest_checkpoint.build_episode_summary_true" if requested else None
+            ),
+            "summary_build_scope": "workflow_completion_auto_memory_episode",
+            "summary_build_kind": "episode_summary",
+            "summary_build_replace_existing": True,
+            "summary_build_non_fatal": True,
+        }
+
     def create(self, relation: MemoryRelationRecord) -> MemoryRelationRecord:
         with self._conn.cursor() as cur:
             cur.execute(

@@ -948,6 +948,31 @@ def test_age_graph_readiness_uses_explicit_database_url_and_graph_name(
         "age_graph_name": "ctxledger_explicit_graph",
         "age_available": True,
         "age_graph_status": "graph_ready",
+        "summary_graph_mirroring": {
+            "enabled": False,
+            "canonical_source": [
+                "memory_summaries",
+                "memory_summary_memberships",
+            ],
+            "derived_graph_labels": [
+                "memory_summary",
+                "memory_item",
+                "summarizes",
+            ],
+            "refresh_command": "ctxledger refresh-age-summary-graph",
+            "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+            "graph_status": "graph_ready",
+            "ready": True,
+        },
+        "workflow_summary_automation": {
+            "orchestration_point": "workflow_completion_auto_memory",
+            "requested": False,
+            "trigger": "latest_checkpoint.build_episode_summary_true",
+            "target_scope": "workflow_completion_auto_memory_episode",
+            "summary_kind": "episode_summary",
+            "replace_existing": True,
+            "non_fatal": True,
+        },
     }
 
 
@@ -1046,6 +1071,31 @@ def test_age_graph_readiness_serializes_non_enum_status_and_false_age_available(
         "age_graph_name": "ctxledger_explicit_graph",
         "age_available": False,
         "age_graph_status": "missing",
+        "summary_graph_mirroring": {
+            "enabled": False,
+            "canonical_source": [
+                "memory_summaries",
+                "memory_summary_memberships",
+            ],
+            "derived_graph_labels": [
+                "memory_summary",
+                "memory_item",
+                "summarizes",
+            ],
+            "refresh_command": "ctxledger refresh-age-summary-graph",
+            "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+            "graph_status": "missing",
+            "ready": False,
+        },
+        "workflow_summary_automation": {
+            "orchestration_point": "workflow_completion_auto_memory",
+            "requested": False,
+            "trigger": "latest_checkpoint.build_episode_summary_true",
+            "target_scope": "workflow_completion_auto_memory_episode",
+            "summary_kind": "episode_summary",
+            "replace_existing": True,
+            "non_fatal": True,
+        },
     }
 
 

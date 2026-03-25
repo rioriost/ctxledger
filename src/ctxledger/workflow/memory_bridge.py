@@ -720,8 +720,14 @@ class WorkflowMemoryBridge:
             return {
                 "summary_build_attempted": False,
                 "summary_build_succeeded": False,
+                "summary_build_requested": False,
                 "summary_build_status": None,
                 "summary_build_skipped_reason": "missing_episode_id",
+                "summary_build_trigger": None,
+                "summary_build_scope": "workflow_completion_auto_memory_episode",
+                "summary_build_kind": "episode_summary",
+                "summary_build_replace_existing": True,
+                "summary_build_non_fatal": True,
                 "summary_build_replaced_existing_summary": False,
                 "built_memory_summary_id": None,
                 "built_summary_kind": "episode_summary",
@@ -733,12 +739,23 @@ class WorkflowMemoryBridge:
             if latest_checkpoint is not None and isinstance(latest_checkpoint.checkpoint_json, dict)
             else {}
         )
-        if checkpoint_payload.get("build_episode_summary") is not True:
+        summary_build_requested = checkpoint_payload.get("build_episode_summary") is True
+        summary_build_trigger = (
+            "latest_checkpoint.build_episode_summary_true" if summary_build_requested else None
+        )
+
+        if not summary_build_requested:
             return {
                 "summary_build_attempted": False,
                 "summary_build_succeeded": False,
+                "summary_build_requested": False,
                 "summary_build_status": None,
                 "summary_build_skipped_reason": "workflow_summary_build_not_requested",
+                "summary_build_trigger": None,
+                "summary_build_scope": "workflow_completion_auto_memory_episode",
+                "summary_build_kind": "episode_summary",
+                "summary_build_replace_existing": True,
+                "summary_build_non_fatal": True,
                 "summary_build_replaced_existing_summary": False,
                 "built_memory_summary_id": None,
                 "built_summary_kind": "episode_summary",
@@ -757,6 +774,7 @@ class WorkflowMemoryBridge:
                         "source": "workflow_completion_auto_memory",
                         "workflow_instance_id": str(workflow.workflow_instance_id),
                         "auto_memory_episode_id": str(episode.episode_id),
+                        "summary_build_trigger": summary_build_trigger,
                     },
                 )
             )
@@ -764,8 +782,14 @@ class WorkflowMemoryBridge:
             return {
                 "summary_build_attempted": True,
                 "summary_build_succeeded": False,
+                "summary_build_requested": True,
                 "summary_build_status": None,
                 "summary_build_skipped_reason": "summary_build_failed",
+                "summary_build_trigger": summary_build_trigger,
+                "summary_build_scope": "workflow_completion_auto_memory_episode",
+                "summary_build_kind": "episode_summary",
+                "summary_build_replace_existing": True,
+                "summary_build_non_fatal": True,
                 "summary_build_replaced_existing_summary": False,
                 "built_memory_summary_id": None,
                 "built_summary_kind": "episode_summary",
@@ -779,8 +803,14 @@ class WorkflowMemoryBridge:
         return {
             "summary_build_attempted": True,
             "summary_build_succeeded": bool(getattr(result, "summary_built", False)),
+            "summary_build_requested": True,
             "summary_build_status": getattr(result, "status", None),
             "summary_build_skipped_reason": getattr(result, "skipped_reason", None),
+            "summary_build_trigger": summary_build_trigger,
+            "summary_build_scope": "workflow_completion_auto_memory_episode",
+            "summary_build_kind": "episode_summary",
+            "summary_build_replace_existing": True,
+            "summary_build_non_fatal": True,
             "summary_build_replaced_existing_summary": getattr(
                 result,
                 "replaced_existing_summary",

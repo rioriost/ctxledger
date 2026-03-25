@@ -69,28 +69,72 @@ def _age_prototype_runtime_details(server: CtxLedgerServer) -> dict[str, Any]:
             "/debug/routes",
             "/debug/tools",
         ],
+        "summary_graph_mirroring": {
+            "enabled": database_settings.age_enabled,
+            "canonical_source": [
+                "memory_summaries",
+                "memory_summary_memberships",
+            ],
+            "derived_graph_labels": [
+                "memory_summary",
+                "memory_item",
+                "summarizes",
+            ],
+            "refresh_command": "ctxledger refresh-age-summary-graph",
+            "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+        },
+        "workflow_summary_automation": {
+            "orchestration_point": "workflow_completion_auto_memory",
+            "requested": False,
+            "trigger": "latest_checkpoint.build_episode_summary_true",
+            "target_scope": "workflow_completion_auto_memory_episode",
+            "summary_kind": "episode_summary",
+            "replace_existing": True,
+            "non_fatal": True,
+        },
     }
+
+    workflow_service = getattr(server, "workflow_service", None)
+    workflow_bridge = (
+        getattr(workflow_service, "_workflow_memory_bridge", None)
+        if workflow_service is not None
+        else None
+    )
+    if workflow_bridge is not None:
+        policy_helper = getattr(workflow_bridge, "_maybe_build_completion_summary", None)
+        if callable(policy_helper):
+            details["workflow_summary_automation"]["implementation_status"] = "available"
+        else:
+            details["workflow_summary_automation"]["implementation_status"] = "unknown"
 
     health_checker = getattr(server, "db_health_checker", None)
     if health_checker is None:
         details["age_graph_status"] = "unknown"
+        details["summary_graph_mirroring"]["graph_status"] = "unknown"
+        details["summary_graph_mirroring"]["ready"] = False
         return details
 
     age_available = getattr(health_checker, "age_available", None)
     if callable(age_available):
         try:
             details["age_available"] = bool(age_available())
+            details["summary_graph_mirroring"]["age_available"] = details["age_available"]
         except Exception as exc:
             details["age_available_error"] = str(exc)
+            details["summary_graph_mirroring"]["age_available_error"] = str(exc)
 
     age_graph_status = getattr(health_checker, "age_graph_status", None)
     if callable(age_graph_status):
         try:
             graph_status = age_graph_status(database_settings.age_graph_name)
-            details["age_graph_status"] = getattr(graph_status, "value", graph_status)
+            normalized_graph_status = getattr(graph_status, "value", graph_status)
+            details["age_graph_status"] = normalized_graph_status
+            details["summary_graph_mirroring"]["graph_status"] = normalized_graph_status
+            details["summary_graph_mirroring"]["ready"] = normalized_graph_status == "graph_ready"
             return details
         except Exception as exc:
             details["age_graph_status_error"] = str(exc)
+            details["summary_graph_mirroring"]["graph_status_error"] = str(exc)
 
     age_graph_available = getattr(health_checker, "age_graph_available", None)
     if callable(age_graph_available):
@@ -98,10 +142,20 @@ def _age_prototype_runtime_details(server: CtxLedgerServer) -> dict[str, Any]:
             details["age_graph_available"] = bool(
                 age_graph_available(database_settings.age_graph_name)
             )
+            details["summary_graph_mirroring"]["graph_available"] = details["age_graph_available"]
         except Exception as exc:
             details["age_graph_available_error"] = str(exc)
+            details["summary_graph_mirroring"]["graph_available_error"] = str(exc)
 
     details.setdefault("age_graph_status", "unknown")
+    details["summary_graph_mirroring"].setdefault(
+        "graph_status",
+        details["age_graph_status"],
+    )
+    details["summary_graph_mirroring"].setdefault(
+        "ready",
+        details["summary_graph_mirroring"].get("graph_status") == "graph_ready",
+    )
     return details
 
 
