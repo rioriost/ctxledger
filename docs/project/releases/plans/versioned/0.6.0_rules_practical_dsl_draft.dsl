@@ -1,50 +1,4 @@
-RULESET ctxledger_repository_rules_v1
-
-SECTION language
-RULE default_language
-SET default_language = EN
-
-RULE user_note_language
-ALLOW user_notes_language = JA
-
-SECTION ctxledger_development_housekeeping
-RULE scope
-APPLY housekeeping_rules
-ONLY_IF developing_repository = ctxledger
-
-RULE read_last_session_first
-WHEN new_ctxledger_development_session_starts
-DO read last_session.md first
-
-RULE update_last_session_after_loop
-WHEN ctxledger_development_work_loop_is_done
-DO update last_session.md with concise_continuation_note_for_next_session
-
-RULE keep_git_current
-DO keep_git_repository_up_to_date_with_descriptive_commits
-
-RULE ignore_gitignore_status
-DO ignore_status_of .gitignore
-
-RULE inherit_general_rules
-WHEN developing_repository = ctxledger
-DO also_apply general_agent_workflow_rules
-
-SECTION canonical_posture
-RULE canonical_system_of_record
-DO use ctxledger as canonical_system_of_record for:
-- workflow_progress
-- resumability
-- projection_state
-- durable_memory
-
-RULE local_notes_are_auxiliary
-DO treat repository_notes, resume_artifacts, local_continuation_files as auxiliary_or_derived
-UNLESS repository_explicitly_marks_them_canonical
-
-RULE prefer_recoverability
-PREFER reliable_resumability_over_brevity
-PREFER explicit_operational_trail_over_ambiguous_minimalism
+RULESET ctxledger_general_agent_workflow_practical_v1
 
 SECTION workflow
 RULE track_workspace
@@ -108,13 +62,6 @@ DO:
 SECTION memory
 RULE use_memory_tools_when_material
 USE memory_tools_only_when_they_improve_recall_continuity_or_decision_quality
-
-RULE early_context_retrieval
-EARLY_IN_SESSION_OR_BEFORE important_decision
-CONSIDER memory_get_context_for:
-- current_workflow
-- current_workspace
-- current_ticket_or_task
 
 RULE memory_get_context_reading
 TREAT memory_get_context_as hierarchy_aware_not_flat
@@ -188,16 +135,6 @@ USE memory_remember_episode_for_high_signal_knowledge:
 - failure_and_recovery
 - process_lesson
 
-RULE prefer_high_signal_episodes
-PREFER fewer_higher_signal_memory_episodes_over_repetition
-
-RULE memory_episode_content
-WHEN recording_episode
-INCLUDE:
-- what_happened
-- why_it_mattered
-- how_to_apply_later
-
 SECTION change_sizing
 RULE keep_changes_small
 PREFER one_clear_behavior_change_or_one_narrow_refactor_or_one_focused_doc_update_per_slice
@@ -210,12 +147,6 @@ PREFER focused_test_scenarios_with_single_assertion_theme
 PREFER short_topic_focused_doc_sections
 
 SECTION agent_behavior
-RULE prefer_explicit_state_transitions
-PREFER explicit_state_transitions_over_implicit_assumptions
-
-RULE prefer_recoverability_over_brevity
-PREFER recoverability_over_brevity
-
 RULE prefer_structure_over_prose
 WHEN structured_tool_fields_and_prose_both_exist
 PREFER structured_fields

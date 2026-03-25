@@ -1,0 +1,333 @@
+RULESET ctxledger_general_agent_workflow_v1
+
+SECTION canonical_posture
+RULE canonical_system_of_record
+DO use ctxledger as canonical_system_of_record for:
+- workflow_progress
+- resumability
+- projection_state
+- durable_memory
+
+RULE local_notes_are_auxiliary
+DO treat repository_notes, resume_artifacts, local_continuation_files as auxiliary_or_derived
+UNLESS repository_explicitly_marks_them_canonical
+
+RULE prefer_recoverability
+PREFER reliable_resumability_over_brevity
+PREFER explicit_operational_trail_over_ambiguous_minimalism
+
+SECTION workspace_and_workflow_lifecycle
+RULE session_start_tracking
+WHEN work_begins
+DO ensure_workspace_tracked_with workspace_register
+
+RULE resume_before_start
+WHEN task_appears_to_continue_existing_work
+PREFER recover_or_resume_existing_workflow_before workflow_start
+
+RULE start_only_when_needed
+DO use workflow_start
+ONLY_IF work_is_genuinely_new OR no_resumable_workflow_can_be_identified
+
+RULE identifier_types_are_distinct
+DO distinguish_ids:
+- workspace_register -> workspace_id
+- workflow_start -> workflow_instance_id, attempt_id
+- workflow_resume -> workflow_instance_id
+- workflow_checkpoint -> workflow_instance_id, attempt_id
+- workflow_complete -> workflow_instance_id, attempt_id
+
+RULE verify_resume_identifier
+BEFORE workflow_resume
+DO verify workflow_instance_id_source in:
+- prior_workflow_start_result
+- prior_workflow_resume_result
+- workflow_context_explicitly_labeled_workflow_instance_id
+
+RULE never_resume_with_workspace_id
+NEVER pass workspace_id to workflow_resume
+
+RULE never_guess_workflow_id
+WHEN only_workspace_id_is_known
+NEVER fabricate_workflow_instance_id
+DO recover_active_or_latest_workflow_from_canonical_context
+IF recovery_fails
+THEN workflow_start_new_work
+
+RULE resume_failure_handling
+WHEN workflow_resume_fails_or_times_out
+NEVER blindly_retry_same_malformed_request
+DO:
+- recheck_identifier_type
+- distinguish identifier_misuse vs missing_workflow_state vs runtime_degradation
+
+RULE resume_decision_policy
+WHEN deciding_between_resume_and_start
+PREFER reuse_existing_workflow_if objective_or_repository_or_recent_context_matches
+NEVER create_duplicate_workflows_due_to_incomplete_context
+IF uncertain
+THEN inspect_or_recover_workflow_state_before_start
+
+RULE resumable_only_if_open
+DO treat_workflow_as_resumable
+ONLY_IF workflow_is_operationally_open
+DO inspect_terminal_workflows_instead_of_continuing
+
+RULE prefer_workspace_scoped_discovery
+WHEN only_repository_or_workspace_context_is_known
+PREFER workspace_scoped_discovery_over_resume_guess
+
+SECTION checkpoint_discipline
+RULE record_meaningful_progress
+DURING work
+DO workflow_checkpoint_after:
+- planning_or_narrowing
+- root_cause_or_key_decision
+- code_change_completion
+- test_add_or_update
+- validation_or_debug_completion
+- blocker_or_handoff
+
+RULE checkpoint_content
+EACH checkpoint
+SHOULD_INCLUDE:
+- what_changed
+- what_was_learned_or_confirmed
+- what_remains
+- next_intended_action
+- current_verification_status
+- blocker_risk_or_open_question_if_any
+
+RULE use_verify_fields_meaningfully
+DO use verification_related_fields
+ONLY_IF fields_meaningfully_reflect_current_state
+
+RULE complete_is_terminal
+DO treat workflow_complete as terminal_transition
+NEVER use workflow_complete as generic_progress_save
+
+RULE terminal_states
+DEFINE terminal_workflow_states:
+- completed
+- failed
+- cancelled
+
+RULE no_checkpoint_after_terminal
+AFTER workflow_is_terminal
+NEVER add_checkpoint_to_same_workflow
+
+RULE keep_workflow_open_while_work_continues
+IF more_work_may_still_occur
+THEN prefer workflow_checkpoint
+AND delay workflow_complete_until_truly_done
+
+RULE new_work_after_terminal
+WHEN new_work_appears_after_terminal_workflow
+DO start_new_workflow
+NEVER continue_closed_workflow
+
+RULE small_tasks_still_tracked
+NEVER skip_workflow_recording_only_because_task_is_small
+
+RULE workflow_operation_failure_visibility
+WHEN workflow_operations_fail
+NEVER ignore_failure_silently
+DO reasonable_retry_or_diagnosis
+IF failure_persists
+THEN continue_only_with_explicit_awareness_of_degraded_workflow_state
+AND surface_problem_in_status_reporting
+
+RULE end_of_work_loop
+WHEN task_or_work_loop_is_done
+DO:
+- workflow_complete
+- keep_git_up_to_date_with_descriptive_commit_if_files_changed
+- leave_resumption_context_for_next_session
+
+SECTION memory_tool_usage
+RULE use_memory_tools_when_material
+DO use memory_tools
+ONLY_IF they_materially_improve continuity_or_recall_or_decision_quality
+
+RULE early_context_retrieval
+EARLY_IN_SESSION_OR_BEFORE important_decision
+CONSIDER memory_get_context_for:
+- current_workflow
+- current_workspace
+- current_ticket_or_task
+
+RULE memory_get_context_is_hierarchy_aware
+DO treat memory_get_context as hierarchy_aware_and_route_explainable
+NEVER treat_as_flat_episode_lookup
+
+RULE read_structured_context_fields_first
+WHEN interpreting memory_get_context
+DO read_fields_first:
+- summary_selection_applied
+- summary_selection_kind
+- memory_context_groups
+- retrieval_routes_present
+- primary_retrieval_routes_present
+- auxiliary_retrieval_routes_present
+- retrieval_route_presence
+- retrieval_route_group_counts
+- retrieval_route_item_counts
+- summary_first_has_episode_groups
+- summary_first_is_summary_only
+- summary_first_child_episode_count
+- summary_first_child_episode_ids
+- primary_episode_groups_present_after_query_filter
+- auxiliary_only_after_query_filter
+
+RULE grouped_output_is_primary_when_structure_matters
+WHEN context_structure_matters
+DO use memory_context_groups_as_primary_output
+
+RULE flat_fields_are_supporting
+DO treat flat_or_compatibility_fields as supporting_output
+UNLESS repository_redefines_them_canonical
+
+RULE retrieval_routes_are_literal
+INTERPRET route_meanings:
+- summary_first = primary_summary_selected_path
+- episode_direct = direct_visible_episode_path
+- workspace_inherited_auxiliary = inherited_workspace_auxiliary_context
+- relation_supports_auxiliary = relation_derived_auxiliary_context
+- graph_summary_auxiliary = derived_graph_backed_auxiliary_summary_member_context
+
+RULE graph_summary_is_not_canonical
+NEVER treat graph_summary_auxiliary as canonical_truth
+
+RULE summary_truth_is_relational_first
+DO read summary_state as canonical_relational_first
+DO read graph_backed_summary_enrichment as derived_and_degradable
+
+RULE summary_first_modes
+IF summary_first_has_episode_groups = true
+THEN interpret_as summary_plus_episode_primary_output
+
+IF summary_first_is_summary_only = true
+THEN interpret_as summary_only_primary_output
+NEVER collapse_into auxiliary_only_output
+
+RULE include_episodes_false_is_narrow
+IF include_episodes = false
+THEN:
+- read_only_surfaced_fields_and_routes
+- do_not_assume_hidden_summary_first_placeholders
+
+RULE summary_selection_kind_meaning
+INTERPRET summary_selection_kind:
+- memory_summary_first = canonical_summary_first_selection
+- episode_summary_first = episode_derived_summary_fallback
+
+RULE use_route_metadata_when_origin_matters
+WHEN context_origin_matters
+DO use route_metadata_explicitly
+NEVER infer_origin_only_from_text_presence
+
+RULE memory_search_usage
+USE memory_search
+WHEN:
+- similar_work_may_exist
+- prior_failures_or_tradeoffs_matter
+- prior_pattern_or_recovery_should_be_reused
+
+RULE remember_episode_usage
+USE memory_remember_episode
+WHEN current_work_produces_high_signal_knowledge:
+- non_obvious_root_cause
+- important_design_or_operational_decision
+- reusable_debugging_or_validation_pattern
+- failure_mode_and_recovery
+- workflow_or_process_lesson
+
+RULE prefer_high_signal_episodes
+PREFER fewer_higher_signal_memory_episodes_over_repetition
+
+RULE memory_episode_content
+WHEN recording_episode
+INCLUDE:
+- what_happened
+- why_it_mattered
+- how_to_apply_later
+
+SECTION change_sizing
+RULE keep_changes_small
+DO keep code_tests_docs semantically_small
+
+RULE one_slice_one_theme
+PREFER:
+- one_clear_behavior_change
+- one_narrow_refactor
+- one_focused_doc_update
+PER slice
+
+RULE decompose_large_work
+IF task_is_large
+THEN split_into small_semantic_slices
+
+RULE avoid_mixed_concerns
+NEVER mix_unrelated_concerns_in_same_change
+UNLESS truly_necessary
+
+RULE test_granularity
+PREFER focused_test_scenarios_with_single_assertion_theme
+
+RULE doc_granularity
+PREFER short_topic_focused_doc_sections
+
+SECTION agent_behavior
+RULE prefer_explicit_state_transitions
+PREFER explicit_state_transitions_over_implicit_assumptions
+
+RULE prefer_recoverability_over_brevity
+PREFER recoverability_over_brevity
+
+RULE leave_resumption_context
+WHEN in_doubt
+DO leave_enough_context_for_future_capable_agent
+
+RULE structured_tool_fields_first
+WHEN MCP_or_tool_payload_has_structured_fields_and_prose
+PREFER structured_fields
+
+RULE inspect_auto_memory_details
+IF workflow_completion_result_contains auto_memory_details
+THEN inspect_before_summarizing
+
+RULE summary_build_payload_is_authoritative
+IF auto_memory_details.summary_build_is_present
+THEN treat_as_authoritative_for:
+- summary_build_attempted
+- summary_build_succeeded
+- summary_build_requested
+- summary_build_status
+- summary_build_skipped_reason
+- summary_build_trigger
+- summary_build_scope
+- summary_build_replace_existing
+- summary_build_replaced_existing_summary
+- built_memory_summary_id
+- built_summary_membership_count
+
+RULE avoid_vague_summary_build_claims
+NEVER compress_structured_summary_build_outcomes_into_vague_claims
+
+RULE workflow_summary_automation_policy
+DO treat workflow_summary_automation as:
+- explicit
+- checkpoint_gated
+- non_fatal
+
+RULE workflow_summary_policy_fields
+READ literally:
+- default_requested = false
+- request_field = latest_checkpoint.checkpoint_json.build_episode_summary
+- trigger = latest_checkpoint.build_episode_summary_true
+
+RULE separate_auto_memory_facts
+KEEP_SEPARATE:
+- auto_memory_recorded
+- summary_build_attempted
+- summary_build_succeeded
