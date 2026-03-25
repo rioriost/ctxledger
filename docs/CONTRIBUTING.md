@@ -41,7 +41,7 @@ pytest -q
 If you are working on the proxy-protected small auth pattern, also review:
 
 - `docs/small_auth_operator_runbook.md`
-- `docs/plans/auth_proxy_scaling_plan.md`
+- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
 
 ---
 
@@ -53,32 +53,32 @@ The right docs to read depend on the kind of change you are making.
 Read these first when you are new to the repo:
 
 - `README.md`
-- `docs/specification.md`
-- `docs/architecture.md`
-- `docs/workflow-model.md`
-- `docs/mcp-api.md`
+- `docs/project/product/specification.md`
+- `docs/project/product/architecture.md`
+- `docs/project/product/workflow-model.md`
+- `docs/project/product/mcp-api.md`
 - `docs/deployment.md`
 - `docs/SECURITY.md`
 
 ### MCP transport or protocol work
 If your change affects MCP behavior, HTTP transport, or protocol claims, also read:
 
-- `docs/plans/mcp_planning_index.md`
+- `docs/project/releases/plans/mcp_planning_index.md`
 
 Then follow the linked planning documents from there.
 
 ### Auth, proxy, or deployment-boundary work
 If your change affects authentication, reverse proxy behavior, protected routes, or deployment guidance, read:
 
-- `docs/plans/auth_planning_index.md`
+- `docs/project/releases/plans/auth_planning_index.md`
 - `docs/small_auth_operator_runbook.md`
-- `docs/plans/auth_proxy_scaling_plan.md`
-- `docs/plans/auth_large_gateway_evaluation_memo.md`
-- `docs/plans/auth_large_gateway_shortlist_example.md`
+- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
+- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
 
 If you are preparing a future large-pattern gateway selection record, also review:
 
-- `docs/plans/auth_large_gateway_decision_record_template.md`
+- `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
 
 ### Why these auth docs matter
 The current documented posture is:
@@ -313,15 +313,15 @@ Use this quick map when contributing around auth or deployment topics.
 
 ### Small pattern, implemented
 - `docs/small_auth_operator_runbook.md`
-- `docs/plans/auth_proxy_scaling_plan.md`
+- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
 - `README.md`
 - `docs/deployment.md`
 - `docs/SECURITY.md`
 
 ### Large pattern, design-prep only
-- `docs/plans/auth_large_gateway_evaluation_memo.md`
-- `docs/plans/auth_large_gateway_shortlist_example.md`
-- `docs/plans/auth_large_gateway_decision_record_template.md`
+- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
+- `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
 
 ### Current expectations
 - small pattern is implemented and validated

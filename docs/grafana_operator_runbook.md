@@ -77,7 +77,7 @@ Relevant files:
 Related documentation:
 
 - `docs/deployment.md`
-- `docs/plans/observability_0_4_0_plan.md`
+- `docs/project/releases/plans/observability_0_4_0_plan.md`
 
 ---
 

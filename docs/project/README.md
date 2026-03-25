@@ -1,0 +1,132 @@
+# Project Documentation Index
+
+This directory groups repository-level documentation into clearer categories so
+that current product references, versioned release/planning artifacts, and
+historical implementation notes are easier to navigate.
+
+## Directory layout
+
+### `product/`
+
+Use this directory for **current repository-wide direction and reference
+material**.
+
+Typical contents include:
+
+- overall architecture
+- design principles
+- product/specification-level behavior
+- workflow and memory models
+- MCP interface reference
+- roadmap and milestone direction
+
+Current files:
+
+- `product/specification.md`
+- `product/architecture.md`
+- `product/design-principles.md`
+- `product/workflow-model.md`
+- `product/memory-model.md`
+- `product/mcp-api.md`
+- `product/roadmap.md`
+
+### `releases/`
+
+Use this directory for **version-oriented planning and release artifacts**.
+
+Typical contents include:
+
+- changelog entries
+- version-specific plans
+- milestone plans
+- release acceptance evidence
+- release checklists and remediation plans
+
+Current files include:
+
+- `releases/CHANGELOG.md`
+- `releases/v0.1.0_acceptance_evidence.md`
+- `releases/plans/...`
+
+### `history/`
+
+Use this directory for **older implementation plans and historical artifacts**
+that are still useful for traceability, but should not be mistaken for the
+current canonical repository description.
+
+Typical contents include:
+
+- older implementation plans
+- plan reviews
+- historical cleanup plans
+- superseded planning artifacts that still matter for context
+
+Current files include:
+
+- `history/imple_plan_0.1.0.md`
+- `history/imple_plan_review_0.1.0.md`
+- `history/imple_plan_0.5.3_projection_deprecation.md`
+- `history/imple_plan_0.5.4_projection_removal_cleanup.md`
+
+---
+
+## How to choose the right docs
+
+### If you want the current repository shape
+Start with:
+
+- `product/specification.md`
+- `product/architecture.md`
+- `product/workflow-model.md`
+- `product/memory-model.md`
+- `product/mcp-api.md`
+- `product/roadmap.md`
+
+### If you want version-by-version plans or release evidence
+Start with:
+
+- `releases/CHANGELOG.md`
+- `releases/plans/`
+- `releases/v0.1.0_acceptance_evidence.md`
+
+### If you want historical planning context
+Start with:
+
+- `history/`
+
+Treat files there as historical/supporting context unless they explicitly remain
+current for a narrow purpose.
+
+---
+
+## Scope note
+
+This `project/` directory is intended for **ctxledger-wide project
+documentation**.
+
+Other top-level `docs/` areas may still exist for narrower topics, such as:
+
+- deployment/operator guidance
+- security guidance
+- memory-specific design notes and runbooks
+
+Those are not replaced by this directory.
+This directory is specifically for organizing:
+
+- ctxledger全体の方針や機能要件、ロードマップ
+- バージョン毎のプランや成果物
+
+into clearer subdirectories.
+
+---
+
+## Editing guidance
+
+When adding or moving files:
+
+- put current canonical repository/product references in `product/`
+- put versioned planning and release artifacts in `releases/`
+- put older/superseded implementation material in `history/`
+
+Avoid mixing current-state reference docs with historical planning notes in the
+same location when a clearer category exists.

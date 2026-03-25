@@ -2,183 +2,155 @@
 
 ## Summary
 
-This continuation completed the next bounded post-closeout follow-up after the
-`0.6.0` summary hierarchy milestone was already treated as operationally closed.
+This continuation completed the requested documentation reorganization for
+repository-level product/reference docs and version-oriented planning/release
+artifacts.
 
-The main result of this continuation is that the repository now has:
+The main result is that the repository now has a clearer top-level documentation
+structure for project-wide material:
 
-- finalized release-facing `0.6.0` closeout wording in the changelog
-- a stronger operator-facing summary build runbook
-- clearer and more consistent canonical-versus-derived AGE boundary wording
-- a narrower and more explicit runtime/readiness description of
-  workflow-completion summary automation
-- green targeted and full-suite validation after the latest docs and metadata
-  updates
+- current repository/product references are grouped under:
+  - `docs/project/product/`
+- version-specific plans and release-facing artifacts are grouped under:
+  - `docs/project/releases/`
+- historical implementation-plan artifacts are grouped under:
+  - `docs/project/history/`
 
-This continuation intentionally did **not** broaden the `0.6.0` implementation
-into a new large feature slice.
+This continuation focused on file organization, path repair, and documentation
+navigation clarity.
 
-Instead, it tightened:
-
-- release/closeout framing
-- operator guidance
-- AGE degradation/boundary interpretation
-- workflow-summary automation metadata explainability
+It did **not** change the underlying `0.6.0` hierarchical memory behavior,
+retrieval contracts, AGE runtime behavior, or workflow-summary automation
+behavior.
 
 ---
 
 ## What was completed
 
-### 1. Finalized release-facing `0.6.0` closeout wording
+### 1. Added project-level documentation subdirectories
 
-The release-facing milestone wording was updated so the current `0.6.0` state
-reads more explicitly as a bounded, completed slice rather than an in-progress
-exploration.
+A new project-level docs grouping was introduced:
 
-Updated area:
+- `docs/project/product/`
+- `docs/project/releases/`
+- `docs/project/history/`
 
-- `docs/CHANGELOG.md`
+The intended reading is now:
 
-The main closeout clarifications now include:
+### `docs/project/product/`
+Use this for current repository-wide direction and reference material, including:
 
-- the current `0.6.0` hierarchy slice should be read as operationally closed for
-  its intended bounded scope
-- canonical summary ownership and canonical summary-membership ownership are now
-  called out together
-- direct summary-member memory-item expansion is explicitly named as part of the
-  shipped slice
-- the narrowed retrieval-contract reading is stated more clearly
-- the explicit operator path is now described more concretely:
-  - `ctxledger build-episode-summary`
-  - `ctxledger refresh-age-summary-graph`
-- degraded AGE summary graph state is now described as reduced enrichment rather
-  than canonical summary loss
+- architecture
+- design principles
+- specification
+- workflow model
+- memory model
+- MCP API
+- roadmap
 
-The validation section was also updated to reflect the latest focused and broad
-test results from this continuation.
+### `docs/project/releases/`
+Use this for version-by-version and milestone-oriented material, including:
 
----
+- changelog
+- release evidence
+- versioned plans
+- milestone plans
+- release/remediation/checklist artifacts
 
-### 2. Expanded the summary build operator runbook
-
-The explicit summary-build runbook was strengthened to better support operator
-and developer usage of the current bounded summary path.
-
-Updated doc:
-
-- `docs/memory/summary_build_runbook.md`
-
-The main additions were:
-
-- explicit canonical-versus-derived interpretation
-- clearer statement that summary build correctness is relational first
-- stronger guidance for verifying retrieval after a build or rebuild
-- explicit instruction for when to run:
-  - `ctxledger refresh-age-summary-graph`
-- explicit instruction for when to inspect:
-  - `ctxledger age-graph-readiness`
-- clearer degraded-state interpretation:
-  - graph degradation means reduced auxiliary support or observability
-  - not canonical relational summary loss
-
-This makes the current explicit build path easier to operate without requiring
-the reader to infer the intended graph boundary from other docs.
+### `docs/project/history/`
+Use this for older implementation-plan material that still matters for traceability
+but should not be read as the current canonical repository description.
 
 ---
 
-### 3. Unified AGE boundary / degradation wording
+### 2. Moved current product/reference docs into `docs/project/product/`
 
-The AGE boundary wording was tightened so the architecture story is more
-consistent with the closeout and runbook language.
+The following current repository-wide reference docs were moved under the new
+product directory:
 
-Updated doc:
+- `docs/project/product/specification.md`
+- `docs/project/product/architecture.md`
+- `docs/project/product/design-principles.md`
+- `docs/project/product/workflow-model.md`
+- `docs/project/product/memory-model.md`
+- `docs/project/product/mcp-api.md`
+- `docs/project/product/roadmap.md`
 
-- `docs/architecture.md`
-
-The main clarification added there is that, for the current `0.6.0` slice:
-
-- canonical summary truth remains in relational PostgreSQL state
-- graph-backed summary structure is derived support state
-- graph staleness or absence should affect enrichment quality, not canonical
-  correctness
-- ordinary summary retrieval correctness should still be interpreted from the
-  canonical relational path
-
-This reduces the risk that future readers treat the current bounded AGE support
-as graph-owned hierarchy truth.
+This means the current repository-wide policy/requirements/modeling material is
+no longer mixed into the same flat directory as historical and version-specific
+plan artifacts.
 
 ---
 
-### 4. Added a narrow workflow-summary automation follow-up
+### 3. Moved versioned plans and release artifacts into `docs/project/releases/`
 
-The requested workflow-oriented summary automation follow-up was handled as a
-small explainability improvement rather than as a broad behavior expansion.
+The following release/version-oriented artifacts were moved:
 
-Updated implementation areas:
+- `docs/project/releases/CHANGELOG.md`
+- `docs/project/releases/v0.1.0_acceptance_evidence.md`
+- `docs/project/releases/plans/...`
 
-- `src/ctxledger/runtime/server_responses.py`
-- `src/ctxledger/__init__.py`
-
-The main change is that runtime/readiness metadata now describes the current
-automation policy more literally as a checkpoint-gated path.
-
-The new runtime/readiness wording now makes it clearer that:
-
-- workflow summary automation is not “always requested”
-- the default is not to request it
-- the request field is:
-  - `latest_checkpoint.checkpoint_json.build_episode_summary`
-- the active trigger remains:
-  - `latest_checkpoint.build_episode_summary_true`
-
-This keeps the current automation follow-up narrow and aligned with the
-repository’s existing implementation.
-
-No broad new automation policy was added.
-
-No default-always-on automation was introduced.
-
-The current behavior remains:
-
-- explicit
-- gated
-- non-fatal
+This makes the version-by-version planning and milestone material easier to
+recognize as release-oriented or planning-oriented rather than current canonical
+product reference documentation.
 
 ---
 
-### 5. Added focused validation around automation metadata expectations
+### 4. Moved older implementation-plan artifacts into `docs/project/history/`
 
-To keep the metadata follow-up test-backed, runtime/readiness and workflow tool
-expectations were updated and expanded.
+The following older implementation-plan files were moved into the history area:
 
-Updated test areas include:
+- `docs/project/history/imple_plan_0.1.0.md`
+- `docs/project/history/imple_plan_review_0.1.0.md`
+- `docs/project/history/imple_plan_0.5.3_projection_deprecation.md`
+- `docs/project/history/imple_plan_0.5.4_projection_removal_cleanup.md`
 
-- `tests/cli/test_cli_schema.py`
-- `tests/http/test_server_http.py`
-- `tests/http/test_coverage_targets_http.py`
-- `tests/runtime/test_coverage_targets_runtime.py`
-- `tests/server/test_server.py`
-- `tests/mcp/test_tool_handlers_workflow.py`
+This creates a clearer boundary between:
 
-The main test-facing improvements were:
+- current-state reference docs
+- active/release-oriented planning docs
+- historical implementation material
 
-- readiness JSON expectations now reflect:
-  - `default_requested`
-  - `request_field`
-- runtime introspection expectations now reflect the same narrower automation
-  policy wording
-- workflow-complete tool-handler coverage now explicitly preserves nested
-  `summary_build` metadata in `auto_memory_details`
+---
 
-One important nuance that was confirmed during this follow-up:
+### 5. Repaired important documentation links
 
-- runtime/readiness helper output only surfaces extra availability/policy-status
-  fields when the relevant workflow bridge/helper is actually present
-- tests that construct lighter server objects without that bridge should continue
-  to expect the narrower default payload
+After the moves, key documentation references were updated so the new structure
+is navigable.
 
-That distinction is now preserved in test expectations rather than being blurred
-into one universal payload shape.
+Updated areas included:
+
+- `README.md`
+- `docs/CONTRIBUTING.md`
+- `docs/SECURITY.md`
+- `docs/grafana_operator_runbook.md`
+- selected moved historical plan files
+
+The main categories of repair were:
+
+- current reference doc links now point to `docs/project/product/...`
+- versioned planning links now point to `docs/project/releases/plans/...`
+- moved historical-doc self-references now point to `docs/project/history/...`
+
+---
+
+### 6. Added a new project docs index
+
+A new index file was added:
+
+- `docs/project/README.md`
+
+This file now explains:
+
+- what belongs in `product/`
+- what belongs in `releases/`
+- what belongs in `history/`
+- how to choose the right starting point depending on whether the reader wants:
+  - current repository shape
+  - version/release planning
+  - historical implementation context
+
+This should reduce future drift back toward a flat mixed-purpose docs layout.
 
 ---
 
@@ -188,11 +160,11 @@ into one universal payload shape.
 
 Command:
 
-- `python -m pytest tests/cli/test_cli_schema.py tests/http/test_server_http.py tests/http/test_coverage_targets_http.py tests/runtime/test_coverage_targets_runtime.py tests/server/test_server.py tests/mcp/test_tool_handlers_workflow.py tests/postgres_integration/test_workflow_auto_memory_integration.py -q`
+- `python -m pytest tests/http/test_server_http.py tests/http/test_coverage_targets_http.py tests/runtime/test_coverage_targets_runtime.py tests/server/test_server.py tests/mcp/test_tool_handlers_workflow.py -q`
 
 Result:
 
-- **295 passed**
+- **214 passed**
 
 ### Full-suite validation
 
@@ -206,93 +178,73 @@ Result:
 
 ---
 
-## Current implemented state at handoff
+## Current repository reading after this continuation
 
-At handoff, the current `0.6.0` / immediate-post-closeout hierarchical memory
-state should be read as:
+At handoff, the documentation structure should now be read as:
 
-### Canonical relational layer
-- `memory_summaries`
-- `memory_summary_memberships`
-- relational summary state remains the system of record
+### Current project/product references
+- `docs/project/product/...`
 
-### Retrieval layer
-- summary-first retrieval through `memory_get_context`
-- direct summary-member memory-item expansion
-- episode-derived summary fallback when canonical summaries are absent
-- narrowed episode-less shaping preserved for:
-  - `include_episodes = false`
-- explicit retrieval-route metadata including:
-  - `graph_summary_auxiliary`
+### Versioned plans and release artifacts
+- `docs/project/releases/...`
 
-### Derived graph layer
-- bounded derived AGE summary support remains auxiliary
-- explicit graph refresh path through:
-  - `ctxledger refresh-age-summary-graph`
-- graph readiness inspection path through:
-  - `ctxledger age-graph-readiness`
-- degraded graph state should still be interpreted as support loss, not
-  canonical loss
+### Historical implementation-plan context
+- `docs/project/history/...`
 
-### Operator path
-- explicit canonical summary build path remains:
-  - `ctxledger build-episode-summary`
-- runbook guidance now covers:
-  - verification of written canonical state
-  - retrieval verification after rebuild
-  - graph refresh when graph-backed auxiliary behavior is under inspection
-  - degraded-state interpretation
+### Narrower topic-specific docs that remain outside `docs/project/`
+Still top-level under `docs/` for now:
 
-### Workflow automation layer
-- workflow-completion auto-memory remains present
-- summary building remains gated by checkpoint intent
-- runtime/readiness metadata now makes the gating policy more explicit through:
-  - `default_requested = false`
-  - `request_field = latest_checkpoint.checkpoint_json.build_episode_summary`
-  - `trigger = latest_checkpoint.build_episode_summary_true`
-- workflow-summary automation remains non-fatal and bounded
+- deployment/operator guidance
+- security guidance
+- memory-specific design notes and runbooks
+
+This means the reorganization currently applies specifically to:
+
+- ctxledger全体の方針や機能要件、ロードマップ
+- バージョン毎のプランや成果物
+
+rather than to every topical sub-area inside `docs/`.
 
 ---
 
-## What remains deferred
+## What remains to watch
 
-The following still remain deferred beyond the current bounded closeout and
-follow-up work:
+The structural reorganization is complete for the requested scope, but a few
+follow-up concerns remain worth watching in future sessions:
 
-- summary-to-summary recursion
-- arbitrary-depth hierarchy traversal
-- graph-native hierarchy truth
-- broad graph-first retrieval redesign
-- broader AGE ownership expansion beyond the current bounded auxiliary slice
-- always-on workflow summary generation
-- broader workflow automation policy rollout
-- Mnemis alignment / comparison work
-- any broader milestone work that would reopen the already-bounded `0.6.0`
-  architectural decisions
+1. Some deeper planning docs inside `docs/project/releases/plans/` may still
+   contain old path references and could be cleaned incrementally if they become
+   active again.
+2. Topic-specific docs under `docs/memory/` remain intentionally separate for
+   now; if broader docs taxonomy work happens later, that should be treated as a
+   separate bounded slice.
+3. Operator/security/deployment docs remain top-level and may or may not be
+   reorganized later depending on whether a broader docs information architecture
+   effort is chosen.
 
 ---
 
 ## Recommended next step
 
-The current `0.6.0` closeout and immediate follow-up loop should now be treated
-as complete.
+If another session continues from here, the most natural next step is **not**
+more immediate restructuring unless a broken link or discoverability issue is
+found.
 
-If another session continues from here, the most sensible next move is **not**
-another incremental `0.6.0` refinement unless a very specific regression or docs
-gap appears.
+Instead, the likely sensible next options are:
 
-Instead, the likely next useful directions are:
-
-1. begin explicit planning for the next milestone boundary
-2. choose whether workflow-summary automation should remain as-is or receive a
-   separately bounded future slice
-3. keep AGE work constrained unless a concrete traversal benefit justifies a new
-   graph follow-up
+1. do a light sweep for stale path references inside:
+   - `docs/project/releases/plans/`
+2. decide whether topic-specific docs such as:
+   - `docs/memory/`
+   - operator runbooks
+   should remain where they are or join a broader information architecture
+   cleanup later
+3. return to planning work for the next post-`0.6.0` milestone now that the
+   project-wide docs structure is cleaner
 
 The important handoff point is:
 
-- the current repository state is validated
-- the `0.6.0` summary hierarchy slice is documented as closed
-- the operator path is documented
-- the current automation policy is more explicit
-- the next work can now be chosen deliberately rather than by cleanup drift
+- the requested docs categorization is in place
+- key top-level links were repaired
+- the repository remains green after the reorganization
+- future documentation cleanup can now proceed from a clearer base structure

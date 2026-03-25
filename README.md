@@ -791,15 +791,15 @@ If you are trying to **use** `ctxledger`, go here first:
 If you are trying to **understand the model**, start here:
 
 - architecture:
-  - `docs/architecture.md`
+  - `docs/project/product/architecture.md`
 - workflow model:
-  - `docs/workflow-model.md`
+  - `docs/project/product/workflow-model.md`
 - MCP API:
-  - `docs/mcp-api.md`
+  - `docs/project/product/mcp-api.md`
 - memory model:
-  - `docs/memory-model.md`
+  - `docs/project/product/memory-model.md`
 - roadmap:
-  - `docs/roadmap.md`
+  - `docs/project/product/roadmap.md`
 
 If you are trying to **develop on the repository**, use:
 
@@ -812,15 +812,15 @@ If you are trying to **develop on the repository**, use:
 
 Core references:
 
-- `docs/specification.md`
-- `docs/architecture.md`
-- `docs/workflow-model.md`
-- `docs/mcp-api.md`
-- `docs/memory-model.md`
+- `docs/project/product/specification.md`
+- `docs/project/product/architecture.md`
+- `docs/project/product/workflow-model.md`
+- `docs/project/product/mcp-api.md`
+- `docs/project/product/memory-model.md`
 - `docs/deployment.md`
 - `docs/SECURITY.md`
-- `docs/design-principles.md`
-- `docs/roadmap.md`
+- `docs/project/product/design-principles.md`
+- `docs/project/product/roadmap.md`
 
 Operator runbooks:
 
@@ -829,11 +829,11 @@ Operator runbooks:
 
 Planning docs:
 
-- `docs/plans/observability_0_4_0_plan.md`
-- `docs/plans/auth_planning_index.md`
-- `docs/plans/auth_proxy_scaling_plan.md`
-- `docs/plans/auth_large_gateway_evaluation_memo.md`
-- `docs/plans/auth_large_gateway_shortlist_example.md`
+- `docs/project/releases/plans/observability_0_4_0_plan.md`
+- `docs/project/releases/plans/auth_planning_index.md`
+- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
+- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
+- `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
 
 ---
 
