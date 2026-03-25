@@ -1304,19 +1304,6 @@ class WorkflowService:
             auto_memory_details: dict[str, Any] | None = None
 
             workflow_memory_bridge = self._workflow_memory_bridge
-            if (
-                workflow_memory_bridge is not None
-                and type(uow).__name__ == "PostgresUnitOfWork"
-                and uow.memory_episodes is not None
-                and uow.memory_items is not None
-            ):
-                workflow_memory_bridge = WorkflowMemoryBridge(
-                    episode_repository=uow.memory_episodes,
-                    memory_item_repository=uow.memory_items,
-                    memory_embedding_repository=uow.memory_embeddings,
-                    summary_builder=workflow_memory_bridge.summary_builder,
-                    embedding_generator=workflow_memory_bridge.embedding_generator,
-                )
 
             if workflow_memory_bridge is not None:
                 try:

@@ -378,7 +378,7 @@ def test_postgres_workflow_complete_auto_memory_skips_low_signal_closeout(
     assert workspace_items == ()
 
 
-def test_postgres_workflow_complete_auto_memory_reports_summary_build_as_skipped_until_workflow_scoped_builder_integration_exists(
+def test_postgres_workflow_complete_auto_memory_builds_summary_when_gated_builder_is_enabled(
     postgres_pooled_uow_factory,
 ) -> None:
     uow_factory = postgres_pooled_uow_factory
@@ -409,6 +409,7 @@ def test_postgres_workflow_complete_auto_memory_reports_summary_build_as_skipped
             summary="Checkpoint summary for gated summary build",
             checkpoint_json={
                 "auto_memory": True,
+                "build_episode_summary": True,
                 "next_intended_action": "Inspect the built summary and retrieval path",
             },
             verify_status=VerifyStatus.PASSED,
@@ -422,6 +423,131 @@ def test_postgres_workflow_complete_auto_memory_reports_summary_build_as_skipped
             attempt_id=started.attempt.attempt_id,
             workflow_status=WorkflowInstanceStatus.COMPLETED,
             summary="Completed workflow with explicit gated summary build",
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    with uow_factory() as uow:
+        assert uow.memory_episodes is not None
+        assert uow.memory_summaries is not None
+        assert uow.memory_summary_memberships is not None
+
+        workflow_episodes = uow.memory_episodes.list_by_workflow_id(
+            started.workflow_instance.workflow_instance_id,
+            limit=10,
+        )
+        auto_episodes = [
+            episode
+            for episode in workflow_episodes
+            if episode.metadata.get("memory_origin") == "workflow_complete_auto"
+        ]
+        assert len(auto_episodes) == 1
+        auto_episode = auto_episodes[0]
+
+        built_summaries = uow.memory_summaries.list_by_episode_id(
+            auto_episode.episode_id,
+            limit=10,
+        )
+        assert len(built_summaries) == 1
+        built_summary = built_summaries[0]
+
+        memberships = uow.memory_summary_memberships.list_by_summary_id(
+            built_summary.memory_summary_id,
+            limit=10,
+        )
+
+    assert completed.workflow_instance.status == WorkflowInstanceStatus.COMPLETED
+    assert completed.attempt.status == WorkflowAttemptStatus.SUCCEEDED
+    assert completed.auto_memory_details is not None
+    assert completed.auto_memory_details["auto_memory_recorded"] is True
+    summary_build_details = completed.auto_memory_details["summary_build"]
+    assert summary_build_details["summary_build_attempted"] is True
+    assert summary_build_details["summary_build_succeeded"] is True
+    assert summary_build_details["summary_build_status"] == "built"
+    assert summary_build_details["summary_build_skipped_reason"] is None
+    assert summary_build_details["summary_build_replaced_existing_summary"] is False
+    assert summary_build_details["built_memory_summary_id"] == str(built_summary.memory_summary_id)
+    assert summary_build_details["built_summary_kind"] == "episode_summary"
+    assert summary_build_details["built_summary_membership_count"] == 1
+    assert completed.warnings == ()
+    assert built_summary.summary_kind == "episode_summary"
+    assert built_summary.metadata["builder"] == "minimal_episode_summary_builder"
+    assert built_summary.metadata["source"] == "workflow_completion_auto_memory"
+    assert built_summary.metadata["workflow_instance_id"] == str(
+        started.workflow_instance.workflow_instance_id
+    )
+    assert built_summary.metadata["auto_memory_episode_id"] == str(auto_episode.episode_id)
+    assert len(memberships) == 1
+
+    context = memory_service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=True,
+        )
+    )
+
+    assert context.feature == MemoryFeature.GET_CONTEXT
+    assert context.details["summary_selection_applied"] is True
+    assert context.details["summary_selection_kind"] == "episode_summary_first"
+    assert context.details["summaries"] == [
+        {
+            "episode_id": str(auto_episode.episode_id),
+            "workflow_instance_id": str(started.workflow_instance.workflow_instance_id),
+            "memory_item_count": 1,
+            "memory_item_types": ["workflow_completion_note"],
+            "memory_item_provenance": ["workflow_complete_auto"],
+        }
+    ]
+
+
+def test_postgres_workflow_complete_auto_memory_skips_summary_build_when_trigger_is_absent(
+    postgres_pooled_uow_factory,
+) -> None:
+    uow_factory = postgres_pooled_uow_factory
+    workflow_service = _build_local_stub_workflow_service(
+        uow_factory,
+        enable_summary_builder=True,
+    )
+    memory_service = _build_local_stub_memory_service(uow_factory)
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-workflow-complete-auto-summary-build-skip.git",
+            canonical_path="/tmp/integration-repo-workflow-complete-auto-summary-build-skip",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-AUTO-MEM-SUMMARY-BUILD-TRIGGER-ABSENT-001",
+        )
+    )
+    workflow_service.create_checkpoint(
+        CreateCheckpointInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="summarize_completion",
+            summary="Checkpoint summary without summary-build trigger",
+            checkpoint_json={
+                "auto_memory": True,
+                "next_intended_action": "Inspect the retrieval path without explicit summary build",
+            },
+            verify_status=VerifyStatus.PASSED,
+            verify_report={"checks": ["pytest"], "status": "passed"},
+        )
+    )
+
+    completed = workflow_service.complete_workflow(
+        CompleteWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            workflow_status=WorkflowInstanceStatus.COMPLETED,
+            summary="Completed workflow without requesting gated summary build",
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -462,12 +588,12 @@ def test_postgres_workflow_complete_auto_memory_reports_summary_build_as_skipped
     assert completed.auto_memory_details is not None
     assert completed.auto_memory_details["auto_memory_recorded"] is True
     summary_build_details = completed.auto_memory_details["summary_build"]
-    assert summary_build_details["summary_build_attempted"] is True
+    assert summary_build_details["summary_build_attempted"] is False
     assert summary_build_details["summary_build_succeeded"] is False
     assert summary_build_details["summary_build_status"] is None
     assert (
         summary_build_details["summary_build_skipped_reason"]
-        == "workflow_scoped_builder_integration_deferred"
+        == "workflow_summary_build_not_requested"
     )
     assert summary_build_details["summary_build_replaced_existing_summary"] is False
     assert summary_build_details["built_memory_summary_id"] is None

@@ -158,6 +158,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override the AGE graph name instead of using CTXLEDGER_DB_AGE_GRAPH_NAME",
     )
 
+    refresh_age_summary_graph_parser = subparsers.add_parser(
+        "refresh-age-summary-graph",
+        help="Refresh derived AGE summary mirroring from canonical relational summaries",
+    )
+    refresh_age_summary_graph_parser.add_argument(
+        "--database-url",
+        help="Override the database URL instead of using CTXLEDGER_DATABASE_URL",
+    )
+    refresh_age_summary_graph_parser.add_argument(
+        "--graph-name",
+        help="Override the AGE graph name instead of using CTXLEDGER_DB_AGE_GRAPH_NAME",
+    )
+
     build_episode_summary_parser = subparsers.add_parser(
         "build-episode-summary",
         help="Build one canonical episode summary from the episode's memory items",
@@ -476,6 +489,235 @@ def _age_graph_readiness(args: argparse.Namespace) -> int:
         return 0
     except Exception as exc:
         print(f"Failed to check AGE graph readiness: {exc}", file=sys.stderr)
+        return 1
+
+
+def _refresh_age_summary_graph(args: argparse.Namespace) -> int:
+    try:
+        from .config import get_settings
+
+        try:
+            import psycopg
+        except ImportError:
+            print(
+                "Failed to import PostgreSQL driver. Install psycopg[binary] first.",
+                file=sys.stderr,
+            )
+            return 1
+
+        settings = get_settings()
+        database_url = args.database_url or settings.database.url
+        graph_name = args.graph_name or settings.database.age_graph_name
+
+        if not database_url:
+            return _print_missing_database_url(include_override_hint=True)
+
+        if not graph_name:
+            print(
+                "AGE graph name is required. Set CTXLEDGER_DB_AGE_GRAPH_NAME or pass --graph-name.",
+                file=sys.stderr,
+            )
+            return 1
+
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("LOAD 'age'")
+                cursor.execute('SET search_path = ag_catalog, "$user", public')
+                graph_name_literal = "'" + graph_name.replace("'", "''") + "'"
+                cursor.execute(
+                    """
+                    SELECT 1
+                    FROM ag_catalog.ag_graph
+                    WHERE name = %s
+                    LIMIT 1
+                    """,
+                    (graph_name,),
+                )
+                if cursor.fetchone() is None:
+                    cursor.execute(f"SELECT ag_catalog.create_graph({graph_name_literal})")
+                cursor.execute(
+                    f"""
+                    SELECT *
+                    FROM cypher(
+                        {graph_name_literal},
+                        $$
+                        MATCH (n:memory_summary)-[r:summarizes]->()
+                        DELETE r
+                        RETURN 1 AS cleared
+                        $$
+                    ) AS (cleared agtype)
+                    """,
+                )
+                cursor.execute(
+                    f"""
+                    SELECT *
+                    FROM cypher(
+                        {graph_name_literal},
+                        $$
+                        MATCH (n:memory_summary)
+                        DETACH DELETE n
+                        RETURN 1 AS cleared
+                        $$
+                    ) AS (cleared agtype)
+                    """,
+                )
+                cursor.execute(
+                    """
+                    SELECT
+                        memory_summary_id,
+                        workspace_id,
+                        episode_id,
+                        summary_kind
+                    FROM public.memory_summaries
+                    ORDER BY created_at DESC, memory_summary_id DESC
+                    """
+                )
+                summary_rows = cursor.fetchall()
+                for summary_row in summary_rows:
+                    if isinstance(summary_row, tuple):
+                        (
+                            raw_memory_summary_id,
+                            raw_workspace_id,
+                            raw_episode_id,
+                            raw_summary_kind,
+                        ) = summary_row
+                    else:
+                        raw_memory_summary_id = summary_row["memory_summary_id"]
+                        raw_workspace_id = summary_row["workspace_id"]
+                        raw_episode_id = summary_row["episode_id"]
+                        raw_summary_kind = summary_row["summary_kind"]
+
+                    summary_params = json.dumps(
+                        {
+                            "memory_summary_id": str(raw_memory_summary_id),
+                            "workspace_id": str(raw_workspace_id),
+                            "episode_id": (
+                                str(raw_episode_id) if raw_episode_id is not None else None
+                            ),
+                            "summary_kind": str(raw_summary_kind),
+                        },
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    cursor.execute(
+                        f"""
+                        SELECT *
+                        FROM cypher(
+                            {graph_name_literal},
+                            $$
+                            CREATE (n:memory_summary {{memory_summary_id: $memory_summary_id, workspace_id: $workspace_id, episode_id: $episode_id, summary_kind: $summary_kind}})
+                            RETURN n
+                            $$,
+                            %s
+                        ) AS (n agtype)
+                        """,
+                        (summary_params,),
+                    )
+
+                cursor.execute(
+                    """
+                    SELECT
+                        memory_summary_membership_id,
+                        memory_summary_id,
+                        memory_id,
+                        membership_order
+                    FROM public.memory_summary_memberships
+                    ORDER BY
+                        memory_summary_id ASC,
+                        membership_order ASC NULLS LAST,
+                        created_at ASC,
+                        memory_summary_membership_id ASC
+                    """
+                )
+                membership_rows = cursor.fetchall()
+                for membership_row in membership_rows:
+                    if isinstance(membership_row, tuple):
+                        (
+                            raw_membership_id,
+                            raw_memory_summary_id,
+                            raw_memory_id,
+                            raw_membership_order,
+                        ) = membership_row
+                    else:
+                        raw_membership_id = membership_row["memory_summary_membership_id"]
+                        raw_memory_summary_id = membership_row["memory_summary_id"]
+                        raw_memory_id = membership_row["memory_id"]
+                        raw_membership_order = membership_row["membership_order"]
+
+                    membership_params = json.dumps(
+                        {
+                            "memory_summary_membership_id": str(raw_membership_id),
+                            "memory_summary_id": str(raw_memory_summary_id),
+                            "memory_id": str(raw_memory_id),
+                            "membership_order": raw_membership_order,
+                        },
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    cursor.execute(
+                        f"""
+                        SELECT *
+                        FROM cypher(
+                            {graph_name_literal},
+                            $$
+                            MATCH (summary:memory_summary {{memory_summary_id: $memory_summary_id}})
+                            MATCH (item:memory_item {{memory_id: $memory_id}})
+                            CREATE (summary)-[r:summarizes {{memory_summary_membership_id: $memory_summary_membership_id, memory_summary_id: $memory_summary_id, memory_id: $memory_id, membership_order: $membership_order}}]->(item)
+                            RETURN r
+                            $$,
+                            %s
+                        ) AS (r agtype)
+                        """,
+                        (membership_params,),
+                    )
+
+                cursor.execute(
+                    f"""
+                    SELECT count(*)
+                    FROM cypher(
+                        {graph_name_literal},
+                        $$
+                        MATCH (n:memory_summary)
+                        RETURN count(n) AS node_count
+                        $$
+                    ) AS (node_count agtype)
+                    """,
+                )
+                summary_node_count_row = cursor.fetchone()
+                summary_node_count = (
+                    summary_node_count_row[0]
+                    if isinstance(summary_node_count_row, tuple)
+                    else summary_node_count_row["count"]
+                )
+
+                cursor.execute(
+                    f"""
+                    SELECT count(*)
+                    FROM cypher(
+                        {graph_name_literal},
+                        $$
+                        MATCH (:memory_summary)-[r:summarizes]->(:memory_item)
+                        RETURN count(r) AS edge_count
+                        $$
+                    ) AS (edge_count agtype)
+                    """,
+                )
+                membership_edge_count_row = cursor.fetchone()
+                membership_edge_count = (
+                    membership_edge_count_row[0]
+                    if isinstance(membership_edge_count_row, tuple)
+                    else membership_edge_count_row["count"]
+                )
+            connection.commit()
+
+        print(
+            f"AGE summary graph refresh completed for '{graph_name}' "
+            f"(memory_summary nodes rebuilt={summary_node_count}, "
+            f"summarizes edges rebuilt={membership_edge_count})."
+        )
+        return 0
+    except Exception as exc:
+        print(f"Failed to refresh AGE summary graph: {exc}", file=sys.stderr)
         return 1
 
 
@@ -1145,6 +1387,8 @@ def main(argv: list[str] | None = None) -> int:
         return _bootstrap_age_graph(args)
     if command == "age-graph-readiness":
         return _age_graph_readiness(args)
+    if command == "refresh-age-summary-graph":
+        return _refresh_age_summary_graph(args)
     if command == "build-episode-summary":
         return _build_episode_summary(args)
     if command == "resume-workflow":

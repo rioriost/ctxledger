@@ -28,6 +28,7 @@ def test_build_parser_includes_expected_subcommands() -> None:
         "apply-schema",
         "bootstrap-age-graph",
         "age-graph-readiness",
+        "refresh-age-summary-graph",
         "build-episode-summary",
         "resume-workflow",
         "version",
@@ -161,6 +162,35 @@ def test_main_dispatches_build_episode_summary(
             "json",
         )
     ]
+
+
+def test_main_dispatches_refresh_age_summary_graph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[tuple[str | None, str | None]] = []
+
+    def fake_refresh_age_summary_graph(args: argparse.Namespace) -> int:
+        received.append((args.database_url, args.graph_name))
+        return 13
+
+    monkeypatch.setattr(
+        cli_module,
+        "_refresh_age_summary_graph",
+        fake_refresh_age_summary_graph,
+    )
+
+    result = cli_module.main(
+        [
+            "refresh-age-summary-graph",
+            "--database-url",
+            "postgresql://override/db",
+            "--graph-name",
+            "ctxledger_summary_graph",
+        ]
+    )
+
+    assert result == 13
+    assert received == [("postgresql://override/db", "ctxledger_summary_graph")]
 
 
 def test_main_dispatches_version(

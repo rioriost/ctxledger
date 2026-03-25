@@ -1494,6 +1494,35 @@ def test_main_dispatches_build_episode_summary(
     ]
 
 
+def test_main_dispatches_refresh_age_summary_graph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[tuple[str | None, str | None]] = []
+
+    def fake_refresh_age_summary_graph(args: argparse.Namespace) -> int:
+        received.append((args.database_url, args.graph_name))
+        return 13
+
+    monkeypatch.setattr(
+        cli_module,
+        "_refresh_age_summary_graph",
+        fake_refresh_age_summary_graph,
+    )
+
+    result = cli_module.main(
+        [
+            "refresh-age-summary-graph",
+            "--database-url",
+            "postgresql://explicit/db",
+            "--graph-name",
+            "ctxledger_summary_graph",
+        ]
+    )
+
+    assert result == 13
+    assert received == [("postgresql://explicit/db", "ctxledger_summary_graph")]
+
+
 def test_build_episode_summary_reports_failure(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1519,6 +1548,142 @@ def test_build_episode_summary_reports_failure(
     assert exit_code == 1
     assert captured.out == ""
     assert "Failed to build episode summary: builder exploded" in captured.err
+
+
+def test_refresh_age_summary_graph_reports_failure_with_current_narrow_fake_graph_substrate(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    executed_queries: list[tuple[str, object | None]] = []
+    connect_calls: list[str] = []
+    commit_calls: list[str] = []
+
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.fetchone_results: list[object] = [None]
+
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            executed_queries.append((query, params))
+            if "FROM public.memory_summary_memberships" in query:
+                raise RuntimeError("summary graph refresh exploded")
+
+        def fetchone(self) -> object:
+            return self.fetchone_results.pop(0)
+
+        def fetchall(self) -> list[object]:
+            last_query = executed_queries[-1][0]
+            if "FROM public.memory_summaries" in last_query:
+                summary_id_one = UUID("11111111-1111-1111-1111-111111111111")
+                summary_id_two = UUID("22222222-2222-2222-2222-222222222222")
+                workspace_id_one = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+                workspace_id_two = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+                episode_id_one = UUID("33333333-3333-3333-3333-333333333333")
+                return [
+                    {
+                        "memory_summary_id": summary_id_one,
+                        "workspace_id": workspace_id_one,
+                        "episode_id": episode_id_one,
+                        "summary_kind": "episode_summary",
+                    },
+                    {
+                        "memory_summary_id": summary_id_two,
+                        "workspace_id": workspace_id_two,
+                        "episode_id": None,
+                        "summary_kind": "episode_summary",
+                    },
+                ]
+            return []
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def commit(self) -> None:
+            commit_calls.append("commit")
+
+    fake_psycopg = SimpleNamespace(
+        connect=lambda database_url: connect_calls.append(database_url) or FakeConnection()
+    )
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
+
+    exit_code = cli_module._refresh_age_summary_graph(
+        argparse.Namespace(
+            database_url="postgresql://explicit/db",
+            graph_name="ctxledger_summary_graph",
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to refresh AGE summary graph: summary graph refresh exploded" in captured.err
+    assert connect_calls == ["postgresql://explicit/db"]
+    assert commit_calls == []
+    assert executed_queries[0] == ("LOAD 'age'", None)
+    assert executed_queries[1] == ('SET search_path = ag_catalog, "$user", public', None)
+    assert executed_queries[2][1] == ("ctxledger_summary_graph",)
+    assert executed_queries[3][0] == "SELECT ag_catalog.create_graph('ctxledger_summary_graph')"
+    assert executed_queries[3][1] is None
+    assert "MATCH (n:memory_summary)-[r:summarizes]->()" in executed_queries[4][0]
+    assert "MATCH (n:memory_summary)" in executed_queries[5][0]
+    assert "FROM public.memory_summaries" in executed_queries[6][0]
+    assert "FROM public.memory_summary_memberships" in executed_queries[9][0]
+
+
+def test_refresh_age_summary_graph_reports_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class ExplodingCursor:
+        def __enter__(self) -> "ExplodingCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            raise RuntimeError("summary graph refresh exploded")
+
+    class ExplodingConnection:
+        def __enter__(self) -> "ExplodingConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> ExplodingCursor:
+            return ExplodingCursor()
+
+    fake_psycopg = SimpleNamespace(connect=lambda database_url: ExplodingConnection())
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
+
+    exit_code = cli_module._refresh_age_summary_graph(
+        argparse.Namespace(
+            database_url="postgresql://explicit/db",
+            graph_name="ctxledger_summary_graph",
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to refresh AGE summary graph: summary graph refresh exploded" in captured.err
 
 
 def test_main_dispatches_to_resume_workflow(monkeypatch: pytest.MonkeyPatch) -> None:

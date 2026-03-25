@@ -335,6 +335,7 @@ class WorkflowMemoryBridge:
             workflow=workflow,
             episode=episode,
             memory_item=memory_item,
+            latest_checkpoint=latest_checkpoint,
         )
         return WorkflowCompletionMemoryRecordResult(
             episode=episode,
@@ -709,20 +710,89 @@ class WorkflowMemoryBridge:
         workflow: WorkflowInstance,
         episode: EpisodeRecord,
         memory_item: MemoryItemRecord,
+        latest_checkpoint: WorkflowCheckpoint | None,
     ) -> dict[str, Any] | None:
         builder = self.summary_builder
         if builder is None:
             return None
 
+        if episode.episode_id is None:
+            return {
+                "summary_build_attempted": False,
+                "summary_build_succeeded": False,
+                "summary_build_status": None,
+                "summary_build_skipped_reason": "missing_episode_id",
+                "summary_build_replaced_existing_summary": False,
+                "built_memory_summary_id": None,
+                "built_summary_kind": "episode_summary",
+                "built_summary_membership_count": 0,
+            }
+
+        checkpoint_payload = (
+            latest_checkpoint.checkpoint_json
+            if latest_checkpoint is not None and isinstance(latest_checkpoint.checkpoint_json, dict)
+            else {}
+        )
+        if checkpoint_payload.get("build_episode_summary") is not True:
+            return {
+                "summary_build_attempted": False,
+                "summary_build_succeeded": False,
+                "summary_build_status": None,
+                "summary_build_skipped_reason": "workflow_summary_build_not_requested",
+                "summary_build_replaced_existing_summary": False,
+                "built_memory_summary_id": None,
+                "built_summary_kind": "episode_summary",
+                "built_summary_membership_count": 0,
+            }
+
+        try:
+            from ..memory.service import BuildEpisodeSummaryRequest
+
+            result = builder.build_episode_summary(
+                BuildEpisodeSummaryRequest(
+                    episode_id=str(episode.episode_id),
+                    summary_kind="episode_summary",
+                    replace_existing=True,
+                    metadata={
+                        "source": "workflow_completion_auto_memory",
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "auto_memory_episode_id": str(episode.episode_id),
+                    },
+                )
+            )
+        except Exception as exc:
+            return {
+                "summary_build_attempted": True,
+                "summary_build_succeeded": False,
+                "summary_build_status": None,
+                "summary_build_skipped_reason": "summary_build_failed",
+                "summary_build_replaced_existing_summary": False,
+                "built_memory_summary_id": None,
+                "built_summary_kind": "episode_summary",
+                "built_summary_membership_count": 0,
+                "summary_build_error_type": type(exc).__name__,
+                "summary_build_error_message": str(exc),
+            }
+
+        summary = getattr(result, "summary", None)
+        memberships = getattr(result, "memberships", ())
         return {
             "summary_build_attempted": True,
-            "summary_build_succeeded": False,
-            "summary_build_status": None,
-            "summary_build_skipped_reason": "workflow_scoped_builder_integration_deferred",
-            "summary_build_replaced_existing_summary": False,
-            "built_memory_summary_id": None,
-            "built_summary_kind": "episode_summary",
-            "built_summary_membership_count": 0,
+            "summary_build_succeeded": bool(getattr(result, "summary_built", False)),
+            "summary_build_status": getattr(result, "status", None),
+            "summary_build_skipped_reason": getattr(result, "skipped_reason", None),
+            "summary_build_replaced_existing_summary": getattr(
+                result,
+                "replaced_existing_summary",
+                False,
+            ),
+            "built_memory_summary_id": (
+                str(summary.memory_summary_id) if summary is not None else None
+            ),
+            "built_summary_kind": (
+                summary.summary_kind if summary is not None else "episode_summary"
+            ),
+            "built_summary_membership_count": len(memberships),
         }
 
     def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
