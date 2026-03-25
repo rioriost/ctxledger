@@ -1495,6 +1495,156 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_running_wor
     assert response.headers == {"content-type": "application/json"}
 
 
+def test_build_workspace_resume_resource_response_uow_branch_surfaces_resumability_explanations_for_latest_selected_candidate() -> (
+    None
+):
+    workspace_id = uuid4()
+    workflow_instance_id = uuid4()
+
+    class FakeUow:
+        def __init__(self) -> None:
+            latest_workflow = SimpleNamespace(
+                workflow_instance_id=workflow_instance_id,
+                status="running",
+                ticket_id="TASK-PRIMARY-RESUME-HTTP-1",
+                latest_attempt=SimpleNamespace(status="running"),
+            )
+            latest_checkpoint = SimpleNamespace(
+                summary="Resume primary workflow implementation",
+                step_name="implement_task_recall",
+                checkpoint_json={},
+            )
+            self.workspaces = SimpleNamespace(
+                get_by_id=lambda _workspace_id: SimpleNamespace(workspace_id=workspace_id)
+            )
+            self.workflow_instances = SimpleNamespace(
+                get_running_by_workspace_id=lambda _workspace_id: None,
+                get_latest_by_workspace_id=lambda _workspace_id: latest_workflow,
+                list_by_workspace_id=lambda _workspace_id, *, limit: (latest_workflow,),
+            )
+            self.workflow_checkpoints = SimpleNamespace(
+                get_latest_by_workflow_id=lambda _workflow_instance_id: latest_checkpoint,
+            )
+
+        def __enter__(self) -> "FakeUow":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    server = make_server()
+    server.workflow_service = SimpleNamespace(_uow_factory=lambda: FakeUow())
+    original_builder = build_workspace_resume_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ]
+
+    def fake_build_workflow_resume_response(_server: object, workflow_id: object) -> object:
+        assert workflow_id == workflow_instance_id
+        return SimpleNamespace(
+            status_code=200,
+            payload={"workflow_instance_id": str(workflow_instance_id)},
+            headers={"content-type": "application/json"},
+        )
+
+    build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
+        fake_build_workflow_resume_response
+    )
+    try:
+        response = build_workspace_resume_resource_response(server, workspace_id)
+    finally:
+        build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
+            original_builder
+        )
+
+    assert response.status_code == 200
+    assert response.payload == {
+        "uri": f"workspace://{workspace_id}/resume",
+        "resource": {
+            "workflow_instance_id": str(workflow_instance_id),
+        },
+        "selection": {
+            "strategy": "running_or_latest",
+            "candidate_count": 1,
+            "selected_workflow_instance_id": str(workflow_instance_id),
+            "running_workflow_instance_id": None,
+            "latest_workflow_instance_id": str(workflow_instance_id),
+            "selected_reason": "selected latest workflow because no running workflow was available",
+            "latest_deprioritized": False,
+            "signals": {
+                "running_workflow_available": False,
+                "latest_workflow_terminal": False,
+                "non_terminal_candidate_available": True,
+                "selected_equals_latest": True,
+                "selected_equals_running": False,
+                "latest_ticket_detour_like": False,
+                "latest_checkpoint_detour_like": False,
+                "selected_ticket_detour_like": False,
+                "selected_checkpoint_detour_like": False,
+                "detour_override_applied": False,
+                "ranking_details_present": True,
+                "explanations_present": True,
+            },
+            "explanations": [
+                {
+                    "code": "latest_attempt_present",
+                    "message": "candidate has a latest attempt signal that improves resumability confidence",
+                },
+                {
+                    "code": "latest_checkpoint_present",
+                    "message": "candidate has checkpoint history that improves resumability confidence",
+                },
+            ],
+            "ranking_details": [
+                {
+                    "workflow_instance_id": str(workflow_instance_id),
+                    "is_latest": True,
+                    "is_running": False,
+                    "workflow_terminal": False,
+                    "has_latest_attempt": True,
+                    "latest_attempt_terminal": False,
+                    "has_latest_checkpoint": True,
+                    "ticket_detour_like": False,
+                    "checkpoint_detour_like": False,
+                    "detour_like": False,
+                    "score": 45,
+                    "reason_list": [
+                        {
+                            "code": "workflow_non_terminal_bonus",
+                            "message": "non-terminal workflows are preferred for continuation",
+                            "impact": 25,
+                        },
+                        {
+                            "code": "latest_attempt_present_bonus",
+                            "message": "candidate has a latest attempt signal available",
+                            "impact": 5,
+                        },
+                        {
+                            "code": "latest_checkpoint_present_bonus",
+                            "message": "candidate has checkpoint history for resumability",
+                            "impact": 5,
+                        },
+                        {
+                            "code": "mainline_like_bonus",
+                            "message": "candidate looks aligned with the main task line",
+                            "impact": 10,
+                        },
+                        {
+                            "code": "latest_candidate",
+                            "message": "candidate is the latest workflow considered for resume",
+                        },
+                        {
+                            "code": "selected_candidate",
+                            "message": "candidate was selected after applying workspace resume heuristics",
+                        },
+                    ],
+                    "selected": True,
+                },
+            ],
+        },
+    }
+    assert response.headers == {"content-type": "application/json"}
+
+
 def test_build_workspace_resume_resource_response_uow_branch_prefers_non_terminal_candidate_over_latest_terminal() -> (
     None
 ):
