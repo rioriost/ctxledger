@@ -829,11 +829,12 @@ Operator runbooks:
 
 Planning docs:
 
-- `docs/project/releases/plans/observability_0_4_0_plan.md`
-- `docs/project/releases/plans/auth_planning_index.md`
-- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
-- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
-- `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
+- `docs/project/releases/plans/README.md`
+- `docs/project/releases/plans/versioned/observability_0_4_0_plan.md`
+- `docs/project/releases/plans/domains/auth/auth_planning_index.md`
+- `docs/project/releases/plans/domains/auth/auth_proxy_scaling_plan.md`
+- `docs/project/releases/plans/domains/auth/auth_large_gateway_evaluation_memo.md`
+- `docs/project/releases/plans/domains/auth/auth_large_gateway_shortlist_example.md`
 
 ---
 

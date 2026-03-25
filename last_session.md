@@ -2,88 +2,200 @@
 
 ## Summary
 
-This continuation completed a bounded stale-path cleanup sweep across the main
-release-planning documents after the broader docs reorganization work.
+This continuation completed the requested taxonomy reorganization for
+`docs/project/releases/plans/`.
 
-The main result is that the repository’s release-plan references now align much
-better with the reorganized documentation layout:
+The main result is that the release-planning area is now easier to navigate
+because it no longer mixes version-oriented plans and topic/domain planning sets
+in one flat directory.
 
-- project-wide reference docs live under:
-  - `docs/project/product/`
-- release/version planning artifacts live under:
-  - `docs/project/releases/`
-- operations-facing docs live under:
-  - `docs/operations/`
-- historical implementation-plan artifacts live under:
-  - `docs/project/history/`
+The new reading is:
 
-This continuation focused on documentation path hygiene and navigation
-consistency.
+- version-tied milestone/release plans live under:
+  - `docs/project/releases/plans/versioned/`
+- continuing topic/domain planning clusters live under:
+  - `docs/project/releases/plans/domains/`
+- the subtree now has an explicit navigation index at:
+  - `docs/project/releases/plans/README.md`
 
-It did **not** change runtime behavior, memory behavior, workflow behavior,
-deployment behavior, or release semantics.
+This continuation focused on documentation information architecture, path
+repair, and navigation clarity.
+
+It did **not** change release behavior, runtime behavior, memory behavior,
+workflow behavior, deployment behavior, or security behavior.
 
 ---
 
 ## What was completed
 
-### 1. Cleaned up stale paths in the auth planning cluster
+### 1. Added a release-plans taxonomy
 
-The following release-planning/auth-planning files were updated:
+The following new structure was introduced under
+`docs/project/releases/plans/`:
 
-- `docs/project/releases/plans/auth_planning_index.md`
-- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
-- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
-- `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
-- `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
+- `docs/project/releases/plans/versioned/`
+- `docs/project/releases/plans/domains/`
+- `docs/project/releases/plans/domains/auth/`
+- `docs/project/releases/plans/domains/mcp/`
 
-The main path corrections there were:
+The intent of this taxonomy is to separate:
 
-- old `docs/plans/...` references now point to:
-  - `docs/project/releases/plans/...`
-- old roadmap references now point to:
-  - `docs/project/product/roadmap.md`
-- old deployment/security/runbook references now point to:
-  - `docs/operations/deployment/deployment.md`
-  - `docs/operations/security/SECURITY.md`
-  - `docs/operations/runbooks/small_auth_operator_runbook.md`
-- old project-model references now point to:
-  - `docs/project/product/...`
+- **version semantics**
+  - plans whose main identity is a release or milestone line such as
+    `0.4.0`, `0.5.1`, `0.6.0`, or `0.7.0`
+- **domain semantics**
+  - planning clusters whose main identity is a continuing topic area such as
+    auth or MCP
 
-This means the auth planning set now better reflects the repository’s current
-docs structure instead of the earlier flat layout.
+This removes one of the remaining high-friction parts of the docs structure.
 
 ---
 
-### 2. Cleaned up stale paths in the main MCP planning cluster
+### 2. Moved version-oriented plans into `versioned/`
 
-The following MCP/release-planning files were updated:
+The following clearly version-tied plans were moved into:
 
-- `docs/project/releases/plans/mcp_planning_index.md`
-- `docs/project/releases/plans/mcp_pr_sequence_overview.md`
-- `docs/project/releases/plans/mcp_release_acceptance_checklist.md`
-- `docs/project/releases/plans/mcp_review_gate_checklist.md`
-- `docs/project/releases/plans/http_mcp_acceptance_remediation_plan.md`
-- `docs/project/releases/plans/mcp_2025_03_26_compliance_remediation_plan.md`
+- `docs/project/releases/plans/versioned/`
 
-The main path corrections there were:
+Representative moves include:
 
-- old `docs/specification.md` references now point to:
-  - `docs/project/product/specification.md`
-- old `docs/mcp-api.md`, `docs/architecture.md`, and similar product references
-  now point to:
-  - `docs/project/product/...`
-- old `docs/deployment.md` references now point to:
-  - `docs/operations/deployment/deployment.md`
-- old `docs/CHANGELOG.md` references now point to:
-  - `docs/project/releases/CHANGELOG.md`
-- old `docs/imple_plan_review_0.1.0.md` references now point to:
-  - `docs/project/history/imple_plan_review_0.1.0.md`
-- old MCP planning references under `docs/plans/...` now point to:
-  - `docs/project/releases/plans/...`
+- `observability_0_4_0_plan.md`
+- `refactoring_0_5_0_plan.md`
+- `connection_pooling_0_5_1_plan.md`
+- `workflow_resume_timeout_0_5_2_plan.md`
+- `test_suite_split_and_coverage_0_5_5_plan.md`
+- `hierarchical_memory_0_6_0_plan.md`
+- `task_recall_0_7_0_plan.md`
 
-This means the main MCP planning set now reads consistently against the new docs
-structure rather than implying the earlier flat top-level layout.
+This means a reader asking:
+
+- “What was planned for `0.5.1`?”
+- “Where is the `0.6.0` milestone plan?”
+
+can now browse directly by release line.
+
+---
+
+### 3. Moved auth planning docs into `domains/auth/`
+
+The following auth/deployment-boundary planning cluster was moved into:
+
+- `docs/project/releases/plans/domains/auth/`
+
+Moved files:
+
+- `auth_planning_index.md`
+- `auth_proxy_scaling_plan.md`
+- `auth_large_gateway_evaluation_memo.md`
+- `auth_large_gateway_decision_record_template.md`
+- `auth_large_gateway_shortlist_example.md`
+
+This groups together:
+
+- auth planning index material
+- current small-vs-large auth planning direction
+- large-pattern evaluation prep
+- gateway selection prep artifacts
+
+instead of leaving them intermingled with unrelated versioned and MCP planning
+documents.
+
+---
+
+### 4. Moved MCP planning docs into `domains/mcp/`
+
+The main MCP planning/remediation/review cluster was moved into:
+
+- `docs/project/releases/plans/domains/mcp/`
+
+Moved files include:
+
+- `mcp_planning_index.md`
+- `mcp_2025_03_26_compliance_remediation_plan.md`
+- `mcp_2025_03_26_conformance_audit.md`
+- `mcp_transport_rewrite_decision_memo.md`
+- `mcp_transport_rewrite_execution_plan.md`
+- `mcp_transport_cutover_checklist.md`
+- `mcp_module_split_proposal.md`
+- `mcp_pr_sequence_overview.md`
+- `mcp_first_patch_plan.md`
+- `mcp_second_patch_plan.md`
+- `mcp_third_patch_plan.md`
+- `mcp_review_gate_checklist.md`
+- `mcp_release_acceptance_checklist.md`
+- `http_mcp_acceptance_remediation_plan.md`
+
+This makes the MCP planning set readable as one continuing domain cluster rather
+than as a scattered set of files mixed into a flat release-plans directory.
+
+---
+
+### 5. Left uncategorized general plans at the root for now
+
+A small number of plans remain directly under:
+
+- `docs/project/releases/plans/`
+
+These are currently the files that do not yet fit as cleanly into the first-pass
+taxonomy or that should be reconsidered separately if deeper planning taxonomy
+work is done later.
+
+Representative remaining files include:
+
+- `automatic_multilayer_memory_plan.md`
+- `openai_default_embedding_integration_plan.md`
+- `http_fastapi_cleanup_plan.md`
+
+This was intentional.
+The goal of this continuation was to create a clearer taxonomy without forcing
+every file into a possibly misleading bucket.
+
+---
+
+### 6. Added a release-plans index
+
+A new index file was added:
+
+- `docs/project/releases/plans/README.md`
+
+This file now explains:
+
+- what belongs in `versioned/`
+- what belongs in `domains/`
+- how to choose whether to browse by version or by subject area
+- why the subtree is no longer flat
+- how new planning docs should be categorized going forward
+
+This should reduce future drift back toward a mixed list of files with no obvious
+organizing principle.
+
+---
+
+### 7. Repaired key references to the new taxonomy
+
+After the moves, key references were updated so the new release-plans taxonomy is
+navigable and self-consistent.
+
+Updated areas included:
+
+- `README.md`
+- `docs/CONTRIBUTING.md`
+- `docs/project/README.md`
+- `docs/operations/README.md`
+- `docs/operations/security/SECURITY.md`
+- the moved auth planning docs
+- the moved MCP planning docs
+
+The main categories of repair were:
+
+- old auth plan links now point to:
+  - `docs/project/releases/plans/domains/auth/...`
+- old MCP plan links now point to:
+  - `docs/project/releases/plans/domains/mcp/...`
+- old versioned milestone plan links now point to:
+  - `docs/project/releases/plans/versioned/...`
+- generic release-plans entry references now point to:
+  - `docs/project/releases/plans/README.md`
 
 ---
 
@@ -113,20 +225,19 @@ Result:
 
 ## Current repository reading after this continuation
 
-At handoff, the repository’s docs structure should now be read more consistently
-across:
+At handoff, the main documentation structure should now be read as:
 
-### Project-wide references
+### Project-wide repository references
 - `docs/project/product/...`
 
-### Release/version planning artifacts
+### Release/version artifacts
 - `docs/project/releases/...`
 
-### Operations-facing docs
-- `docs/operations/...`
-
-### Historical implementation-plan context
-- `docs/project/history/...`
+### Release-planning taxonomy
+- `docs/project/releases/plans/README.md`
+- `docs/project/releases/plans/versioned/...`
+- `docs/project/releases/plans/domains/auth/...`
+- `docs/project/releases/plans/domains/mcp/...`
 
 ### Memory-topic docs
 - `docs/memory/decisions/...`
@@ -134,44 +245,49 @@ across:
 - `docs/memory/runbooks/...`
 - `docs/memory/validation/...`
 
-The important improvement from this continuation is that the main release-plan
-entrypoints now reference those locations directly instead of continuing to point
-to pre-reorganization flat paths.
+### Operations-facing docs
+- `docs/operations/deployment/...`
+- `docs/operations/security/...`
+- `docs/operations/runbooks/...`
+
+The important improvement from this continuation is that
+`docs/project/releases/plans/` now has an explicit organizing principle instead
+of being a flat directory that mixed version semantics and domain semantics.
 
 ---
 
 ## What remains to watch
 
-The bounded stale-path sweep is complete for the main release-plan clusters, but
-a few follow-up concerns remain worth watching in future sessions:
+This taxonomy reorganization is complete for the current bounded scope, but a few
+follow-up concerns remain worth watching in future sessions:
 
-1. Less-active release plans may still contain some old paths and can be cleaned
-   incrementally if those files become active again.
-2. Some historical documents may still contain references written before the
-   current docs taxonomy existed.
-3. Additional docs cleanup should now be driven by actual discoverability or
-   stale-link evidence rather than by broad restructuring for its own sake.
+1. A few remaining root-level release plans may still deserve domain or
+   versioned categorization later if a clear home becomes obvious.
+2. Some less-active release documents may still contain stale references that can
+   be cleaned incrementally if those files become active again.
+3. Future plan additions should follow the new taxonomy so the subtree does not
+   drift back toward a flat mixed list.
 
 ---
 
 ## Recommended next step
 
 If another session continues from here, the most natural next step is **not**
-another broad docs reorganization unless a specific stale-link cluster is found.
+another broad release-plans restructuring unless a specific ambiguity remains.
 
 Instead, the likely sensible next options are:
 
-1. do small targeted stale-link repairs only when a specific docs cluster becomes
-   active
-2. return to feature or milestone planning work now that the major docs
-   structures and key release-plan references are aligned
-3. keep future docs additions aligned with the current taxonomy so new stale-path
-   drift stays small
+1. do small targeted stale-link repairs only when a specific remaining file
+   cluster becomes active
+2. decide whether the remaining uncategorized root-level plans should gain an
+   additional taxonomy bucket later
+3. return to feature or milestone planning work now that the documentation
+   structure is much clearer
 
 The important handoff point is:
 
-- the main release-plan stale-path clusters were cleaned
-- key auth and MCP planning docs now point at the reorganized docs layout
-- the repository remains green after the cleanup
-- future documentation maintenance can proceed incrementally from a much cleaner
-  base
+- `docs/project/releases/plans/` is no longer a flat mixed directory
+- version-tied plans and domain clusters are now separated
+- key entry-point links were repaired
+- the repository remains green after the reorganization
+- future release-plan additions can now follow a clearer taxonomy

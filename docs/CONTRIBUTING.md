@@ -63,22 +63,22 @@ Read these first when you are new to the repo:
 ### MCP transport or protocol work
 If your change affects MCP behavior, HTTP transport, or protocol claims, also read:
 
-- `docs/project/releases/plans/mcp_planning_index.md`
+- `docs/project/releases/plans/domains/mcp/mcp_planning_index.md`
 
 Then follow the linked planning documents from there.
 
 ### Auth, proxy, or deployment-boundary work
 If your change affects authentication, reverse proxy behavior, protected routes, or deployment guidance, read:
 
-- `docs/project/releases/plans/auth_planning_index.md`
+- `docs/project/releases/plans/domains/auth/auth_planning_index.md`
 - `docs/operations/runbooks/small_auth_operator_runbook.md`
-- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
-- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
-- `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
+- `docs/project/releases/plans/domains/auth/auth_proxy_scaling_plan.md`
+- `docs/project/releases/plans/domains/auth/auth_large_gateway_evaluation_memo.md`
+- `docs/project/releases/plans/domains/auth/auth_large_gateway_shortlist_example.md`
 
 If you are preparing a future large-pattern gateway selection record, also review:
 
-- `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
+- `docs/project/releases/plans/domains/auth/auth_large_gateway_decision_record_template.md`
 
 ### Why these auth docs matter
 The current documented posture is:
@@ -313,15 +313,15 @@ Use this quick map when contributing around auth or deployment topics.
 
 ### Small pattern, implemented
 - `docs/operations/runbooks/small_auth_operator_runbook.md`
-- `docs/project/releases/plans/auth_proxy_scaling_plan.md`
+- `docs/project/releases/plans/domains/auth/auth_proxy_scaling_plan.md`
 - `README.md`
 - `docs/operations/deployment/deployment.md`
 - `docs/operations/security/SECURITY.md`
 
 ### Large pattern, design-prep only
-- `docs/project/releases/plans/auth_large_gateway_evaluation_memo.md`
-- `docs/project/releases/plans/auth_large_gateway_shortlist_example.md`
-- `docs/project/releases/plans/auth_large_gateway_decision_record_template.md`
+- `docs/project/releases/plans/domains/auth/auth_large_gateway_evaluation_memo.md`
+- `docs/project/releases/plans/domains/auth/auth_large_gateway_shortlist_example.md`
+- `docs/project/releases/plans/domains/auth/auth_large_gateway_decision_record_template.md`
 
 ### Current expectations
 - small pattern is implemented and validated

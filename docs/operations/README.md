@@ -154,7 +154,7 @@ Common companion references include:
 - `docs/project/product/architecture.md`
 - `docs/project/product/specification.md`
 - `docs/project/product/roadmap.md`
-- `docs/project/releases/plans/auth_planning_index.md`
+- `docs/project/releases/plans/domains/auth/auth_planning_index.md`
 
 Use the operations docs for the operational reading.
 Use the project/release docs for broader architectural or milestone context.

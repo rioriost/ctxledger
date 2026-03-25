@@ -13,15 +13,15 @@ This overview is a coordination artifact for implementation sequencing, review s
 It is downstream of:
 
 - `docs/project/product/specification.md`
-- `docs/project/releases/plans/mcp_2025_03_26_compliance_remediation_plan.md`
-- `docs/project/releases/plans/mcp_2025_03_26_conformance_audit.md`
-- `docs/project/releases/plans/mcp_transport_rewrite_decision_memo.md`
-- `docs/project/releases/plans/mcp_transport_rewrite_execution_plan.md`
-- `docs/project/releases/plans/mcp_transport_cutover_checklist.md`
-- `docs/project/releases/plans/mcp_module_split_proposal.md`
-- `docs/project/releases/plans/mcp_first_patch_plan.md`
-- `docs/project/releases/plans/mcp_second_patch_plan.md`
-- `docs/project/releases/plans/mcp_third_patch_plan.md`
+- `docs/project/releases/plans/domains/mcp/mcp_2025_03_26_compliance_remediation_plan.md`
+- `docs/project/releases/plans/domains/mcp/mcp_2025_03_26_conformance_audit.md`
+- `docs/project/releases/plans/domains/mcp/mcp_transport_rewrite_decision_memo.md`
+- `docs/project/releases/plans/domains/mcp/mcp_transport_rewrite_execution_plan.md`
+- `docs/project/releases/plans/domains/mcp/mcp_transport_cutover_checklist.md`
+- `docs/project/releases/plans/domains/mcp/mcp_module_split_proposal.md`
+- `docs/project/releases/plans/domains/mcp/mcp_first_patch_plan.md`
+- `docs/project/releases/plans/domains/mcp/mcp_second_patch_plan.md`
+- `docs/project/releases/plans/domains/mcp/mcp_third_patch_plan.md`
 
 ---
 

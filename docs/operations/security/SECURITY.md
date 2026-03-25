@@ -14,7 +14,7 @@ This document describes the current security posture of `ctxledger` in `v0.1.0`,
 `ctxledger` is still in an early implementation phase.  
 The goal of this document is to make the present security boundary explicit, not to claim a fully mature security model.
 
-This document should be read together with the phased auth strategy in `docs/project/releases/plans/auth_proxy_scaling_plan.md`, especially when comparing the current proxy-first small pattern with the deferred large-pattern direction.
+This document should be read together with the phased auth strategy in `docs/project/releases/plans/domains/auth/auth_proxy_scaling_plan.md`, especially when comparing the current proxy-first small pattern with the deferred large-pattern direction.
 
 For current deployment guidance, use:
 

@@ -48,6 +48,18 @@ Current files include:
 - `releases/v0.1.0_acceptance_evidence.md`
 - `releases/plans/...`
 
+The `releases/plans/` subtree is itself organized so that **version semantics**
+and **topic/domain semantics** are easier to distinguish:
+
+- `releases/plans/versioned/`
+  - for plans whose main identity is a release or milestone line such as
+    `0.4.0`, `0.5.1`, `0.6.0`, or `0.7.0`
+- `releases/plans/domains/`
+  - for topic clusters with multiple related planning artifacts, such as auth or
+    MCP
+- `releases/plans/README.md`
+  - for the entry-point explanation of that taxonomy
+
 ### `history/`
 
 Use this directory for **older implementation plans and historical artifacts**
@@ -86,7 +98,9 @@ Start with:
 Start with:
 
 - `releases/CHANGELOG.md`
-- `releases/plans/`
+- `releases/plans/README.md`
+- `releases/plans/versioned/`
+- `releases/plans/domains/`
 - `releases/v0.1.0_acceptance_evidence.md`
 
 ### If you want historical planning context
@@ -127,6 +141,12 @@ When adding or moving files:
 - put current canonical repository/product references in `product/`
 - put versioned planning and release artifacts in `releases/`
 - put older/superseded implementation material in `history/`
+
+Within `releases/plans/`:
+
+- put milestone/release-line plans in `releases/plans/versioned/`
+- put topic-cluster planning sets in `releases/plans/domains/`
+- keep `releases/plans/README.md` as the navigation entry point for that subtree
 
 Avoid mixing current-state reference docs with historical planning notes in the
 same location when a clearer category exists.
