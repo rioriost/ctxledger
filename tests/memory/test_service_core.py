@@ -269,20 +269,99 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
     assert "content" in search_response.results[0].matched_fields
     assert search_response.results[0].lexical_score > 0.0
     assert search_response.results[0].semantic_score == 0.0
-    assert search_response.results[0].ranking_details == {
-        "lexical_component": search_response.results[0].lexical_score,
-        "semantic_component": 0.0,
-        "score_mode": "lexical_only",
-        "semantic_only_discount_applied": False,
-    }
+    assert search_response.results[0].ranking_details["lexical_component"] == (
+        search_response.results[0].lexical_score
+    )
+    assert search_response.results[0].ranking_details["semantic_component"] == 0.0
+    assert search_response.results[0].ranking_details["score_mode"] == "lexical_only"
+    assert search_response.results[0].ranking_details["semantic_only_discount_applied"] is False
+    assert search_response.results[0].ranking_details["reason_list"] == [
+        {
+            "code": "lexical_signal_present",
+            "message": "lexical overlap contributed to the ranking score",
+            "value": search_response.results[0].lexical_score,
+        },
+        {
+            "code": "semantic_signal_absent",
+            "message": "no semantic similarity contributed to the ranking score",
+            "value": 0.0,
+        },
+        {
+            "code": "lexical_only_score_mode",
+            "message": "the result ranked using lexical evidence only",
+        },
+    ]
+    assert search_response.results[0].ranking_details["task_recall_detail"]["matched_fields"] == [
+        "content"
+    ]
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_type"]
+        == "episode_note"
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        == "episode"
+    )
+    assert (
+        "root-cause"
+        in search_response.results[0].ranking_details["task_recall_detail"][
+            "metadata_match_candidates"
+        ]
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["workspace_constrained"]
+        is True
+    )
     assert search_response.results[0].score > search_response.results[1].score
     assert search_response.results[1].lexical_score == 0.0
-    assert search_response.results[1].ranking_details == {
-        "lexical_component": 0.0,
-        "semantic_component": search_response.results[1].semantic_score,
-        "score_mode": "semantic_only_discounted",
-        "semantic_only_discount_applied": True,
-    }
+    assert search_response.results[1].ranking_details["lexical_component"] == 0.0
+    assert search_response.results[1].ranking_details["semantic_component"] == (
+        search_response.results[1].semantic_score
+    )
+    assert search_response.results[1].ranking_details["score_mode"] == ("semantic_only_discounted")
+    assert search_response.results[1].ranking_details["semantic_only_discount_applied"] is True
+    assert search_response.results[1].ranking_details["reason_list"] == [
+        {
+            "code": "lexical_signal_absent",
+            "message": "no lexical overlap contributed to the ranking score",
+            "value": 0.0,
+        },
+        {
+            "code": "semantic_signal_present",
+            "message": "semantic similarity contributed to the ranking score",
+            "value": search_response.results[1].semantic_score,
+        },
+        {
+            "code": "semantic_only_discounted_score_mode",
+            "message": "semantic-only evidence was discounted to avoid outranking lexical matches too aggressively",
+        },
+        {
+            "code": "semantic_only_discount_applied",
+            "message": "semantic-only scoring discount was applied",
+            "value": 0.75,
+        },
+    ]
+    assert search_response.results[1].ranking_details["task_recall_detail"]["matched_fields"] == [
+        "embedding_similarity"
+    ]
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_type"]
+        == "episode_note"
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        == "episode"
+    )
+    assert (
+        "background"
+        in search_response.results[1].ranking_details["task_recall_detail"][
+            "metadata_match_candidates"
+        ]
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"]["workspace_constrained"]
+        is True
+    )
     assert search_response.results[1].semantic_score == 1.0
 
 
@@ -1307,18 +1386,102 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
     }
     assert search_response.results[0].semantic_score == pytest.approx(1.0)
     assert search_response.results[1].semantic_score == pytest.approx(0.390625)
-    assert search_response.results[0].ranking_details == {
-        "lexical_component": 0.0,
-        "semantic_component": search_response.results[0].semantic_score,
-        "score_mode": "semantic_only_discounted",
-        "semantic_only_discount_applied": True,
-    }
-    assert search_response.results[1].ranking_details == {
-        "lexical_component": 0.0,
-        "semantic_component": search_response.results[1].semantic_score,
-        "score_mode": "semantic_only_discounted",
-        "semantic_only_discount_applied": True,
-    }
+    assert search_response.results[0].ranking_details["lexical_component"] == 0.0
+    assert search_response.results[0].ranking_details["semantic_component"] == (
+        search_response.results[0].semantic_score
+    )
+    assert search_response.results[0].ranking_details["score_mode"] == ("semantic_only_discounted")
+    assert search_response.results[0].ranking_details["semantic_only_discount_applied"] is True
+    assert search_response.results[0].ranking_details["reason_list"] == [
+        {
+            "code": "lexical_signal_absent",
+            "message": "no lexical overlap contributed to the ranking score",
+            "value": 0.0,
+        },
+        {
+            "code": "semantic_signal_present",
+            "message": "semantic similarity contributed to the ranking score",
+            "value": search_response.results[0].semantic_score,
+        },
+        {
+            "code": "semantic_only_discounted_score_mode",
+            "message": "semantic-only evidence was discounted to avoid outranking lexical matches too aggressively",
+        },
+        {
+            "code": "semantic_only_discount_applied",
+            "message": "semantic-only scoring discount was applied",
+            "value": 0.75,
+        },
+    ]
+    assert search_response.results[0].ranking_details["task_recall_detail"]["matched_fields"] == [
+        "embedding_similarity"
+    ]
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_type"]
+        == "episode_note"
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        == "episode"
+    )
+    assert (
+        "semantic"
+        in search_response.results[0].ranking_details["task_recall_detail"][
+            "metadata_match_candidates"
+        ]
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["workspace_constrained"]
+        is True
+    )
+    assert search_response.results[1].ranking_details["lexical_component"] == 0.0
+    assert search_response.results[1].ranking_details["semantic_component"] == (
+        search_response.results[1].semantic_score
+    )
+    assert search_response.results[1].ranking_details["score_mode"] == ("semantic_only_discounted")
+    assert search_response.results[1].ranking_details["semantic_only_discount_applied"] is True
+    assert search_response.results[1].ranking_details["reason_list"] == [
+        {
+            "code": "lexical_signal_absent",
+            "message": "no lexical overlap contributed to the ranking score",
+            "value": 0.0,
+        },
+        {
+            "code": "semantic_signal_present",
+            "message": "semantic similarity contributed to the ranking score",
+            "value": search_response.results[1].semantic_score,
+        },
+        {
+            "code": "semantic_only_discounted_score_mode",
+            "message": "semantic-only evidence was discounted to avoid outranking lexical matches too aggressively",
+        },
+        {
+            "code": "semantic_only_discount_applied",
+            "message": "semantic-only scoring discount was applied",
+            "value": 0.75,
+        },
+    ]
+    assert search_response.results[1].ranking_details["task_recall_detail"]["matched_fields"] == [
+        "embedding_similarity"
+    ]
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_type"]
+        == "episode_note"
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        == "episode"
+    )
+    assert (
+        "semantic"
+        in search_response.results[1].ranking_details["task_recall_detail"][
+            "metadata_match_candidates"
+        ]
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"]["workspace_constrained"]
+        is True
+    )
     assert search_response.results[0].score == pytest.approx(0.75)
     assert search_response.results[1].score == pytest.approx(0.29296875)
 

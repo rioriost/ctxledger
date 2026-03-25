@@ -3123,6 +3123,56 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
             "relation": 0,
         },
     }
+    assert response.details["task_recall_selection_present"] is True
+    assert response.details["task_recall_selected_workflow_instance_id"] == str(workflow_id)
+    assert response.details["task_recall_latest_workflow_instance_id"] is None
+    assert response.details["task_recall_running_workflow_instance_id"] is None
+    assert response.details["task_recall_selected_equals_latest"] is False
+    assert response.details["task_recall_selected_equals_running"] is False
+    assert response.details["task_recall_latest_workflow_terminal"] is False
+    assert response.details["task_recall_latest_ticket_detour_like"] is False
+    assert response.details["task_recall_latest_checkpoint_detour_like"] is False
+    assert response.details["task_recall_selected_ticket_detour_like"] is False
+    assert response.details["task_recall_selected_checkpoint_detour_like"] is False
+    assert response.details["task_recall_detour_override_applied"] is False
+    assert response.details["task_recall_explanations_present"] is True
+    assert response.details["task_recall_explanations"] == [
+        {
+            "code": "latest_candidate_retained",
+            "message": "latest workflow candidate remained the best continuation point",
+        }
+    ]
+    assert response.details["task_recall_ranking_details_present"] is True
+    assert response.details["task_recall_ranking_details"] == [
+        {
+            "workflow_instance_id": str(workflow_id),
+            "resolver_order": 0,
+            "selected": True,
+            "is_latest": False,
+            "workflow_terminal": False,
+            "has_latest_attempt": False,
+            "latest_attempt_terminal": False,
+            "has_latest_checkpoint": False,
+            "score": 30,
+            "reason_list": [
+                {
+                    "code": "workflow_non_terminal_bonus",
+                    "message": "non-terminal workflows are preferred for continuation",
+                    "impact": 25,
+                },
+                {
+                    "code": "mainline_like_bonus",
+                    "message": "candidate looks aligned with the main task line",
+                    "impact": 5,
+                },
+                {
+                    "code": "selected_candidate",
+                    "message": "candidate was selected after applying task recall heuristics",
+                },
+            ],
+        }
+    ]
+    assert response.details["task_recall_selected_workflow_terminal"] is False
     assert response.details["retrieval_route_scopes_present"] == {
         "summary_first": [
             "summary",

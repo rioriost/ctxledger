@@ -560,14 +560,90 @@ class MemoryService:
             score_mode = "hybrid"
 
             hybrid_score = lexical_component + semantic_component
+            semantic_only_discount_applied = False
             if lexical_score <= 0 and semantic_score > 0:
                 hybrid_score = semantic_component * semantic_only_discount
                 score_mode = "semantic_only_discounted"
+                semantic_only_discount_applied = True
             elif lexical_score > 0 and semantic_score <= 0:
                 score_mode = "lexical_only"
 
             if hybrid_score <= 0:
                 continue
+
+            ranking_reasons: list[dict[str, Any]] = []
+            if lexical_score > 0:
+                ranking_reasons.append(
+                    {
+                        "code": "lexical_signal_present",
+                        "message": "lexical overlap contributed to the ranking score",
+                        "value": lexical_score,
+                    }
+                )
+            else:
+                ranking_reasons.append(
+                    {
+                        "code": "lexical_signal_absent",
+                        "message": "no lexical overlap contributed to the ranking score",
+                        "value": lexical_score,
+                    }
+                )
+
+            if semantic_score > 0:
+                ranking_reasons.append(
+                    {
+                        "code": "semantic_signal_present",
+                        "message": "semantic similarity contributed to the ranking score",
+                        "value": semantic_score,
+                    }
+                )
+            else:
+                ranking_reasons.append(
+                    {
+                        "code": "semantic_signal_absent",
+                        "message": "no semantic similarity contributed to the ranking score",
+                        "value": semantic_score,
+                    }
+                )
+
+            if score_mode == "hybrid":
+                ranking_reasons.append(
+                    {
+                        "code": "hybrid_score_mode",
+                        "message": "both lexical and semantic components were combined",
+                    }
+                )
+            elif score_mode == "lexical_only":
+                ranking_reasons.append(
+                    {
+                        "code": "lexical_only_score_mode",
+                        "message": "the result ranked using lexical evidence only",
+                    }
+                )
+            else:
+                ranking_reasons.append(
+                    {
+                        "code": "semantic_only_discounted_score_mode",
+                        "message": "semantic-only evidence was discounted to avoid outranking lexical matches too aggressively",
+                    }
+                )
+
+            if semantic_only_discount_applied:
+                ranking_reasons.append(
+                    {
+                        "code": "semantic_only_discount_applied",
+                        "message": "semantic-only scoring discount was applied",
+                        "value": semantic_only_discount,
+                    }
+                )
+
+            task_recall_detail = {
+                "matched_fields": list(combined_fields),
+                "memory_item_type": memory_item.type,
+                "memory_item_provenance": memory_item.provenance,
+                "metadata_match_candidates": list(metadata_query_strings(memory_item.metadata)),
+                "workspace_constrained": workspace_id is not None,
+            }
 
             scored_results.append(
                 SearchResultRecord(
@@ -586,9 +662,9 @@ class MemoryService:
                         "lexical_component": lexical_component,
                         "semantic_component": semantic_component,
                         "score_mode": score_mode,
-                        "semantic_only_discount_applied": (
-                            lexical_score <= 0 and semantic_score > 0
-                        ),
+                        "semantic_only_discount_applied": semantic_only_discount_applied,
+                        "reason_list": ranking_reasons,
+                        "task_recall_detail": task_recall_detail,
                     },
                     created_at=memory_item.created_at,
                     updated_at=memory_item.updated_at,
@@ -789,6 +865,214 @@ class MemoryService:
                     limit=request.limit,
                 )
 
+        selected_task_recall_workflow_id = (
+            str(resolved_workflow_ids[0]) if resolved_workflow_ids else None
+        )
+        latest_task_recall_workflow_id = (
+            str(resolver_ordered_workflow_ids[0]) if resolver_ordered_workflow_ids else None
+        )
+        task_recall_selected_equals_latest = (
+            selected_task_recall_workflow_id is not None
+            and selected_task_recall_workflow_id == latest_task_recall_workflow_id
+        )
+        latest_task_recall_signals = (
+            ordering_signals.get(latest_task_recall_workflow_id, {})
+            if latest_task_recall_workflow_id is not None
+            else {}
+        )
+        selected_task_recall_signals = (
+            ordering_signals.get(selected_task_recall_workflow_id, {})
+            if selected_task_recall_workflow_id is not None
+            else {}
+        )
+        task_recall_latest_workflow_terminal = bool(
+            latest_task_recall_signals.get("workflow_is_terminal", False)
+        )
+        task_recall_selected_workflow_terminal = bool(
+            selected_task_recall_signals.get("workflow_is_terminal", False)
+        )
+        task_recall_selected_over_latest = (
+            selected_task_recall_workflow_id is not None
+            and latest_task_recall_workflow_id is not None
+            and selected_task_recall_workflow_id != latest_task_recall_workflow_id
+        )
+
+        def _task_recall_detour_like(signal_map: dict[str, Any]) -> bool:
+            candidate_values = (
+                signal_map.get("ticket_id"),
+                signal_map.get("latest_checkpoint_step_name"),
+                signal_map.get("latest_checkpoint_summary"),
+            )
+            detour_tokens = ("coverage", "docs", "cleanup", "diagnostic", "detour")
+            normalized_values = " ".join(
+                str(value).lower() for value in candidate_values if value is not None
+            )
+            return any(token in normalized_values for token in detour_tokens)
+
+        task_recall_latest_ticket_detour_like = _task_recall_detour_like(latest_task_recall_signals)
+        task_recall_selected_ticket_detour_like = _task_recall_detour_like(
+            selected_task_recall_signals
+        )
+        task_recall_detour_override_applied = (
+            task_recall_selected_over_latest
+            and task_recall_latest_ticket_detour_like
+            and not task_recall_selected_ticket_detour_like
+        )
+
+        task_recall_explanations: list[dict[str, str]] = []
+        if task_recall_selected_over_latest and task_recall_latest_workflow_terminal:
+            task_recall_explanations.extend(
+                [
+                    {
+                        "code": "latest_workflow_terminal",
+                        "message": "latest workflow candidate was terminal",
+                    },
+                    {
+                        "code": "selected_alternative_candidate",
+                        "message": "selected an alternative workflow candidate for continuation",
+                    },
+                ]
+            )
+        if task_recall_detour_override_applied:
+            task_recall_explanations.extend(
+                [
+                    {
+                        "code": "latest_candidate_detour_like",
+                        "message": "latest workflow candidate looked like a detour rather than the primary task line",
+                    },
+                    {
+                        "code": "selected_mainline_candidate",
+                        "message": "selected a less detour-like candidate to better continue the main task",
+                    },
+                ]
+            )
+        if (
+            selected_task_recall_workflow_id is not None
+            and not task_recall_explanations
+            and (task_recall_selected_equals_latest or len(resolved_workflow_ids) == 1)
+        ):
+            task_recall_explanations.append(
+                {
+                    "code": "latest_candidate_retained",
+                    "message": "latest workflow candidate remained the best continuation point",
+                }
+            )
+
+        task_recall_ranking_details = []
+        for index, workflow_id in enumerate(
+            [str(workflow_id) for workflow_id in resolved_workflow_ids]
+        ):
+            signal_map = ordering_signals.get(workflow_id, {})
+            workflow_terminal = bool(signal_map.get("workflow_is_terminal", False))
+            has_latest_attempt = bool(signal_map.get("has_latest_attempt", False))
+            latest_attempt_terminal = bool(signal_map.get("latest_attempt_is_terminal", False))
+            has_latest_checkpoint = bool(signal_map.get("has_latest_checkpoint", False))
+            is_latest = workflow_id == latest_task_recall_workflow_id
+            selected = workflow_id == selected_task_recall_workflow_id
+            detour_like = _task_recall_detour_like(signal_map)
+
+            score = 0
+            reason_list: list[dict[str, Any]] = []
+
+            if is_latest:
+                reason_list.append(
+                    {
+                        "code": "latest_candidate",
+                        "message": "candidate is the freshest workflow in resolver order",
+                    }
+                )
+
+            if workflow_terminal:
+                score -= 25
+                reason_list.append(
+                    {
+                        "code": "workflow_terminal_penalty",
+                        "message": "terminal workflows are less suitable for continuation",
+                        "impact": -25,
+                    }
+                )
+            else:
+                score += 25
+                reason_list.append(
+                    {
+                        "code": "workflow_non_terminal_bonus",
+                        "message": "non-terminal workflows are preferred for continuation",
+                        "impact": 25,
+                    }
+                )
+
+            if has_latest_attempt:
+                score += 5
+                reason_list.append(
+                    {
+                        "code": "latest_attempt_present_bonus",
+                        "message": "candidate has a latest attempt signal available",
+                        "impact": 5,
+                    }
+                )
+
+            if latest_attempt_terminal:
+                score -= 5
+                reason_list.append(
+                    {
+                        "code": "latest_attempt_terminal_penalty",
+                        "message": "latest attempt is terminal, reducing continuation confidence",
+                        "impact": -5,
+                    }
+                )
+
+            if has_latest_checkpoint:
+                score += 5
+                reason_list.append(
+                    {
+                        "code": "latest_checkpoint_present_bonus",
+                        "message": "candidate has checkpoint history for resumability",
+                        "impact": 5,
+                    }
+                )
+
+            if detour_like:
+                score -= 10
+                reason_list.append(
+                    {
+                        "code": "detour_like_penalty",
+                        "message": "candidate looks detour-like based on task-recall signals",
+                        "impact": -10,
+                    }
+                )
+            else:
+                score += 5
+                reason_list.append(
+                    {
+                        "code": "mainline_like_bonus",
+                        "message": "candidate looks aligned with the main task line",
+                        "impact": 5,
+                    }
+                )
+
+            if selected:
+                reason_list.append(
+                    {
+                        "code": "selected_candidate",
+                        "message": "candidate was selected after applying task recall heuristics",
+                    }
+                )
+
+            task_recall_ranking_details.append(
+                {
+                    "workflow_instance_id": workflow_id,
+                    "resolver_order": index,
+                    "selected": selected,
+                    "is_latest": is_latest,
+                    "workflow_terminal": workflow_terminal,
+                    "has_latest_attempt": has_latest_attempt,
+                    "latest_attempt_terminal": latest_attempt_terminal,
+                    "has_latest_checkpoint": has_latest_checkpoint,
+                    "score": score,
+                    "reason_list": reason_list,
+                }
+            )
+
         details = {
             "query": request.query,
             "normalized_query": normalized_query,
@@ -834,6 +1118,23 @@ class MemoryService:
             },
             "resolved_workflow_count": len(resolved_workflow_ids),
             "resolved_workflow_ids": [str(workflow_id) for workflow_id in resolved_workflow_ids],
+            "task_recall_selection_present": selected_task_recall_workflow_id is not None,
+            "task_recall_selected_workflow_instance_id": selected_task_recall_workflow_id,
+            "task_recall_latest_workflow_instance_id": latest_task_recall_workflow_id,
+            "task_recall_running_workflow_instance_id": None,
+            "task_recall_selected_equals_latest": task_recall_selected_equals_latest,
+            "task_recall_selected_equals_running": False,
+            "task_recall_latest_workflow_terminal": task_recall_latest_workflow_terminal,
+            "task_recall_latest_ticket_detour_like": task_recall_latest_ticket_detour_like,
+            "task_recall_latest_checkpoint_detour_like": task_recall_latest_ticket_detour_like,
+            "task_recall_selected_ticket_detour_like": task_recall_selected_ticket_detour_like,
+            "task_recall_selected_checkpoint_detour_like": task_recall_selected_ticket_detour_like,
+            "task_recall_detour_override_applied": task_recall_detour_override_applied,
+            "task_recall_explanations_present": bool(task_recall_explanations),
+            "task_recall_explanations": task_recall_explanations,
+            "task_recall_ranking_details_present": bool(task_recall_ranking_details),
+            "task_recall_ranking_details": task_recall_ranking_details,
+            "task_recall_selected_workflow_terminal": task_recall_selected_workflow_terminal,
         }
 
         if not request.include_episodes:
