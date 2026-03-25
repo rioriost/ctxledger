@@ -63,6 +63,7 @@ class MemoryEmbeddingRecord:
 class WorkflowCompletionMemoryRecordResult:
     episode: EpisodeRecord | None = None
     memory_item: MemoryItemRecord | None = None
+    summary_build: dict[str, Any] | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
 
@@ -144,16 +145,14 @@ class WorkflowMemoryBridge:
     episode_repository: EpisodeRepository
     memory_item_repository: MemoryItemRepository
     memory_embedding_repository: MemoryEmbeddingRepository | None = None
+    summary_builder: Any | None = None
     embedding_generator: EmbeddingGenerator | None = None
 
     def __post_init__(self) -> None:
         if self.embedding_generator is None:
             try:
                 settings = get_settings().embedding
-                if (
-                    settings.enabled
-                    and settings.provider is not EmbeddingProvider.LOCAL_STUB
-                ):
+                if settings.enabled and settings.provider is not EmbeddingProvider.LOCAL_STUB:
                     self.embedding_generator = build_embedding_generator(settings)
                 else:
                     self.embedding_generator = None
@@ -175,9 +174,7 @@ class WorkflowMemoryBridge:
             extra={
                 "workflow_instance_id": str(workflow.workflow_instance_id),
                 "attempt_id": str(attempt.attempt_id),
-                "workflow_status": str(
-                    getattr(workflow.status, "value", workflow.status)
-                ),
+                "workflow_status": str(getattr(workflow.status, "value", workflow.status)),
                 "attempt_status": str(getattr(attempt.status, "value", attempt.status)),
                 "has_latest_checkpoint": latest_checkpoint is not None,
                 "has_completion_summary": self._normalize_text(summary) is not None,
@@ -334,12 +331,19 @@ class WorkflowMemoryBridge:
                 "embedding_details": details,
             },
         )
+        summary_build = self._maybe_build_completion_summary(
+            workflow=workflow,
+            episode=episode,
+            memory_item=memory_item,
+        )
         return WorkflowCompletionMemoryRecordResult(
             episode=episode,
             memory_item=memory_item,
+            summary_build=summary_build,
             details={
                 "auto_memory_recorded": True,
                 **details,
+                **({"summary_build": summary_build} if summary_build is not None else {}),
             },
         )
 
@@ -377,8 +381,7 @@ class WorkflowMemoryBridge:
             "open_question",
         )
         has_signal = any(
-            isinstance(checkpoint_payload.get(key), str)
-            and checkpoint_payload.get(key, "").strip()
+            isinstance(checkpoint_payload.get(key), str) and checkpoint_payload.get(key, "").strip()
             for key in heuristic_signals
         )
         if has_signal:
@@ -420,8 +423,7 @@ class WorkflowMemoryBridge:
             if not (
                 isinstance(prior_step_name, str)
                 and prior_step_name.strip() == step_name
-                and prior_episode.metadata.get("memory_origin")
-                == "workflow_complete_auto"
+                and prior_episode.metadata.get("memory_origin") == "workflow_complete_auto"
             ):
                 continue
 
@@ -461,9 +463,7 @@ class WorkflowMemoryBridge:
         if not hasattr(self.episode_repository, "list_by_workflow_id"):
             return ()
 
-        list_by_workflow_id = getattr(
-            self.episode_repository, "list_by_workflow_id", None
-        )
+        list_by_workflow_id = getattr(self.episode_repository, "list_by_workflow_id", None)
         if not callable(list_by_workflow_id):
             return ()
 
@@ -503,9 +503,7 @@ class WorkflowMemoryBridge:
         meaningful_left_tokens = left_tokens - _SUMMARY_SIMILARITY_IGNORED_TOKENS
         meaningful_right_tokens = right_tokens - _SUMMARY_SIMILARITY_IGNORED_TOKENS
 
-        comparison_left_tokens = (
-            meaningful_left_tokens if meaningful_left_tokens else left_tokens
-        )
+        comparison_left_tokens = meaningful_left_tokens if meaningful_left_tokens else left_tokens
         comparison_right_tokens = (
             meaningful_right_tokens if meaningful_right_tokens else right_tokens
         )
@@ -557,15 +555,11 @@ class WorkflowMemoryBridge:
         prior_fields: dict[str, str],
     ) -> bool:
         return (
-            current_fields.get("next_intended_action")
-            == prior_fields.get("next_intended_action")
+            current_fields.get("next_intended_action") == prior_fields.get("next_intended_action")
             and current_fields.get("verify_status") == prior_fields.get("verify_status")
-            and current_fields.get("workflow_status")
-            == prior_fields.get("workflow_status")
-            and current_fields.get("attempt_status")
-            == prior_fields.get("attempt_status")
-            and current_fields.get("failure_reason")
-            == prior_fields.get("failure_reason")
+            and current_fields.get("workflow_status") == prior_fields.get("workflow_status")
+            and current_fields.get("attempt_status") == prior_fields.get("attempt_status")
+            and current_fields.get("failure_reason") == prior_fields.get("failure_reason")
         )
 
     def _weighted_closeout_similarity(
@@ -652,9 +646,7 @@ class WorkflowMemoryBridge:
         if summary_text is None and checkpoint_summary is None:
             return None
 
-        lines: list[str] = [
-            f"Workflow completed with status `{workflow.status.value}`."
-        ]
+        lines: list[str] = [f"Workflow completed with status `{workflow.status.value}`."]
 
         if summary_text is not None:
             lines.append(f"Completion summary: {summary_text}")
@@ -702,9 +694,7 @@ class WorkflowMemoryBridge:
 
         if latest_checkpoint is not None:
             metadata["step_name"] = latest_checkpoint.step_name
-            next_intended_action = self._checkpoint_next_intended_action(
-                latest_checkpoint
-            )
+            next_intended_action = self._checkpoint_next_intended_action(latest_checkpoint)
             if next_intended_action is not None:
                 metadata["next_intended_action"] = next_intended_action
 
@@ -713,13 +703,33 @@ class WorkflowMemoryBridge:
 
         return metadata
 
+    def _maybe_build_completion_summary(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        episode: EpisodeRecord,
+        memory_item: MemoryItemRecord,
+    ) -> dict[str, Any] | None:
+        builder = self.summary_builder
+        if builder is None:
+            return None
+
+        return {
+            "summary_build_attempted": True,
+            "summary_build_succeeded": False,
+            "summary_build_status": None,
+            "summary_build_skipped_reason": "workflow_scoped_builder_integration_deferred",
+            "summary_build_replaced_existing_summary": False,
+            "built_memory_summary_id": None,
+            "built_summary_kind": "episode_summary",
+            "built_summary_membership_count": 0,
+        }
+
     def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
         if self.embedding_generator is None or self.memory_embedding_repository is None:
             return {
                 "embedding_persistence_status": "skipped",
-                "embedding_generation_skipped_reason": (
-                    "embedding_persistence_not_configured"
-                ),
+                "embedding_generation_skipped_reason": ("embedding_persistence_not_configured"),
             }
 
         try:

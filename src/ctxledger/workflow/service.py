@@ -1314,6 +1314,7 @@ class WorkflowService:
                     episode_repository=uow.memory_episodes,
                     memory_item_repository=uow.memory_items,
                     memory_embedding_repository=uow.memory_embeddings,
+                    summary_builder=workflow_memory_bridge.summary_builder,
                     embedding_generator=workflow_memory_bridge.embedding_generator,
                 )
 
