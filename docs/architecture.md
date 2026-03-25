@@ -950,8 +950,18 @@ Examples of degraded-but-ready conditions:
 - projection write failure
 - embedding lag
 - memory indexing lag
+- derived AGE summary graph mirroring is absent, stale, or not yet refreshed
+- narrow graph-backed summary-member traversal is unavailable and the system falls back to non-graph behavior
+- summary-graph readiness/observability checks report derived graph degradation while canonical relational summaries remain available
 
 These do not necessarily invalidate the workflow control subsystem.
+
+For `0.6.0`, this distinction should be read explicitly as:
+
+- relational PostgreSQL summary state remains canonical
+- derived summary graph state remains supporting and rebuildable
+- ordinary summary-first retrieval must remain correct even when derived summary graph state is unavailable or degraded
+- graph-backed summary traversal may improve auxiliary context assembly when ready, but should not become a hard readiness dependency
 
 ### 17.3 Local Deployment
 

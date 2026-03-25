@@ -1874,6 +1874,7 @@ def test_memory_service_build_retrieval_route_details_marks_auxiliary_only_after
         include_memory_items=False,
         inherited_memory_items=(inherited_memory_item,),
         related_memory_items=(),
+        graph_summary_related_memory_items=(),
     )
 
     assert details["retrieval_routes_present"] == [
@@ -1890,6 +1891,100 @@ def test_memory_service_build_retrieval_route_details_marks_auxiliary_only_after
     assert details["summary_first_child_episode_count"] == 0
     assert details["summary_first_child_episode_ids"] == []
     assert details["relation_supports_source_episode_count"] == 0
+
+
+def test_memory_service_collect_graph_summary_related_memory_items_returns_empty_when_relation_repository_is_missing() -> (
+    None
+):
+    service = MemoryService(
+        memory_item_repository=InMemoryMemoryItemRepository(),
+    )
+
+    related_memory_items = service._collect_graph_summary_related_memory_items(
+        memory_item_details=(
+            {
+                "episode_id": str(uuid4()),
+                "memory_items": (),
+            },
+        ),
+        limit=5,
+    )
+
+    assert related_memory_items == ()
+
+
+def test_memory_service_collect_graph_summary_related_memory_items_returns_empty_when_graph_lookup_raises() -> (
+    None
+):
+    class ExplodingGraphLookupRepository:
+        def list_distinct_summary_member_memory_ids_by_source_memory_ids(
+            self,
+            source_memory_ids: tuple[UUID, ...],
+        ) -> tuple[UUID, ...]:
+            raise RuntimeError("graph summary lookup exploded")
+
+    source_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=uuid4(),
+        episode_id=uuid4(),
+        type="episode_note",
+        provenance="episode",
+        content="source memory item",
+    )
+
+    service = MemoryService(
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_relation_repository=ExplodingGraphLookupRepository(),
+    )
+
+    related_memory_items = service._collect_graph_summary_related_memory_items(
+        memory_item_details=(
+            {
+                "episode_id": str(source_memory_item.episode_id),
+                "memory_items": (source_memory_item,),
+            },
+        ),
+        limit=5,
+    )
+
+    assert related_memory_items == ()
+
+
+def test_memory_service_collect_graph_summary_related_memory_items_returns_empty_when_graph_lookup_returns_no_members() -> (
+    None
+):
+    class EmptyGraphLookupRepository:
+        def list_distinct_summary_member_memory_ids_by_source_memory_ids(
+            self,
+            source_memory_ids: tuple[UUID, ...],
+        ) -> tuple[UUID, ...]:
+            return ()
+
+    source_memory_item = MemoryItemRecord(
+        memory_id=uuid4(),
+        workspace_id=uuid4(),
+        episode_id=uuid4(),
+        type="episode_note",
+        provenance="episode",
+        content="source memory item",
+    )
+
+    service = MemoryService(
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_relation_repository=EmptyGraphLookupRepository(),
+    )
+
+    related_memory_items = service._collect_graph_summary_related_memory_items(
+        memory_item_details=(
+            {
+                "episode_id": str(source_memory_item.episode_id),
+                "memory_items": (source_memory_item,),
+            },
+        ),
+        limit=5,
+    )
+
+    assert related_memory_items == ()
 
 
 def test_memory_service_raises_validation_errors_for_invalid_requests() -> None:

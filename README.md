@@ -305,10 +305,23 @@ The current readiness output is intended to help you verify:
 - whether the configured graph is ready
 - whether derived summary mirroring is in scope for the current environment
 - which explicit refresh command is expected for summary graph rebuilding
+- whether the current summary graph state should be read as ready, unavailable,
+  or degraded-but-non-canonical
+
+If the summary graph is absent, stale, or otherwise degraded, current summary
+retrieval should still be read as relationally correct for the supported
+`0.6.0` path.
 
 The runtime debug surface also reports AGE prototype details, including summary
 graph mirroring observability and the current workflow-completion-oriented
 summary automation policy.
+
+When interpreting those details, treat the derived summary graph as:
+
+- optional for the current narrow graph-backed auxiliary read path
+- rebuildable through `ctxledger refresh-age-summary-graph`
+- not the canonical system of record for summary truth
+- a degraded-but-ready concern when relational retrieval remains healthy
 
 ### Step 6 — Verify Grafana
 
@@ -478,6 +491,9 @@ For the default `small` deployment, the intended AGE operator flow is now:
    - `CTXLEDGER_DB_AGE_GRAPH_NAME=ctxledger_memory`
 4. run `ctxledger age-graph-readiness`
 5. inspect `/debug/runtime` if you want the current `age_prototype` payload
+6. if summary graph details look absent or degraded, treat that as an
+   observability/rebuild signal first rather than as proof that canonical
+   summary retrieval is broken
 6. use `ctxledger bootstrap-age-graph` only when you explicitly want to rebuild the current constrained graph contents
 
 The first successful validation target for the default `small` deployment is

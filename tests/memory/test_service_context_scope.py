@@ -418,12 +418,14 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
                 "episode_direct": 0,
                 "workspace_inherited_auxiliary": 0,
                 "relation_supports_auxiliary": 0,
+                "graph_summary_auxiliary": 0,
             },
             "retrieval_route_item_counts": {
                 "summary_first": 0,
                 "episode_direct": 0,
                 "workspace_inherited_auxiliary": 0,
                 "relation_supports_auxiliary": 0,
+                "graph_summary_auxiliary": 0,
             },
             "retrieval_route_presence": {
                 "summary_first": {
@@ -439,6 +441,10 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
                     "item_present": False,
                 },
                 "relation_supports_auxiliary": {
+                    "group_present": False,
+                    "item_present": False,
+                },
+                "graph_summary_auxiliary": {
                     "group_present": False,
                     "item_present": False,
                 },
@@ -463,6 +469,12 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
                     "relation": 0,
                 },
                 "relation_supports_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "graph_summary_auxiliary": {
                     "summary": 0,
                     "episode": 0,
                     "workspace": 0,
@@ -494,12 +506,19 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
                     "workspace": 0,
                     "relation": 0,
                 },
+                "graph_summary_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
             },
             "retrieval_route_scopes_present": {
                 "summary_first": [],
                 "episode_direct": [],
                 "workspace_inherited_auxiliary": [],
                 "relation_supports_auxiliary": [],
+                "graph_summary_auxiliary": [],
             },
             "memory_context_groups": [],
             "inherited_memory_items": [],
@@ -683,12 +702,14 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
                 "episode_direct": 0,
                 "workspace_inherited_auxiliary": 0,
                 "relation_supports_auxiliary": 0,
+                "graph_summary_auxiliary": 0,
             },
             "retrieval_route_item_counts": {
                 "summary_first": 0,
                 "episode_direct": 0,
                 "workspace_inherited_auxiliary": 0,
                 "relation_supports_auxiliary": 0,
+                "graph_summary_auxiliary": 0,
             },
             "retrieval_route_presence": {
                 "summary_first": {
@@ -704,6 +725,10 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
                     "item_present": False,
                 },
                 "relation_supports_auxiliary": {
+                    "group_present": False,
+                    "item_present": False,
+                },
+                "graph_summary_auxiliary": {
                     "group_present": False,
                     "item_present": False,
                 },
@@ -728,6 +753,12 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
                     "relation": 0,
                 },
                 "relation_supports_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
+                "graph_summary_auxiliary": {
                     "summary": 0,
                     "episode": 0,
                     "workspace": 0,
@@ -759,12 +790,19 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
                     "workspace": 0,
                     "relation": 0,
                 },
+                "graph_summary_auxiliary": {
+                    "summary": 0,
+                    "episode": 0,
+                    "workspace": 0,
+                    "relation": 0,
+                },
             },
             "retrieval_route_scopes_present": {
                 "summary_first": [],
                 "episode_direct": [],
                 "workspace_inherited_auxiliary": [],
                 "relation_supports_auxiliary": [],
+                "graph_summary_auxiliary": [],
             },
             "memory_context_groups": [],
             "inherited_memory_items": [],

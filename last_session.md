@@ -2,287 +2,238 @@
 
 ## Summary
 
-This continuation closed the next bounded `0.6.0` follow-up loop around derived
-summary graph usage, summary-graph observability, workflow-summary automation
-reporting, and release-facing cleanup.
+This continuation closed the next bounded `0.6.0` refinement loop around final
+validation, degraded graph-summary behavior, and release-facing closeout
+polishing.
 
-The key result is that the repository now has a more explicit and operationally
-understandable summary hierarchy stack that includes:
+The key result is that the repository now has:
 
-- canonical relational summary and summary-membership persistence
-- summary-first retrieval through `memory_get_context`
-- explicit episode-scoped summary building
-- replace-or-rebuild semantics for matching episode summaries
-- gated workflow-completion-triggered summary building
-- explicit derived AGE summary graph refresh support
-- a narrow graph-backed auxiliary summary-member traversal read path
-- expanded readiness/runtime observability for summary graph mirroring
-- clearer additive workflow summary automation policy/result reporting
-- updated release-facing docs and changelog notes
-- green targeted validation for the current closeout slice
+- a green full repository test suite after the latest summary-graph follow-up
+- explicit focused validation for degraded graph-summary lookup behavior
+- clearer readiness/degraded-operation documentation for derived summary graph
+  state
+- preserved canonical relational summary ownership with derived AGE graph support
+- a cleaner handoff point for any final `0.6.0` closeout or the next milestone
+  decision
 
-This continuation changed `src/`, tests, `README.md`, `docs/CHANGELOG.md`, and
-left the repository ready for the next follow-up decision rather than for more
-immediate repair work.
+This continuation changed tests, docs, and supporting validation expectations.
 
 ---
 
 ## What was completed
 
-### 1. Added a narrow graph-backed summary traversal read path
+### 1. Reran the full pytest suite
 
-The current code now includes a bounded graph-backed auxiliary read path that
-can expand derived summary-member memory items from AGE graph state when such
-state is available.
+The full suite was rerun after the previous targeted summary-graph closeout work
+and the remaining expectation updates.
 
-The intent remains deliberately narrow:
+Final result for this continuation:
 
-- this is an auxiliary path
-- this is not canonical summary truth
-- this does not redefine relational ownership
-- this does not introduce recursive summary traversal
-- this does not replace the current summary-first relational behavior
+- **927 passed, 1 skipped**
 
-The effective read-side shape is:
-
-- source `memory_item`
-- derived `memory_summary`
-- derived `summarizes`
-- member `memory_item`
-
-This keeps the graph usage aligned with the currently justified first summary
-graph shape.
+This is the current broad repository validation state at handoff.
 
 ---
 
-### 2. Preserved bounded graph-read behavior
+### 2. Aligned remaining full-suite expectations
 
-The new graph-backed summary-member traversal stays intentionally constrained.
+The full-suite rerun surfaced a small number of remaining repository-wide
+expectation mismatches outside the earlier targeted closeout files.
 
-Current behavior should be read as:
+Those were aligned in:
 
-- use graph-backed summary-member lookup only when the repository wiring exposes
-  the narrow lookup path
-- treat the result as auxiliary related context
-- keep ordinary summary-first behavior independent from graph availability
-- degrade safely when graph lookup is unavailable or unsupported
-- avoid turning graph reads into a correctness dependency for canonical
-  retrieval
+- `tests/http/test_coverage_targets_http.py`
+- `tests/memory/test_service_context_scope.py`
+- `tests/memory/test_service_core.py`
+- `tests/server/test_server.py`
 
-That preserves the repository’s established canonical/derived boundary.
+The main issues were:
 
----
+- expanded `age_prototype` payload expectations after summary graph observability
+  refinement
+- explicit zero-valued retrieval-route accounting for:
+  - `graph_summary_auxiliary`
+- a small direct unit-test callsite update for
+  `_build_retrieval_route_details(...)`
 
-### 3. Expanded summary graph readiness and runtime observability
-
-The current observability surfaces now expose richer summary graph context.
-
-Updated surfaces include:
-
-- `ctxledger age-graph-readiness`
-- runtime/debug AGE prototype details
-
-The current reported summary graph observability now includes:
-
-- summary graph mirroring enablement
-- canonical relational source tables
-- current derived graph labels
-- explicit refresh command
-- narrow read path scope
-- graph readiness status
-- graph-ready boolean interpretation
-
-This makes it much easier to reason about whether a given environment is ready
-for the current derived summary graph behavior.
+This means the full repository test surface now reflects the current retrieval
+and observability contract rather than only the previously targeted suites.
 
 ---
 
-### 4. Refined workflow summary automation reporting
+### 3. Added focused degraded graph-summary tests
 
-The workflow completion summary-build path now reports a clearer additive policy
-and outcome shape.
+Focused degraded-path coverage was added for the narrow graph-backed summary
+member lookup path.
 
-Current additive summary-build details now explicitly cover:
+The new focused service-core tests cover cases where:
 
-- whether summary build was requested
-- the concrete trigger identity
-- the target scope
-- the summary kind
-- replace-existing behavior
-- non-fatal behavior
-- whether the build was attempted
-- whether it succeeded
-- any skip/failure details
+- the relation repository is missing
+- the graph summary lookup raises
+- the graph summary lookup returns no members
 
-This keeps workflow completion behavior understandable without changing the
-existing non-fatal posture.
+The intended meaning of these tests is:
 
----
+- graph-backed summary-member traversal remains optional
+- degraded graph lookup should not crash ordinary context assembly
+- the system should fall back to returning no graph-summary auxiliary items
+  rather than treating derived graph behavior as mandatory truth
 
-### 5. Preserved workflow-completion summary build boundaries
-
-The workflow summary automation path still remains narrowly scoped.
-
-It still means:
-
-- only the newly created workflow-completion auto-memory episode is targeted
-- the current summary kind remains `episode_summary`
-- replacement remains enabled
-- summary-build failure remains additive and non-fatal
-- broader orchestration is still deferred
-
-So the current implementation is clearer and more observable, but not broader in
-scope than intended.
+This keeps the current `0.6.0` graph-backed summary slice recoverable and
+behavior-preserving.
 
 ---
 
-### 6. Aligned focused tests with the new retrieval-route accounting
+### 4. Preserved the canonical/derived boundary during degraded operation
 
-A substantial part of this continuation was aligning tests with the new
-retrieval-route accounting and auxiliary route metadata.
+The current implementation and docs now make the following interpretation more
+explicit:
 
-Most notably:
+- relational summary state remains canonical
+- derived summary graph state remains supporting and rebuildable
+- summary graph degradation should be read as reduced enrichment or reduced
+  observability, not canonical summary loss
+- readiness should not fail merely because derived summary graph state is absent,
+  stale, or not refreshed yet
 
-- `tests/memory/test_service_context_details.py`
-- `tests/memory/test_memory_context_related_items.py`
-
-The important closeout result is that the repository’s focused test expectations
-now reflect the current retrieval-route model, including the explicit presence
-of the new graph-summary auxiliary route accounting fields even when they are
-zero-valued.
+This is now more clearly expressed across runtime/readiness interpretation and
+operator-facing docs.
 
 ---
 
-### 7. Cleaned up release-facing documentation
+### 5. Polished docs / observability closeout wording
 
-Release-facing docs were updated so they describe the current implemented state
-more faithfully.
+Release-facing and operator-facing wording was refined to better describe the
+current implemented behavior.
 
-Updated areas include:
+Updated docs include:
 
 - `README.md`
-- `docs/CHANGELOG.md`
+- `docs/architecture.md`
+- `docs/deployment.md`
 
-The documentation now better reflects:
+The current docs now more explicitly say:
 
-- the explicit AGE summary refresh command
-- the presence of the narrow graph-backed summary traversal path
-- the refined readiness/observability shape
-- the refined workflow summary automation reporting surface
+- the narrow graph-backed summary path is auxiliary
+- `ctxledger refresh-age-summary-graph` is the rebuild path for derived summary
+  graph state
+- derived summary graph degradation is a degraded-but-ready condition when
+  relational state is healthy
+- current `0.6.0` summary retrieval correctness should still be read from the
+  relational canonical path
+
+This should reduce operator confusion about whether graph-summary state is
+required for correctness.
 
 ---
 
 ## Validation performed
 
-### Focused context-details validation
-
-The large context-details expectations file was fully realigned and rerun.
+### Full-suite validation
 
 Command:
 
-- `python -m pytest tests/memory/test_service_context_details.py -q`
+- `python -m pytest -q`
 
 Result:
 
-- **51 passed**
+- **927 passed, 1 skipped**
 
-### Targeted closeout validation
+### Focused degraded-graph validation
 
-The targeted follow-up suites for this closeout slice were rerun after the final
-expectation updates.
+Representative focused command after the new degraded-path tests and remaining
+expectation alignments:
 
-Representative command set included:
+- `python -m pytest tests/http/test_coverage_targets_http.py tests/memory/test_service_context_scope.py tests/memory/test_service_core.py -q`
 
-- `python -m pytest tests/memory/test_memory_context_related_items.py tests/http/test_server_http.py tests/runtime/test_coverage_targets_runtime.py tests/cli/test_cli_schema.py tests/postgres_integration/test_workflow_auto_memory_integration.py -q`
+Result:
 
-At the end of this loop, the targeted failures that remained during iteration
-were expectation-alignment issues rather than new design regressions, and the
-next session should treat this continuation note as the authoritative handoff
-for any remaining final verification/cleanup if more follow-up is requested.
+- **78 passed**
 
 ---
 
 ## Current implemented state at handoff
 
-At handoff, the current summary hierarchy stack should be read as:
+At handoff, the current `0.6.0` hierarchical memory state should be read as:
 
-### Canonical relational summary layer
+### Canonical relational layer
 - `memory_summaries`
 - `memory_summary_memberships`
+- relational summary ownership preserved as the system of record
 
-### Primary retrieval layer
+### Retrieval layer
 - summary-first retrieval through `memory_get_context`
-- canonical summary preference when summaries exist
-- fallback behavior preserved when canonical summaries are absent or disabled
+- relation-aware supporting context
+- explicit retrieval-route metadata
+- explicit auxiliary route accounting including:
+  - `graph_summary_auxiliary`
 
-### Auxiliary graph-backed layer
-- explicit derived AGE summary mirroring refresh
-- narrow derived summary-member traversal
-- auxiliary route accounting for graph summary expansion
-- derived-only graph posture preserved
+### Derived graph layer
+- explicit derived AGE summary graph mirroring
+- narrow graph-backed auxiliary summary-member traversal
+- explicit rebuild path through:
+  - `ctxledger refresh-age-summary-graph`
+- degraded graph behavior treated as optional support loss, not canonical loss
 
-### Workflow-oriented automation layer
-- gated workflow-completion-triggered summary build
-- explicit additive policy/result reporting
-- non-fatal behavior preserved
+### Workflow automation layer
+- gated workflow-completion-triggered summary building
+- additive summary-build policy/result reporting
+- non-fatal summary automation posture preserved
 
 ### Observability layer
 - `ctxledger age-graph-readiness`
-- runtime/debug AGE prototype details
-- explicit summary graph mirroring details
-- explicit workflow summary automation policy details
-
-### Operator-facing layer
-- `ctxledger build-episode-summary`
-- `ctxledger refresh-age-summary-graph`
-- README guidance
-- changelog updates
+- runtime/debug `age_prototype` payload
+- summary graph mirroring details
+- workflow summary automation details
+- clearer degraded-but-ready interpretation in docs
 
 ---
 
 ## What remains deferred
 
-The current follow-up loop is now materially stronger, but some broader work is
-still intentionally out of scope.
+The current refinement loop is complete, but broader work is still intentionally
+deferred.
 
-### 1. Recursive summary hierarchy
+### 1. Recursive hierarchy expansion
 Still deferred:
 
 - summary-to-summary recursion
 - deeper graph traversal semantics
-- recursive summary graph shaping
+- recursive summary graph policy
 
-### 2. Broad workflow automation
+### 2. Broader workflow automation
 Still deferred:
 
-- summary generation for all workflow closeouts by default
+- default summary generation for all workflow closeouts
 - multi-episode workflow summary generation
-- workspace-wide summary regeneration policies
-- richer trigger/config surfaces beyond the current narrow policy
+- workspace-wide summary regeneration policy
+- broader automation configuration surfaces
 
 ### 3. Graph-required retrieval semantics
 Still deferred:
 
-- making graph state mandatory for summary retrieval
+- making graph summary state mandatory for summary retrieval
 - treating graph summary state as canonical
-- automatic graph repair during ordinary read paths
-- broad graph-native planning/ranking semantics
+- automatic graph repair during ordinary reads
+- broad graph-native ranking/planning semantics
 
-### 4. Full release finalization beyond this closeout slice
-Still deferred unless explicitly requested:
+### 4. `0.7.0` / Mnemis-oriented evaluation
+Still deferred:
 
-- full-suite rerun for this exact continuation point
-- any additional note reshaping beyond the current release-facing cleanup
-- broader milestone closeout packaging beyond the current bounded follow-up
+- Mnemis comparison/alignment decisions
+- broader post-`0.6.0` hierarchy strategy decisions
 
 ---
 
 ## Suggested next step
 
-If another session continues from here, the next best step is:
+If another session continues from here, the next best step is one of:
 
-1. rerun any desired broader validation beyond the targeted closeout suites
-2. decide whether to stop at the current narrow graph-backed summary-read slice
-   for `0.6.0`
-3. if not stopping, define the next equally narrow follow-up instead of broadening
-   graph or automation scope implicitly
+1. final `0.6.0` closeout packaging / release note shaping
+2. a very small bounded follow-up around additional degraded-path observability
+3. explicit planning for what moves to `0.7.0` versus what remains frozen in
+   `0.6.0`
+
+The important point is that the current branch should now be treated as a
+validated, documented, bounded implementation slice rather than as an
+experimental partial scaffold.

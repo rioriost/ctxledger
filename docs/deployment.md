@@ -795,8 +795,26 @@ Examples:
 - a derived artifact path is currently unavailable
 - embedding generation is lagging
 - memory indexing is incomplete
+- the derived AGE summary graph is absent, stale, or not yet refreshed
+- the narrow graph-backed summary-member traversal path is unavailable and reads fall back to non-graph behavior
 
 These affect quality or operator visibility, but do not necessarily invalidate workflow control availability.
+
+For the current hierarchical memory direction, the important rule is:
+
+- canonical relational summary state remains the system of record
+- derived summary graph state remains rebuildable support state
+- degraded summary graph behavior should be read as reduced retrieval enrichment or observability, not as canonical data loss
+
+Operators should therefore distinguish between:
+
+- not-ready canonical failures
+  - database unavailable
+  - required schema missing
+- degraded derived-summary conditions
+  - AGE available but the summary graph is not ready
+  - summary graph mirroring has not been refreshed yet
+  - graph-backed auxiliary traversal failed and the system degraded safely
 
 ## 8.4 Not-Ready Conditions
 
