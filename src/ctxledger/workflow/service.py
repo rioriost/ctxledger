@@ -250,6 +250,8 @@ class WorkflowCheckpointResult:
     workflow_instance: WorkflowInstance
     attempt: WorkflowAttempt
     verify_report: VerifyReport | None = None
+    warnings: tuple[ResumeIssue, ...] = ()
+    auto_memory_details: dict[str, Any] | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -271,6 +273,10 @@ class WorkflowStats:
     episode_count: int
     memory_item_count: int
     memory_embedding_count: int
+    checkpoint_auto_memory_recorded_count: int = 0
+    checkpoint_auto_memory_skipped_count: int = 0
+    workflow_completion_auto_memory_recorded_count: int = 0
+    workflow_completion_auto_memory_skipped_count: int = 0
     latest_workflow_updated_at: datetime | None = None
     latest_checkpoint_created_at: datetime | None = None
     latest_verify_report_created_at: datetime | None = None
@@ -286,6 +292,10 @@ class MemoryStats:
     memory_embedding_count: int
     memory_relation_count: int
     memory_item_provenance_counts: dict[str, int]
+    checkpoint_auto_memory_recorded_count: int = 0
+    checkpoint_auto_memory_skipped_count: int = 0
+    workflow_completion_auto_memory_recorded_count: int = 0
+    workflow_completion_auto_memory_skipped_count: int = 0
     latest_episode_created_at: datetime | None = None
     latest_memory_item_created_at: datetime | None = None
     latest_memory_embedding_created_at: datetime | None = None
@@ -586,6 +596,7 @@ class WorkflowService:
             episode_count = self._count_rows(uow, "memory_episodes")
             memory_item_count = self._count_rows(uow, "memory_items")
             memory_embedding_count = self._count_rows(uow, "memory_embeddings")
+            memory_item_provenance_counts = self._count_memory_item_provenance(uow)
 
             workflow_status_counts = self._count_grouped_statuses(
                 uow,
@@ -658,6 +669,24 @@ class WorkflowService:
                 episode_count=episode_count,
                 memory_item_count=memory_item_count,
                 memory_embedding_count=memory_embedding_count,
+                checkpoint_auto_memory_recorded_count=memory_item_provenance_counts.get(
+                    "workflow_checkpoint_auto",
+                    0,
+                ),
+                checkpoint_auto_memory_skipped_count=max(
+                    checkpoint_count
+                    - memory_item_provenance_counts.get("workflow_checkpoint_auto", 0),
+                    0,
+                ),
+                workflow_completion_auto_memory_recorded_count=memory_item_provenance_counts.get(
+                    "workflow_complete_auto",
+                    0,
+                ),
+                workflow_completion_auto_memory_skipped_count=max(
+                    sum(workflow_status_counts.values())
+                    - memory_item_provenance_counts.get("workflow_complete_auto", 0),
+                    0,
+                ),
                 latest_workflow_updated_at=latest_workflow_updated_at,
                 latest_checkpoint_created_at=latest_checkpoint_created_at,
                 latest_verify_report_created_at=latest_verify_report_created_at,
@@ -672,6 +701,8 @@ class WorkflowService:
             memory_item_count = self._count_rows(uow, "memory_items")
             memory_embedding_count = self._count_rows(uow, "memory_embeddings")
             memory_relation_count = self._count_rows(uow, "memory_relations")
+            checkpoint_count = self._count_rows(uow, "workflow_checkpoints")
+            workflow_count = self._count_rows(uow, "workflow_instances")
 
             latest_episode_created_at = self._max_datetime_field(
                 uow,
@@ -702,6 +733,23 @@ class WorkflowService:
                 memory_embedding_count=memory_embedding_count,
                 memory_relation_count=memory_relation_count,
                 memory_item_provenance_counts=memory_item_provenance_counts,
+                checkpoint_auto_memory_recorded_count=memory_item_provenance_counts.get(
+                    "workflow_checkpoint_auto",
+                    0,
+                ),
+                checkpoint_auto_memory_skipped_count=max(
+                    checkpoint_count
+                    - memory_item_provenance_counts.get("workflow_checkpoint_auto", 0),
+                    0,
+                ),
+                workflow_completion_auto_memory_recorded_count=memory_item_provenance_counts.get(
+                    "workflow_complete_auto",
+                    0,
+                ),
+                workflow_completion_auto_memory_skipped_count=max(
+                    workflow_count - memory_item_provenance_counts.get("workflow_complete_auto", 0),
+                    0,
+                ),
                 latest_episode_created_at=latest_episode_created_at,
                 latest_memory_item_created_at=latest_memory_item_created_at,
                 latest_memory_embedding_created_at=latest_memory_embedding_created_at,
@@ -976,12 +1024,75 @@ class WorkflowService:
                 )
                 attempt = uow.workflow_attempts.update(attempt)
 
+            checkpoint_warnings: list[ResumeIssue] = []
+            auto_memory_details: dict[str, Any] | None = None
+
+            workflow_memory_bridge = self._workflow_memory_bridge
+
+            if workflow_memory_bridge is not None:
+                try:
+                    auto_memory_result = workflow_memory_bridge.record_checkpoint_memory(
+                        workflow=workflow,
+                        attempt=attempt,
+                        checkpoint=checkpoint,
+                        verify_report=verify_report,
+                    )
+                except Exception as exc:
+                    checkpoint_warnings.append(
+                        ResumeIssue(
+                            code="checkpoint_auto_memory_recording_failed",
+                            message=(
+                                "workflow checkpoint succeeded but automatic memory "
+                                "recording failed"
+                            ),
+                            details={
+                                "error_type": type(exc).__name__,
+                                "error_message": str(exc),
+                            },
+                        )
+                    )
+                else:
+                    if auto_memory_result is None:
+                        auto_memory_details = {
+                            "auto_memory_recorded": False,
+                            "auto_memory_skipped_reason": "no_checkpoint_memory_source",
+                        }
+                    else:
+                        auto_memory_details = dict(auto_memory_result.details)
+                        if (
+                            auto_memory_result.details.get("embedding_persistence_status")
+                            == "failed"
+                        ):
+                            checkpoint_warnings.append(
+                                ResumeIssue(
+                                    code="checkpoint_auto_memory_embedding_failed",
+                                    message=(
+                                        "workflow checkpoint succeeded but automatic "
+                                        "memory embedding generation failed"
+                                    ),
+                                    details={
+                                        "embedding_generation_skipped_reason": (
+                                            auto_memory_result.details.get(
+                                                "embedding_generation_skipped_reason"
+                                            )
+                                        ),
+                                        "embedding_generation_failure": (
+                                            auto_memory_result.details.get(
+                                                "embedding_generation_failure"
+                                            )
+                                        ),
+                                    },
+                                )
+                            )
+
             uow.commit()
             return WorkflowCheckpointResult(
                 checkpoint=checkpoint,
                 workflow_instance=workflow,
                 attempt=attempt,
                 verify_report=verify_report,
+                warnings=tuple(checkpoint_warnings),
+                auto_memory_details=auto_memory_details,
             )
 
     def resume_workflow(self, data: ResumeWorkflowInput) -> WorkflowResume:

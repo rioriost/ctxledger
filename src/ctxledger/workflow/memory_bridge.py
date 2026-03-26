@@ -84,6 +84,15 @@ class WorkflowCompletionMemoryRecordResult:
 
 
 @dataclass(slots=True, frozen=True)
+class WorkflowCheckpointMemoryRecordResult:
+    episode: EpisodeRecord | None = None
+    memory_item: MemoryItemRecord | None = None
+    promoted_memory_items: tuple[MemoryItemRecord, ...] = ()
+    relations: tuple[MemoryRelationRecord, ...] = ()
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True, frozen=True)
 class AutoMemoryDuplicateCheckResult:
     should_record: bool
     skipped_reason: str | None = None
@@ -489,6 +498,173 @@ class WorkflowMemoryBridge:
             details=details,
         )
 
+    def record_checkpoint_memory(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        attempt: WorkflowAttempt,
+        checkpoint: WorkflowCheckpoint,
+        verify_report: VerifyReport | None,
+    ) -> WorkflowCheckpointMemoryRecordResult | None:
+        logger.info(
+            "workflow checkpoint auto-memory evaluation started",
+            extra={
+                "workflow_instance_id": str(workflow.workflow_instance_id),
+                "attempt_id": str(attempt.attempt_id),
+                "checkpoint_id": str(checkpoint.checkpoint_id),
+                "step_name": checkpoint.step_name,
+                "has_checkpoint_summary": self._normalize_text(checkpoint.summary) is not None,
+            },
+        )
+        should_record, skipped_reason = self._checkpoint_auto_memory_gating_decision(
+            checkpoint=checkpoint,
+            verify_report=verify_report,
+        )
+        stage_details = self._initial_stage_details(
+            should_record=should_record,
+            skipped_reason=skipped_reason,
+        )
+        if not should_record:
+            return WorkflowCheckpointMemoryRecordResult(
+                details={
+                    "auto_memory_recorded": False,
+                    "auto_memory_skipped_reason": skipped_reason,
+                    "stage_details": stage_details,
+                }
+            )
+
+        memory_summary = self._build_checkpoint_summary(
+            workflow=workflow,
+            checkpoint=checkpoint,
+            verify_report=verify_report,
+        )
+        stage_details["summary_selection"] = {
+            "attempted": True,
+            "status": "built" if memory_summary is not None else "skipped",
+            "skipped_reason": None if memory_summary is not None else "no_checkpoint_memory_source",
+        }
+        if memory_summary is None:
+            return None
+
+        episode_metadata = self._build_checkpoint_metadata(
+            workflow=workflow,
+            attempt=attempt,
+            checkpoint=checkpoint,
+            verify_report=verify_report,
+        )
+
+        now = datetime.now(timezone.utc)
+        episode = self.episode_repository.create(
+            EpisodeRecord(
+                episode_id=uuid4(),
+                workflow_instance_id=workflow.workflow_instance_id,
+                summary=memory_summary,
+                attempt_id=attempt.attempt_id,
+                metadata=episode_metadata,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        stage_details["episode"] = {
+            "attempted": True,
+            "status": "recorded",
+            "episode_id": str(episode.episode_id),
+            "skipped_reason": None,
+        }
+
+        memory_item = self.memory_item_repository.create(
+            MemoryItemRecord(
+                memory_id=uuid4(),
+                workspace_id=workflow.workspace_id,
+                episode_id=episode.episode_id,
+                type="workflow_checkpoint_note",
+                provenance="workflow_checkpoint_auto",
+                content=episode.summary,
+                metadata=dict(episode.metadata),
+                created_at=episode.created_at,
+                updated_at=episode.updated_at,
+            )
+        )
+        stage_details["primary_memory_item"] = {
+            "attempted": True,
+            "status": "recorded",
+            "memory_id": str(memory_item.memory_id),
+            "memory_type": memory_item.type,
+            "skipped_reason": None,
+        }
+
+        promoted_memory_items = self._create_checkpoint_promoted_memory_items(
+            workflow=workflow,
+            attempt=attempt,
+            checkpoint=checkpoint,
+            verify_report=verify_report,
+            episode=episode,
+            now=episode.created_at,
+        )
+        stage_details["promoted_memory_items"] = {
+            "attempted": True,
+            "status": "recorded" if promoted_memory_items else "skipped",
+            "created_count": len(promoted_memory_items),
+            "created_memory_ids": [str(item.memory_id) for item in promoted_memory_items],
+            "created_types": [item.type for item in promoted_memory_items],
+            "skipped_reason": None if promoted_memory_items else "no_promotable_checkpoint_fields",
+        }
+
+        relation_records = self._create_supports_relations(
+            workflow=workflow,
+            attempt=attempt,
+            primary_memory_item=memory_item,
+            promoted_memory_items=promoted_memory_items,
+            now=episode.created_at,
+        )
+        stage_details["relations"] = {
+            "attempted": self.memory_relation_repository is not None,
+            "status": (
+                "recorded"
+                if relation_records
+                else (
+                    "skipped" if self.memory_relation_repository is not None else "not_configured"
+                )
+            ),
+            "created_count": len(relation_records),
+            "created_relation_ids": [
+                str(relation.memory_relation_id) for relation in relation_records
+            ],
+            "relation_type_counts": self._relation_type_counts(relation_records),
+            "skipped_reason": self._relation_skipped_reason(
+                relation_records=relation_records,
+                promoted_memory_items=promoted_memory_items,
+            ),
+        }
+
+        embedding_details = self._maybe_store_embedding(memory_item)
+        stage_details["embedding"] = {
+            "attempted": True,
+            "status": embedding_details.get("embedding_persistence_status"),
+            "skipped_reason": embedding_details.get("embedding_generation_skipped_reason"),
+            "provider": embedding_details.get("embedding_provider"),
+            "model": embedding_details.get("embedding_model"),
+        }
+
+        details = {
+            "auto_memory_recorded": True,
+            "episode_id": str(episode.episode_id),
+            "memory_item_id": str(memory_item.memory_id),
+            "promoted_memory_item_ids": [str(item.memory_id) for item in promoted_memory_items],
+            "promoted_memory_item_count": len(promoted_memory_items),
+            "memory_relation_count": len(relation_records),
+            "stage_details": stage_details,
+            **embedding_details,
+        }
+
+        return WorkflowCheckpointMemoryRecordResult(
+            episode=episode,
+            memory_item=memory_item,
+            promoted_memory_items=tuple(promoted_memory_items),
+            relations=tuple(relation_records),
+            details=details,
+        )
+
     def _initial_stage_details(
         self,
         *,
@@ -544,6 +720,43 @@ class WorkflowMemoryBridge:
             return True, ""
 
         return False, "low_signal_checkpoint_closeout"
+
+    def _checkpoint_auto_memory_gating_decision(
+        self,
+        *,
+        checkpoint: WorkflowCheckpoint,
+        verify_report: VerifyReport | None,
+    ) -> tuple[bool, str]:
+        checkpoint_payload = checkpoint.checkpoint_json
+        if not isinstance(checkpoint_payload, dict):
+            return False, "low_signal_checkpoint_memory"
+
+        if self._normalize_text(checkpoint.summary) is not None:
+            return True, ""
+
+        heuristic_signals = (
+            "current_objective",
+            "next_intended_action",
+            "root_cause",
+            "recovery_pattern",
+            "what_remains",
+            "decision",
+            "risk",
+            "blocker",
+            "open_question",
+        )
+        has_signal = any(
+            isinstance(checkpoint_payload.get(key), str) and checkpoint_payload.get(key, "").strip()
+            for key in heuristic_signals
+        )
+        if has_signal:
+            return True, ""
+
+        verify_status = self._verify_status_value(verify_report)
+        if verify_status is not None:
+            return True, ""
+
+        return False, "low_signal_checkpoint_memory"
 
     def _duplicate_closeout_memory_decision(
         self,
@@ -874,9 +1087,103 @@ class WorkflowMemoryBridge:
             next_intended_action = self._checkpoint_next_intended_action(latest_checkpoint)
             if next_intended_action is not None:
                 metadata["next_intended_action"] = next_intended_action
+            root_cause = self._checkpoint_root_cause(latest_checkpoint)
+            if root_cause is not None:
+                metadata["root_cause"] = root_cause
+            recovery_pattern = self._checkpoint_recovery_pattern(latest_checkpoint)
+            if recovery_pattern is not None:
+                metadata["recovery_pattern"] = recovery_pattern
 
         if failure_reason is not None:
             metadata["failure_reason"] = failure_reason
+
+        return metadata
+
+    def _build_checkpoint_summary(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        checkpoint: WorkflowCheckpoint,
+        verify_report: VerifyReport | None,
+    ) -> str | None:
+        checkpoint_summary = self._normalize_text(checkpoint.summary)
+        current_objective = self._checkpoint_current_objective(checkpoint)
+        next_intended_action = self._checkpoint_next_intended_action(checkpoint)
+        root_cause = self._checkpoint_root_cause(checkpoint)
+        recovery_pattern = self._checkpoint_recovery_pattern(checkpoint)
+        what_remains = self._checkpoint_what_remains(checkpoint)
+        verify_status = self._verify_status_value(verify_report)
+
+        if (
+            checkpoint_summary is None
+            and current_objective is None
+            and next_intended_action is None
+            and root_cause is None
+            and recovery_pattern is None
+            and what_remains is None
+            and verify_status is None
+        ):
+            return None
+
+        lines = [f"Checkpoint recorded for workflow status `{workflow.status.value}`."]
+        if checkpoint_summary is not None:
+            lines.append(f"Checkpoint summary: {checkpoint_summary}")
+        if current_objective is not None:
+            lines.append(f"Current objective: {current_objective}")
+        if next_intended_action is not None:
+            lines.append(f"Next action: {next_intended_action}")
+        if root_cause is not None:
+            lines.append(f"Root cause: {root_cause}")
+        if recovery_pattern is not None:
+            lines.append(f"Recovery pattern: {recovery_pattern}")
+        if what_remains is not None:
+            lines.append(f"What remains: {what_remains}")
+        if verify_status is not None:
+            lines.append(f"Verify status: {verify_status}")
+
+        return "\n".join(lines)
+
+    def _build_checkpoint_metadata(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        attempt: WorkflowAttempt,
+        checkpoint: WorkflowCheckpoint,
+        verify_report: VerifyReport | None,
+    ) -> dict[str, Any]:
+        metadata: dict[str, Any] = {
+            "auto_generated": True,
+            "memory_origin": "workflow_checkpoint_auto",
+            "workflow_status": workflow.status.value,
+            "attempt_status": attempt.status.value,
+            "attempt_number": attempt.attempt_number,
+            "step_name": checkpoint.step_name,
+            "checkpoint_id": str(checkpoint.checkpoint_id),
+        }
+
+        verify_status = self._verify_status_value(verify_report)
+        if verify_status is not None:
+            metadata["verify_status"] = verify_status
+
+        current_objective = self._checkpoint_current_objective(checkpoint)
+        if current_objective is not None:
+            metadata["current_objective"] = current_objective
+
+        next_intended_action = self._checkpoint_next_intended_action(checkpoint)
+        if next_intended_action is not None:
+            metadata["next_intended_action"] = next_intended_action
+
+        root_cause = self._checkpoint_root_cause(checkpoint)
+        if root_cause is not None:
+            metadata["root_cause"] = root_cause
+
+        recovery_pattern = self._checkpoint_recovery_pattern(checkpoint)
+        if recovery_pattern is not None:
+            metadata["recovery_pattern"] = recovery_pattern
+
+        what_remains = self._checkpoint_what_remains(checkpoint)
+        if what_remains is not None:
+            metadata["what_remains"] = what_remains
 
         return metadata
 
@@ -940,6 +1247,38 @@ class WorkflowMemoryBridge:
                 )
             )
 
+        root_cause = self._checkpoint_root_cause(latest_checkpoint)
+        if root_cause is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="root_cause",
+                    memory_type="workflow_root_cause",
+                    content=root_cause,
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "latest_checkpoint.root_cause",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        recovery_pattern = self._checkpoint_recovery_pattern(latest_checkpoint)
+        if recovery_pattern is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="recovery_pattern",
+                    memory_type="workflow_recovery_pattern",
+                    content=recovery_pattern,
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "latest_checkpoint.recovery_pattern",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
         normalized_failure_reason = self._normalize_text(failure_reason)
         if normalized_failure_reason is not None:
             candidates.append(
@@ -950,6 +1289,115 @@ class WorkflowMemoryBridge:
                     metadata={
                         "memory_origin": "workflow_complete_auto",
                         "promotion_source": "workflow_complete.failure_reason",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        return tuple(candidates)
+
+    def _collect_checkpoint_promotion_candidates(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        attempt: WorkflowAttempt,
+        checkpoint: WorkflowCheckpoint,
+        verify_report: VerifyReport | None,
+    ) -> tuple[CompletionPromotionCandidate, ...]:
+        candidates: list[CompletionPromotionCandidate] = []
+
+        current_objective = self._checkpoint_current_objective(checkpoint)
+        if current_objective is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="current_objective",
+                    memory_type="workflow_objective",
+                    content=current_objective,
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "checkpoint.current_objective",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        next_intended_action = self._checkpoint_next_intended_action(checkpoint)
+        if next_intended_action is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="next_intended_action",
+                    memory_type="workflow_next_action",
+                    content=next_intended_action,
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "checkpoint.next_intended_action",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        root_cause = self._checkpoint_root_cause(checkpoint)
+        if root_cause is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="root_cause",
+                    memory_type="workflow_root_cause",
+                    content=root_cause,
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "checkpoint.root_cause",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        recovery_pattern = self._checkpoint_recovery_pattern(checkpoint)
+        if recovery_pattern is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="recovery_pattern",
+                    memory_type="workflow_recovery_pattern",
+                    content=recovery_pattern,
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "checkpoint.recovery_pattern",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        what_remains = self._checkpoint_what_remains(checkpoint)
+        if what_remains is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="what_remains",
+                    memory_type="workflow_what_remains",
+                    content=what_remains,
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "checkpoint.what_remains",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        verify_status = self._verify_status_value(verify_report)
+        if verify_status is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="verify_status",
+                    memory_type="workflow_verification_outcome",
+                    content=f"Workflow verification outcome: {verify_status}",
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "verify_report.status",
+                        "verify_status": verify_status,
                         "workflow_status": workflow.status.value,
                         "attempt_status": attempt.status.value,
                     },
@@ -999,6 +1447,55 @@ class WorkflowMemoryBridge:
                 extra={
                     "workflow_instance_id": str(workflow.workflow_instance_id),
                     "attempt_id": str(attempt.attempt_id),
+                    "episode_id": str(episode.episode_id),
+                    "memory_id": str(memory_item.memory_id),
+                    "memory_type": memory_item.type,
+                    "promotion_field": candidate.field_key,
+                },
+            )
+            created_items.append(memory_item)
+        return tuple(created_items)
+
+    def _create_checkpoint_promoted_memory_items(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        attempt: WorkflowAttempt,
+        checkpoint: WorkflowCheckpoint,
+        verify_report: VerifyReport | None,
+        episode: EpisodeRecord,
+        now: datetime,
+    ) -> tuple[MemoryItemRecord, ...]:
+        created_items: list[MemoryItemRecord] = []
+        for candidate in self._collect_checkpoint_promotion_candidates(
+            workflow=workflow,
+            attempt=attempt,
+            checkpoint=checkpoint,
+            verify_report=verify_report,
+        ):
+            memory_item = self.memory_item_repository.create(
+                MemoryItemRecord(
+                    memory_id=uuid4(),
+                    workspace_id=workflow.workspace_id,
+                    episode_id=episode.episode_id,
+                    type=candidate.memory_type,
+                    provenance="workflow_checkpoint_auto",
+                    content=candidate.content,
+                    metadata={
+                        **dict(episode.metadata),
+                        **dict(candidate.metadata),
+                        "promotion_field": candidate.field_key,
+                    },
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            logger.info(
+                "workflow checkpoint auto-memory promoted memory item created",
+                extra={
+                    "workflow_instance_id": str(workflow.workflow_instance_id),
+                    "attempt_id": str(attempt.attempt_id),
+                    "checkpoint_id": str(checkpoint.checkpoint_id),
                     "episode_id": str(episode.episode_id),
                     "memory_id": str(memory_item.memory_id),
                     "memory_type": memory_item.type,
@@ -1060,6 +1557,19 @@ class WorkflowMemoryBridge:
                     failure_item,
                     primary_memory_item,
                     "failure reason supports the completion note",
+                )
+            )
+
+        root_cause_item = promoted_by_field.get("root_cause")
+        recovery_pattern_item = promoted_by_field.get("recovery_pattern")
+
+        if recovery_pattern_item is not None and root_cause_item is not None:
+            relation_specs.append(
+                (
+                    "recovery_pattern_supports_root_cause",
+                    recovery_pattern_item,
+                    root_cause_item,
+                    "recovery pattern supports the root cause understanding",
                 )
             )
 
@@ -1316,6 +1826,42 @@ class WorkflowMemoryBridge:
         if checkpoint is None:
             return None
         raw_value = checkpoint.checkpoint_json.get("next_intended_action")
+        if not isinstance(raw_value, str):
+            return None
+        normalized = raw_value.strip()
+        return normalized if normalized else None
+
+    @staticmethod
+    def _checkpoint_root_cause(
+        checkpoint: WorkflowCheckpoint | None,
+    ) -> str | None:
+        if checkpoint is None:
+            return None
+        raw_value = checkpoint.checkpoint_json.get("root_cause")
+        if not isinstance(raw_value, str):
+            return None
+        normalized = raw_value.strip()
+        return normalized if normalized else None
+
+    @staticmethod
+    def _checkpoint_recovery_pattern(
+        checkpoint: WorkflowCheckpoint | None,
+    ) -> str | None:
+        if checkpoint is None:
+            return None
+        raw_value = checkpoint.checkpoint_json.get("recovery_pattern")
+        if not isinstance(raw_value, str):
+            return None
+        normalized = raw_value.strip()
+        return normalized if normalized else None
+
+    @staticmethod
+    def _checkpoint_what_remains(
+        checkpoint: WorkflowCheckpoint | None,
+    ) -> str | None:
+        if checkpoint is None:
+            return None
+        raw_value = checkpoint.checkpoint_json.get("what_remains")
         if not isinstance(raw_value, str):
             return None
         normalized = raw_value.strip()

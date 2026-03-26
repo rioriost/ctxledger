@@ -22,6 +22,7 @@ from ctxledger.memory.service import (
     InMemoryEpisodeRepository,
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
+    InMemoryMemoryRelationRepository,
     InMemoryWorkflowLookupRepository,
     MemoryItemRecord,
     MemoryService,
@@ -48,6 +49,7 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
     episode_repository = InMemoryEpisodeRepository()
     memory_item_repository = InMemoryMemoryItemRepository()
     memory_embedding_repository = InMemoryMemoryEmbeddingRepository()
+    memory_relation_repository = InMemoryMemoryRelationRepository()
 
     workflow = WorkflowInstance(
         workflow_instance_id=workflow_id,
@@ -81,6 +83,7 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
         episode_repository=episode_repository,
         memory_item_repository=memory_item_repository,
         memory_embedding_repository=memory_embedding_repository,
+        memory_relation_repository=memory_relation_repository,
         embedding_generator=LocalStubEmbeddingGenerator(
             model="local-stub-v1",
             dimensions=8,
@@ -134,11 +137,195 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
         result.memory_item.content,
         result.memory_item.metadata,
     )
+    assert result.details["promoted_memory_item_count"] == 2
+    assert result.details["memory_relation_count"] == 1
+    assert result.details["stage_details"]["gating"]["status"] == "passed"
+    assert result.details["stage_details"]["summary_selection"]["status"] == "built"
+    assert result.details["stage_details"]["promoted_memory_items"]["status"] == "recorded"
+    assert result.details["stage_details"]["promoted_memory_items"]["created_count"] == 2
+    assert result.details["stage_details"]["relations"]["status"] == "recorded"
+    assert result.details["stage_details"]["relations"]["created_count"] == 1
+    assert result.details["stage_details"]["embedding"]["status"] == "stored"
+
+    assert len(result.promoted_memory_items) == 2
+    assert {item.type for item in result.promoted_memory_items} == {
+        "workflow_next_action",
+        "workflow_verification_outcome",
+    }
+    assert {item.metadata["promotion_field"] for item in result.promoted_memory_items} == {
+        "next_intended_action",
+        "verify_status",
+    }
+
+    assert len(result.relations) == 1
+    assert {relation.relation_type for relation in result.relations} == {"supports"}
+    assert (
+        result.relations[0].metadata["relation_reason"] == "verification_supports_completion_note"
+    )
 
     assert len(episode_repository.episodes) == 1
-    assert len(memory_item_repository.memory_items) == 1
+    assert len(memory_item_repository.memory_items) == 3
     assert len(memory_embedding_repository.embeddings) == 1
+    assert len(memory_relation_repository.relations) == 1
     assert memory_embedding_repository.embeddings[0].memory_id == result.memory_item.memory_id
+
+
+def test_workflow_memory_bridge_records_checkpoint_memory_with_promoted_items_and_relations() -> (
+    None
+):
+    from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
+
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    attempt_id = uuid4()
+    checkpoint_id = uuid4()
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_embedding_repository = InMemoryMemoryEmbeddingRepository()
+    memory_relation_repository = InMemoryMemoryRelationRepository()
+
+    workflow = WorkflowInstance(
+        workflow_instance_id=workflow_id,
+        workspace_id=workspace_id,
+        ticket_id="TICKET-CHECKPOINT-AUTO-MEM-1",
+        status=WorkflowInstanceStatus.RUNNING,
+    )
+    attempt = WorkflowAttempt(
+        attempt_id=attempt_id,
+        workflow_instance_id=workflow_id,
+        attempt_number=1,
+        status=WorkflowAttemptStatus.RUNNING,
+        verify_status=VerifyStatus.PASSED,
+    )
+    checkpoint = WorkflowCheckpoint(
+        checkpoint_id=checkpoint_id,
+        workflow_instance_id=workflow_id,
+        attempt_id=attempt_id,
+        step_name="investigate_regression",
+        summary="Validated the regression boundary and narrowed the fix path",
+        checkpoint_json={
+            "current_objective": "Restore the passing regression suite",
+            "next_intended_action": "Patch the parser edge case",
+            "root_cause": "Tokenizer accepted malformed separators",
+            "recovery_pattern": "Normalize separators before validation",
+            "what_remains": "Run focused regression tests after the parser fix",
+        },
+    )
+    verify_report = VerifyReport(
+        verify_id=uuid4(),
+        attempt_id=attempt_id,
+        status=VerifyStatus.PASSED,
+        report_json={"checks": ["pytest -q tests/parser/test_regression.py"]},
+    )
+
+    bridge = WorkflowMemoryBridge(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_embedding_repository=memory_embedding_repository,
+        memory_relation_repository=memory_relation_repository,
+        embedding_generator=LocalStubEmbeddingGenerator(
+            model="local-stub-v1",
+            dimensions=8,
+        ),
+    )
+
+    result = bridge.record_checkpoint_memory(
+        workflow=workflow,
+        attempt=attempt,
+        checkpoint=checkpoint,
+        verify_report=verify_report,
+    )
+
+    assert result is not None
+    assert result.episode is not None
+    assert result.memory_item is not None
+    assert result.episode.workflow_instance_id == workflow_id
+    assert result.episode.attempt_id == attempt_id
+    assert result.episode.metadata == {
+        "auto_generated": True,
+        "memory_origin": "workflow_checkpoint_auto",
+        "workflow_status": "running",
+        "attempt_status": "running",
+        "attempt_number": 1,
+        "step_name": "investigate_regression",
+        "checkpoint_id": str(checkpoint_id),
+        "verify_status": "passed",
+        "current_objective": "Restore the passing regression suite",
+        "next_intended_action": "Patch the parser edge case",
+        "root_cause": "Tokenizer accepted malformed separators",
+        "recovery_pattern": "Normalize separators before validation",
+        "what_remains": "Run focused regression tests after the parser fix",
+    }
+    assert "Checkpoint summary: Validated the regression boundary and narrowed the fix path" in (
+        result.episode.summary
+    )
+    assert "Current objective: Restore the passing regression suite" in result.episode.summary
+    assert "Next action: Patch the parser edge case" in result.episode.summary
+    assert "Root cause: Tokenizer accepted malformed separators" in result.episode.summary
+    assert "Recovery pattern: Normalize separators before validation" in result.episode.summary
+    assert "What remains: Run focused regression tests after the parser fix" in (
+        result.episode.summary
+    )
+    assert "Verify status: passed" in result.episode.summary
+
+    assert result.memory_item.workspace_id == workspace_id
+    assert result.memory_item.episode_id == result.episode.episode_id
+    assert result.memory_item.type == "workflow_checkpoint_note"
+    assert result.memory_item.provenance == "workflow_checkpoint_auto"
+    assert result.memory_item.metadata == result.episode.metadata
+    assert result.memory_item.content == result.episode.summary
+
+    assert len(result.promoted_memory_items) == 6
+    assert {item.type for item in result.promoted_memory_items} == {
+        "workflow_objective",
+        "workflow_next_action",
+        "workflow_root_cause",
+        "workflow_recovery_pattern",
+        "workflow_what_remains",
+        "workflow_verification_outcome",
+    }
+    assert {item.metadata["promotion_field"] for item in result.promoted_memory_items} == {
+        "current_objective",
+        "next_intended_action",
+        "root_cause",
+        "recovery_pattern",
+        "what_remains",
+        "verify_status",
+    }
+
+    objective_item = next(
+        item for item in result.promoted_memory_items if item.type == "workflow_objective"
+    )
+    next_action_item = next(
+        item for item in result.promoted_memory_items if item.type == "workflow_next_action"
+    )
+    assert objective_item.content == "Restore the passing regression suite"
+    assert next_action_item.content == "Patch the parser edge case"
+
+    assert len(result.relations) == 3
+    assert {relation.relation_type for relation in result.relations} == {"supports"}
+    assert {relation.metadata["relation_reason"] for relation in result.relations} == {
+        "next_action_supports_objective",
+        "recovery_pattern_supports_root_cause",
+        "verification_supports_completion_note",
+    }
+
+    assert result.details["auto_memory_recorded"] is True
+    assert result.details["promoted_memory_item_count"] == 6
+    assert result.details["memory_relation_count"] == 3
+    assert result.details["stage_details"]["gating"]["status"] == "passed"
+    assert result.details["stage_details"]["summary_selection"]["status"] == "built"
+    assert result.details["stage_details"]["promoted_memory_items"]["status"] == "recorded"
+    assert result.details["stage_details"]["promoted_memory_items"]["created_count"] == 6
+    assert result.details["stage_details"]["relations"]["status"] == "recorded"
+    assert result.details["stage_details"]["relations"]["created_count"] == 3
+    assert result.details["stage_details"]["embedding"]["status"] == "stored"
+
+    assert len(episode_repository.episodes) == 1
+    assert len(memory_item_repository.memory_items) == 7
+    assert len(memory_embedding_repository.embeddings) == 1
+    assert len(memory_relation_repository.relations) == 3
 
 
 def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources() -> None:
@@ -152,6 +339,7 @@ def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources(
         episode_repository=InMemoryEpisodeRepository(),
         memory_item_repository=InMemoryMemoryItemRepository(),
         memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        memory_relation_repository=InMemoryMemoryRelationRepository(),
         embedding_generator=LocalStubEmbeddingGenerator(
             model="local-stub-v1",
             dimensions=8,
@@ -190,6 +378,71 @@ def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources(
     assert result.details == {
         "auto_memory_recorded": False,
         "auto_memory_skipped_reason": "low_signal_checkpoint_closeout",
+        "stage_details": {
+            "gating": {
+                "attempted": True,
+                "status": "skipped",
+                "skipped_reason": "low_signal_checkpoint_closeout",
+            }
+        },
+    }
+
+
+def test_workflow_memory_bridge_skips_checkpoint_auto_memory_without_signal() -> None:
+    from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
+
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    attempt_id = uuid4()
+
+    bridge = WorkflowMemoryBridge(
+        episode_repository=InMemoryEpisodeRepository(),
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        memory_relation_repository=InMemoryMemoryRelationRepository(),
+        embedding_generator=LocalStubEmbeddingGenerator(
+            model="local-stub-v1",
+            dimensions=8,
+        ),
+    )
+
+    result = bridge.record_checkpoint_memory(
+        workflow=WorkflowInstance(
+            workflow_instance_id=workflow_id,
+            workspace_id=workspace_id,
+            ticket_id="TICKET-CHECKPOINT-AUTO-MEM-2",
+            status=WorkflowInstanceStatus.RUNNING,
+        ),
+        attempt=WorkflowAttempt(
+            attempt_id=attempt_id,
+            workflow_instance_id=workflow_id,
+            attempt_number=1,
+            status=WorkflowAttemptStatus.RUNNING,
+        ),
+        checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            attempt_id=attempt_id,
+            step_name="minor_note",
+            summary=None,
+            checkpoint_json={},
+        ),
+        verify_report=None,
+    )
+
+    assert result is not None
+    assert result.episode is None
+    assert result.memory_item is None
+    assert result.details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "low_signal_checkpoint_memory",
+        "stage_details": {
+            "gating": {
+                "attempted": True,
+                "status": "skipped",
+                "skipped_reason": "low_signal_checkpoint_memory",
+            }
+        },
     }
 
 
@@ -212,6 +465,7 @@ def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation
         episode_repository=InMemoryEpisodeRepository(),
         memory_item_repository=InMemoryMemoryItemRepository(),
         memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        memory_relation_repository=InMemoryMemoryRelationRepository(),
         embedding_generator=FailingEmbeddingGenerator(),
     )
 
@@ -248,16 +502,21 @@ def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation
     )
 
     assert result is not None
-    assert result.details == {
-        "auto_memory_recorded": True,
-        "embedding_persistence_status": "failed",
-        "embedding_generation_skipped_reason": "embedding_generation_failed:openai",
-        "embedding_generation_failure": {
-            "provider": "openai",
-            "message": "embedding generation failed",
-            "details": {"status_code": 500},
-        },
+    assert result.details["auto_memory_recorded"] is True
+    assert result.details["embedding_persistence_status"] == "failed"
+    assert (
+        result.details["embedding_generation_skipped_reason"]
+        == "embedding_generation_failed:openai"
+    )
+    assert result.details["embedding_generation_failure"] == {
+        "provider": "openai",
+        "message": "embedding generation failed",
+        "details": {"status_code": 500},
     }
+    assert result.details["stage_details"]["embedding"]["status"] == "failed"
+    assert result.details["stage_details"]["embedding"]["skipped_reason"] == (
+        "embedding_generation_failed:openai"
+    )
 
 
 def test_workflow_memory_bridge_post_init_uses_external_generator_when_enabled(
@@ -389,6 +648,13 @@ def test_workflow_memory_bridge_returns_skip_result_when_summary_sources_are_abs
     assert result.details == {
         "auto_memory_recorded": False,
         "auto_memory_skipped_reason": "no_completion_summary_source",
+        "stage_details": {
+            "gating": {
+                "attempted": True,
+                "status": "skipped",
+                "skipped_reason": "no_completion_summary_source",
+            }
+        },
     }
 
 
@@ -604,7 +870,8 @@ def test_workflow_memory_bridge_build_completion_summary_uses_checkpoint_summary
 
     assert summary == (
         "Workflow completed with status `completed`.\n"
-        "Latest checkpoint summary: Checkpoint-only summary"
+        "Latest checkpoint summary: Checkpoint-only summary\n"
+        "Workflow status: completed"
     )
 
 
@@ -646,6 +913,7 @@ def test_workflow_memory_bridge_build_completion_summary_includes_failure_reason
         "Workflow completed with status `failed`.\n"
         "Completion summary: Explicit failure closeout\n"
         "Latest checkpoint summary: Failure checkpoint summary\n"
+        "Workflow status: failed\n"
         "Failure reason: database unavailable"
     )
 

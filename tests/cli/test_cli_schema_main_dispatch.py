@@ -801,6 +801,10 @@ def test_memory_stats_renders_text_output_and_closes_pool(
         memory_embedding_count=5,
         memory_relation_count=6,
         memory_item_provenance_counts={"episode": 4},
+        checkpoint_auto_memory_recorded_count=2,
+        checkpoint_auto_memory_skipped_count=1,
+        workflow_completion_auto_memory_recorded_count=3,
+        workflow_completion_auto_memory_skipped_count=0,
         latest_episode_created_at=datetime(2024, 11, 2, tzinfo=UTC),
         latest_memory_item_created_at=datetime(2024, 11, 3, tzinfo=UTC),
         latest_memory_embedding_created_at=datetime(2024, 11, 4, tzinfo=UTC),
@@ -832,6 +836,10 @@ def test_memory_stats_renders_text_output_and_closes_pool(
     assert "- memory_items: 4" in captured.out
     assert "- memory_embeddings: 5" in captured.out
     assert "- memory_relations: 6" in captured.out
+    assert "- checkpoint_auto_memory_recorded: 2" in captured.out
+    assert "- checkpoint_auto_memory_skipped: 1" in captured.out
+    assert "- workflow_completion_auto_memory_recorded: 3" in captured.out
+    assert "- workflow_completion_auto_memory_skipped: 0" in captured.out
     assert "- memory_relation_created_at: 2024-11-05 00:00:00+00:00" in captured.out
     assert close_calls == ["close"]
 

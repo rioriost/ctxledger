@@ -322,6 +322,16 @@ def test_build_workflow_checkpoint_tool_handler_returns_verify_report_status_whe
     workflow_instance_id = uuid4()
     attempt_id = uuid4()
     checkpoint_id = uuid4()
+    auto_memory_details = {
+        "auto_memory_recorded": True,
+        "stage_details": {
+            "gating": {
+                "attempted": True,
+                "status": "passed",
+                "skipped_reason": None,
+            }
+        },
+    }
     result = SimpleNamespace(
         checkpoint=SimpleNamespace(
             checkpoint_id=checkpoint_id,
@@ -334,6 +344,8 @@ def test_build_workflow_checkpoint_tool_handler_returns_verify_report_status_whe
             verify_status=VerifyStatus.FAILED,
         ),
         verify_report=SimpleNamespace(status=VerifyStatus.PASSED),
+        warnings=(),
+        auto_memory_details=auto_memory_details,
     )
     service = FakeWorkflowService(checkpoint_result=result)
     handler = build_workflow_checkpoint_tool_handler(make_server(workflow_service=service))
@@ -359,6 +371,8 @@ def test_build_workflow_checkpoint_tool_handler_returns_verify_report_status_whe
             "step_name": "implement",
             "created_at": now.isoformat(),
             "latest_verify_status": "passed",
+            "warnings": [],
+            "auto_memory_details": auto_memory_details,
         },
     }
     assert service.checkpoint_calls is not None
@@ -383,6 +397,8 @@ def test_build_workflow_checkpoint_tool_handler_falls_back_to_attempt_verify_sta
             verify_status=VerifyStatus.PASSED,
         ),
         verify_report=None,
+        warnings=(),
+        auto_memory_details=None,
     )
     service = FakeWorkflowService(checkpoint_result=result)
     handler = build_workflow_checkpoint_tool_handler(make_server(workflow_service=service))
@@ -396,6 +412,8 @@ def test_build_workflow_checkpoint_tool_handler_falls_back_to_attempt_verify_sta
     )
 
     assert response.payload["result"]["latest_verify_status"] == "passed"
+    assert response.payload["result"]["warnings"] == []
+    assert response.payload["result"]["auto_memory_details"] is None
 
 
 def test_build_workflow_complete_tool_handler_rejects_invalid_verify_report_type() -> None:

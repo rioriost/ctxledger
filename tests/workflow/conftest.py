@@ -8,6 +8,7 @@ from ctxledger.workflow.memory_bridge import (
     EpisodeRecord,
     MemoryEmbeddingRecord,
     MemoryItemRecord,
+    MemoryRelationRecord,
     WorkflowMemoryBridge,
 )
 from ctxledger.workflow.service import (
@@ -58,6 +59,15 @@ class RecordingMemoryEmbeddingRepository:
         return embedding
 
 
+class RecordingMemoryRelationRepository:
+    def __init__(self) -> None:
+        self.relations: list[MemoryRelationRecord] = []
+
+    def create(self, relation: MemoryRelationRecord) -> MemoryRelationRecord:
+        self.relations.append(relation)
+        return relation
+
+
 def make_service_and_uow(
     *,
     workflow_memory_bridge: WorkflowMemoryBridge | None = None,
@@ -86,14 +96,17 @@ def build_recording_workflow_memory_bridge() -> tuple[
     RecordingEpisodeRepository,
     RecordingMemoryItemRepository,
     RecordingMemoryEmbeddingRepository,
+    RecordingMemoryRelationRepository,
 ]:
     episode_repository = RecordingEpisodeRepository()
     memory_item_repository = RecordingMemoryItemRepository()
     memory_embedding_repository = RecordingMemoryEmbeddingRepository()
+    memory_relation_repository = RecordingMemoryRelationRepository()
     bridge = WorkflowMemoryBridge(
         episode_repository=episode_repository,
         memory_item_repository=memory_item_repository,
         memory_embedding_repository=memory_embedding_repository,
+        memory_relation_repository=memory_relation_repository,
         embedding_generator=None,
     )
     return (
@@ -101,6 +114,7 @@ def build_recording_workflow_memory_bridge() -> tuple[
         episode_repository,
         memory_item_repository,
         memory_embedding_repository,
+        memory_relation_repository,
     )
 
 

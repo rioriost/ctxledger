@@ -891,6 +891,12 @@ def _format_stats_text(stats: object) -> str:
         f"- memory_items: {getattr(stats, 'memory_item_count', 0)}",
         f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
         "",
+        "Remember-path observability:",
+        f"- checkpoint_auto_memory_recorded: {getattr(stats, 'checkpoint_auto_memory_recorded_count', 0)}",
+        f"- checkpoint_auto_memory_skipped: {getattr(stats, 'checkpoint_auto_memory_skipped_count', 0)}",
+        f"- workflow_completion_auto_memory_recorded: {getattr(stats, 'workflow_completion_auto_memory_recorded_count', 0)}",
+        f"- workflow_completion_auto_memory_skipped: {getattr(stats, 'workflow_completion_auto_memory_skipped_count', 0)}",
+        "",
         "Other:",
         f"- checkpoints: {getattr(stats, 'checkpoint_count', 0)}",
         "",
@@ -930,6 +936,18 @@ def _stats(args: argparse.Namespace) -> int:
                     "episode_count": stats.episode_count,
                     "memory_item_count": stats.memory_item_count,
                     "memory_embedding_count": stats.memory_embedding_count,
+                    "checkpoint_auto_memory_recorded_count": (
+                        stats.checkpoint_auto_memory_recorded_count
+                    ),
+                    "checkpoint_auto_memory_skipped_count": (
+                        stats.checkpoint_auto_memory_skipped_count
+                    ),
+                    "workflow_completion_auto_memory_recorded_count": (
+                        stats.workflow_completion_auto_memory_recorded_count
+                    ),
+                    "workflow_completion_auto_memory_skipped_count": (
+                        stats.workflow_completion_auto_memory_skipped_count
+                    ),
                     "latest_workflow_updated_at": _isoformat_or_none(
                         stats.latest_workflow_updated_at
                     ),
@@ -1043,6 +1061,12 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- memory_items: {getattr(stats, 'memory_item_count', 0)}",
         f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
         f"- memory_relations: {getattr(stats, 'memory_relation_count', 0)}",
+        "",
+        "Remember-path observability:",
+        f"- checkpoint_auto_memory_recorded: {getattr(stats, 'checkpoint_auto_memory_recorded_count', 0)}",
+        f"- checkpoint_auto_memory_skipped: {getattr(stats, 'checkpoint_auto_memory_skipped_count', 0)}",
+        f"- workflow_completion_auto_memory_recorded: {getattr(stats, 'workflow_completion_auto_memory_recorded_count', 0)}",
+        f"- workflow_completion_auto_memory_skipped: {getattr(stats, 'workflow_completion_auto_memory_skipped_count', 0)}",
         "",
         "Memory item provenance:",
     ]
@@ -1165,6 +1189,18 @@ def _memory_stats(args: argparse.Namespace) -> int:
                     "memory_embedding_count": stats.memory_embedding_count,
                     "memory_relation_count": stats.memory_relation_count,
                     "memory_item_provenance_counts": (stats.memory_item_provenance_counts),
+                    "checkpoint_auto_memory_recorded_count": (
+                        stats.checkpoint_auto_memory_recorded_count
+                    ),
+                    "checkpoint_auto_memory_skipped_count": (
+                        stats.checkpoint_auto_memory_skipped_count
+                    ),
+                    "workflow_completion_auto_memory_recorded_count": (
+                        stats.workflow_completion_auto_memory_recorded_count
+                    ),
+                    "workflow_completion_auto_memory_skipped_count": (
+                        stats.workflow_completion_auto_memory_skipped_count
+                    ),
                     "latest_episode_created_at": _isoformat_or_none(
                         stats.latest_episode_created_at
                     ),

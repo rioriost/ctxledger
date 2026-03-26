@@ -34,6 +34,10 @@ def test_format_stats_text_uses_zero_defaults_for_missing_fields() -> None:
     assert "- episodes: 0" in rendered
     assert "- memory_items: 0" in rendered
     assert "- memory_embeddings: 0" in rendered
+    assert "- checkpoint_auto_memory_recorded: 0" in rendered
+    assert "- checkpoint_auto_memory_skipped: 0" in rendered
+    assert "- workflow_completion_auto_memory_recorded: 0" in rendered
+    assert "- workflow_completion_auto_memory_skipped: 0" in rendered
     assert "- checkpoints: 0" in rendered
     assert "- workflow_updated_at: None" in rendered
     assert "- checkpoint_created_at: None" in rendered
@@ -94,6 +98,10 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
         memory_embedding_count=0,
         memory_relation_count=0,
         memory_item_provenance_counts={},
+        checkpoint_auto_memory_recorded_count=0,
+        checkpoint_auto_memory_skipped_count=0,
+        workflow_completion_auto_memory_recorded_count=0,
+        workflow_completion_auto_memory_skipped_count=0,
         latest_episode_created_at=None,
         latest_memory_item_created_at=None,
         latest_memory_embedding_created_at=None,
@@ -103,6 +111,11 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
     rendered = cli_module._format_memory_stats_text(stats)
 
     assert "ctxledger memory-stats" in rendered
+    assert "Remember-path observability:" in rendered
+    assert "- checkpoint_auto_memory_recorded: 0" in rendered
+    assert "- checkpoint_auto_memory_skipped: 0" in rendered
+    assert "- workflow_completion_auto_memory_recorded: 0" in rendered
+    assert "- workflow_completion_auto_memory_skipped: 0" in rendered
     assert "Memory item provenance:" in rendered
     assert "- none" in rendered
     assert "- memory_relation_created_at: None" in rendered
@@ -148,6 +161,10 @@ def test_format_memory_stats_text_renders_values() -> None:
             "checkpoint": 1,
             "episode": 2,
         },
+        checkpoint_auto_memory_recorded_count=7,
+        checkpoint_auto_memory_skipped_count=3,
+        workflow_completion_auto_memory_recorded_count=5,
+        workflow_completion_auto_memory_skipped_count=2,
         latest_episode_created_at=datetime(2026, 3, 17, 12, 0, 0, tzinfo=UTC),
         latest_memory_item_created_at=datetime(2026, 3, 17, 12, 1, 0, tzinfo=UTC),
         latest_memory_embedding_created_at=datetime(2026, 3, 17, 12, 2, 0, tzinfo=UTC),
@@ -160,6 +177,10 @@ def test_format_memory_stats_text_renders_values() -> None:
     assert "- memory_items: 3" in rendered
     assert "- memory_embeddings: 4" in rendered
     assert "- memory_relations: 5" in rendered
+    assert "- checkpoint_auto_memory_recorded: 7" in rendered
+    assert "- checkpoint_auto_memory_skipped: 3" in rendered
+    assert "- workflow_completion_auto_memory_recorded: 5" in rendered
+    assert "- workflow_completion_auto_memory_skipped: 2" in rendered
     assert "- checkpoint: 1" in rendered
     assert "- episode: 2" in rendered
     assert "- episode_created_at: 2026-03-17 12:00:00+00:00" in rendered
