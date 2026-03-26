@@ -151,6 +151,8 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
 

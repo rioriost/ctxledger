@@ -1,6 +1,6 @@
 # AGE Prototype Validation Runbook for the Constrained `supports` Path
 
-For a fill-in template that records one concrete validation pass, see:
+For a concrete validation note that records one realistic local validation pass, see:
 
 - `docs/memory/validation/age_prototype_validation_observation_template.md`
 
@@ -13,7 +13,7 @@ For the planned optional AGE-capable local/dev environment path, see:
 This runbook describes how to validate the current constrained Apache AGE
 prototype in a practical, operator-facing way.
 
-It is intended for the current `0.6.0`-oriented prototype state where:
+It is intended for the current `0.8.0`-oriented prototype state where:
 
 - relational PostgreSQL tables remain canonical
 - AGE-backed graph usage is optional
@@ -23,6 +23,8 @@ It is intended for the current `0.6.0`-oriented prototype state where:
   unchanged
 
 This runbook is intentionally narrow.
+
+It stays within the current `0.8.0` constrained prototype boundary.
 
 It does **not** define a full production graph operations model.
 
@@ -73,7 +75,10 @@ Current prototype scope:
 
 - `memory_item` graph nodes
 - `supports` graph edges
+- `memory_summary` graph nodes
+- `summarizes` graph edges for derived summary mirroring
 - one-hop relation lookup only
+- narrow auxiliary summary-member traversal for explainability/readiness work
 
 Current prototype non-goals:
 
@@ -95,7 +100,9 @@ A successful validation pass should answer these questions clearly:
 3. Does the configured graph name match what operators expect?
 4. Has the graph been bootstrapped and populated?
 5. Does the system report graph readiness clearly?
-6. If graph readiness is missing, is relational fallback still the expected safe
+6. Does the readiness surface expose the same summary-graph explainability shape
+   that operators see elsewhere?
+7. If graph readiness is missing, is relational fallback still the expected safe
    interpretation?
 
 ---

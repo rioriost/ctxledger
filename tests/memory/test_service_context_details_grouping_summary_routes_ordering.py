@@ -177,6 +177,8 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
                 "relation_reasons": [],
                 "relation_reason_primary": None,
                 "relation_reasons_frontloaded": False,
+                "relation_reason_count": 0,
+                "relation_reason_counts": {},
                 "relation_origins": [],
             },
         }
@@ -473,6 +475,8 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
                 "relation_reasons": [],
                 "relation_reason_primary": None,
                 "relation_reasons_frontloaded": False,
+                "relation_reason_count": 0,
+                "relation_reason_counts": {},
                 "relation_origins": [],
             },
         },
@@ -489,6 +493,8 @@ def test_memory_get_context_group_ordering_is_summary_then_episodes_then_workspa
                 "relation_reasons": [],
                 "relation_reason_primary": None,
                 "relation_reasons_frontloaded": False,
+                "relation_reason_count": 0,
+                "relation_reason_counts": {},
                 "relation_origins": [],
             },
         },
@@ -1109,6 +1115,10 @@ def test_memory_get_context_summary_only_group_frontloads_relation_reason_explai
                 ],
                 "relation_reason_primary": "next_action_supports_objective",
                 "relation_reasons_frontloaded": True,
+                "relation_reason_count": 1,
+                "relation_reason_counts": {
+                    "next_action_supports_objective": 1,
+                },
                 "relation_origins": [
                     "workflow_checkpoint_auto",
                 ],

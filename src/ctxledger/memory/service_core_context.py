@@ -344,6 +344,11 @@ class ContextShapingMixin:
                         else None
                     ),
                     "relation_reasons_frontloaded": bool(remember_path_relation_reasons),
+                    "relation_reason_count": len(remember_path_relation_reasons),
+                    "relation_reason_counts": detail.get(
+                        "remember_path_relation_summary",
+                        {},
+                    ).get("relation_reason_counts", {}),
                     "relation_origins": sorted(
                         {
                             str(relation.metadata.get("memory_origin"))
@@ -731,6 +736,28 @@ class ContextShapingMixin:
                                 )
                                 else None
                             ),
+                            "remember_path_summary_relation_reason_counts": {
+                                relation_reason: sum(
+                                    summary.get("remember_path_explainability", {})
+                                    .get("relation_reason_counts", {})
+                                    .get(relation_reason, 0)
+                                    for summary in summaries
+                                )
+                                for relation_reason in sorted(
+                                    {
+                                        relation_reason
+                                        for summary in summaries
+                                        for relation_reason in (
+                                            summary.get("remember_path_explainability", {}).get(
+                                                "relation_reason_counts",
+                                                {},
+                                            )
+                                        ).keys()
+                                        if isinstance(relation_reason, str)
+                                        and relation_reason.strip()
+                                    }
+                                )
+                            },
                         }
                         if include_memory_items
                         else {}
@@ -851,6 +878,48 @@ class ContextShapingMixin:
                         )
                     ],
                     "remember_path_relation_summary": {
+                        **(
+                            {
+                                "relation_reasons": sorted(
+                                    {
+                                        relation_reason
+                                        for detail in memory_item_details
+                                        for relation_reason in detail.get(
+                                            "remember_path_relation_summary",
+                                            {},
+                                        )
+                                        .get("relation_reason_counts", {})
+                                        .keys()
+                                        if isinstance(relation_reason, str)
+                                        and relation_reason.strip()
+                                    }
+                                ),
+                                "relation_reason_primary": (
+                                    sorted(
+                                        {
+                                            relation_reason
+                                            for detail in memory_item_details
+                                            for relation_reason in detail.get(
+                                                "remember_path_relation_summary",
+                                                {},
+                                            )
+                                            .get("relation_reason_counts", {})
+                                            .keys()
+                                            if isinstance(relation_reason, str)
+                                            and relation_reason.strip()
+                                        }
+                                    )[0]
+                                ),
+                            }
+                            if any(
+                                detail.get("remember_path_relation_summary", {}).get(
+                                    "relation_reason_counts",
+                                    {},
+                                )
+                                for detail in memory_item_details
+                            )
+                            else {}
+                        ),
                         "relation_reason_counts": {
                             relation_reason: sum(
                                 detail.get("remember_path_relation_summary", {})
@@ -930,6 +999,37 @@ class ContextShapingMixin:
                         self._serialize_memory_item(memory_item)
                         for memory_item in graph_summary_related_memory_items
                     ],
+                    "readiness_explainability": {
+                        "selection_route": "graph_summary_auxiliary",
+                        "relation_type": "summarizes",
+                        "source_episode_count": len(
+                            {
+                                detail["episode_id"]
+                                for detail in memory_item_details
+                                if isinstance(detail.get("episode_id"), str)
+                            }
+                        ),
+                        "source_memory_count": len(
+                            {
+                                str(memory_item.memory_id)
+                                for detail in memory_item_details
+                                for memory_item in detail.get("memory_items", [])
+                                if getattr(memory_item, "memory_id", None) is not None
+                            }
+                        ),
+                        "derived_memory_count": len(graph_summary_related_memory_items),
+                        "derived_graph_labels": [
+                            "memory_summary",
+                            "memory_item",
+                            "summarizes",
+                        ],
+                        "canonical_source": [
+                            "memory_summaries",
+                            "memory_summary_memberships",
+                        ],
+                        "refresh_command": "ctxledger refresh-age-summary-graph",
+                        "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+                    },
                 }
             )
 

@@ -629,6 +629,8 @@ def test_memory_get_context_includes_inherited_workspace_items_in_details_shape(
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
 

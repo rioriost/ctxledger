@@ -1620,6 +1620,36 @@ class MemoryService(
                     or bool(detail.get("remember_path_relation_explanations"))
                     for detail in memory_item_details
                 ),
+                "remember_path_relation_reasons": sorted(
+                    {
+                        relation_reason
+                        for detail in memory_item_details
+                        for relation_reason in detail.get("remember_path_relation_summary", {})
+                        .get("relation_reason_counts", {})
+                        .keys()
+                        if isinstance(relation_reason, str) and relation_reason.strip()
+                    }
+                ),
+                "remember_path_relation_reason_primary": (
+                    sorted(
+                        {
+                            relation_reason
+                            for detail in memory_item_details
+                            for relation_reason in detail.get("remember_path_relation_summary", {})
+                            .get("relation_reason_counts", {})
+                            .keys()
+                            if isinstance(relation_reason, str) and relation_reason.strip()
+                        }
+                    )[0]
+                    if any(
+                        detail.get("remember_path_relation_summary", {}).get(
+                            "relation_reason_counts",
+                            {},
+                        )
+                        for detail in memory_item_details
+                    )
+                    else None
+                ),
                 "remember_path_origin_counts": {
                     origin: sum(
                         detail.get("remember_path_memory_summary", {})
@@ -1727,6 +1757,52 @@ class MemoryService(
                 "group_related_memory_items_are_convenience_output": bool(
                     related_memory_items or graph_summary_related_memory_items
                 ),
+                "readiness_explainability": {
+                    "graph_summary_auxiliary": next(
+                        (
+                            group.get("readiness_explainability", {})
+                            for group in memory_context_groups
+                            if group.get("selection_route") == "graph_summary_auxiliary"
+                        ),
+                        {},
+                    ),
+                    "summary_graph_mirroring": (
+                        {
+                            "selection_route": "graph_summary_auxiliary",
+                            "relation_type": "summarizes",
+                            "source_episode_count": len(
+                                {
+                                    detail["episode_id"]
+                                    for detail in memory_item_details
+                                    if isinstance(detail.get("episode_id"), str)
+                                }
+                            ),
+                            "source_memory_count": len(
+                                {
+                                    str(memory_item.memory_id)
+                                    for detail in memory_item_details
+                                    for memory_item in detail.get("memory_items", [])
+                                    if getattr(memory_item, "memory_id", None) is not None
+                                }
+                            ),
+                            "derived_memory_count": len(graph_summary_related_memory_items),
+                            "derived_graph_labels": [
+                                "memory_summary",
+                                "memory_item",
+                                "summarizes",
+                            ],
+                            "canonical_source": [
+                                "memory_summaries",
+                                "memory_summary_memberships",
+                            ],
+                            "refresh_command": "ctxledger refresh-age-summary-graph",
+                            "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+                            "ready": bool(graph_summary_related_memory_items),
+                        }
+                        if graph_summary_related_memory_items
+                        else {}
+                    ),
+                },
                 "memory_context_groups": memory_context_groups,
                 "inherited_memory_items": [
                     self._serialize_memory_item(memory_item)

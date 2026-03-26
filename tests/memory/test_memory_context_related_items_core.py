@@ -278,6 +278,8 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
         "graph_summary_auxiliary": [],
     }
     assert response.details["related_context_returned_without_episode_matches"] is (False)
+    assert response.details["remember_path_relation_reasons"] == []
+    assert response.details["remember_path_relation_reason_primary"] is None
     assert response.details["flat_related_memory_items_is_compatibility_field"] is (True)
     assert (
         response.details["flat_related_memory_items_matches_grouped_episode_related_items"] is True
@@ -357,11 +359,14 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
             "target_memory_id": str(supports_target_item.memory_id),
         }
     ]
-    assert response.details["memory_context_groups"][0]["remember_path_relation_summary"] == {
-        "relation_reason_counts": {},
-        "checkpoint_origin_present": False,
-        "completion_origin_present": False,
-    }
+    relation_summary = response.details["memory_context_groups"][0][
+        "remember_path_relation_summary"
+    ]
+    assert relation_summary.get("relation_reasons", []) == []
+    assert relation_summary.get("relation_reason_primary") is None
+    assert relation_summary["relation_reason_counts"] == {}
+    assert relation_summary["checkpoint_origin_present"] is False
+    assert relation_summary["completion_origin_present"] is False
     workspace_group = response.details["memory_context_groups"][1]
     assert workspace_group["scope"] == "workspace"
     assert workspace_group["scope_id"] == str(workspace_id)
@@ -438,11 +443,12 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
             "target_memory_id": str(supports_target_item.memory_id),
         }
     ]
-    assert relation_group["remember_path_relation_summary"] == {
-        "relation_reason_counts": {},
-        "checkpoint_origin_present": False,
-        "completion_origin_present": False,
-    }
+    relation_summary = relation_group["remember_path_relation_summary"]
+    assert relation_summary.get("relation_reasons", []) == []
+    assert relation_summary.get("relation_reason_primary") is None
+    assert relation_summary["relation_reason_counts"] == {}
+    assert relation_summary["checkpoint_origin_present"] is False
+    assert relation_summary["completion_origin_present"] is False
 
 
 def test_memory_get_context_relation_auxiliary_stays_disabled_when_memory_items_are_off() -> None:

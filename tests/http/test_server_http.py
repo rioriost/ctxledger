@@ -169,6 +169,9 @@ def test_age_prototype_runtime_details_reports_enabled_ready_graph_state() -> No
                 "memory_item",
                 "summarizes",
             ],
+            "relation_type": "summarizes",
+            "selection_route": "graph_summary_auxiliary",
+            "explainability_scope": "readiness",
             "refresh_command": "ctxledger refresh-age-summary-graph",
             "read_path_scope": "narrow_auxiliary_summary_member_traversal",
             "age_available": True,
@@ -226,6 +229,9 @@ def test_age_prototype_runtime_details_reports_disabled_graph_state() -> None:
                 "memory_item",
                 "summarizes",
             ],
+            "relation_type": "summarizes",
+            "selection_route": "graph_summary_auxiliary",
+            "explainability_scope": "readiness",
             "refresh_command": "ctxledger refresh-age-summary-graph",
             "read_path_scope": "narrow_auxiliary_summary_member_traversal",
             "age_available": False,
@@ -289,6 +295,9 @@ def test_build_runtime_introspection_response_includes_age_prototype_details() -
                 "memory_item",
                 "summarizes",
             ],
+            "relation_type": "summarizes",
+            "selection_route": "graph_summary_auxiliary",
+            "explainability_scope": "readiness",
             "refresh_command": "ctxledger refresh-age-summary-graph",
             "read_path_scope": "narrow_auxiliary_summary_member_traversal",
             "age_available": True,
@@ -309,6 +318,42 @@ def test_build_runtime_introspection_response_includes_age_prototype_details() -
         "age_graph_status": "graph_unavailable",
     }
     assert "runtime" in response.payload
+
+
+def test_age_prototype_runtime_details_readiness_payload_surfaces_explainability_fields() -> None:
+    settings = make_settings()
+    health_checker = FakeDatabaseHealthChecker(
+        age_available_value=True,
+        age_graph_available_value=True,
+    )
+    server = make_server(
+        settings=settings,
+        db_health_checker=health_checker,
+        runtime=FakeRuntime(),
+    )
+
+    details = _age_prototype_runtime_details(server)
+
+    assert details["summary_graph_mirroring"] == {
+        "enabled": False,
+        "canonical_source": [
+            "memory_summaries",
+            "memory_summary_memberships",
+        ],
+        "derived_graph_labels": [
+            "memory_summary",
+            "memory_item",
+            "summarizes",
+        ],
+        "relation_type": "summarizes",
+        "selection_route": "graph_summary_auxiliary",
+        "explainability_scope": "readiness",
+        "refresh_command": "ctxledger refresh-age-summary-graph",
+        "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+        "age_available": True,
+        "graph_status": "graph_ready",
+        "ready": True,
+    }
 
 
 def test_http_runtime_adapter_dispatches_registered_workflow_resume_handler() -> None:
@@ -593,6 +638,9 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
                     "memory_item",
                     "summarizes",
                 ],
+                "relation_type": "summarizes",
+                "selection_route": "graph_summary_auxiliary",
+                "explainability_scope": "readiness",
                 "refresh_command": "ctxledger refresh-age-summary-graph",
                 "read_path_scope": "narrow_auxiliary_summary_member_traversal",
                 "age_available": True,
@@ -613,6 +661,22 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
             "age_graph_status": "graph_ready",
         },
     }
+
+
+def test_build_runtime_introspection_response_exposes_readiness_explainability_fields() -> None:
+    settings = make_settings()
+    server, _, _, _ = make_http_runtime(
+        settings=settings,
+    )
+
+    response = build_runtime_introspection_response(server)
+
+    summary_graph_mirroring = response.payload["age_prototype"]["summary_graph_mirroring"]
+    assert summary_graph_mirroring["relation_type"] == "summarizes"
+    assert summary_graph_mirroring["selection_route"] == "graph_summary_auxiliary"
+    assert summary_graph_mirroring["explainability_scope"] == "readiness"
+    assert summary_graph_mirroring["refresh_command"] == "ctxledger refresh-age-summary-graph"
+    assert summary_graph_mirroring["read_path_scope"] == "narrow_auxiliary_summary_member_traversal"
 
 
 def test_build_runtime_introspection_response_returns_empty_runtime_list_when_runtime_is_missing() -> (
@@ -651,6 +715,9 @@ def test_build_runtime_introspection_response_returns_empty_runtime_list_when_ru
                     "memory_item",
                     "summarizes",
                 ],
+                "relation_type": "summarizes",
+                "selection_route": "graph_summary_auxiliary",
+                "explainability_scope": "readiness",
                 "refresh_command": "ctxledger refresh-age-summary-graph",
                 "read_path_scope": "narrow_auxiliary_summary_member_traversal",
                 "age_available": True,
@@ -706,6 +773,9 @@ def test_build_runtime_introspection_http_handler_returns_success_response() -> 
                     "memory_item",
                     "summarizes",
                 ],
+                "relation_type": "summarizes",
+                "selection_route": "graph_summary_auxiliary",
+                "explainability_scope": "readiness",
                 "refresh_command": "ctxledger refresh-age-summary-graph",
                 "read_path_scope": "narrow_auxiliary_summary_member_traversal",
                 "age_available": True,
@@ -804,6 +874,9 @@ def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handle
                     "memory_item",
                     "summarizes",
                 ],
+                "relation_type": "summarizes",
+                "selection_route": "graph_summary_auxiliary",
+                "explainability_scope": "readiness",
                 "refresh_command": "ctxledger refresh-age-summary-graph",
                 "read_path_scope": "narrow_auxiliary_summary_member_traversal",
                 "age_available": True,
@@ -1339,6 +1412,50 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payloa
             "summary_selection_kind": "memory_summary_first",
             "retrieval_routes_present": ["summary_first"],
             "primary_retrieval_routes_present": ["summary_first"],
+            "remember_path_relation_reasons": [
+                "checkpoint_to_completion_support",
+                "summary_member_support",
+            ],
+            "remember_path_relation_reason_primary": "checkpoint_to_completion_support",
+            "readiness_explainability": {
+                "graph_summary_auxiliary": {
+                    "selection_route": "graph_summary_auxiliary",
+                    "relation_type": "summarizes",
+                    "source_episode_count": 1,
+                    "source_memory_count": 1,
+                    "derived_memory_count": 1,
+                    "derived_graph_labels": [
+                        "memory_summary",
+                        "memory_item",
+                        "summarizes",
+                    ],
+                    "canonical_source": [
+                        "memory_summaries",
+                        "memory_summary_memberships",
+                    ],
+                    "refresh_command": "ctxledger refresh-age-summary-graph",
+                    "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+                },
+                "summary_graph_mirroring": {
+                    "selection_route": "graph_summary_auxiliary",
+                    "relation_type": "summarizes",
+                    "source_episode_count": 1,
+                    "source_memory_count": 1,
+                    "derived_memory_count": 1,
+                    "derived_graph_labels": [
+                        "memory_summary",
+                        "memory_item",
+                        "summarizes",
+                    ],
+                    "canonical_source": [
+                        "memory_summaries",
+                        "memory_summary_memberships",
+                    ],
+                    "refresh_command": "ctxledger refresh-age-summary-graph",
+                    "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+                    "ready": True,
+                },
+            },
             "memory_context_groups": [
                 {
                     "scope": "summary",
@@ -1465,6 +1582,53 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payloa
     assert payload["result"]["details"]["summary_selection_kind"] == "memory_summary_first"
     assert payload["result"]["details"]["retrieval_routes_present"] == ["summary_first"]
     assert payload["result"]["details"]["primary_retrieval_routes_present"] == ["summary_first"]
+    assert payload["result"]["details"]["remember_path_relation_reasons"] == [
+        "checkpoint_to_completion_support",
+        "summary_member_support",
+    ]
+    assert (
+        payload["result"]["details"]["remember_path_relation_reason_primary"]
+        == "checkpoint_to_completion_support"
+    )
+    assert payload["result"]["details"]["readiness_explainability"] == {
+        "graph_summary_auxiliary": {
+            "selection_route": "graph_summary_auxiliary",
+            "relation_type": "summarizes",
+            "source_episode_count": 1,
+            "source_memory_count": 1,
+            "derived_memory_count": 1,
+            "derived_graph_labels": [
+                "memory_summary",
+                "memory_item",
+                "summarizes",
+            ],
+            "canonical_source": [
+                "memory_summaries",
+                "memory_summary_memberships",
+            ],
+            "refresh_command": "ctxledger refresh-age-summary-graph",
+            "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+        },
+        "summary_graph_mirroring": {
+            "selection_route": "graph_summary_auxiliary",
+            "relation_type": "summarizes",
+            "source_episode_count": 1,
+            "source_memory_count": 1,
+            "derived_memory_count": 1,
+            "derived_graph_labels": [
+                "memory_summary",
+                "memory_item",
+                "summarizes",
+            ],
+            "canonical_source": [
+                "memory_summaries",
+                "memory_summary_memberships",
+            ],
+            "refresh_command": "ctxledger refresh-age-summary-graph",
+            "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+            "ready": True,
+        },
+    }
     assert payload["result"]["details"]["summaries"] == [
         {
             "memory_summary_id": str(memory_summary_id),

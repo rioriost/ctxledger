@@ -317,11 +317,12 @@ def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_
         and explanation["target_memory_type"] is None
         for explanation in relation_group["remember_path_relation_explanations"][2:]
     )
-    assert relation_group["remember_path_relation_summary"] == {
-        "relation_reason_counts": {},
-        "checkpoint_origin_present": False,
-        "completion_origin_present": False,
-    }
+    relation_summary = relation_group["remember_path_relation_summary"]
+    assert relation_summary.get("relation_reasons", []) == []
+    assert relation_summary.get("relation_reason_primary") is None
+    assert relation_summary["relation_reason_counts"] == {}
+    assert relation_summary["checkpoint_origin_present"] is False
+    assert relation_summary["completion_origin_present"] is False
 
 
 def test_memory_get_context_supports_target_lookup_boundary_preserves_relation_auxiliary_parity() -> (

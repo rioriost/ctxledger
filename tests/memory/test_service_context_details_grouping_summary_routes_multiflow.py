@@ -393,6 +393,8 @@ def test_memory_get_context_multi_workflow_summary_first_with_memory_items_keeps
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
     assert second_summary["episode_id"] == str(second_episode.episode_id)
@@ -407,6 +409,8 @@ def test_memory_get_context_multi_workflow_summary_first_with_memory_items_keeps
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
 
@@ -675,6 +679,8 @@ def test_memory_get_context_ticket_only_multi_workflow_summary_first_with_memory
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
     assert second_summary["episode_id"] == str(second_episode.episode_id)
@@ -689,6 +695,8 @@ def test_memory_get_context_ticket_only_multi_workflow_summary_first_with_memory
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
 
@@ -956,6 +964,8 @@ def test_memory_get_context_ticket_only_multi_workflow_query_filter_summary_firs
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
 
@@ -1205,6 +1215,8 @@ def test_memory_get_context_workspace_only_multi_workflow_summary_first_with_wor
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
     assert second_summary["episode_id"] == str(second_episode.episode_id)
@@ -1219,6 +1231,8 @@ def test_memory_get_context_workspace_only_multi_workflow_summary_first_with_wor
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
 
