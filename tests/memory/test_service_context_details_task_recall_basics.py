@@ -213,22 +213,25 @@ def test_memory_get_context_includes_memory_items_and_summaries_details() -> Non
         str(first_episode.episode_id): 2,
         str(second_episode.episode_id): 1,
     }
-    assert response.details["summaries"] == [
-        {
-            "episode_id": str(first_episode.episode_id),
-            "workflow_instance_id": str(workflow_id),
-            "memory_item_count": 2,
-            "memory_item_types": ["checkpoint_note", "episode_note"],
-            "memory_item_provenance": ["checkpoint", "episode"],
-        },
-        {
-            "episode_id": str(second_episode.episode_id),
-            "workflow_instance_id": str(workflow_id),
-            "memory_item_count": 1,
-            "memory_item_types": ["episode_note"],
-            "memory_item_provenance": ["episode"],
-        },
+    assert len(response.details["summaries"]) == 2
+    assert response.details["summaries"][0]["episode_id"] == str(first_episode.episode_id)
+    assert response.details["summaries"][0]["workflow_instance_id"] == str(workflow_id)
+    assert response.details["summaries"][0]["memory_item_count"] == 2
+    assert response.details["summaries"][0]["memory_item_types"] == [
+        "checkpoint_note",
+        "episode_note",
     ]
+    assert response.details["summaries"][0]["memory_item_provenance"] == [
+        "checkpoint",
+        "episode",
+    ]
+    assert "remember_path_explainability" in response.details["summaries"][0]
+    assert response.details["summaries"][1]["episode_id"] == str(second_episode.episode_id)
+    assert response.details["summaries"][1]["workflow_instance_id"] == str(workflow_id)
+    assert response.details["summaries"][1]["memory_item_count"] == 1
+    assert response.details["summaries"][1]["memory_item_types"] == ["episode_note"]
+    assert response.details["summaries"][1]["memory_item_provenance"] == ["episode"]
+    assert "remember_path_explainability" in response.details["summaries"][1]
     assert response.details["summary_selection_applied"] is True
     assert response.details["summary_selection_kind"] == "episode_summary_first"
     assert response.details["summary_first_has_episode_groups"] is True

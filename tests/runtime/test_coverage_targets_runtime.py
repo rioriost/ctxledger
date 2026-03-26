@@ -1817,11 +1817,13 @@ def test_build_workflow_service_factory_uses_uow_memory_backing_when_uow_is_prov
             episode_repository: object,
             memory_item_repository: object,
             memory_embedding_repository: object,
+            memory_relation_repository: object,
             summary_builder: object | None = None,
         ) -> None:
             self.episode_repository = episode_repository
             self.memory_item_repository = memory_item_repository
             self.memory_embedding_repository = memory_embedding_repository
+            self.memory_relation_repository = memory_relation_repository
             self.summary_builder = summary_builder
 
     class FakeWorkflowService:
@@ -1850,6 +1852,7 @@ def test_build_workflow_service_factory_uses_uow_memory_backing_when_uow_is_prov
         memory_episodes="EPISODES",
         memory_items="ITEMS",
         memory_embeddings="EMBEDDINGS",
+        memory_relations="RELATIONS",
     )
 
     settings = make_settings()
@@ -1862,6 +1865,7 @@ def test_build_workflow_service_factory_uses_uow_memory_backing_when_uow_is_prov
     assert bridge.episode_repository == "EPISODES"
     assert bridge.memory_item_repository == "ITEMS"
     assert bridge.memory_embedding_repository == "EMBEDDINGS"
+    assert bridge.memory_relation_repository == "RELATIONS"
     assert captured["settings"] is settings
     assert captured["config"] == "postgres-config"
     assert captured["pool"] == "POOL"

@@ -428,6 +428,7 @@ def test_workflow_service_stats_and_listing_helpers_cover_repository_branches() 
                 max_datetime=lambda field_name: now,
             )
             self.workflow_instances = SimpleNamespace(
+                count_all=lambda: 3,
                 count_by_status=lambda: {
                     "running": 2,
                     "completed": 1,
@@ -436,13 +437,15 @@ def test_workflow_service_stats_and_listing_helpers_cover_repository_branches() 
                 max_datetime=lambda field_name: now,
             )
             self.workflow_attempts = SimpleNamespace(
+                count_all=lambda: 5,
                 count_by_status=lambda: {
                     "running": 1,
                     "succeeded": 4,
                     "ignored": 99,
-                }
+                },
             )
             self.verify_reports = SimpleNamespace(
+                count_all=lambda: 8,
                 count_by_status=lambda: {
                     "pending": 2,
                     "passed": 6,

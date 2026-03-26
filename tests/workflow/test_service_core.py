@@ -523,7 +523,12 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
                 count_all=lambda: 7, max_datetime=lambda field: expected_time
             )
             self.memory_items = SimpleNamespace(
-                count_all=lambda: 8, max_datetime=lambda field: expected_time
+                count_all=lambda: 8,
+                count_by_provenance=lambda: {
+                    "episode": 5,
+                    "workflow_complete_auto": 3,
+                },
+                max_datetime=lambda field: expected_time,
             )
             self.memory_embeddings = SimpleNamespace(
                 count_all=lambda: 9, max_datetime=lambda field: expected_time
@@ -561,6 +566,10 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
         episode_count=7,
         memory_item_count=8,
         memory_embedding_count=9,
+        checkpoint_auto_memory_recorded_count=0,
+        checkpoint_auto_memory_skipped_count=6,
+        workflow_completion_auto_memory_recorded_count=3,
+        workflow_completion_auto_memory_skipped_count=0,
         latest_workflow_updated_at=expected_time,
         latest_checkpoint_created_at=expected_time,
         latest_verify_report_created_at=expected_time,
@@ -568,6 +577,12 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
         latest_memory_item_created_at=expected_time,
         latest_memory_embedding_created_at=expected_time,
     )
+
+    memory_stats = service.get_memory_stats()
+    assert memory_stats.memory_item_provenance_counts == {
+        "episode": 5,
+        "workflow_complete_auto": 3,
+    }
 
 
 def test_get_memory_stats_collects_relation_and_provenance_information() -> None:

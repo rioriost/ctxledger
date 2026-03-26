@@ -235,19 +235,15 @@ def test_memory_service_build_memory_item_details_with_summary_output() -> None:
         include_summaries=True,
     )
 
-    assert details == (
-        {
-            "episode_id": str(episode.episode_id),
-            "memory_item_count": 2,
-            "summary": {
-                "episode_id": str(episode.episode_id),
-                "workflow_instance_id": str(episode.workflow_instance_id),
-                "memory_item_count": 2,
-                "memory_item_types": ["checkpoint_note", "episode_note"],
-                "memory_item_provenance": ["checkpoint", "episode"],
-            },
-        },
-    )
+    assert len(details) == 1
+    assert details[0]["episode_id"] == str(episode.episode_id)
+    assert details[0]["memory_item_count"] == 2
+    assert details[0]["summary"]["episode_id"] == str(episode.episode_id)
+    assert details[0]["summary"]["workflow_instance_id"] == str(episode.workflow_instance_id)
+    assert details[0]["summary"]["memory_item_count"] == 2
+    assert details[0]["summary"]["memory_item_types"] == ["checkpoint_note", "episode_note"]
+    assert details[0]["summary"]["memory_item_provenance"] == ["checkpoint", "episode"]
+    assert "remember_path_explainability" in details[0]["summary"]
 
 
 def test_memory_service_build_summary_selection_details_without_summaries() -> None:
