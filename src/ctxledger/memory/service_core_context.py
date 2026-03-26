@@ -175,6 +175,47 @@ class ContextShapingMixin:
                 detail["memory_items"] = [
                     self._serialize_memory_item(memory_item) for memory_item in memory_items
                 ]
+                detail["remember_path_memory_items"] = [
+                    {
+                        "memory_id": str(memory_item.memory_id),
+                        "memory_type": memory_item.type,
+                        "provenance": memory_item.provenance,
+                        "memory_origin": memory_item.metadata.get("memory_origin"),
+                        "promotion_field": memory_item.metadata.get("promotion_field"),
+                        "promotion_source": memory_item.metadata.get("promotion_source"),
+                        "checkpoint_id": memory_item.metadata.get("checkpoint_id"),
+                        "step_name": memory_item.metadata.get("step_name"),
+                        "workflow_status": memory_item.metadata.get("workflow_status"),
+                        "attempt_status": memory_item.metadata.get("attempt_status"),
+                    }
+                    for memory_item in memory_items
+                ]
+                remember_path_origin_counts: dict[str, int] = {}
+                remember_path_promotion_field_counts: dict[str, int] = {}
+                for memory_item in memory_items:
+                    memory_origin = memory_item.metadata.get("memory_origin")
+                    if isinstance(memory_origin, str) and memory_origin.strip():
+                        remember_path_origin_counts[memory_origin] = (
+                            remember_path_origin_counts.get(memory_origin, 0) + 1
+                        )
+
+                    promotion_field = memory_item.metadata.get("promotion_field")
+                    if isinstance(promotion_field, str) and promotion_field.strip():
+                        remember_path_promotion_field_counts[promotion_field] = (
+                            remember_path_promotion_field_counts.get(promotion_field, 0) + 1
+                        )
+
+                detail["remember_path_memory_summary"] = {
+                    "memory_origin_counts": remember_path_origin_counts,
+                    "promotion_field_counts": remember_path_promotion_field_counts,
+                    "checkpoint_origin_present": bool(
+                        remember_path_origin_counts.get("workflow_checkpoint_auto", 0)
+                    ),
+                    "completion_origin_present": bool(
+                        remember_path_origin_counts.get("workflow_complete_auto", 0)
+                    ),
+                }
+
                 related_memory_items, related_memory_relations = (
                     self._collect_supports_related_memory_items(
                         memory_item_details=(detail,),
@@ -196,6 +237,10 @@ class ContextShapingMixin:
                             "episode" if memory_item.episode_id is not None else "workspace"
                         ),
                         "target_group_selection_kind": "supports_related_auxiliary",
+                        "source_memory_origin": relation.metadata.get("memory_origin"),
+                        "relation_reason": relation.metadata.get("relation_reason"),
+                        "source_memory_type": relation.metadata.get("source_memory_type"),
+                        "target_memory_type": relation.metadata.get("target_memory_type"),
                     }
                     for memory_item, relation in zip(
                         related_memory_items,
@@ -214,6 +259,45 @@ class ContextShapingMixin:
                     }
                     for relation in related_memory_relations
                 ]
+                detail["remember_path_relation_explanations"] = [
+                    {
+                        "memory_relation_id": str(relation.memory_relation_id),
+                        "relation_type": relation.relation_type,
+                        "relation_reason": relation.metadata.get("relation_reason"),
+                        "relation_description": relation.metadata.get("relation_description"),
+                        "memory_origin": relation.metadata.get("memory_origin"),
+                        "source_memory_type": relation.metadata.get("source_memory_type"),
+                        "target_memory_type": relation.metadata.get("target_memory_type"),
+                        "source_memory_id": str(relation.source_memory_id),
+                        "target_memory_id": str(relation.target_memory_id),
+                    }
+                    for relation in related_memory_relations
+                ]
+                detail["remember_path_relation_summary"] = {
+                    "relation_reason_counts": {
+                        relation_reason: sum(
+                            1
+                            for relation in related_memory_relations
+                            if relation.metadata.get("relation_reason") == relation_reason
+                        )
+                        for relation_reason in sorted(
+                            {
+                                str(relation.metadata.get("relation_reason"))
+                                for relation in related_memory_relations
+                                if isinstance(relation.metadata.get("relation_reason"), str)
+                                and str(relation.metadata.get("relation_reason")).strip()
+                            }
+                        )
+                    },
+                    "checkpoint_origin_present": any(
+                        relation.metadata.get("memory_origin") == "workflow_checkpoint_auto"
+                        for relation in related_memory_relations
+                    ),
+                    "completion_origin_present": any(
+                        relation.metadata.get("memory_origin") == "workflow_complete_auto"
+                        for relation in related_memory_relations
+                    ),
+                }
 
             if include_summaries:
                 detail["summary"] = {
@@ -224,6 +308,28 @@ class ContextShapingMixin:
                     "memory_item_provenance": [
                         memory_item.provenance for memory_item in memory_items
                     ],
+                    "remember_path_explainability": (
+                        {
+                            "memory_origins": sorted(
+                                {
+                                    str(memory_item.metadata.get("memory_origin"))
+                                    for memory_item in memory_items
+                                    if isinstance(memory_item.metadata.get("memory_origin"), str)
+                                    and str(memory_item.metadata.get("memory_origin")).strip()
+                                }
+                            ),
+                            "promotion_fields": sorted(
+                                {
+                                    str(memory_item.metadata.get("promotion_field"))
+                                    for memory_item in memory_items
+                                    if isinstance(memory_item.metadata.get("promotion_field"), str)
+                                    and str(memory_item.metadata.get("promotion_field")).strip()
+                                }
+                            ),
+                        }
+                        if include_memory_items
+                        else {}
+                    ),
                 }
 
             details.append(detail)

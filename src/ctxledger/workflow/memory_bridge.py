@@ -153,9 +153,13 @@ _SUMMARY_SIMILARITY_IGNORED_TOKENS = frozenset(
 _FIELD_LABEL_TO_KEY = {
     "completion summary": "completion_summary",
     "latest checkpoint summary": "latest_checkpoint_summary",
+    "checkpoint summary": "latest_checkpoint_summary",
     "current objective": "current_objective",
     "last planned next action": "next_intended_action",
     "next action": "next_intended_action",
+    "root cause": "root_cause",
+    "recovery pattern": "recovery_pattern",
+    "what remains": "what_remains",
     "verify status": "verify_status",
     "workflow status": "workflow_status",
     "attempt status": "attempt_status",
@@ -553,6 +557,26 @@ class WorkflowMemoryBridge:
             verify_report=verify_report,
         )
 
+        duplicate_check = self._duplicate_checkpoint_memory_decision(
+            workflow=workflow,
+            checkpoint=checkpoint,
+            memory_summary=memory_summary,
+            episode_metadata=episode_metadata,
+        )
+        stage_details["duplicate_check"] = {
+            "attempted": True,
+            "status": "passed" if duplicate_check.should_record else "skipped",
+            "skipped_reason": duplicate_check.skipped_reason,
+        }
+        if not duplicate_check.should_record:
+            return WorkflowCheckpointMemoryRecordResult(
+                details={
+                    "auto_memory_recorded": False,
+                    "auto_memory_skipped_reason": duplicate_check.skipped_reason,
+                    "stage_details": stage_details,
+                }
+            )
+
         now = datetime.now(timezone.utc)
         episode = self.episode_repository.create(
             EpisodeRecord(
@@ -758,6 +782,70 @@ class WorkflowMemoryBridge:
 
         return False, "low_signal_checkpoint_memory"
 
+    def _duplicate_checkpoint_memory_decision(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        checkpoint: WorkflowCheckpoint,
+        memory_summary: str,
+        episode_metadata: dict[str, Any],
+    ) -> AutoMemoryDuplicateCheckResult:
+        step_name = checkpoint.step_name.strip()
+        normalized_summary = self._normalize_text(memory_summary)
+        current_fields = self._extract_closeout_fields(
+            memory_summary,
+            fallback_metadata=episode_metadata,
+        )
+
+        recent_checkpoint_memory = self._recent_checkpoint_memory(workflow)
+        for prior_episode in recent_checkpoint_memory:
+            prior_summary = self._normalize_text(prior_episode.summary)
+            if normalized_summary is not None and prior_summary == normalized_summary:
+                return AutoMemoryDuplicateCheckResult(
+                    should_record=False,
+                    skipped_reason="duplicate_checkpoint_auto_memory",
+                )
+
+            if not self._is_within_near_duplicate_window(prior_episode):
+                continue
+
+            prior_step_name = prior_episode.metadata.get("step_name")
+            if not (
+                isinstance(prior_step_name, str)
+                and prior_step_name.strip() == step_name
+                and prior_episode.metadata.get("memory_origin") == "workflow_checkpoint_auto"
+            ):
+                continue
+
+            prior_fields = self._extract_closeout_fields(
+                prior_episode.summary,
+                fallback_metadata=prior_episode.metadata,
+            )
+            metadata_matches = self._metadata_aware_closeout_match(
+                current_fields=current_fields,
+                prior_fields=prior_fields,
+            )
+            field_similarity = self._weighted_closeout_similarity(
+                current_fields=current_fields,
+                prior_fields=prior_fields,
+            )
+            summary_similarity = self._summary_token_similarity(
+                current_fields.get("latest_checkpoint_summary") or memory_summary,
+                prior_fields.get("latest_checkpoint_summary") or prior_episode.summary,
+            )
+
+            if metadata_matches and (
+                field_similarity >= _FIELD_EXTRACTED_SIMILARITY_THRESHOLD
+                or summary_similarity is None
+                or summary_similarity >= _SUMMARY_SIMILARITY_THRESHOLD
+            ):
+                return AutoMemoryDuplicateCheckResult(
+                    should_record=False,
+                    skipped_reason="near_duplicate_checkpoint_memory",
+                )
+
+        return AutoMemoryDuplicateCheckResult(should_record=True)
+
     def _duplicate_closeout_memory_decision(
         self,
         *,
@@ -853,6 +941,34 @@ class WorkflowMemoryBridge:
             if episode.metadata.get("memory_origin") == "workflow_complete_auto"
         )
 
+    def _recent_checkpoint_memory(
+        self,
+        workflow: WorkflowInstance,
+    ) -> tuple[EpisodeRecord, ...]:
+        if not hasattr(self.episode_repository, "list_by_workflow_id"):
+            return ()
+
+        list_by_workflow_id = getattr(self.episode_repository, "list_by_workflow_id", None)
+        if not callable(list_by_workflow_id):
+            return ()
+
+        try:
+            episodes = list_by_workflow_id(
+                workflow.workflow_instance_id,
+                limit=5,
+            )
+        except Exception:
+            return ()
+
+        if not isinstance(episodes, tuple):
+            return ()
+
+        return tuple(
+            episode
+            for episode in episodes
+            if episode.metadata.get("memory_origin") == "workflow_checkpoint_auto"
+        )
+
     def _is_within_near_duplicate_window(self, episode: EpisodeRecord) -> bool:
         now = datetime.now(timezone.utc)
         return (now - episode.created_at) <= _NEAR_DUPLICATE_LOOKBACK_WINDOW
@@ -907,6 +1023,9 @@ class WorkflowMemoryBridge:
             for key in (
                 "current_objective",
                 "next_intended_action",
+                "root_cause",
+                "recovery_pattern",
+                "what_remains",
                 "verify_status",
                 "workflow_status",
                 "attempt_status",
@@ -928,6 +1047,9 @@ class WorkflowMemoryBridge:
             current_fields.get("current_objective") == prior_fields.get("current_objective")
             and current_fields.get("next_intended_action")
             == prior_fields.get("next_intended_action")
+            and current_fields.get("root_cause") == prior_fields.get("root_cause")
+            and current_fields.get("recovery_pattern") == prior_fields.get("recovery_pattern")
+            and current_fields.get("what_remains") == prior_fields.get("what_remains")
             and current_fields.get("verify_status") == prior_fields.get("verify_status")
             and current_fields.get("workflow_status") == prior_fields.get("workflow_status")
             and current_fields.get("attempt_status") == prior_fields.get("attempt_status")
@@ -948,6 +1070,9 @@ class WorkflowMemoryBridge:
             ("latest_checkpoint_summary", _CHECKPOINT_SUMMARY_WEIGHT),
             ("current_objective", _CURRENT_OBJECTIVE_WEIGHT),
             ("next_intended_action", _NEXT_ACTION_WEIGHT),
+            ("root_cause", _FAILURE_REASON_WEIGHT),
+            ("recovery_pattern", _NEXT_ACTION_WEIGHT),
+            ("what_remains", _CHECKPOINT_SUMMARY_WEIGHT),
             ("verify_status", _VERIFY_STATUS_WEIGHT),
             ("workflow_status", _WORKFLOW_STATUS_WEIGHT),
             ("attempt_status", _ATTEMPT_STATUS_WEIGHT),

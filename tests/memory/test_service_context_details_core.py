@@ -10,10 +10,12 @@ from ctxledger.memory.service import (
     GetMemoryContextRequest,
     InMemoryEpisodeRepository,
     InMemoryMemoryItemRepository,
+    InMemoryMemoryRelationRepository,
     InMemoryMemorySummaryMembershipRepository,
     InMemoryMemorySummaryRepository,
     InMemoryWorkflowLookupRepository,
     MemoryItemRecord,
+    MemoryRelationRecord,
     MemoryService,
     MemorySummaryMembershipRecord,
     MemorySummaryRecord,
@@ -155,6 +157,219 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
             }
         },
     }
+
+
+def test_memory_get_context_surfaces_remember_path_explainability_details() -> None:
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    episode_id = uuid4()
+    objective_memory_id = uuid4()
+    next_action_memory_id = uuid4()
+    completion_note_memory_id = uuid4()
+    relation_id = uuid4()
+    created_at = datetime(2024, 2, 1, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_relation_repository = InMemoryMemoryRelationRepository()
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=episode_id,
+            workflow_instance_id=workflow_id,
+            summary="Checkpoint and completion memory accumulated for remember-path explainability",
+            metadata={"kind": "remember-path"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=objective_memory_id,
+            workspace_id=workspace_id,
+            episode_id=episode_id,
+            type="workflow_objective",
+            provenance="workflow_checkpoint_auto",
+            content="Strengthen checkpoint-driven remember-path accumulation",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "current_objective",
+                "promotion_source": "checkpoint.current_objective",
+                "checkpoint_id": "checkpoint-1",
+                "step_name": "remember_path_checkpoint",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=next_action_memory_id,
+            workspace_id=workspace_id,
+            episode_id=episode_id,
+            type="workflow_next_action",
+            provenance="workflow_checkpoint_auto",
+            content="Complete the end-to-end remember-path validation",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "next_intended_action",
+                "promotion_source": "checkpoint.next_intended_action",
+                "checkpoint_id": "checkpoint-1",
+                "step_name": "remember_path_checkpoint",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=completion_note_memory_id,
+            workspace_id=workspace_id,
+            episode_id=episode_id,
+            type="workflow_completion_note",
+            provenance="workflow_complete_auto",
+            content="Completed the remember-path end-to-end validation flow",
+            metadata={
+                "memory_origin": "workflow_complete_auto",
+                "step_name": "workflow_complete",
+                "workflow_status": "completed",
+                "attempt_status": "succeeded",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+
+    memory_relation_repository.create(
+        MemoryRelationRecord(
+            memory_relation_id=relation_id,
+            source_memory_id=next_action_memory_id,
+            target_memory_id=objective_memory_id,
+            relation_type="supports",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "relation_reason": "next_action_supports_objective",
+                "relation_description": "next intended action supports the current objective",
+                "source_memory_type": "workflow_next_action",
+                "target_memory_type": "workflow_objective",
+            },
+            created_at=created_at,
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_relation_repository=memory_relation_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=True,
+        )
+    )
+
+    assert response.details["remember_path_explainability_present"] is True
+    assert response.details["remember_path_origin_counts"] == {
+        "workflow_checkpoint_auto": 2,
+        "workflow_complete_auto": 1,
+    }
+    assert response.details["remember_path_promotion_field_counts"] == {
+        "current_objective": 1,
+        "next_intended_action": 1,
+    }
+    assert response.details["remember_path_relation_reason_counts"] == {
+        "next_action_supports_objective": 1,
+    }
+
+    explainability = response.details["remember_path_explainability_by_episode"][str(episode_id)]
+    assert explainability["memory_summary"] == {
+        "memory_origin_counts": {
+            "workflow_checkpoint_auto": 2,
+            "workflow_complete_auto": 1,
+        },
+        "promotion_field_counts": {
+            "current_objective": 1,
+            "next_intended_action": 1,
+        },
+        "checkpoint_origin_present": True,
+        "completion_origin_present": True,
+    }
+    assert explainability["relation_summary"] == {
+        "relation_reason_counts": {
+            "next_action_supports_objective": 1,
+        },
+        "checkpoint_origin_present": True,
+        "completion_origin_present": False,
+    }
+    assert sorted(
+        explainability["memory_items"],
+        key=lambda item: item["memory_id"],
+    ) == sorted(
+        [
+            {
+                "memory_id": str(completion_note_memory_id),
+                "memory_type": "workflow_completion_note",
+                "provenance": "workflow_complete_auto",
+                "memory_origin": "workflow_complete_auto",
+                "promotion_field": None,
+                "promotion_source": None,
+                "checkpoint_id": None,
+                "step_name": "workflow_complete",
+                "workflow_status": "completed",
+                "attempt_status": "succeeded",
+            },
+            {
+                "memory_id": str(next_action_memory_id),
+                "memory_type": "workflow_next_action",
+                "provenance": "workflow_checkpoint_auto",
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "next_intended_action",
+                "promotion_source": "checkpoint.next_intended_action",
+                "checkpoint_id": "checkpoint-1",
+                "step_name": "remember_path_checkpoint",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+            {
+                "memory_id": str(objective_memory_id),
+                "memory_type": "workflow_objective",
+                "provenance": "workflow_checkpoint_auto",
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "current_objective",
+                "promotion_source": "checkpoint.current_objective",
+                "checkpoint_id": "checkpoint-1",
+                "step_name": "remember_path_checkpoint",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+        ],
+        key=lambda item: item["memory_id"],
+    )
+    assert explainability["relation_explanations"] == [
+        {
+            "memory_relation_id": str(relation_id),
+            "relation_type": "supports",
+            "relation_reason": "next_action_supports_objective",
+            "relation_description": "next intended action supports the current objective",
+            "memory_origin": "workflow_checkpoint_auto",
+            "source_memory_type": "workflow_next_action",
+            "target_memory_type": "workflow_objective",
+            "source_memory_id": str(next_action_memory_id),
+            "target_memory_id": str(objective_memory_id),
+        }
+    ]
+    assert response.details["related_context_relation_types"] == ["supports"]
 
 
 def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
@@ -728,6 +943,7 @@ def test_memory_get_context_summary_only_primary_path_differs_from_episode_less_
                     "memory_item_provenance": [
                         "episode",
                     ],
+                    "remember_path_explainability": {},
                 }
             ],
         }
@@ -857,6 +1073,7 @@ def test_memory_get_context_falls_back_to_episode_summary_when_canonical_summary
             "memory_item_provenance": [
                 "episode",
             ],
+            "remember_path_explainability": {},
         }
     ]
     assert response.details["memory_context_groups"] == [
@@ -886,6 +1103,7 @@ def test_memory_get_context_falls_back_to_episode_summary_when_canonical_summary
                     "memory_item_provenance": [
                         "episode",
                     ],
+                    "remember_path_explainability": {},
                 }
             ],
         }

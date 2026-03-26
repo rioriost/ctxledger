@@ -460,6 +460,37 @@ class MemoryService(
                         "semantic_only_discount_applied": semantic_only_discount_applied,
                         "reason_list": ranking_reasons,
                         "task_recall_detail": task_recall_detail,
+                        "remember_path_detail": {
+                            "memory_origin": memory_item.metadata.get("memory_origin"),
+                            "promotion_field": memory_item.metadata.get("promotion_field"),
+                            "promotion_source": memory_item.metadata.get("promotion_source"),
+                            "checkpoint_id": memory_item.metadata.get("checkpoint_id"),
+                            "step_name": memory_item.metadata.get("step_name"),
+                            "workflow_status": memory_item.metadata.get("workflow_status"),
+                            "attempt_status": memory_item.metadata.get("attempt_status"),
+                            "supports_relation_present": bool(
+                                self._memory_relation_repository is not None
+                                and any(
+                                    relation.source_memory_id == memory_item.memory_id
+                                    or relation.target_memory_id == memory_item.memory_id
+                                    for relation in self._memory_relation_repository.list_by_source_memory_ids(
+                                        (memory_item.memory_id,)
+                                    )
+                                )
+                            ),
+                            "supports_relation_reasons": (
+                                [
+                                    relation.metadata.get("relation_reason")
+                                    for relation in self._memory_relation_repository.list_by_source_memory_ids(
+                                        (memory_item.memory_id,)
+                                    )
+                                    if isinstance(relation.metadata.get("relation_reason"), str)
+                                    and str(relation.metadata.get("relation_reason")).strip()
+                                ]
+                                if self._memory_relation_repository is not None
+                                else []
+                            ),
+                        },
                     },
                     created_at=memory_item.created_at,
                     updated_at=memory_item.updated_at,
@@ -1571,6 +1602,77 @@ class MemoryService(
                     detail["episode_id"]: detail.get("related_memory_items", [])
                     for detail in memory_item_details
                     if isinstance(detail.get("related_memory_items"), list)
+                },
+                "remember_path_explainability_by_episode": {
+                    detail["episode_id"]: {
+                        "memory_items": detail.get("remember_path_memory_items", []),
+                        "memory_summary": detail.get("remember_path_memory_summary", {}),
+                        "relation_explanations": detail.get(
+                            "remember_path_relation_explanations",
+                            [],
+                        ),
+                        "relation_summary": detail.get("remember_path_relation_summary", {}),
+                    }
+                    for detail in memory_item_details
+                },
+                "remember_path_explainability_present": any(
+                    bool(detail.get("remember_path_memory_items"))
+                    or bool(detail.get("remember_path_relation_explanations"))
+                    for detail in memory_item_details
+                ),
+                "remember_path_origin_counts": {
+                    origin: sum(
+                        detail.get("remember_path_memory_summary", {})
+                        .get("memory_origin_counts", {})
+                        .get(origin, 0)
+                        for detail in memory_item_details
+                    )
+                    for origin in sorted(
+                        {
+                            origin
+                            for detail in memory_item_details
+                            for origin in detail.get("remember_path_memory_summary", {})
+                            .get("memory_origin_counts", {})
+                            .keys()
+                            if isinstance(origin, str) and origin.strip()
+                        }
+                    )
+                },
+                "remember_path_promotion_field_counts": {
+                    promotion_field: sum(
+                        detail.get("remember_path_memory_summary", {})
+                        .get("promotion_field_counts", {})
+                        .get(promotion_field, 0)
+                        for detail in memory_item_details
+                    )
+                    for promotion_field in sorted(
+                        {
+                            promotion_field
+                            for detail in memory_item_details
+                            for promotion_field in detail.get("remember_path_memory_summary", {})
+                            .get("promotion_field_counts", {})
+                            .keys()
+                            if isinstance(promotion_field, str) and promotion_field.strip()
+                        }
+                    )
+                },
+                "remember_path_relation_reason_counts": {
+                    relation_reason: sum(
+                        detail.get("remember_path_relation_summary", {})
+                        .get("relation_reason_counts", {})
+                        .get(relation_reason, 0)
+                        for detail in memory_item_details
+                    )
+                    for relation_reason in sorted(
+                        {
+                            relation_reason
+                            for detail in memory_item_details
+                            for relation_reason in detail.get("remember_path_relation_summary", {})
+                            .get("relation_reason_counts", {})
+                            .keys()
+                            if isinstance(relation_reason, str) and relation_reason.strip()
+                        }
+                    )
                 },
                 "memory_item_counts_by_episode": {
                     detail["episode_id"]: detail["memory_item_count"]

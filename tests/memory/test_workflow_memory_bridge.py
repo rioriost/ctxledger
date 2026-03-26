@@ -25,6 +25,7 @@ from ctxledger.memory.service import (
     InMemoryMemoryRelationRepository,
     InMemoryWorkflowLookupRepository,
     MemoryItemRecord,
+    MemoryRelationRecord,
     MemoryService,
 )
 from ctxledger.workflow.service import (
@@ -444,6 +445,218 @@ def test_workflow_memory_bridge_skips_checkpoint_auto_memory_without_signal() ->
             }
         },
     }
+
+
+def test_workflow_memory_bridge_surfaces_remember_path_explainability_in_checkpoint_details() -> (
+    None
+):
+    from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
+
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    attempt_id = uuid4()
+    checkpoint_id = uuid4()
+    relation_repository = InMemoryMemoryRelationRepository()
+
+    bridge = WorkflowMemoryBridge(
+        episode_repository=InMemoryEpisodeRepository(),
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        memory_relation_repository=relation_repository,
+        embedding_generator=LocalStubEmbeddingGenerator(
+            model="local-stub-v1",
+            dimensions=8,
+        ),
+    )
+
+    result = bridge.record_checkpoint_memory(
+        workflow=WorkflowInstance(
+            workflow_instance_id=workflow_id,
+            workspace_id=workspace_id,
+            ticket_id="TICKET-CHECKPOINT-AUTO-MEM-EXPLAIN",
+            status=WorkflowInstanceStatus.RUNNING,
+        ),
+        attempt=WorkflowAttempt(
+            attempt_id=attempt_id,
+            workflow_instance_id=workflow_id,
+            attempt_number=1,
+            status=WorkflowAttemptStatus.RUNNING,
+        ),
+        checkpoint=WorkflowCheckpoint(
+            checkpoint_id=checkpoint_id,
+            workflow_instance_id=workflow_id,
+            attempt_id=attempt_id,
+            step_name="checkpoint_explainability",
+            summary="Captured explainable checkpoint-origin memory",
+            checkpoint_json={
+                "current_objective": "Strengthen remember-path explainability",
+                "next_intended_action": "Expose remember-path details in retrieval surfaces",
+                "root_cause": "Remember-path origin details were not visible enough",
+                "recovery_pattern": "Publish origin, promotion, and relation metadata explicitly",
+                "what_remains": "Validate context and search explainability",
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"]},
+        ),
+    )
+
+    assert result is not None
+    assert result.details["auto_memory_recorded"] is True
+    assert result.details["stage_details"]["promoted_memory_items"]["status"] == "recorded"
+    assert result.details["stage_details"]["relations"]["status"] == "recorded"
+
+    assert len(result.promoted_memory_items) == 6
+    assert {item.metadata["memory_origin"] for item in result.promoted_memory_items} == {
+        "workflow_checkpoint_auto"
+    }
+    assert {item.metadata["promotion_field"] for item in result.promoted_memory_items} == {
+        "current_objective",
+        "next_intended_action",
+        "root_cause",
+        "recovery_pattern",
+        "what_remains",
+        "verify_status",
+    }
+
+    assert len(result.relations) == 3
+    assert {relation.relation_type for relation in result.relations} == {"supports"}
+    assert {relation.metadata["memory_origin"] for relation in result.relations} == {
+        "workflow_complete_auto"
+    }
+    assert {relation.metadata["relation_reason"] for relation in result.relations} == {
+        "next_action_supports_objective",
+        "recovery_pattern_supports_root_cause",
+        "verification_supports_completion_note",
+    }
+    assert {relation.metadata["source_memory_type"] for relation in result.relations} == {
+        "workflow_next_action",
+        "workflow_recovery_pattern",
+        "workflow_verification_outcome",
+    }
+    assert {relation.metadata["target_memory_type"] for relation in result.relations} == {
+        "workflow_objective",
+        "workflow_root_cause",
+        "workflow_checkpoint_note",
+    }
+
+
+def test_workflow_memory_bridge_suppresses_near_duplicate_checkpoint_memory() -> None:
+    from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
+
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    attempt_id = uuid4()
+
+    episode_repository = InMemoryEpisodeRepository()
+    bridge = WorkflowMemoryBridge(
+        episode_repository=episode_repository,
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        memory_relation_repository=InMemoryMemoryRelationRepository(),
+        embedding_generator=LocalStubEmbeddingGenerator(
+            model="local-stub-v1",
+            dimensions=8,
+        ),
+    )
+
+    first_result = bridge.record_checkpoint_memory(
+        workflow=WorkflowInstance(
+            workflow_instance_id=workflow_id,
+            workspace_id=workspace_id,
+            ticket_id="TICKET-CHECKPOINT-AUTO-MEM-DUPE",
+            status=WorkflowInstanceStatus.RUNNING,
+        ),
+        attempt=WorkflowAttempt(
+            attempt_id=attempt_id,
+            workflow_instance_id=workflow_id,
+            attempt_number=1,
+            status=WorkflowAttemptStatus.RUNNING,
+        ),
+        checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            attempt_id=attempt_id,
+            step_name="checkpoint_duplicate_control",
+            summary="Captured checkpoint duplicate suppression details",
+            checkpoint_json={
+                "current_objective": "Avoid duplicate checkpoint memory",
+                "next_intended_action": "Validate near-duplicate suppression",
+                "what_remains": "Keep only one canonical checkpoint note",
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"]},
+        ),
+    )
+
+    assert first_result is not None
+    assert first_result.details["auto_memory_recorded"] is True
+
+    second_result = bridge.record_checkpoint_memory(
+        workflow=WorkflowInstance(
+            workflow_instance_id=workflow_id,
+            workspace_id=workspace_id,
+            ticket_id="TICKET-CHECKPOINT-AUTO-MEM-DUPE",
+            status=WorkflowInstanceStatus.RUNNING,
+        ),
+        attempt=WorkflowAttempt(
+            attempt_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            attempt_number=2,
+            status=WorkflowAttemptStatus.RUNNING,
+        ),
+        checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=workflow_id,
+            attempt_id=uuid4(),
+            step_name="checkpoint_duplicate_control",
+            summary="Captured checkpoint duplicate suppression details again",
+            checkpoint_json={
+                "current_objective": "Avoid duplicate checkpoint memory",
+                "next_intended_action": "Validate near-duplicate suppression",
+                "what_remains": "Keep only one canonical checkpoint note",
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=uuid4(),
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"]},
+        ),
+    )
+
+    assert second_result is not None
+    assert second_result.episode is None
+    assert second_result.memory_item is None
+    assert second_result.details == {
+        "auto_memory_recorded": False,
+        "auto_memory_skipped_reason": "near_duplicate_checkpoint_memory",
+        "stage_details": {
+            "gating": {
+                "attempted": True,
+                "status": "passed",
+                "skipped_reason": None,
+            },
+            "summary_selection": {
+                "attempted": True,
+                "status": "built",
+                "skipped_reason": None,
+            },
+            "duplicate_check": {
+                "attempted": True,
+                "status": "skipped",
+                "skipped_reason": "near_duplicate_checkpoint_memory",
+            },
+        },
+    }
+    assert len(episode_repository.episodes) == 1
 
 
 def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation_fails() -> None:

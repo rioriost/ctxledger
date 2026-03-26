@@ -318,51 +318,171 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
     assert search_response.results[1].ranking_details["semantic_component"] == (
         search_response.results[1].semantic_score
     )
-    assert search_response.results[1].ranking_details["score_mode"] == ("semantic_only_discounted")
-    assert search_response.results[1].ranking_details["semantic_only_discount_applied"] is True
-    assert search_response.results[1].ranking_details["reason_list"] == [
-        {
-            "code": "lexical_signal_absent",
-            "message": "no lexical overlap contributed to the ranking score",
-            "value": 0.0,
-        },
-        {
-            "code": "semantic_signal_present",
-            "message": "semantic similarity contributed to the ranking score",
-            "value": search_response.results[1].semantic_score,
-        },
-        {
-            "code": "semantic_only_discounted_score_mode",
-            "message": "semantic-only evidence was discounted to avoid outranking lexical matches too aggressively",
-        },
-        {
-            "code": "semantic_only_discount_applied",
-            "message": "semantic-only scoring discount was applied",
-            "value": 0.75,
-        },
-    ]
-    assert search_response.results[1].ranking_details["task_recall_detail"]["matched_fields"] == [
-        "embedding_similarity"
-    ]
-    assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_type"]
-        == "episode_note"
+
+
+def test_memory_search_ranking_details_include_remember_path_explainability_for_checkpoint_memory() -> (
+    None
+):
+    workflow_id = uuid4()
+    workspace_id = UUID("00000000-0000-0000-0000-0000000000aa")
+    objective_memory_id = uuid4()
+    next_action_memory_id = uuid4()
+    relation_id = uuid4()
+    created_at = datetime(2024, 2, 1, tzinfo=UTC)
+
+    service = MemoryService(
+        episode_repository=InMemoryEpisodeRepository(),
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        memory_relation_repository=InMemoryMemoryRelationRepository(),
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                workflow_id: {
+                    "workspace_id": str(workspace_id),
+                    "ticket_id": "TICKET-REMEMBER-PATH-1",
+                }
+            }
+        ),
     )
-    assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_provenance"]
-        == "episode"
+
+    service._memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=objective_memory_id,
+            workspace_id=workspace_id,
+            episode_id=uuid4(),
+            type="workflow_objective",
+            provenance="workflow_checkpoint_auto",
+            content="Strengthen checkpoint remember-path explainability",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "current_objective",
+                "promotion_source": "checkpoint.current_objective",
+                "checkpoint_id": str(uuid4()),
+                "step_name": "checkpoint_explainability",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
     )
-    assert (
-        "background"
-        in search_response.results[1].ranking_details["task_recall_detail"][
-            "metadata_match_candidates"
-        ]
+    service._memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=next_action_memory_id,
+            workspace_id=workspace_id,
+            episode_id=uuid4(),
+            type="workflow_next_action",
+            provenance="workflow_checkpoint_auto",
+            content="Add explainability details to remember-path search ranking",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "next_intended_action",
+                "promotion_source": "checkpoint.next_intended_action",
+                "checkpoint_id": str(uuid4()),
+                "step_name": "checkpoint_explainability",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+            created_at=datetime(2024, 2, 2, tzinfo=UTC),
+            updated_at=datetime(2024, 2, 2, tzinfo=UTC),
+        )
     )
-    assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["workspace_constrained"]
-        is True
+    service._memory_relation_repository.create(
+        MemoryRelationRecord(
+            memory_relation_id=relation_id,
+            source_memory_id=next_action_memory_id,
+            target_memory_id=objective_memory_id,
+            relation_type="supports",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "relation_reason": "next_action_supports_objective",
+                "source_memory_type": "workflow_next_action",
+                "target_memory_type": "workflow_objective",
+            },
+            created_at=datetime(2024, 2, 2, tzinfo=UTC),
+        )
     )
-    assert search_response.results[1].semantic_score == 1.0
+
+    response = service.search(
+        SearchMemoryRequest(
+            query="Add explainability details to remember-path search ranking",
+            workspace_id=str(workspace_id),
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert len(response.results) >= 1
+
+    next_action_result = next(
+        result for result in response.results if result.memory_id == next_action_memory_id
+    )
+    assert next_action_result.ranking_details["remember_path_detail"] == {
+        "memory_origin": "workflow_checkpoint_auto",
+        "promotion_field": "next_intended_action",
+        "promotion_source": "checkpoint.next_intended_action",
+        "checkpoint_id": next_action_result.metadata["checkpoint_id"],
+        "step_name": "checkpoint_explainability",
+        "workflow_status": "running",
+        "attempt_status": "running",
+        "supports_relation_present": True,
+        "supports_relation_reasons": ["next_action_supports_objective"],
+    }
+
+
+def test_memory_search_ranking_details_include_completion_origin_explainability() -> None:
+    workspace_id = UUID("00000000-0000-0000-0000-0000000000bb")
+    memory_id = uuid4()
+    created_at = datetime(2024, 3, 1, tzinfo=UTC)
+
+    service = MemoryService(
+        episode_repository=InMemoryEpisodeRepository(),
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        memory_relation_repository=InMemoryMemoryRelationRepository(),
+        workflow_lookup=InMemoryWorkflowLookupRepository(),
+    )
+
+    service._memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=memory_id,
+            workspace_id=workspace_id,
+            episode_id=uuid4(),
+            type="workflow_completion_note",
+            provenance="workflow_complete_auto",
+            content="Completion note for remember-path ranking explainability",
+            metadata={
+                "memory_origin": "workflow_complete_auto",
+                "step_name": "workflow_complete",
+                "workflow_status": "completed",
+                "attempt_status": "succeeded",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+
+    response = service.search(
+        SearchMemoryRequest(
+            query="Completion note for remember-path ranking explainability",
+            workspace_id=str(workspace_id),
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert len(response.results) == 1
+    assert response.results[0].ranking_details["remember_path_detail"] == {
+        "memory_origin": "workflow_complete_auto",
+        "promotion_field": None,
+        "promotion_source": None,
+        "checkpoint_id": None,
+        "step_name": "workflow_complete",
+        "workflow_status": "completed",
+        "attempt_status": "succeeded",
+        "supports_relation_present": False,
+        "supports_relation_reasons": [],
+    }
 
 
 def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:

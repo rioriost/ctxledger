@@ -489,13 +489,75 @@ The current intended `0.8.0` direction is to strengthen the remember path so the
 The central goals of that milestone are:
 
 - make completion-centered memory capture more reliable
+- make meaningful checkpoint-centered memory capture more reliable before workflow completion
+- keep checkpoint-origin and completion-origin memory explainable instead of collapsing them into one opaque stream
+- preserve promoted-field explainability for:
+  - `current_objective`
+  - `next_intended_action`
+  - `root_cause`
+  - `recovery_pattern`
+  - `what_remains`
+  - verification outcomes
+- preserve constrained relation-reason explainability for canonical `supports` edges
 - define the minimum useful memory artifacts a normal work loop should leave behind
 - introduce the first constrained canonical relation-writing behavior
 - improve observability so operators can tell where memory creation is succeeding, skipping, or failing
 - strengthen agent-facing operational guidance so MCP-capable agents following repository rules are more likely to record memory correctly and automatically
 
+The current `0.8.0` reading should now also include:
+
+- checkpoint-origin and completion-origin memory should remain explainable rather than collapsing into a single opaque memory stream
+- promoted fields such as `current_objective`, `next_intended_action`, `root_cause`, `recovery_pattern`, and `what_remains` should remain visible as structured remember-path evidence
+- `memory_get_context` and `memory_search` should surface enough explainability to show:
+  - checkpoint origin versus completion origin
+  - promoted field identity
+  - constrained `supports` relation reason identity
+- duplicate suppression should apply to checkpoint-origin memory as well as completion-origin memory so the canonical layer does not over-record near-identical checkpoint notes
+- summary and graph enrichment should stay downstream of canonical episode / memory-item / relation creation, with validation that checkpoint-origin relations actually feed those later layers
+- operator-facing stats and docs should explain how to read recorded-versus-skipped remember-path counters and how to investigate gaps
+
 This work is intentionally earlier than any broader Mnemis-style architectural evaluation.
 The repository should first become better at **remembering**, then later decide whether it also needs a broader graph-memory redesign.
+
+## 6.8 Current `0.8.0` operational notes
+
+The current `0.8.0` remember-path reading should now be:
+
+- meaningful checkpoints may create canonical remember artifacts before workflow completion
+- workflow completion remains the default closeout path for normal end-of-loop memory capture
+- remember-path explainability should preserve:
+  - checkpoint origin versus completion origin
+  - promoted field identity
+  - constrained relation reason identity
+- duplicate suppression should now be understood as a remember-path quality control mechanism, not only as a closeout-specific cleanup concern
+
+Operator-facing reading of the newer observability counters should be:
+
+- higher `*_auto_memory_recorded` counts indicate that the corresponding path is actively producing canonical memory artifacts
+- higher `*_auto_memory_skipped` counts indicate that the corresponding path is structurally available but often gated out or under-signaled
+- a persistent gap between checkpoint counts and `checkpoint_auto_memory_recorded` counts should trigger review of:
+  - checkpoint signal quality
+  - duplicate suppression behavior
+  - structured field completeness
+- a persistent gap between workflow completion counts and `workflow_completion_auto_memory_recorded` counts should trigger review of:
+  - completion summary quality
+  - checkpoint-to-closeout signal reuse
+  - duplicate suppression behavior
+- when these counters move in unexpected ways, operators should verify both:
+  - write-time stage reporting in workflow tool results
+  - read-time explainability in `memory_get_context` and `memory_search`
+- operator runbook guidance should explicitly cover:
+  - how to compare checkpoint/workflow counts against recorded/skipped remember-path counts
+  - how to inspect promoted fields and relation reasons
+  - how to decide whether a gap is caused by low signal, duplicate suppression, disabled enrichment, or downstream graph refresh state
+
+Summary and graph layers should still be read as downstream here:
+
+- canonical episode / memory-item / relation creation remains the prerequisite
+- summary-building quality depends on those canonical members existing
+- AGE graph usefulness depends on canonical relation creation and refresh correctness
+- checkpoint-origin relations should therefore be validated not only at write time but also as graph/bootstrap-ready canonical inputs
+- graph absence or graph thinness should not be treated as canonical remember failure by itself until the relational remember path has been checked first
 
 ## 7. Layer 4 — Hierarchical Memory
 
@@ -518,6 +580,21 @@ Representative planned behavior includes:
 - scope-level summaries
 - project-level recall
 - relation-aware rollups
+- explainable rollups that preserve whether important members came from:
+  - checkpoint-origin automatic memory
+  - workflow-completion automatic memory
+  - explicit high-signal episode recording
+- explainable rollups that preserve why relation-linked members were connected:
+  - `next_action_supports_objective`
+  - `recovery_pattern_supports_root_cause`
+  - other future bounded relation reasons
+
+In the current `0.8.0` context, this means summary and graph layers should ideally help answer not only **what** related memories exist, but also:
+
+- **how** those memories entered the canonical remember path
+- **which promoted fields** produced them
+- **which constrained relation reasons** linked them
+- **whether the visible layer is canonical relational evidence or downstream derived enrichment**
 - compressed context assembly for long-running work
 
 ## 7.3 Why a separate layer is useful
