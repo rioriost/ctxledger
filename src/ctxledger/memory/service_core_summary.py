@@ -139,12 +139,40 @@ class EpisodeSummaryBuilder:
         if workspace_id is None:
             workspace_id = UUID(int=0)
 
+        remember_path_memory_origins = sorted(
+            {
+                str(memory_item.metadata.get("memory_origin"))
+                for memory_item in memory_items
+                if isinstance(memory_item.metadata.get("memory_origin"), str)
+                and str(memory_item.metadata.get("memory_origin")).strip()
+            }
+        )
+        remember_path_promotion_fields = sorted(
+            {
+                str(memory_item.metadata.get("promotion_field"))
+                for memory_item in memory_items
+                if isinstance(memory_item.metadata.get("promotion_field"), str)
+                and str(memory_item.metadata.get("promotion_field")).strip()
+            }
+        )
+        remember_path_promotion_sources = sorted(
+            {
+                str(memory_item.metadata.get("promotion_source"))
+                for memory_item in memory_items
+                if isinstance(memory_item.metadata.get("promotion_source"), str)
+                and str(memory_item.metadata.get("promotion_source")).strip()
+            }
+        )
+
         summary_metadata = {
             "builder": "minimal_episode_summary_builder",
             "build_scope": "episode",
             "source_episode_id": str(episode_id),
             "source_memory_item_count": len(memory_items),
             "build_version": "0.6.0-first-slice",
+            "remember_path_memory_origins": remember_path_memory_origins,
+            "remember_path_promotion_fields": remember_path_promotion_fields,
+            "remember_path_promotion_sources": remember_path_promotion_sources,
             **dict(request.metadata),
         }
 
@@ -196,6 +224,24 @@ class EpisodeSummaryBuilder:
                 "summary_kind": request.summary_kind,
                 "member_memory_count": len(memory_items),
                 "member_memory_ids": [str(memory_item.memory_id) for memory_item in memory_items],
+                "remember_path_memory_origins": remember_path_memory_origins,
+                "remember_path_promotion_fields": remember_path_promotion_fields,
+                "remember_path_promotion_sources": remember_path_promotion_sources,
+                "member_memory_explainability": [
+                    {
+                        "memory_id": str(memory_item.memory_id),
+                        "memory_type": memory_item.type,
+                        "provenance": memory_item.provenance,
+                        "memory_origin": memory_item.metadata.get("memory_origin"),
+                        "promotion_field": memory_item.metadata.get("promotion_field"),
+                        "promotion_source": memory_item.metadata.get("promotion_source"),
+                        "checkpoint_id": memory_item.metadata.get("checkpoint_id"),
+                        "step_name": memory_item.metadata.get("step_name"),
+                        "workflow_status": memory_item.metadata.get("workflow_status"),
+                        "attempt_status": memory_item.metadata.get("attempt_status"),
+                    }
+                    for memory_item in memory_items
+                ],
             },
         )
 

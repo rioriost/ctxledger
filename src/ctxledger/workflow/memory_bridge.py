@@ -467,6 +467,7 @@ class WorkflowMemoryBridge:
             workflow=workflow,
             episode=episode,
             memory_item=memory_item,
+            promoted_memory_items=tuple(promoted_memory_items),
             latest_checkpoint=latest_checkpoint,
         )
         stage_details["summary_build"] = (
@@ -1699,6 +1700,11 @@ class WorkflowMemoryBridge:
             )
 
         created_relations: list[MemoryRelationRecord] = []
+        relation_memory_origin = self._relation_memory_origin(
+            primary_memory_item=primary_memory_item,
+            promoted_memory_items=promoted_memory_items,
+        )
+
         for relation_reason, source_item, target_item, description in relation_specs:
             relation = self.memory_relation_repository.create(
                 MemoryRelationRecord(
@@ -1707,7 +1713,7 @@ class WorkflowMemoryBridge:
                     target_memory_id=target_item.memory_id,
                     relation_type="supports",
                     metadata={
-                        "memory_origin": "workflow_complete_auto",
+                        "memory_origin": relation_memory_origin,
                         "relation_reason": relation_reason,
                         "relation_description": description,
                         "workflow_instance_id": str(workflow.workflow_instance_id),
@@ -1733,6 +1739,26 @@ class WorkflowMemoryBridge:
             created_relations.append(relation)
 
         return tuple(created_relations)
+
+    def _relation_memory_origin(
+        self,
+        *,
+        primary_memory_item: MemoryItemRecord,
+        promoted_memory_items: tuple[MemoryItemRecord, ...],
+    ) -> str | None:
+        origins = {
+            str(memory_origin).strip()
+            for memory_item in (primary_memory_item, *promoted_memory_items)
+            for memory_origin in [memory_item.metadata.get("memory_origin")]
+            if isinstance(memory_origin, str) and str(memory_origin).strip()
+        }
+        if not origins:
+            return None
+        if "workflow_checkpoint_auto" in origins:
+            return "workflow_checkpoint_auto"
+        if "workflow_complete_auto" in origins:
+            return "workflow_complete_auto"
+        return sorted(origins)[0]
 
     def _relation_type_counts(
         self,
@@ -1763,6 +1789,7 @@ class WorkflowMemoryBridge:
         workflow: WorkflowInstance,
         episode: EpisodeRecord,
         memory_item: MemoryItemRecord,
+        promoted_memory_items: tuple[MemoryItemRecord, ...],
         latest_checkpoint: WorkflowCheckpoint | None,
     ) -> dict[str, Any] | None:
         builder = self.summary_builder
@@ -1828,6 +1855,30 @@ class WorkflowMemoryBridge:
                         "workflow_instance_id": str(workflow.workflow_instance_id),
                         "auto_memory_episode_id": str(episode.episode_id),
                         "auto_memory_memory_id": str(memory_item.memory_id),
+                        "remember_path_memory_origins": sorted(
+                            {
+                                str(candidate_memory_item.metadata.get("memory_origin"))
+                                for candidate_memory_item in (memory_item, *promoted_memory_items)
+                                if isinstance(
+                                    candidate_memory_item.metadata.get("memory_origin"),
+                                    str,
+                                )
+                                and str(candidate_memory_item.metadata.get("memory_origin")).strip()
+                            }
+                        ),
+                        "remember_path_promotion_fields": sorted(
+                            {
+                                str(candidate_memory_item.metadata.get("promotion_field"))
+                                for candidate_memory_item in (memory_item, *promoted_memory_items)
+                                if isinstance(
+                                    candidate_memory_item.metadata.get("promotion_field"),
+                                    str,
+                                )
+                                and str(
+                                    candidate_memory_item.metadata.get("promotion_field")
+                                ).strip()
+                            }
+                        ),
                         "summary_build_trigger": summary_build_trigger,
                     },
                 )

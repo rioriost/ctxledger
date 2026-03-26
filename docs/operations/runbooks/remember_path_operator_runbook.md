@@ -99,6 +99,39 @@ Focus on:
 - `workflow_completion_auto_memory_recorded`
 - `workflow_completion_auto_memory_skipped`
 
+Concrete example:
+
+```/dev/null/ctxledger_stats_example.txt#L1-18
+ctxledger stats
+
+Workspaces:
+- total: 1
+
+Workflows:
+- running: 2
+- completed: 14
+- failed: 1
+- cancelled: 0
+
+Memory:
+- episodes: 22
+- memory_items: 58
+- memory_embeddings: 58
+
+Remember-path observability:
+- checkpoint_auto_memory_recorded: 19
+- checkpoint_auto_memory_skipped: 6
+- workflow_completion_auto_memory_recorded: 14
+- workflow_completion_auto_memory_skipped: 1
+```
+
+Quick reading:
+
+- high `checkpoint_auto_memory_recorded` means checkpoint-origin memory is actively accumulating
+- high `checkpoint_auto_memory_skipped` means many checkpoints are being gated out or suppressed
+- high `workflow_completion_auto_memory_recorded` means closeout capture is healthy
+- unexpected `workflow_completion_auto_memory_skipped` means completion summaries or reused checkpoint signal should be inspected
+
 ### 4.2 `memory-stats`
 
 `memory-stats` gives the canonical memory picture.
@@ -114,6 +147,36 @@ Focus on:
 - `checkpoint_auto_memory_skipped`
 - `workflow_completion_auto_memory_recorded`
 - `workflow_completion_auto_memory_skipped`
+
+Concrete example:
+
+```/dev/null/ctxledger_memory_stats_example.txt#L1-18
+ctxledger memory-stats
+
+Counts:
+- episodes: 22
+- memory_items: 58
+- memory_embeddings: 58
+- memory_relations: 17
+
+Remember-path observability:
+- checkpoint_auto_memory_recorded: 19
+- checkpoint_auto_memory_skipped: 6
+- workflow_completion_auto_memory_recorded: 14
+- workflow_completion_auto_memory_skipped: 1
+
+Memory item provenance:
+- workflow_checkpoint_auto: 31
+- workflow_complete_auto: 23
+- episode: 4
+```
+
+Quick reading:
+
+- `workflow_checkpoint_auto` in provenance confirms checkpoint-origin canonical memory is being written
+- `workflow_complete_auto` confirms closeout-origin canonical memory is being written
+- non-zero `memory_relations` means the graph layer has canonical relation input to mirror
+- if provenance grows but relations stay flat, inspect promoted fields and relation candidate quality
 
 ### 4.3 Counter meaning
 
@@ -305,6 +368,42 @@ The important questions are:
 - which structured field created it
 - why was this `supports` edge written
 
+Concrete command sequence:
+
+```/dev/null/remember_path_commands.txt#L1-14
+ctxledger stats
+ctxledger memory-stats
+
+# then inspect a specific workflow
+memory_get_context
+  workflow_instance_id = <workflow_instance_id>
+  query = "root cause recovery pattern"
+  limit = 10
+  include_episodes = true
+  include_memory_items = true
+  include_summaries = true
+
+# then inspect retrieval ranking
+memory_search
+  query = "root cause recovery pattern"
+  workspace_id = <workspace_id>
+  limit = 10
+```
+
+What to read in the outputs:
+
+- in `memory_get_context.details`
+  - `remember_path_origin_counts`
+  - `remember_path_promotion_field_counts`
+  - `remember_path_relation_reason_counts`
+  - `remember_path_explainability_by_episode`
+- in `memory_search.results[].ranking_details`
+  - `remember_path_detail.memory_origin`
+  - `remember_path_detail.promotion_field`
+  - `remember_path_detail.promotion_source`
+  - `remember_path_detail.supports_relation_present`
+  - `remember_path_detail.supports_relation_reasons`
+
 ### Step 6 — Inspect summary / graph only after canonical checks
 
 Only after the relational path looks healthy, inspect:
@@ -470,6 +569,134 @@ If not, treat that as an explainability gap rather than canonical data loss.
 
 ---
 
+## 11.1 Minimal command playbook
+
+Use this when you want the shortest practical investigation path.
+
+### Case A — checkpoint path looks weak
+
+```/dev/null/checkpoint_path_playbook.txt#L1-8
+ctxledger stats
+ctxledger memory-stats
+
+memory_get_context
+  workflow_instance_id = <workflow_instance_id>
+  query = "current objective next action root cause recovery pattern"
+  limit = 10
+```
+
+Read:
+
+- whether `checkpoint_auto_memory_recorded` is rising
+- whether `workflow_checkpoint_auto` appears in provenance
+- whether `remember_path_promotion_field_counts` includes the expected structured fields
+
+### Case B — completion path looks weak
+
+```/dev/null/completion_path_playbook.txt#L1-8
+ctxledger stats
+ctxledger memory-stats
+
+memory_get_context
+  workflow_instance_id = <workflow_instance_id>
+  query = "completion summary failure reason verify status"
+  limit = 10
+```
+
+Read:
+
+- whether `workflow_completion_auto_memory_recorded` is rising
+- whether `workflow_complete_auto` appears in provenance
+- whether completion-origin promoted fields and relation reasons are visible
+
+### Case C — relations exist but retrieval still looks thin
+
+```/dev/null/relation_path_playbook.txt#L1-10
+ctxledger memory-stats
+
+memory_get_context
+  workflow_instance_id = <workflow_instance_id>
+  query = "supports relation"
+  limit = 10
+  include_memory_items = true
+  include_summaries = true
+
+memory_search
+  query = "supports relation"
+  workspace_id = <workspace_id>
+```
+
+Read:
+
+- `memory_relations`
+- `related_context_relation_types`
+- `remember_path_relation_reason_counts`
+- `supports_relation_present`
+- `supports_relation_reasons`
+
+Use this when you want the shortest practical investigation path.
+
+### Case A — checkpoint path looks weak
+
+```/dev/null/checkpoint_path_playbook.txt#L1-8
+ctxledger stats
+ctxledger memory-stats
+
+memory_get_context
+  workflow_instance_id = <workflow_instance_id>
+  query = "current objective next action root cause recovery pattern"
+  limit = 10
+```
+
+Read:
+
+- whether `checkpoint_auto_memory_recorded` is rising
+- whether `workflow_checkpoint_auto` appears in provenance
+- whether `remember_path_promotion_field_counts` includes the expected structured fields
+
+### Case B — completion path looks weak
+
+```/dev/null/completion_path_playbook.txt#L1-8
+ctxledger stats
+ctxledger memory-stats
+
+memory_get_context
+  workflow_instance_id = <workflow_instance_id>
+  query = "completion summary failure reason verify status"
+  limit = 10
+```
+
+Read:
+
+- whether `workflow_completion_auto_memory_recorded` is rising
+- whether `workflow_complete_auto` appears in provenance
+- whether completion-origin promoted fields and relation reasons are visible
+
+### Case C — relations exist but retrieval still looks thin
+
+```/dev/null/relation_path_playbook.txt#L1-10
+ctxledger memory-stats
+
+memory_get_context
+  workflow_instance_id = <workflow_instance_id>
+  query = "supports relation"
+  limit = 10
+  include_memory_items = true
+  include_summaries = true
+
+memory_search
+  query = "supports relation"
+  workspace_id = <workspace_id>
+```
+
+Read:
+
+- `memory_relations`
+- `related_context_relation_types`
+- `remember_path_relation_reason_counts`
+- `supports_relation_present`
+- `supports_relation_reasons`
+
 ## 12. Recommended operator actions by symptom
 
 ### Low checkpoint recording
@@ -534,12 +761,15 @@ At that point, preserve:
 
 Use this short checklist first.
 
-1. Are workflows / checkpoints / verify reports present?
-2. Are `checkpoint_auto_memory_recorded` and `workflow_completion_auto_memory_recorded` non-zero where expected?
-3. Does `memory_item_provenance` include `workflow_checkpoint_auto` and/or `workflow_complete_auto`?
-4. Are `memory_relations` non-zero in representative remember-path-heavy usage?
-5. Do explainability surfaces show origin, promoted field, and relation reason?
-6. Only then inspect summary and graph layers.
+1. Run `ctxledger stats`.
+2. Run `ctxledger memory-stats`.
+3. Are workflows / checkpoints / verify reports present?
+4. Are `checkpoint_auto_memory_recorded` and `workflow_completion_auto_memory_recorded` non-zero where expected?
+5. Does `memory_item_provenance` include `workflow_checkpoint_auto` and/or `workflow_complete_auto`?
+6. Are `memory_relations` non-zero in representative remember-path-heavy usage?
+7. Use `memory_get_context` to inspect origin / promoted field / relation reason details for one affected workflow.
+8. Use `memory_search` to inspect ranking explainability for one affected workspace.
+9. Only then inspect summary and graph layers.
 
 ---
 

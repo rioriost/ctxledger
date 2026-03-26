@@ -299,6 +299,53 @@ class ContextShapingMixin:
                     ),
                 }
 
+            remember_path_summary_explainability = (
+                {
+                    "memory_origins": sorted(
+                        {
+                            str(memory_item.metadata.get("memory_origin"))
+                            for memory_item in memory_items
+                            if isinstance(memory_item.metadata.get("memory_origin"), str)
+                            and str(memory_item.metadata.get("memory_origin")).strip()
+                        }
+                    ),
+                    "promotion_fields": sorted(
+                        {
+                            str(memory_item.metadata.get("promotion_field"))
+                            for memory_item in memory_items
+                            if isinstance(memory_item.metadata.get("promotion_field"), str)
+                            and str(memory_item.metadata.get("promotion_field")).strip()
+                        }
+                    ),
+                    "promotion_sources": sorted(
+                        {
+                            str(memory_item.metadata.get("promotion_source"))
+                            for memory_item in memory_items
+                            if isinstance(memory_item.metadata.get("promotion_source"), str)
+                            and str(memory_item.metadata.get("promotion_source")).strip()
+                        }
+                    ),
+                    "relation_reasons": sorted(
+                        {
+                            str(relation.metadata.get("relation_reason"))
+                            for relation in related_memory_relations
+                            if isinstance(relation.metadata.get("relation_reason"), str)
+                            and str(relation.metadata.get("relation_reason")).strip()
+                        }
+                    ),
+                    "relation_origins": sorted(
+                        {
+                            str(relation.metadata.get("memory_origin"))
+                            for relation in related_memory_relations
+                            if isinstance(relation.metadata.get("memory_origin"), str)
+                            and str(relation.metadata.get("memory_origin")).strip()
+                        }
+                    ),
+                }
+                if include_memory_items
+                else {}
+            )
+
             if include_summaries:
                 detail["summary"] = {
                     "episode_id": str(episode.episode_id),
@@ -308,28 +355,7 @@ class ContextShapingMixin:
                     "memory_item_provenance": [
                         memory_item.provenance for memory_item in memory_items
                     ],
-                    "remember_path_explainability": (
-                        {
-                            "memory_origins": sorted(
-                                {
-                                    str(memory_item.metadata.get("memory_origin"))
-                                    for memory_item in memory_items
-                                    if isinstance(memory_item.metadata.get("memory_origin"), str)
-                                    and str(memory_item.metadata.get("memory_origin")).strip()
-                                }
-                            ),
-                            "promotion_fields": sorted(
-                                {
-                                    str(memory_item.metadata.get("promotion_field"))
-                                    for memory_item in memory_items
-                                    if isinstance(memory_item.metadata.get("promotion_field"), str)
-                                    and str(memory_item.metadata.get("promotion_field")).strip()
-                                }
-                            ),
-                        }
-                        if include_memory_items
-                        else {}
-                    ),
+                    "remember_path_explainability": remember_path_summary_explainability,
                 }
 
             details.append(detail)
@@ -685,6 +711,22 @@ class ContextShapingMixin:
                         "related_memory_relation_edges": detail.get(
                             "related_memory_relation_edges", []
                         ),
+                        "remember_path_memory_items": detail.get(
+                            "remember_path_memory_items",
+                            [],
+                        ),
+                        "remember_path_memory_summary": detail.get(
+                            "remember_path_memory_summary",
+                            {},
+                        ),
+                        "remember_path_relation_explanations": detail.get(
+                            "remember_path_relation_explanations",
+                            [],
+                        ),
+                        "remember_path_relation_summary": detail.get(
+                            "remember_path_relation_summary",
+                            {},
+                        ),
                     }
                 )
 
@@ -748,6 +790,51 @@ class ContextShapingMixin:
                         self._serialize_memory_item(memory_item)
                         for memory_item in related_memory_items
                     ],
+                    "remember_path_relation_explanations": [
+                        relation_explanation
+                        for detail in memory_item_details
+                        for relation_explanation in detail.get(
+                            "remember_path_relation_explanations",
+                            [],
+                        )
+                    ],
+                    "remember_path_relation_summary": {
+                        "relation_reason_counts": {
+                            relation_reason: sum(
+                                detail.get("remember_path_relation_summary", {})
+                                .get("relation_reason_counts", {})
+                                .get(relation_reason, 0)
+                                for detail in memory_item_details
+                            )
+                            for relation_reason in sorted(
+                                {
+                                    relation_reason
+                                    for detail in memory_item_details
+                                    for relation_reason in detail.get(
+                                        "remember_path_relation_summary",
+                                        {},
+                                    )
+                                    .get("relation_reason_counts", {})
+                                    .keys()
+                                    if isinstance(relation_reason, str) and relation_reason.strip()
+                                }
+                            )
+                        },
+                        "checkpoint_origin_present": any(
+                            detail.get("remember_path_relation_summary", {}).get(
+                                "checkpoint_origin_present",
+                                False,
+                            )
+                            for detail in memory_item_details
+                        ),
+                        "completion_origin_present": any(
+                            detail.get("remember_path_relation_summary", {}).get(
+                                "completion_origin_present",
+                                False,
+                            )
+                            for detail in memory_item_details
+                        ),
+                    },
                 }
             )
 

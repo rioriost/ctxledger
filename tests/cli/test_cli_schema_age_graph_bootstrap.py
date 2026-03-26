@@ -582,6 +582,92 @@ def test_bootstrap_age_graph_uses_mapping_count_rows(
     assert commit_calls == ["commit"]
 
 
+def test_bootstrap_age_graph_includes_checkpoint_origin_supports_relation_payloads(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    executed_queries: list[tuple[str, object | None]] = []
+    commit_calls: list[str] = []
+
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.fetchone_results: list[object] = [
+                (1,),
+                {"count": "1"},
+                {"count": "1"},
+            ]
+
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            executed_queries.append((query, params))
+
+        def fetchone(self) -> object:
+            return self.fetchone_results.pop(0)
+
+        def fetchall(self) -> list[object]:
+            last_query = executed_queries[-1][0]
+            if "SELECT memory_id" in last_query:
+                return []
+            if "SELECT\n                        mr.memory_relation_id" in last_query:
+                return [
+                    {
+                        "memory_relation_id": "11111111-1111-1111-1111-111111111111",
+                        "source_memory_id": "22222222-2222-2222-2222-222222222222",
+                        "target_memory_id": "33333333-3333-3333-3333-333333333333",
+                    }
+                ]
+            return []
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def commit(self) -> None:
+            commit_calls.append("commit")
+
+    fake_psycopg = SimpleNamespace(connect=lambda database_url: FakeConnection())
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings())
+
+    exit_code = cli_module._bootstrap_age_graph(
+        argparse.Namespace(
+            database_url="postgresql://explicit/db",
+            graph_name="ctxledger_test_graph",
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert captured.out.strip() == (
+        "AGE graph bootstrap completed for 'ctxledger_test_graph' "
+        "(memory_item nodes repopulated=1, supports edges repopulated=1)."
+    )
+    assert commit_calls == ["commit"]
+
+    supports_edge_queries = [
+        (query, params)
+        for query, params in executed_queries
+        if "CREATE (source)-[r:supports" in query
+    ]
+    assert len(supports_edge_queries) == 1
+    assert supports_edge_queries[0][1] == (
+        '{"memory_relation_id":"11111111-1111-1111-1111-111111111111","source_memory_id":"22222222-2222-2222-2222-222222222222","target_memory_id":"33333333-3333-3333-3333-333333333333"}',
+    )
+
+
 def test_bootstrap_age_graph_uses_tuple_count_rows(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

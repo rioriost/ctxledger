@@ -525,7 +525,7 @@ def test_workflow_memory_bridge_surfaces_remember_path_explainability_in_checkpo
     assert len(result.relations) == 3
     assert {relation.relation_type for relation in result.relations} == {"supports"}
     assert {relation.metadata["memory_origin"] for relation in result.relations} == {
-        "workflow_complete_auto"
+        "workflow_checkpoint_auto"
     }
     assert {relation.metadata["relation_reason"] for relation in result.relations} == {
         "next_action_supports_objective",
