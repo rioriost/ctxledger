@@ -449,6 +449,89 @@ Deliverables:
 
 `0.8.0` should not be considered complete unless all of the following are true.
 
+---
+
+## Appendix A. Current remember-path behavior at planning time
+
+The current repository behavior should be read as a **bounded completion auto-memory path**, not yet as a full remember-path implementation.
+
+Current practical flow during `workflow_complete` is:
+
+1. workflow and attempt terminal state are written canonically
+2. latest checkpoint is inspected for gating
+3. one closeout episode may be created
+4. one closeout memory item may be created
+5. one embedding may be created when configured
+6. optional episode-summary automation may run if explicitly requested
+7. stop
+
+This means the current repository already has a useful completion memory bridge, but it still commonly stops before multi-item promotion and canonical relation creation.
+
+### A.1 What currently works
+
+At planning time, the repository already supports:
+
+- completion-centered auto-memory gating
+- duplicate suppression for near-duplicate closeout memory
+- one canonical closeout episode on successful recording
+- one canonical closeout memory item derived from that episode
+- optional embedding persistence for that closeout memory item
+- optional explicit summary-building metadata/reporting for the completion-created episode
+
+### A.2 Where the current path usually stops
+
+The current path still usually stops after:
+
+- episode creation
+- one closeout memory item
+- optional embedding
+- optional summary-build reporting
+
+In particular, the current behavior is still weak or absent for:
+
+- separate promoted memory items for `current_objective`
+- separate promoted memory items for `next_intended_action`
+- separate promoted memory items for failure / recovery knowledge
+- separate promoted memory items for verification outcomes
+- canonical `memory_relations` writing during normal completion flows
+- stage-shaped observability across the full remember pipeline
+
+### A.3 Current canonical / derived boundary
+
+The current boundary should be read as:
+
+- PostgreSQL workflow / checkpoint / memory tables are canonical
+- episode summaries are canonical relational artifacts when explicitly built
+- AGE graph state is derived from canonical relational records
+- graph usefulness is downstream of relation creation and therefore cannot compensate for sparse canonical memory structure
+
+### A.4 Current operator reading
+
+If a deployment currently shows:
+
+- workflows and checkpoints present
+- episodes present
+- memory items present
+- embeddings present
+- `memory_relations = 0`
+
+that should be read as a remember-path weakness rather than as a graph-layer defect.
+
+### A.5 Immediate contract implication for `0.8.0`
+
+The `0.8.0` implementation contract should therefore strengthen the current path from:
+
+- workflow completion -> maybe episode -> maybe one memory item -> stop
+
+toward:
+
+- workflow completion / meaningful checkpoint
+- episode capture
+- structured memory-item promotion
+- constrained canonical relation writing
+- optional embedding / summary / graph refresh
+- explicit stage-level reporting of success, skip, and failure reasons
+
 ## 11.1 Canonical remember pipeline is clearer and stronger
 
 - the repository documents how meaningful work becomes layered memory
@@ -532,6 +615,124 @@ Mitigation:
 ## 13. Validation Strategy
 
 Representative validation for `0.8.0` should include:
+
+---
+
+## Appendix B. `0.8.0` implementation contract
+
+The repository should treat the following as the concrete implementation contract for this milestone.
+
+### B.1 Event types that must participate in the remember path
+
+The first `0.8.0` slice should cover:
+
+- meaningful workflow completion
+- meaningful checkpoints with high-signal structured fields
+
+A checkpoint should be treated as high-signal when it contains one or more of:
+
+- `current_objective`
+- `next_intended_action`
+- failure / recovery signal
+- verification outcome signal
+- other explicitly documented closeout-worthy fields
+
+### B.2 Minimum artifacts for meaningful workflow completion
+
+For a meaningful workflow completion, the intended minimum artifact set is:
+
+- one canonical episode
+- one canonical closeout memory item
+- promoted canonical memory items when structured fields are present
+- optional embedding persistence where configured
+- constrained canonical relation creation where enough structure exists
+- additive reporting for each remember stage
+
+The promoted memory-item set should be intentionally narrow at first.
+
+Recommended first promoted item categories are:
+
+- current objective
+- next intended action
+- verification outcome
+- failure reason / recovery note
+
+### B.3 Minimum artifacts for meaningful checkpoint promotion
+
+For a meaningful checkpoint, `0.8.0` should make it possible for checkpoint structure to be reused in later memory creation rather than disappearing into checkpoint-only storage.
+
+At minimum, the contract should allow:
+
+- objective-bearing checkpoints to produce or feed objective memory
+- next-action-bearing checkpoints to produce or feed next-action memory
+- failure / recovery-bearing checkpoints to produce or feed recovery-oriented memory
+- verify-bearing checkpoints to produce or feed verification-outcome memory
+
+### B.4 First constrained relation-writing rule
+
+The first canonical relation-writing slice should remain narrow.
+
+The default first rule should be:
+
+- write `supports` relations only
+
+The first allowed relation shapes should be constrained to explicitly justified pairs such as:
+
+- next-action memory item -> supports -> current-objective memory item
+- verification-outcome memory item -> supports -> completion note
+- failure / recovery memory item -> supports -> completion note
+- other equally narrow completion-derived pairs that are documented and tested
+
+If no justified pair exists, relation writing should skip explicitly rather than invent weak edges.
+
+### B.5 Observability contract
+
+Remember-path observability should become stage-shaped.
+
+The implementation should surface stage-level outcomes for at least:
+
+- gating
+- summary-source selection
+- duplicate suppression
+- episode creation
+- primary memory-item creation
+- promoted memory-item creation
+- embedding persistence
+- relation creation
+- summary build, when applicable
+
+Each stage should ideally report:
+
+- whether it was attempted
+- whether it succeeded, skipped, failed, or was not configured
+- skip or failure reason when applicable
+- counts or created identifiers where useful
+
+### B.6 Agent-facing contract
+
+Repository guidance for MCP-capable agents should become more explicit.
+
+The intended reading is:
+
+- workflow completion auto-memory should handle normal closeout capture
+- explicit episode recording should still be used for high-signal knowledge that is not safely captured by completion automation alone
+- agents should include structured checkpoint fields when they know them, especially:
+  - `current_objective`
+  - `next_intended_action`
+  - root cause
+  - recovery pattern
+  - verification outcome
+  - what remains
+
+### B.7 Non-goals of this contract
+
+This contract still does **not** require:
+
+- broad ontology extraction
+- broad graph-native redesign
+- unconstrained relation semantics
+- broad retrieval/ranking redesign
+- treating derived graph state as canonical truth
 
 - unit tests for remember-path decision logic
 - integration tests for workflow-completion auto-memory

@@ -77,6 +77,7 @@ def build_workflow_service_factory(
                 episode_repository=uow.memory_episodes,
                 memory_item_repository=uow.memory_items,
                 memory_embedding_repository=uow.memory_embeddings,
+                memory_relation_repository=uow.memory_relations,
                 summary_builder=explicit_summary_builder,
             )
             return WorkflowService(
@@ -88,6 +89,7 @@ def build_workflow_service_factory(
             episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
             memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
             memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+            memory_relation_repository=UnitOfWorkMemoryRelationRepository(uow_factory),
             summary_builder=explicit_summary_builder,
         )
         return WorkflowService(

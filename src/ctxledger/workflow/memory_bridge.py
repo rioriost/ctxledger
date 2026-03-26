@@ -15,7 +15,11 @@ from ..memory.embeddings import (
 )
 
 if TYPE_CHECKING:
-    from ..memory.service import MemoryEmbeddingRepository, MemoryItemRepository
+    from ..memory.service import (
+        MemoryEmbeddingRepository,
+        MemoryItemRepository,
+        MemoryRelationRepository,
+    )
     from .service import (
         VerifyReport,
         WorkflowAttempt,
@@ -60,9 +64,21 @@ class MemoryEmbeddingRecord:
 
 
 @dataclass(slots=True, frozen=True)
+class MemoryRelationRecord:
+    memory_relation_id: UUID
+    source_memory_id: UUID
+    target_memory_id: UUID
+    relation_type: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass(slots=True, frozen=True)
 class WorkflowCompletionMemoryRecordResult:
     episode: EpisodeRecord | None = None
     memory_item: MemoryItemRecord | None = None
+    promoted_memory_items: tuple[MemoryItemRecord, ...] = ()
+    relations: tuple[MemoryRelationRecord, ...] = ()
     summary_build: dict[str, Any] | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
@@ -73,11 +89,20 @@ class AutoMemoryDuplicateCheckResult:
     skipped_reason: str | None = None
 
 
+@dataclass(slots=True, frozen=True)
+class CompletionPromotionCandidate:
+    field_key: str
+    memory_type: str
+    content: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
 _NEAR_DUPLICATE_LOOKBACK_WINDOW = timedelta(hours=6)
 _SUMMARY_SIMILARITY_THRESHOLD = 0.75
 _FIELD_EXTRACTED_SIMILARITY_THRESHOLD = 0.7
 _COMPLETION_SUMMARY_WEIGHT = 3.0
 _CHECKPOINT_SUMMARY_WEIGHT = 1.5
+_CURRENT_OBJECTIVE_WEIGHT = 1.5
 _NEXT_ACTION_WEIGHT = 1.5
 _VERIFY_STATUS_WEIGHT = 0.75
 _WORKFLOW_STATUS_WEIGHT = 0.75
@@ -103,8 +128,10 @@ _SUMMARY_SIMILARITY_IGNORED_TOKENS = frozenset(
         "line",
         "lines",
         "next",
+        "objective",
         "of",
         "planned",
+        "reason",
         "second",
         "status",
         "summary",
@@ -117,6 +144,7 @@ _SUMMARY_SIMILARITY_IGNORED_TOKENS = frozenset(
 _FIELD_LABEL_TO_KEY = {
     "completion summary": "completion_summary",
     "latest checkpoint summary": "latest_checkpoint_summary",
+    "current objective": "current_objective",
     "last planned next action": "next_intended_action",
     "next action": "next_intended_action",
     "verify status": "verify_status",
@@ -140,11 +168,16 @@ class MemoryEmbeddingRepository(Protocol):
     def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord: ...
 
 
+class MemoryRelationRepository(Protocol):
+    def create(self, relation: MemoryRelationRecord) -> MemoryRelationRecord: ...
+
+
 @dataclass(slots=True)
 class WorkflowMemoryBridge:
     episode_repository: EpisodeRepository
     memory_item_repository: MemoryItemRepository
     memory_embedding_repository: MemoryEmbeddingRepository | None = None
+    memory_relation_repository: MemoryRelationRepository | None = None
     summary_builder: Any | None = None
     embedding_generator: EmbeddingGenerator | None = None
 
@@ -195,11 +228,16 @@ class WorkflowMemoryBridge:
                 "skipped_reason": skipped_reason,
             },
         )
+        stage_details = self._initial_stage_details(
+            should_record=should_record,
+            skipped_reason=skipped_reason,
+        )
         if not should_record:
             return WorkflowCompletionMemoryRecordResult(
                 details={
                     "auto_memory_recorded": False,
                     "auto_memory_skipped_reason": skipped_reason,
+                    "stage_details": stage_details,
                 }
             )
 
@@ -221,6 +259,13 @@ class WorkflowMemoryBridge:
                 ),
             },
         )
+        stage_details["summary_selection"] = {
+            "attempted": True,
+            "status": "built" if memory_summary is not None else "skipped",
+            "skipped_reason": None
+            if memory_summary is not None
+            else "no_completion_summary_source",
+        }
         if memory_summary is None:
             return None
 
@@ -255,11 +300,17 @@ class WorkflowMemoryBridge:
                 "skipped_reason": duplicate_check.skipped_reason,
             },
         )
+        stage_details["duplicate_check"] = {
+            "attempted": True,
+            "status": "passed" if duplicate_check.should_record else "skipped",
+            "skipped_reason": duplicate_check.skipped_reason,
+        }
         if not duplicate_check.should_record:
             return WorkflowCompletionMemoryRecordResult(
                 details={
                     "auto_memory_recorded": False,
                     "auto_memory_skipped_reason": duplicate_check.skipped_reason,
+                    "stage_details": stage_details,
                 }
             )
 
@@ -282,6 +333,12 @@ class WorkflowMemoryBridge:
                 updated_at=now,
             )
         )
+        stage_details["episode"] = {
+            "attempted": True,
+            "status": "recorded",
+            "episode_id": str(episode.episode_id),
+            "skipped_reason": None,
+        }
         logger.info(
             "workflow completion auto-memory episode created",
             extra={
@@ -290,8 +347,9 @@ class WorkflowMemoryBridge:
                 "episode_id": str(episode.episode_id),
             },
         )
+
         logger.info(
-            "workflow completion auto-memory creating memory item",
+            "workflow completion auto-memory creating primary memory item",
             extra={
                 "workflow_instance_id": str(workflow.workflow_instance_id),
                 "attempt_id": str(attempt.attempt_id),
@@ -311,8 +369,15 @@ class WorkflowMemoryBridge:
                 updated_at=episode.updated_at,
             )
         )
+        stage_details["primary_memory_item"] = {
+            "attempted": True,
+            "status": "recorded",
+            "memory_id": str(memory_item.memory_id),
+            "memory_type": memory_item.type,
+            "skipped_reason": None,
+        }
         logger.info(
-            "workflow completion auto-memory memory item created",
+            "workflow completion auto-memory primary memory item created",
             extra={
                 "workflow_instance_id": str(workflow.workflow_instance_id),
                 "attempt_id": str(attempt.attempt_id),
@@ -320,7 +385,53 @@ class WorkflowMemoryBridge:
                 "memory_id": str(memory_item.memory_id),
             },
         )
-        details = self._maybe_store_embedding(memory_item)
+
+        promoted_memory_items = self._create_promoted_memory_items(
+            workflow=workflow,
+            attempt=attempt,
+            latest_checkpoint=latest_checkpoint,
+            verify_report=verify_report,
+            failure_reason=failure_reason,
+            episode=episode,
+            now=episode.created_at,
+        )
+        stage_details["promoted_memory_items"] = {
+            "attempted": True,
+            "status": "recorded" if promoted_memory_items else "skipped",
+            "created_count": len(promoted_memory_items),
+            "created_memory_ids": [str(item.memory_id) for item in promoted_memory_items],
+            "created_types": [item.type for item in promoted_memory_items],
+            "skipped_reason": None if promoted_memory_items else "no_promotable_completion_fields",
+        }
+
+        relation_records = self._create_supports_relations(
+            workflow=workflow,
+            attempt=attempt,
+            primary_memory_item=memory_item,
+            promoted_memory_items=promoted_memory_items,
+            now=episode.created_at,
+        )
+        stage_details["relations"] = {
+            "attempted": self.memory_relation_repository is not None,
+            "status": (
+                "recorded"
+                if relation_records
+                else (
+                    "skipped" if self.memory_relation_repository is not None else "not_configured"
+                )
+            ),
+            "created_count": len(relation_records),
+            "created_relation_ids": [
+                str(relation.memory_relation_id) for relation in relation_records
+            ],
+            "relation_type_counts": self._relation_type_counts(relation_records),
+            "skipped_reason": self._relation_skipped_reason(
+                relation_records=relation_records,
+                promoted_memory_items=promoted_memory_items,
+            ),
+        }
+
+        embedding_details = self._maybe_store_embedding(memory_item)
         logger.info(
             "workflow completion auto-memory embedding persistence finished",
             extra={
@@ -328,25 +439,69 @@ class WorkflowMemoryBridge:
                 "attempt_id": str(attempt.attempt_id),
                 "episode_id": str(episode.episode_id),
                 "memory_id": str(memory_item.memory_id),
-                "embedding_details": details,
+                "embedding_details": embedding_details,
             },
         )
+        stage_details["embedding"] = {
+            "attempted": True,
+            "status": embedding_details.get("embedding_persistence_status"),
+            "skipped_reason": embedding_details.get("embedding_generation_skipped_reason"),
+            "provider": embedding_details.get("embedding_provider"),
+            "model": embedding_details.get("embedding_model"),
+        }
+
         summary_build = self._maybe_build_completion_summary(
             workflow=workflow,
             episode=episode,
             memory_item=memory_item,
             latest_checkpoint=latest_checkpoint,
         )
+        stage_details["summary_build"] = (
+            dict(summary_build)
+            if summary_build is not None
+            else {
+                "summary_build_attempted": False,
+                "summary_build_succeeded": False,
+                "summary_build_requested": False,
+                "summary_build_status": None,
+                "summary_build_skipped_reason": "summary_builder_not_configured",
+            }
+        )
+
+        details = {
+            "auto_memory_recorded": True,
+            "episode_id": str(episode.episode_id),
+            "memory_item_id": str(memory_item.memory_id),
+            "promoted_memory_item_ids": [str(item.memory_id) for item in promoted_memory_items],
+            "promoted_memory_item_count": len(promoted_memory_items),
+            "memory_relation_count": len(relation_records),
+            "stage_details": stage_details,
+            **embedding_details,
+            **({"summary_build": summary_build} if summary_build is not None else {}),
+        }
+
         return WorkflowCompletionMemoryRecordResult(
             episode=episode,
             memory_item=memory_item,
+            promoted_memory_items=tuple(promoted_memory_items),
+            relations=tuple(relation_records),
             summary_build=summary_build,
-            details={
-                "auto_memory_recorded": True,
-                **details,
-                **({"summary_build": summary_build} if summary_build is not None else {}),
-            },
+            details=details,
         )
+
+    def _initial_stage_details(
+        self,
+        *,
+        should_record: bool,
+        skipped_reason: str,
+    ) -> dict[str, Any]:
+        return {
+            "gating": {
+                "attempted": True,
+                "status": "passed" if should_record else "skipped",
+                "skipped_reason": None if should_record else skipped_reason,
+            }
+        }
 
     def _auto_memory_gating_decision(
         self,
@@ -537,6 +692,7 @@ class WorkflowMemoryBridge:
 
         if fallback_metadata is not None:
             for key in (
+                "current_objective",
                 "next_intended_action",
                 "verify_status",
                 "workflow_status",
@@ -556,7 +712,9 @@ class WorkflowMemoryBridge:
         prior_fields: dict[str, str],
     ) -> bool:
         return (
-            current_fields.get("next_intended_action") == prior_fields.get("next_intended_action")
+            current_fields.get("current_objective") == prior_fields.get("current_objective")
+            and current_fields.get("next_intended_action")
+            == prior_fields.get("next_intended_action")
             and current_fields.get("verify_status") == prior_fields.get("verify_status")
             and current_fields.get("workflow_status") == prior_fields.get("workflow_status")
             and current_fields.get("attempt_status") == prior_fields.get("attempt_status")
@@ -575,6 +733,7 @@ class WorkflowMemoryBridge:
         for key, weight in (
             ("completion_summary", _COMPLETION_SUMMARY_WEIGHT),
             ("latest_checkpoint_summary", _CHECKPOINT_SUMMARY_WEIGHT),
+            ("current_objective", _CURRENT_OBJECTIVE_WEIGHT),
             ("next_intended_action", _NEXT_ACTION_WEIGHT),
             ("verify_status", _VERIFY_STATUS_WEIGHT),
             ("workflow_status", _WORKFLOW_STATUS_WEIGHT),
@@ -643,8 +802,15 @@ class WorkflowMemoryBridge:
             if latest_checkpoint is not None
             else None
         )
+        current_objective = self._checkpoint_current_objective(latest_checkpoint)
+        next_intended_action = self._checkpoint_next_intended_action(latest_checkpoint)
 
-        if summary_text is None and checkpoint_summary is None:
+        if (
+            summary_text is None
+            and checkpoint_summary is None
+            and current_objective is None
+            and next_intended_action is None
+        ):
             return None
 
         lines: list[str] = [f"Workflow completed with status `{workflow.status.value}`."]
@@ -654,17 +820,24 @@ class WorkflowMemoryBridge:
         elif checkpoint_summary is not None:
             lines.append(f"Latest checkpoint summary: {checkpoint_summary}")
 
-        if summary_text is not None and checkpoint_summary is not None:
-            if summary_text != checkpoint_summary:
-                lines.append(f"Latest checkpoint summary: {checkpoint_summary}")
+        if (
+            summary_text is not None
+            and checkpoint_summary is not None
+            and summary_text != checkpoint_summary
+        ):
+            lines.append(f"Latest checkpoint summary: {checkpoint_summary}")
 
-        next_intended_action = self._checkpoint_next_intended_action(latest_checkpoint)
+        if current_objective is not None:
+            lines.append(f"Current objective: {current_objective}")
+
         if next_intended_action is not None:
             lines.append(f"Last planned next action: {next_intended_action}")
 
         verify_status = self._verify_status_value(verify_report)
         if verify_status is not None:
             lines.append(f"Verify status: {verify_status}")
+
+        lines.append(f"Workflow status: {workflow.status.value}")
 
         workflow_status = str(getattr(workflow.status, "value", workflow.status))
         if failure_reason is not None and workflow_status in {"failed", "cancelled"}:
@@ -695,6 +868,9 @@ class WorkflowMemoryBridge:
 
         if latest_checkpoint is not None:
             metadata["step_name"] = latest_checkpoint.step_name
+            current_objective = self._checkpoint_current_objective(latest_checkpoint)
+            if current_objective is not None:
+                metadata["current_objective"] = current_objective
             next_intended_action = self._checkpoint_next_intended_action(latest_checkpoint)
             if next_intended_action is not None:
                 metadata["next_intended_action"] = next_intended_action
@@ -703,6 +879,248 @@ class WorkflowMemoryBridge:
             metadata["failure_reason"] = failure_reason
 
         return metadata
+
+    def _collect_promotion_candidates(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        attempt: WorkflowAttempt,
+        latest_checkpoint: WorkflowCheckpoint | None,
+        verify_report: VerifyReport | None,
+        failure_reason: str | None,
+    ) -> tuple[CompletionPromotionCandidate, ...]:
+        candidates: list[CompletionPromotionCandidate] = []
+
+        current_objective = self._checkpoint_current_objective(latest_checkpoint)
+        if current_objective is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="current_objective",
+                    memory_type="workflow_objective",
+                    content=current_objective,
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "latest_checkpoint.current_objective",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        next_intended_action = self._checkpoint_next_intended_action(latest_checkpoint)
+        if next_intended_action is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="next_intended_action",
+                    memory_type="workflow_next_action",
+                    content=next_intended_action,
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "latest_checkpoint.next_intended_action",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        verify_status = self._verify_status_value(verify_report)
+        if verify_status is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="verify_status",
+                    memory_type="workflow_verification_outcome",
+                    content=f"Workflow verification outcome: {verify_status}",
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "verify_report.status",
+                        "verify_status": verify_status,
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        normalized_failure_reason = self._normalize_text(failure_reason)
+        if normalized_failure_reason is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="failure_reason",
+                    memory_type="workflow_failure_reason",
+                    content=normalized_failure_reason,
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "workflow_complete.failure_reason",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        return tuple(candidates)
+
+    def _create_promoted_memory_items(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        attempt: WorkflowAttempt,
+        latest_checkpoint: WorkflowCheckpoint | None,
+        verify_report: VerifyReport | None,
+        failure_reason: str | None,
+        episode: EpisodeRecord,
+        now: datetime,
+    ) -> tuple[MemoryItemRecord, ...]:
+        created_items: list[MemoryItemRecord] = []
+        for candidate in self._collect_promotion_candidates(
+            workflow=workflow,
+            attempt=attempt,
+            latest_checkpoint=latest_checkpoint,
+            verify_report=verify_report,
+            failure_reason=failure_reason,
+        ):
+            memory_item = self.memory_item_repository.create(
+                MemoryItemRecord(
+                    memory_id=uuid4(),
+                    workspace_id=workflow.workspace_id,
+                    episode_id=episode.episode_id,
+                    type=candidate.memory_type,
+                    provenance="workflow_complete_auto",
+                    content=candidate.content,
+                    metadata={
+                        **dict(episode.metadata),
+                        **dict(candidate.metadata),
+                        "promotion_field": candidate.field_key,
+                    },
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            logger.info(
+                "workflow completion auto-memory promoted memory item created",
+                extra={
+                    "workflow_instance_id": str(workflow.workflow_instance_id),
+                    "attempt_id": str(attempt.attempt_id),
+                    "episode_id": str(episode.episode_id),
+                    "memory_id": str(memory_item.memory_id),
+                    "memory_type": memory_item.type,
+                    "promotion_field": candidate.field_key,
+                },
+            )
+            created_items.append(memory_item)
+        return tuple(created_items)
+
+    def _create_supports_relations(
+        self,
+        *,
+        workflow: WorkflowInstance,
+        attempt: WorkflowAttempt,
+        primary_memory_item: MemoryItemRecord,
+        promoted_memory_items: tuple[MemoryItemRecord, ...],
+        now: datetime,
+    ) -> tuple[MemoryRelationRecord, ...]:
+        if self.memory_relation_repository is None:
+            return ()
+
+        promoted_by_field = {
+            item.metadata.get("promotion_field"): item
+            for item in promoted_memory_items
+            if isinstance(item.metadata.get("promotion_field"), str)
+        }
+
+        relation_specs: list[tuple[str, MemoryItemRecord, MemoryItemRecord, str]] = []
+
+        objective_item = promoted_by_field.get("current_objective")
+        next_action_item = promoted_by_field.get("next_intended_action")
+        verify_item = promoted_by_field.get("verify_status")
+        failure_item = promoted_by_field.get("failure_reason")
+
+        if next_action_item is not None and objective_item is not None:
+            relation_specs.append(
+                (
+                    "next_action_supports_objective",
+                    next_action_item,
+                    objective_item,
+                    "next intended action supports the current objective",
+                )
+            )
+
+        if verify_item is not None and primary_memory_item is not None:
+            relation_specs.append(
+                (
+                    "verification_supports_completion_note",
+                    verify_item,
+                    primary_memory_item,
+                    "verification outcome supports the completion note",
+                )
+            )
+
+        if failure_item is not None and primary_memory_item is not None:
+            relation_specs.append(
+                (
+                    "failure_reason_supports_completion_note",
+                    failure_item,
+                    primary_memory_item,
+                    "failure reason supports the completion note",
+                )
+            )
+
+        created_relations: list[MemoryRelationRecord] = []
+        for relation_reason, source_item, target_item, description in relation_specs:
+            relation = self.memory_relation_repository.create(
+                MemoryRelationRecord(
+                    memory_relation_id=uuid4(),
+                    source_memory_id=source_item.memory_id,
+                    target_memory_id=target_item.memory_id,
+                    relation_type="supports",
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "relation_reason": relation_reason,
+                        "relation_description": description,
+                        "workflow_instance_id": str(workflow.workflow_instance_id),
+                        "attempt_id": str(attempt.attempt_id),
+                        "source_memory_type": source_item.type,
+                        "target_memory_type": target_item.type,
+                    },
+                    created_at=now,
+                )
+            )
+            logger.info(
+                "workflow completion auto-memory relation created",
+                extra={
+                    "workflow_instance_id": str(workflow.workflow_instance_id),
+                    "attempt_id": str(attempt.attempt_id),
+                    "memory_relation_id": str(relation.memory_relation_id),
+                    "relation_type": relation.relation_type,
+                    "source_memory_id": str(relation.source_memory_id),
+                    "target_memory_id": str(relation.target_memory_id),
+                    "relation_reason": relation_reason,
+                },
+            )
+            created_relations.append(relation)
+
+        return tuple(created_relations)
+
+    def _relation_type_counts(
+        self,
+        relations: tuple[MemoryRelationRecord, ...],
+    ) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for relation in relations:
+            counts[relation.relation_type] = counts.get(relation.relation_type, 0) + 1
+        return counts
+
+    def _relation_skipped_reason(
+        self,
+        *,
+        relation_records: tuple[MemoryRelationRecord, ...],
+        promoted_memory_items: tuple[MemoryItemRecord, ...],
+    ) -> str | None:
+        if self.memory_relation_repository is None:
+            return "memory_relations_not_configured"
+        if relation_records:
+            return None
+        if not promoted_memory_items:
+            return "no_relation_candidate_memory_items"
+        return "no_supported_relation_pairs"
 
     def _maybe_build_completion_summary(
         self,
@@ -774,6 +1192,7 @@ class WorkflowMemoryBridge:
                         "source": "workflow_completion_auto_memory",
                         "workflow_instance_id": str(workflow.workflow_instance_id),
                         "auto_memory_episode_id": str(episode.episode_id),
+                        "auto_memory_memory_id": str(memory_item.memory_id),
                         "summary_build_trigger": summary_build_trigger,
                     },
                 )
@@ -829,7 +1248,7 @@ class WorkflowMemoryBridge:
         if self.embedding_generator is None or self.memory_embedding_repository is None:
             return {
                 "embedding_persistence_status": "skipped",
-                "embedding_generation_skipped_reason": ("embedding_persistence_not_configured"),
+                "embedding_generation_skipped_reason": "embedding_persistence_not_configured",
             }
 
         try:
@@ -876,6 +1295,18 @@ class WorkflowMemoryBridge:
         if not isinstance(value, str):
             return None
         normalized = value.strip()
+        return normalized if normalized else None
+
+    @staticmethod
+    def _checkpoint_current_objective(
+        checkpoint: WorkflowCheckpoint | None,
+    ) -> str | None:
+        if checkpoint is None:
+            return None
+        raw_value = checkpoint.checkpoint_json.get("current_objective")
+        if not isinstance(raw_value, str):
+            return None
+        normalized = raw_value.strip()
         return normalized if normalized else None
 
     @staticmethod

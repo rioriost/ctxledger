@@ -165,6 +165,38 @@ USE memory_remember_episode_for_high_signal_knowledge:
 - failure_and_recovery
 - process_lesson
 
+RULE completion_auto_memory_default
+DO treat workflow_completion_auto_memory_as_default_closeout_path
+FOR:
+- normal_workflow_completion
+- normal_failure_closeout
+- normal_cancellation_closeout
+WHEN completion_fields_are_available
+
+RULE explicit_episode_vs_auto_memory
+USE memory_remember_episode_in_addition_to_workflow_completion_auto_memory
+ONLY_FOR high_signal_knowledge_not_safely_captured_by_closeout_automation
+SUCH_AS:
+- non_obvious_root_cause
+- important_decision
+- reusable_debugging_pattern
+- failure_and_recovery_lesson
+- process_lesson_with_reuse_value
+
+RULE avoid_duplicate_closeout_episodes
+DO NOT use memory_remember_episode_only_to_repeat_workflow_complete_summary
+OR restate_checkpoint_fields_already_recorded_for_closeout
+WHEN no_additional_high_signal_memory_is_added
+
+RULE completion_structured_fields
+DO include_structured_checkpoint_fields_when_known:
+- current_objective
+- next_intended_action
+- root_cause
+- recovery_pattern
+- what_remains
+- verify_status
+
 RULE prefer_high_signal_episodes
 PREFER fewer_higher_signal_memory_episodes_over_repetition
 

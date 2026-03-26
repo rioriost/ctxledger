@@ -596,6 +596,94 @@ def test_build_workflow_complete_tool_handler_preserves_summary_build_metadata()
     }
 
 
+def test_build_workflow_complete_tool_handler_preserves_structured_auto_memory_stage_details() -> (
+    None
+):
+    workflow_instance_id = uuid4()
+    attempt_id = uuid4()
+    finished_at = datetime(2024, 1, 3, tzinfo=UTC)
+    auto_memory_details = {
+        "auto_memory_recorded": True,
+        "episode_id": str(uuid4()),
+        "memory_item_id": str(uuid4()),
+        "promoted_memory_item_ids": [str(uuid4()), str(uuid4())],
+        "promoted_memory_item_count": 2,
+        "memory_relation_count": 1,
+        "stage_details": {
+            "gating": {
+                "attempted": True,
+                "status": "passed",
+                "skipped_reason": None,
+            },
+            "promoted_memory_items": {
+                "attempted": True,
+                "status": "recorded",
+                "created_count": 2,
+                "created_memory_ids": [str(uuid4()), str(uuid4())],
+                "created_types": [
+                    "workflow_objective",
+                    "workflow_next_action",
+                ],
+                "skipped_reason": None,
+            },
+            "relations": {
+                "attempted": True,
+                "status": "recorded",
+                "created_count": 1,
+                "created_relation_ids": [str(uuid4())],
+                "relation_type_counts": {"supports": 1},
+                "skipped_reason": None,
+            },
+            "embedding": {
+                "attempted": True,
+                "status": "stored",
+                "skipped_reason": None,
+                "provider": "local_stub",
+                "model": "local-stub-v1",
+            },
+        },
+    }
+    result = SimpleNamespace(
+        workflow_instance=SimpleNamespace(
+            workflow_instance_id=workflow_instance_id,
+            status=WorkflowInstanceStatus.COMPLETED,
+        ),
+        attempt=SimpleNamespace(
+            attempt_id=attempt_id,
+            status=SimpleNamespace(value="completed"),
+            finished_at=finished_at,
+            verify_status=VerifyStatus.PASSED,
+        ),
+        verify_report=SimpleNamespace(status=VerifyStatus.PASSED),
+        warnings=(),
+        auto_memory_details=auto_memory_details,
+    )
+    service = FakeWorkflowService(complete_result=result)
+    handler = build_workflow_complete_tool_handler(make_server(workflow_service=service))
+
+    response = handler(
+        {
+            "workflow_instance_id": str(workflow_instance_id),
+            "attempt_id": str(attempt_id),
+            "workflow_status": "completed",
+        }
+    )
+
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "workflow_instance_id": str(workflow_instance_id),
+            "attempt_id": str(attempt_id),
+            "workflow_status": "completed",
+            "attempt_status": "completed",
+            "finished_at": finished_at.isoformat(),
+            "latest_verify_status": "passed",
+            "warnings": [],
+            "auto_memory_details": auto_memory_details,
+        },
+    }
+
+
 def test_build_workspace_register_tool_handler_rejects_missing_repo_url() -> None:
     handler = build_workspace_register_tool_handler(
         make_server(workflow_service=FakeWorkflowService())

@@ -1025,6 +1025,21 @@ It may also:
 - record final summary
 - record final verification evidence
 - attach failure or cancellation context
+- trigger completion-centered automatic memory recording
+
+For the current `0.8.0` remember-path direction, `workflow_complete` should be read as the primary closeout-memory entry point for normal work-loop completion.
+
+The current bounded closeout path may:
+
+- inspect the latest checkpoint for remember-path gating
+- create one canonical closeout episode
+- create one canonical closeout memory item
+- promote structured closeout fields into additional canonical memory items when present
+- write constrained canonical `supports` relations when justified
+- persist an embedding for the primary closeout memory item when configured
+- return additive stage-level success / skip / failure details through `auto_memory_details`
+
+This does **not** make `workflow_complete` a replacement for explicit high-signal episodic recording.
 
 ### Expected Inputs
 Implemented MCP `inputSchema` fields:
@@ -1048,8 +1063,19 @@ Writes to:
 - `workflow_instances`
 - `workflow_attempts`
 - `verify_reports` (optional)
+- canonical memory records created by the completion auto-memory path when recording is gated in:
+  - `episodes`
+  - `memory_items`
+  - `memory_relations`
+  - `memory_embeddings` (optional, when configured)
 - future failure records
 - projection failure records on projection update failure
+
+The remember-path reading for `0.8.0` should be:
+
+- workflow / checkpoint state remains canonical operational truth
+- completion auto-memory writes canonical memory artifacts derived from that truth
+- summary and graph layers remain downstream / derived
 
 ### Response Intent
 Return terminal workflow state.
@@ -1062,6 +1088,30 @@ Typical response content:
 - `attempt_status`
 - `finished_at`
 - `latest_verify_status` (optional)
+- `warnings`
+- `auto_memory_details` (optional)
+
+For the current `0.8.0` remember-path slice, `auto_memory_details` should be read as additive completion-memory reporting rather than as a second workflow-truth mechanism.
+
+Representative fields may include:
+
+- whether automatic memory recording occurred
+- why it was skipped
+- created episode / memory identifiers
+- promoted memory-item counts
+- relation counts
+- embedding persistence outcome
+- summary-build outcome
+- stage-level reporting for:
+  - gating
+  - summary-source selection
+  - duplicate suppression
+  - episode creation
+  - primary memory-item creation
+  - promoted memory-item creation
+  - embedding persistence
+  - relation creation
+  - summary build
 
 ### Projection Failure Interaction
 `workflow_complete` does not redefine projection failure lifecycle, but implementations may still record projection-related operational failures if projection regeneration or projection state updates fail during terminalization flows.
@@ -1096,6 +1146,18 @@ Implemented in the current repository state.
 - persists append-only episodic records
 - returns the recorded episode payload on success
 
+For the current `0.8.0` remember-path reading, `memory_remember_episode` should be treated as the explicit episodic write path for **high-signal knowledge** that should not depend on workflow completion timing.
+
+Representative intended uses are:
+
+- non-obvious root cause
+- important decision
+- reusable debugging pattern
+- failure and recovery lesson
+- process lesson
+
+It should **not** be treated as something an agent must call after every normal work-loop completion if `workflow_complete` already recorded the closeout memory correctly.
+
 ### Current Canonical Persistence
 Writes to:
 
@@ -1116,6 +1178,19 @@ The canonical `episodes` record now includes:
 - store richer episode-derived structures
 - support stronger provenance and recall behavior
 - act as a durable input into later semantic and hierarchical memory layers
+
+For `0.8.0`, the intended responsibility split should be read as:
+
+- use `workflow_complete` for normal closeout-centered canonical memory capture
+- use `memory_remember_episode` for explicit high-signal episodic capture when the knowledge matters beyond routine closeout
+- use structured checkpoint fields such as:
+  - `current_objective`
+  - `next_intended_action`
+  - root cause
+  - recovery pattern
+  - verification outcome
+  - what remains
+  so later completion-centered and checkpoint-centered remember flows can promote that signal into richer canonical memory structure
 
 ---
 
