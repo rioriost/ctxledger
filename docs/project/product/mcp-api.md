@@ -1039,6 +1039,13 @@ The current bounded closeout path may:
 - persist an embedding for the primary closeout memory item when configured
 - return additive stage-level success / skip / failure details through `auto_memory_details`
 
+The current explainability reading should also be:
+
+- completion-origin memory should remain distinguishable from checkpoint-origin memory
+- promoted-field identity should remain visible instead of being collapsed into opaque note text
+- constrained relation reasons should remain explainable in retrieval/debug surfaces
+- summary and graph layers should continue to reflect canonical remember-path evidence rather than inventing a second source of truth
+
 This does **not** make `workflow_complete` a replacement for explicit high-signal episodic recording.
 
 ### Expected Inputs
@@ -1076,6 +1083,10 @@ The remember-path reading for `0.8.0` should be:
 - workflow / checkpoint state remains canonical operational truth
 - completion auto-memory writes canonical memory artifacts derived from that truth
 - summary and graph layers remain downstream / derived
+- canonical remember-path origin metadata should remain explicit when later surfaces explain:
+  - checkpoint-origin versus completion-origin writes
+  - promoted fields
+  - constrained relation reasons
 
 ### Response Intent
 Return terminal workflow state.
@@ -1112,6 +1123,19 @@ Representative fields may include:
   - embedding persistence
   - relation creation
   - summary build
+
+Operator/debug reading should keep these facts separate:
+
+- whether closeout memory was recorded
+- whether summary build was attempted
+- whether summary build succeeded
+
+The newer retrieval/debug surfaces should also be expected to explain completion-derived memory using fields such as:
+
+- memory origin
+- promoted field
+- promotion source
+- constrained `supports` relation reason
 
 ### Projection Failure Interaction
 `workflow_complete` does not redefine projection failure lifecycle, but implementations may still record projection-related operational failures if projection regeneration or projection state updates fail during terminalization flows.
@@ -1191,6 +1215,12 @@ For `0.8.0`, the intended responsibility split should be read as:
   - verification outcome
   - what remains
   so later completion-centered and checkpoint-centered remember flows can promote that signal into richer canonical memory structure
+
+The current explainability expectation is that later read/debug surfaces should still be able to show:
+
+- whether a memory artifact came from checkpoint automation or completion automation
+- which promoted field created it when applicable
+- which constrained relation reason linked it when applicable
 
 ---
 

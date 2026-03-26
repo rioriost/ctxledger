@@ -299,6 +299,18 @@ class ContextShapingMixin:
                     ),
                 }
 
+            remember_path_relation_reasons = (
+                sorted(
+                    {
+                        str(relation.metadata.get("relation_reason"))
+                        for relation in related_memory_relations
+                        if isinstance(relation.metadata.get("relation_reason"), str)
+                        and str(relation.metadata.get("relation_reason")).strip()
+                    }
+                )
+                if include_memory_items
+                else []
+            )
             remember_path_summary_explainability = (
                 {
                     "memory_origins": sorted(
@@ -325,14 +337,13 @@ class ContextShapingMixin:
                             and str(memory_item.metadata.get("promotion_source")).strip()
                         }
                     ),
-                    "relation_reasons": sorted(
-                        {
-                            str(relation.metadata.get("relation_reason"))
-                            for relation in related_memory_relations
-                            if isinstance(relation.metadata.get("relation_reason"), str)
-                            and str(relation.metadata.get("relation_reason")).strip()
-                        }
+                    "relation_reasons": remember_path_relation_reasons,
+                    "relation_reason_primary": (
+                        remember_path_relation_reasons[0]
+                        if remember_path_relation_reasons
+                        else None
                     ),
+                    "relation_reasons_frontloaded": bool(remember_path_relation_reasons),
                     "relation_origins": sorted(
                         {
                             str(relation.metadata.get("memory_origin"))
@@ -683,6 +694,47 @@ class ContextShapingMixin:
                         else "memory_items_disabled"
                     ),
                     "summaries": list(summaries),
+                    **(
+                        {
+                            "remember_path_summary_relation_reasons": sorted(
+                                {
+                                    relation_reason
+                                    for summary in summaries
+                                    for relation_reason in (
+                                        summary.get("remember_path_explainability", {}).get(
+                                            "relation_reasons", []
+                                        )
+                                    )
+                                    if isinstance(relation_reason, str) and relation_reason.strip()
+                                }
+                            ),
+                            "remember_path_summary_relation_reason_primary": (
+                                sorted(
+                                    {
+                                        relation_reason
+                                        for summary in summaries
+                                        for relation_reason in (
+                                            summary.get("remember_path_explainability", {}).get(
+                                                "relation_reasons", []
+                                            )
+                                        )
+                                        if isinstance(relation_reason, str)
+                                        and relation_reason.strip()
+                                    }
+                                )[0]
+                                if any(
+                                    summary.get("remember_path_explainability", {}).get(
+                                        "relation_reasons",
+                                        [],
+                                    )
+                                    for summary in summaries
+                                )
+                                else None
+                            ),
+                        }
+                        if include_memory_items
+                        else {}
+                    ),
                 }
             )
 

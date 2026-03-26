@@ -736,11 +736,31 @@ def _refresh_age_summary_graph(args: argparse.Namespace) -> int:
                 )
             connection.commit()
 
+        explainability_payload = {
+            "graph_name": graph_name,
+            "memory_summary_node_count": int(summary_node_count),
+            "summarizes_edge_count": int(membership_edge_count),
+            "remember_path_explainability": {
+                "canonical_source": [
+                    "memory_summaries",
+                    "memory_summary_memberships",
+                ],
+                "graph_labels": [
+                    "memory_summary",
+                    "memory_item",
+                    "summarizes",
+                ],
+                "summary_first_relation_reason_frontloaded": True,
+                "graph_input_scope": "canonical_summary_membership_edges",
+                "graph_truth_boundary": "derived_from_canonical_relational_state",
+            },
+        }
         print(
             f"AGE summary graph refresh completed for '{graph_name}' "
             f"(memory_summary nodes rebuilt={summary_node_count}, "
             f"summarizes edges rebuilt={membership_edge_count})."
         )
+        print(json.dumps(explainability_payload))
         return 0
     except Exception as exc:
         print(f"Failed to refresh AGE summary graph: {exc}", file=sys.stderr)
