@@ -6,7 +6,11 @@ from uuid import uuid4
 
 import pytest
 
-from ctxledger.memory.types import MemorySummaryMembershipRecord, MemorySummaryRecord
+from ctxledger.memory.types import (
+    MemoryRelationRecord,
+    MemorySummaryMembershipRecord,
+    MemorySummaryRecord,
+)
 from ctxledger.workflow.service import (
     MemoryEmbeddingRecord,
     MemoryItemRecord,
@@ -500,6 +504,31 @@ def test_postgres_checkpoint_verify_episode_repositories_create_and_lookup() -> 
         ]
     )
     assert episode_repo.list_by_workflow_id(workflow.workflow_instance_id, limit=5) == (episode,)
+
+    connection.fetchone_results.append(
+        {
+            "episode_id": episode.episode_id,
+            "workflow_instance_id": episode.workflow_instance_id,
+            "summary": episode.summary,
+            "attempt_id": None,
+            "metadata_json": {},
+            "status": None,
+            "created_at": episode.created_at,
+            "updated_at": episode.updated_at,
+        }
+    )
+    loaded_episode = episode_repo.get_by_episode_id(episode.episode_id)
+    assert loaded_episode is not None
+    assert loaded_episode.attempt_id is None
+    assert loaded_episode.metadata == {}
+    assert loaded_episode.status == "recorded"
+
+    connection.fetchone_results.append(None)
+    assert episode_repo.get_by_episode_id(uuid4()) is None
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to create episode"):
+        episode_repo.create(episode)
 
 
 def test_postgres_memory_item_and_embedding_repositories_create_and_list() -> None:
@@ -997,3 +1026,502 @@ def test_postgres_memory_summary_and_membership_repositories_create_and_list() -
     connection.fetchone_results.append(None)
     with pytest.raises(PersistenceError, match="Failed to create memory summary membership"):
         membership_repo.create(membership)
+
+
+def test_postgres_memory_summary_and_membership_repositories_cover_empty_and_delete_paths() -> None:
+    from ctxledger.db.postgres import (
+        PostgresMemorySummaryMembershipRepository,
+        PostgresMemorySummaryRepository,
+    )
+
+    connection = FakeConnection()
+    summary_repo = PostgresMemorySummaryRepository(connection)
+    membership_repo = PostgresMemorySummaryMembershipRepository(connection)
+
+    summary_id = uuid4()
+
+    assert summary_repo.list_by_summary_ids(()) == ()
+    assert membership_repo.list_by_summary_ids(()) == ()
+
+    summary_repo.delete_by_summary_id(summary_id)
+    membership_repo.delete_by_summary_id(summary_id)
+
+    executed = connection.executed
+    assert (
+        executed[-2][0].strip()
+        == """
+                DELETE FROM memory_summaries
+                WHERE memory_summary_id = %s
+                """.strip()
+    )
+    assert executed[-2][1] == (summary_id,)
+    assert (
+        executed[-1][0].strip()
+        == """
+                DELETE FROM memory_summary_memberships
+                WHERE memory_summary_id = %s
+                """.strip()
+    )
+    assert executed[-1][1] == (summary_id,)
+
+
+def test_postgres_memory_relation_repository_covers_empty_and_summary_fallback_branches() -> None:
+    from ctxledger.db.postgres import (
+        AgeGraphStatus,
+        PostgresConfig,
+        PostgresMemoryRelationRepository,
+    )
+
+    connection = FakeConnection()
+    repo = PostgresMemoryRelationRepository(connection)
+    source_memory_id = uuid4()
+    target_memory_id = uuid4()
+    member_memory_id = uuid4()
+
+    assert repo.list_by_source_memory_ids(()) == ()
+    assert repo.list_distinct_support_target_memory_ids_by_source_memory_ids(()) == ()
+    assert (
+        repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age(
+            (),
+            graph_name="ctxledger_memory",
+        )
+        == ()
+    )
+    assert (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age(
+            (),
+            graph_name="ctxledger_memory",
+        )
+        == ()
+    )
+
+    support_query_start = len(connection.executed)
+    connection.fetchall_results.append(
+        [
+            {"target_memory_id": f'"{target_memory_id}"'},
+            {"target_memory_id": target_memory_id},
+        ]
+    )
+    assert repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age(
+        (source_memory_id,),
+        graph_name="ctxledger_memory",
+    ) == (target_memory_id, target_memory_id)
+
+    support_load_query, support_load_params = connection.executed[support_query_start]
+    support_search_path_query, support_search_path_params = connection.executed[
+        support_query_start + 1
+    ]
+    support_cypher_query, support_cypher_params = connection.executed[support_query_start + 2]
+    assert support_load_query.strip() == "LOAD 'age'"
+    assert support_load_params is None
+    assert support_search_path_query.strip() == 'SET search_path = ag_catalog, "$user", public'
+    assert support_search_path_params is None
+    assert "FROM cypher(" in support_cypher_query
+    assert support_cypher_params[0] == "ctxledger_memory"
+    assert str(source_memory_id) in support_cypher_params[1]
+
+    summary_query_start = len(connection.executed)
+    connection.fetchall_results.append(
+        [
+            {"member_memory_id": f'"{member_memory_id}"'},
+            {"member_memory_id": member_memory_id},
+        ]
+    )
+    assert repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age(
+        (source_memory_id,),
+        graph_name="ctxledger_memory",
+    ) == (member_memory_id, member_memory_id)
+
+    summary_load_query, summary_load_params = connection.executed[summary_query_start]
+    summary_search_path_query, summary_search_path_params = connection.executed[
+        summary_query_start + 1
+    ]
+    summary_cypher_query, summary_cypher_params = connection.executed[summary_query_start + 2]
+    assert summary_load_query.strip() == "LOAD 'age'"
+    assert summary_load_params is None
+    assert summary_search_path_query.strip() == 'SET search_path = ag_catalog, "$user", public'
+    assert summary_search_path_params is None
+    assert "FROM cypher(" in summary_cypher_query
+    assert summary_cypher_params[0] == "ctxledger_memory"
+    assert str(source_memory_id) in summary_cypher_params[1]
+
+    assert (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_with_fallback(
+            (source_memory_id,),
+            graph_name="ctxledger_memory",
+            graph_status=AgeGraphStatus.GRAPH_UNAVAILABLE,
+        )
+        == ()
+    )
+
+    original_summary_via_age = (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age
+    )
+    repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age = (  # type: ignore[method-assign]
+        lambda source_memory_ids, *, graph_name: (_ for _ in ()).throw(RuntimeError("age failed"))
+    )
+    try:
+        assert (
+            repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_with_fallback(
+                (source_memory_id,),
+                graph_name="ctxledger_memory",
+                graph_status=AgeGraphStatus.GRAPH_READY,
+            )
+            == ()
+        )
+    finally:
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age = (
+            original_summary_via_age  # type: ignore[method-assign]
+        )
+
+    class StubHealthChecker:
+        def __init__(self, graph_status: AgeGraphStatus) -> None:
+            self.graph_status = graph_status
+            self.requested_graph_names: list[str] = []
+
+        def age_graph_status(self, graph_name: str) -> AgeGraphStatus:
+            self.requested_graph_names.append(graph_name)
+            return self.graph_status
+
+    disabled_config = PostgresConfig(
+        database_url="postgresql://example/db",
+        age_enabled=False,
+        age_graph_name="ctxledger_memory",
+    )
+    assert (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_for_config(
+            (source_memory_id,),
+            config=disabled_config,
+        )
+        == ()
+    )
+
+    enabled_config = PostgresConfig(
+        database_url="postgresql://example/db",
+        age_enabled=True,
+        age_graph_name="ctxledger_memory",
+    )
+    graph_unavailable_checker = StubHealthChecker(AgeGraphStatus.GRAPH_UNAVAILABLE)
+    assert (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_for_config(
+            (source_memory_id,),
+            config=enabled_config,
+            health_checker=graph_unavailable_checker,
+        )
+        == ()
+    )
+    assert graph_unavailable_checker.requested_graph_names == ["ctxledger_memory"]
+
+    assert repo.workflow_completion_summary_build_requested(None) is False
+    assert (
+        repo.workflow_completion_summary_build_requested({"build_episode_summary": False}) is False
+    )
+    assert repo.workflow_completion_summary_build_requested({"build_episode_summary": True}) is True
+
+    assert repo.workflow_completion_summary_build_policy({"build_episode_summary": False}) == {
+        "summary_build_requested": False,
+        "summary_build_trigger": None,
+        "summary_build_scope": "workflow_completion_auto_memory_episode",
+        "summary_build_kind": "episode_summary",
+        "summary_build_replace_existing": True,
+        "summary_build_non_fatal": True,
+    }
+    assert repo.workflow_completion_summary_build_policy({"build_episode_summary": True}) == {
+        "summary_build_requested": True,
+        "summary_build_trigger": "latest_checkpoint.build_episode_summary_true",
+        "summary_build_scope": "workflow_completion_auto_memory_episode",
+        "summary_build_kind": "episode_summary",
+        "summary_build_replace_existing": True,
+        "summary_build_non_fatal": True,
+    }
+
+
+def test_postgres_memory_embedding_repository_find_similar_with_workspace_filter_and_empty_rows() -> (
+    None
+):
+    from ctxledger.db.postgres import PostgresMemoryEmbeddingRepository
+
+    connection = FakeConnection()
+    repo = PostgresMemoryEmbeddingRepository(connection)
+    workspace_id = uuid4()
+    memory_id = uuid4()
+    embedding_id = uuid4()
+    created_at = datetime(2024, 1, 12, tzinfo=UTC)
+
+    connection.fetchall_results.append(
+        [
+            {
+                "memory_embedding_id": embedding_id,
+                "memory_id": memory_id,
+                "embedding_model": "test-model",
+                "embedding": "[0.4,0.5,0.6]",
+                "content_hash": "hash-456",
+                "created_at": created_at,
+            }
+        ]
+    )
+    matches = repo.find_similar(
+        (0.4, 0.5, 0.6),
+        limit=2,
+        workspace_id=workspace_id,
+    )
+
+    assert len(matches) == 1
+    assert matches[0].memory_id == memory_id
+
+    last_query, last_params = connection.executed[-1]
+    assert "AND mi.workspace_id = %s" in last_query
+    assert last_params[0] == workspace_id
+    assert last_params[1].startswith("[0.4")
+    assert last_params[1].endswith("0.59999999999999998]")
+    assert last_params[2] == 2
+
+    connection.fetchall_results.append([])
+    assert repo.find_similar((0.4, 0.5, 0.6), limit=2) == ()
+
+
+def test_postgres_memory_relation_repository_create_and_list_branches() -> None:
+    from ctxledger.db.postgres import PostgresMemoryRelationRepository
+
+    connection = FakeConnection()
+    repo = PostgresMemoryRelationRepository(connection)
+
+    source_memory_id = uuid4()
+    target_memory_id = uuid4()
+    other_target_memory_id = uuid4()
+    created_at = datetime(2024, 1, 13, tzinfo=UTC)
+
+    relation_row = {
+        "memory_relation_id": uuid4(),
+        "source_memory_id": source_memory_id,
+        "target_memory_id": target_memory_id,
+        "relation_type": "supports",
+        "metadata_json": {"kind": "supports-edge"},
+        "created_at": created_at,
+    }
+
+    connection.fetchone_results.append(relation_row)
+    created_relation = repo.create(
+        MemoryRelationRecord(
+            memory_relation_id=relation_row["memory_relation_id"],
+            source_memory_id=source_memory_id,
+            target_memory_id=target_memory_id,
+            relation_type="supports",
+            metadata={"kind": "supports-edge"},
+            created_at=created_at,
+        )
+    )
+    assert created_relation.memory_relation_id == relation_row["memory_relation_id"]
+    assert created_relation.metadata == {"kind": "supports-edge"}
+
+    connection.fetchall_results.append([relation_row])
+    assert repo.list_by_source_memory_id(source_memory_id, limit=3) == (
+        MemoryRelationRecord(
+            memory_relation_id=relation_row["memory_relation_id"],
+            source_memory_id=source_memory_id,
+            target_memory_id=target_memory_id,
+            relation_type="supports",
+            metadata={"kind": "supports-edge"},
+            created_at=created_at,
+        ),
+    )
+
+    connection.fetchall_results.append(
+        [
+            relation_row,
+            {
+                "memory_relation_id": uuid4(),
+                "source_memory_id": source_memory_id,
+                "target_memory_id": other_target_memory_id,
+                "relation_type": "references",
+                "metadata_json": {},
+                "created_at": created_at,
+            },
+        ]
+    )
+    by_source_ids = repo.list_by_source_memory_ids((source_memory_id,))
+    assert len(by_source_ids) == 2
+    assert by_source_ids[0].target_memory_id == target_memory_id
+    assert by_source_ids[1].target_memory_id == other_target_memory_id
+
+    connection.fetchall_results.append(
+        [
+            {"target_memory_id": target_memory_id},
+            {"target_memory_id": other_target_memory_id},
+        ]
+    )
+    assert repo.list_distinct_support_target_memory_ids_by_source_memory_ids(
+        (source_memory_id,)
+    ) == (target_memory_id, other_target_memory_id)
+
+    connection.fetchall_results.append([relation_row])
+    assert repo.list_by_target_memory_id(target_memory_id, limit=4) == (
+        MemoryRelationRecord(
+            memory_relation_id=relation_row["memory_relation_id"],
+            source_memory_id=source_memory_id,
+            target_memory_id=target_memory_id,
+            relation_type="supports",
+            metadata={"kind": "supports-edge"},
+            created_at=created_at,
+        ),
+    )
+
+    connection.fetchone_results.append(None)
+    with pytest.raises(PersistenceError, match="Failed to create memory relation"):
+        repo.create(
+            MemoryRelationRecord(
+                memory_relation_id=uuid4(),
+                source_memory_id=source_memory_id,
+                target_memory_id=target_memory_id,
+                relation_type="supports",
+                metadata={},
+                created_at=created_at,
+            )
+        )
+
+
+def test_postgres_memory_relation_repository_covers_age_and_policy_helpers() -> None:
+    from ctxledger.db.postgres import (
+        AgeGraphStatus,
+        PostgresConfig,
+        PostgresMemoryRelationRepository,
+    )
+
+    connection = FakeConnection()
+    repo = PostgresMemoryRelationRepository(connection)
+    source_memory_id = uuid4()
+    target_memory_id = uuid4()
+    member_memory_id = uuid4()
+
+    assert (
+        repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age(
+            (),
+            graph_name="ctxledger_memory",
+        )
+        == ()
+    )
+    assert (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age(
+            (),
+            graph_name="ctxledger_memory",
+        )
+        == ()
+    )
+
+    connection.fetchall_results.append(
+        [
+            {"target_memory_id": f'"{target_memory_id}"'},
+            {"target_memory_id": target_memory_id},
+        ]
+    )
+    assert repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age(
+        (source_memory_id,),
+        graph_name="ctxledger_memory",
+    ) == (
+        target_memory_id,
+        target_memory_id,
+    )
+
+    connection.fetchall_results.append(
+        [
+            {"member_memory_id": f'"{member_memory_id}"'},
+            {"member_memory_id": member_memory_id},
+        ]
+    )
+    assert repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age(
+        (source_memory_id,),
+        graph_name="ctxledger_memory",
+    ) == (
+        member_memory_id,
+        member_memory_id,
+    )
+
+    assert (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_with_fallback(
+            (source_memory_id,),
+            graph_name="ctxledger_memory",
+            graph_status=AgeGraphStatus.GRAPH_UNAVAILABLE,
+        )
+        == ()
+    )
+
+    original_summary_via_age = (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age
+    )
+    repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age = (  # type: ignore[method-assign]
+        lambda source_memory_ids, *, graph_name: (_ for _ in ()).throw(RuntimeError("age failed"))
+    )
+    try:
+        assert (
+            repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_with_fallback(
+                (source_memory_id,),
+                graph_name="ctxledger_memory",
+                graph_status=AgeGraphStatus.GRAPH_READY,
+            )
+            == ()
+        )
+    finally:
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_via_age = (
+            original_summary_via_age  # type: ignore[method-assign]
+        )
+
+    class StubHealthChecker:
+        def __init__(self, graph_status: AgeGraphStatus) -> None:
+            self.graph_status = graph_status
+            self.requested_graph_names: list[str] = []
+
+        def age_graph_status(self, graph_name: str) -> AgeGraphStatus:
+            self.requested_graph_names.append(graph_name)
+            return self.graph_status
+
+    disabled_config = PostgresConfig(
+        database_url="postgresql://example/db",
+        age_enabled=False,
+        age_graph_name="ctxledger_memory",
+    )
+    assert (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_for_config(
+            (source_memory_id,),
+            config=disabled_config,
+        )
+        == ()
+    )
+
+    enabled_config = PostgresConfig(
+        database_url="postgresql://example/db",
+        age_enabled=True,
+        age_graph_name="ctxledger_memory",
+    )
+    graph_unavailable_checker = StubHealthChecker(AgeGraphStatus.GRAPH_UNAVAILABLE)
+    assert (
+        repo.list_distinct_summary_member_memory_ids_by_source_memory_ids_for_config(
+            (source_memory_id,),
+            config=enabled_config,
+            health_checker=graph_unavailable_checker,
+        )
+        == ()
+    )
+    assert graph_unavailable_checker.requested_graph_names == ["ctxledger_memory"]
+
+    assert repo.workflow_completion_summary_build_requested(None) is False
+    assert (
+        repo.workflow_completion_summary_build_requested({"build_episode_summary": False}) is False
+    )
+    assert repo.workflow_completion_summary_build_requested({"build_episode_summary": True}) is True
+
+    assert repo.workflow_completion_summary_build_policy({"build_episode_summary": False}) == {
+        "summary_build_requested": False,
+        "summary_build_trigger": None,
+        "summary_build_scope": "workflow_completion_auto_memory_episode",
+        "summary_build_kind": "episode_summary",
+        "summary_build_replace_existing": True,
+        "summary_build_non_fatal": True,
+    }
+    assert repo.workflow_completion_summary_build_policy({"build_episode_summary": True}) == {
+        "summary_build_requested": True,
+        "summary_build_trigger": "latest_checkpoint.build_episode_summary_true",
+        "summary_build_scope": "workflow_completion_auto_memory_episode",
+        "summary_build_kind": "episode_summary",
+        "summary_build_replace_existing": True,
+        "summary_build_non_fatal": True,
+    }

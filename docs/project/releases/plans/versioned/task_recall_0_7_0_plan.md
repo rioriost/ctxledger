@@ -145,8 +145,8 @@ Rough progress reading at the current repository state:
 
 Main remaining gaps at this stage:
 
-- stronger concept-to-task recovery beyond the current bounded `memory_get_context` and `memory_search` task-recall path
-- broader integration of task-recall semantics into adjacent retrieval surfaces only where that remains explainable and justified
+- clarify how far `0.7.0` should take concept-to-task recovery beyond the current bounded `memory_get_context` and `memory_search` task-recall path
+- decide which adjacent retrieval surfaces, if any, should participate in task-recall semantics for `0.7.0`, and explicitly defer the rest
 - a final `0.7.0` hardening slice that semantically splits oversized `src/` and `tests/` files so the task-recall implementation remains maintainable and easier to reason about
 - a release-ready behavior summary and closeout-oriented acceptance reading for the bounded `0.7.0` slice
 - an explicit milestone decision on whether the current derived return-target and task-thread surfaces are sufficient for `0.7.0`, or whether any further bounded hardening is still required
@@ -345,6 +345,7 @@ However, the current behavior should still be read as a bounded heuristic layer:
 - explicit objective presence is treated as strong evidence, not definitive canonical intent
 - return-target selection is still expressed through ranked workflow selection rather than a separate first-class return-target object
 - the latest-versus-selected comparison block improves explanation quality, but does not by itself guarantee full historical primary-thread recovery
+- the current concept-to-task bridge is intentionally concentrated in `memory_get_context` and workspace-scoped `memory_search`, rather than spread across every retrieval surface
 
 ---
 
@@ -626,12 +627,54 @@ Goals:
   - `resume timeout`
   - `memory split`
 - connect semantic retrieval to operational continuation targets
+- make an explicit milestone-boundary decision about how far this concept-to-task behavior should extend in `0.7.0`
 
 Deliverables:
 
-- improved concept-query behavior
-- better workflow/checkpoint/thread surfacing
+- improved concept-query behavior within the current bounded task-recall path
+- better workflow/checkpoint/thread surfacing for `memory_get_context` and workspace-scoped `memory_search`
+- an explicit scope call that separates:
+  - in-scope `0.7.0` concept-to-task behavior
+  - deferred post-`0.7.0` broader retrieval-surface expansion
 - focused tests using realistic repository history patterns
+
+### 16.4.1 Bounded `0.7.0` concept-to-task reading
+
+The current best `0.7.0` default is:
+
+- keep concept-to-task recovery centered on:
+  - `memory_get_context`
+  - workspace-scoped `memory_search`
+- treat those two surfaces as the first bounded agent-facing recovery bridge from concept words toward continuation targets
+- avoid broadening `0.7.0` into a general all-surfaces routing rewrite
+
+Under this reading, `0.7.0` should be considered complete enough on concept-to-task behavior when:
+
+- realistic concept queries can better surface the current continuation thread through the existing bounded path
+- the task-recall explanation details make the selected continuation context inspectable
+- release-facing docs clearly say that broader retrieval-surface rollout is deferred
+
+### 16.4.2 Adjacent retrieval surface scope for `0.7.0`
+
+For `0.7.0`, adjacent surface integration should be read narrowly.
+
+In scope for bounded task-recall semantics:
+
+- `memory_get_context`
+- workspace-scoped `memory_search`
+- `workflow_resume`-adjacent reasoning only to the extent that resume-facing responses explain why a continuation target was selected
+
+Not required for `0.7.0` closeout unless a later slice proves they are both necessary and still explainable:
+
+- broad task-recall propagation to every retrieval or transport surface
+- new dedicated retrieval tools solely to widen concept routing
+- broader architectural routing changes that would make multiple surfaces compete as workflow-selection authorities
+
+The intended `0.7.0` default should therefore be:
+
+- strengthen the bounded current surfaces
+- name the non-bounded expansion ideas explicitly
+- defer the broader rollout rather than leaving it ambiguous
 
 ---
 
@@ -658,10 +701,11 @@ Deliverables:
 
 - an agent can recover the current primary task thread for a workspace more reliably
 - recent detour workflows no longer automatically eclipse the main continuation target
-- concept-word retrieval can surface the relevant task thread more often
+- concept-word retrieval can surface the relevant task thread more often through the bounded `memory_get_context` / workspace-scoped `memory_search` path
 - explanation details make result selection understandable
 - canonical PostgreSQL state remains the source of truth
 - workflow resume semantics remain correct and separate from support-context retrieval
+- release-facing docs make it explicit which broader retrieval-surface expansions were deferred beyond `0.7.0`
 - tests cover both:
   - semantic relevance
   - operational continuation relevance
@@ -688,10 +732,14 @@ By the end of `0.7.0`, the repository should ideally have:
 - an explicit task-recall design
 - better workspace-scoped main-thread recovery
 - detour-aware recall behavior
-- improved concept-to-thread retrieval
+- improved bounded concept-to-thread retrieval through `memory_get_context` and workspace-scoped `memory_search`
 - explanation-rich result metadata
 - tests proving return-to-main-task behavior
-- docs that clearly describe primary objective, detour, and return target semantics
+- docs that clearly describe:
+  - primary objective
+  - detour
+  - return target
+  - which broader retrieval-surface expansions were intentionally deferred beyond `0.7.0`
 
 ---
 

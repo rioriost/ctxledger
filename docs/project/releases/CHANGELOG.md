@@ -253,10 +253,14 @@ The project currently follows a lightweight, human-maintained changelog style.
       - `tests/memory/test_service_context_details_grouping_summary_routes_ordering.py`
 - the current `0.7.0` closeout reading should now be:
   - implementation is further along than the older “roughly `70%` complete” planning shorthand suggested
+  - the intended bounded `0.7.0` retrieval-surface scope should now be read as:
+    - concept-to-task recovery centered on `memory_get_context`
+    - concept-to-task recovery centered on workspace-scoped `memory_search`
+    - workspace-resume-facing reasoning kept as an adjacent explanation surface, not a separate concept-routing authority
   - the main remaining `0.7.0` work is now:
-    - stronger concept-to-task recovery beyond the current bounded `memory_get_context` and `memory_search` path
-    - broader integration of task-recall semantics into other retrieval surfaces where justified
     - release-facing behavior summary and acceptance/closeout alignment for the bounded `0.7.0` slice
+    - explicit recording that broader concept-to-task expansion beyond the bounded current surfaces is deferred past `0.7.0`
+    - explicit recording that broader task-recall rollout into other retrieval surfaces is deferred past `0.7.0` unless later justified
     - continued maintainability hardening for the remaining oversized memory-context test files after the runtime, visibility, grouping, and task-recall splits already landed
 - the current roadmap should now be read as:
   - `0.8.0` focusing on strengthening the remember path so completion-centered work more reliably becomes:

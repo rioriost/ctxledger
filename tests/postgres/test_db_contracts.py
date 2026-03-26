@@ -20,6 +20,7 @@ from ctxledger.db import (
     InMemoryWorkspaceRepository,
     build_in_memory_uow_factory,
 )
+from ctxledger.db import postgres_common as postgres_common_module
 from ctxledger.workflow.service import (
     EpisodeRecord,
     MemoryEmbeddingRecord,
@@ -63,9 +64,7 @@ def test_schema_file_exists() -> None:
 
     assert schema_path.exists()
     assert (
-        schema_path.read_text(encoding="utf-8")
-        .strip()
-        .startswith("-- ctxledger PostgreSQL schema")
+        schema_path.read_text(encoding="utf-8").strip().startswith("-- ctxledger PostgreSQL schema")
     )
 
 
@@ -182,9 +181,7 @@ def test_workflow_attempt_repository_contract_tracks_next_attempt_number() -> No
     assert repo.get_next_attempt_number(workflow.workflow_instance_id) == 2
 
 
-def test_checkpoint_repository_contract_returns_latest_for_workflow_and_attempt() -> (
-    None
-):
+def test_checkpoint_repository_contract_returns_latest_for_workflow_and_attempt() -> None:
     repo = WorkflowCheckpointRepoStub()
     workflow = sample_workflow(sample_workspace().workspace_id)
     attempt = sample_attempt(workflow.workflow_instance_id)
@@ -259,9 +256,7 @@ def test_memory_item_repository_contract_tracks_workspace_and_episode_items() ->
     )
 
 
-def test_memory_embedding_repository_contract_tracks_embeddings_by_memory_item() -> (
-    None
-):
+def test_memory_embedding_repository_contract_tracks_embeddings_by_memory_item() -> None:
     repo = MemoryEmbeddingRepoStub()
     memory_id = uuid4()
     older_embedding = MemoryEmbeddingRecord(
@@ -385,9 +380,9 @@ def test_postgres_low_level_helpers_and_pool_builder() -> None:
         def __init__(self, **kwargs: object) -> None:
             self.kwargs = kwargs
 
-    original_pool = postgres.ConnectionPool
+    original_pool = postgres_common_module.ConnectionPool
     try:
-        postgres.ConnectionPool = FakePool
+        postgres_common_module.ConnectionPool = FakePool
         config = postgres.PostgresConfig(
             database_url="postgresql://example/db",
             pool_min_size=2,
@@ -396,7 +391,7 @@ def test_postgres_low_level_helpers_and_pool_builder() -> None:
         )
         pool = postgres.build_connection_pool(config)
     finally:
-        postgres.ConnectionPool = original_pool
+        postgres_common_module.ConnectionPool = original_pool
 
     assert isinstance(pool, FakePool)
     assert pool.kwargs["conninfo"] == "postgresql://example/db"
@@ -469,10 +464,7 @@ def test_in_memory_workspace_repository_queries_create_and_update() -> None:
 
     assert repo.update(renamed_workspace) == renamed_workspace
     assert repo.get_by_canonical_path(workspace.canonical_path) is None
-    assert (
-        repo.get_by_canonical_path(renamed_workspace.canonical_path)
-        == renamed_workspace
-    )
+    assert repo.get_by_canonical_path(renamed_workspace.canonical_path) == renamed_workspace
 
 
 def test_in_memory_workflow_instance_repository_filters_and_lists() -> None:
@@ -508,13 +500,8 @@ def test_in_memory_workflow_instance_repository_filters_and_lists() -> None:
     assert repo.update(other_ticket_workflow) == other_ticket_workflow
 
     assert repo.get_by_id(running_workflow.workflow_instance_id) == running_workflow
-    assert (
-        repo.get_running_by_workspace_id(workspace.workspace_id)
-        == other_ticket_workflow
-    )
-    assert (
-        repo.get_latest_by_workspace_id(workspace.workspace_id) == other_ticket_workflow
-    )
+    assert repo.get_running_by_workspace_id(workspace.workspace_id) == other_ticket_workflow
+    assert repo.get_latest_by_workspace_id(workspace.workspace_id) == other_ticket_workflow
     assert repo.list_by_workspace_id(workspace.workspace_id, limit=2) == (
         other_ticket_workflow,
         completed_workflow,
@@ -561,14 +548,8 @@ def test_in_memory_workflow_attempt_repository_queries_and_next_number() -> None
     assert repo.update(newer_finished_attempt) == newer_finished_attempt
 
     assert repo.get_by_id(running_attempt.attempt_id) == running_attempt
-    assert (
-        repo.get_running_by_workflow_id(workflow.workflow_instance_id)
-        == running_attempt
-    )
-    assert (
-        repo.get_latest_by_workflow_id(workflow.workflow_instance_id)
-        == newer_finished_attempt
-    )
+    assert repo.get_running_by_workflow_id(workflow.workflow_instance_id) == running_attempt
+    assert repo.get_latest_by_workflow_id(workflow.workflow_instance_id) == newer_finished_attempt
     assert repo.get_next_attempt_number(workflow.workflow_instance_id) == 3
 
 
@@ -578,12 +559,8 @@ def test_in_memory_checkpoint_and_verify_report_repositories_return_latest() -> 
     checkpoint_repo = InMemoryWorkflowCheckpointRepository({})
     verify_repo = InMemoryVerifyReportRepository({})
 
-    older_checkpoint = sample_checkpoint(
-        workflow.workflow_instance_id, attempt.attempt_id
-    )
-    newer_checkpoint = sample_checkpoint(
-        workflow.workflow_instance_id, attempt.attempt_id
-    )
+    older_checkpoint = sample_checkpoint(workflow.workflow_instance_id, attempt.attempt_id)
+    newer_checkpoint = sample_checkpoint(workflow.workflow_instance_id, attempt.attempt_id)
     newer_checkpoint = newer_checkpoint.__class__(
         checkpoint_id=newer_checkpoint.checkpoint_id,
         workflow_instance_id=newer_checkpoint.workflow_instance_id,
@@ -604,9 +581,7 @@ def test_in_memory_checkpoint_and_verify_report_repositories_return_latest() -> 
         created_at=datetime(2024, 1, 9, tzinfo=UTC),
     )
 
-    assert (
-        checkpoint_repo.get_latest_by_workflow_id(workflow.workflow_instance_id) is None
-    )
+    assert checkpoint_repo.get_latest_by_workflow_id(workflow.workflow_instance_id) is None
     assert checkpoint_repo.get_latest_by_attempt_id(attempt.attempt_id) is None
     assert verify_repo.get_latest_by_attempt_id(attempt.attempt_id) is None
 
@@ -616,12 +591,9 @@ def test_in_memory_checkpoint_and_verify_report_repositories_return_latest() -> 
     assert verify_repo.create(newer_verify) == newer_verify
 
     assert (
-        checkpoint_repo.get_latest_by_workflow_id(workflow.workflow_instance_id)
-        == newer_checkpoint
+        checkpoint_repo.get_latest_by_workflow_id(workflow.workflow_instance_id) == newer_checkpoint
     )
-    assert (
-        checkpoint_repo.get_latest_by_attempt_id(attempt.attempt_id) == newer_checkpoint
-    )
+    assert checkpoint_repo.get_latest_by_attempt_id(attempt.attempt_id) == newer_checkpoint
     assert verify_repo.get_latest_by_attempt_id(attempt.attempt_id) == newer_verify
 
 
@@ -730,9 +702,7 @@ def test_in_memory_unit_of_work_lifecycle_store_and_factory() -> None:
 
     workspace = sample_workspace()
     store.workspaces_by_id[workspace.workspace_id] = workspace
-    store.workspaces_by_canonical_path[workspace.canonical_path] = (
-        workspace.workspace_id
-    )
+    store.workspaces_by_canonical_path[workspace.canonical_path] = workspace.workspace_id
 
     snapshot = store.snapshot()
     assert snapshot is not store

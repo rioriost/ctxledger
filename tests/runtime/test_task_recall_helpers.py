@@ -7,6 +7,7 @@ from ctxledger.runtime.task_recall import (
     build_checkpoint_current_objective_bonus_reason,
     build_checkpoint_detour_like_penalty_reason,
     build_checkpoint_next_intended_action_bonus_reason,
+    build_comparison_summary_explanations,
     build_detour_like_signal_details,
     build_latest_attempt_present_bonus_reason,
     build_latest_attempt_present_explanations,
@@ -16,6 +17,7 @@ from ctxledger.runtime.task_recall import (
     build_latest_candidate_retained_explanations,
     build_latest_checkpoint_present_bonus_reason,
     build_latest_checkpoint_present_explanations,
+    build_latest_vs_selected_explanations,
     build_non_detour_candidate_bonus_reason,
     build_resumability_explanations,
     build_running_workflow_priority_reason,
@@ -25,6 +27,8 @@ from ctxledger.runtime.task_recall import (
     build_ticket_detour_like_penalty_reason,
     build_workflow_non_terminal_bonus_reason,
     build_workflow_terminal_penalty_reason,
+    checkpoint_detour_text,
+    checkpoint_mainline_signal_details,
     default_workspace_resume_selection_signals,
     workflow_ticket_is_detour_like,
 )
@@ -329,6 +333,183 @@ def test_build_task_recall_detour_override_applied_returns_expected_flag() -> No
         )
         is False
     )
+
+
+def test_checkpoint_detour_text_normalizes_summary_step_and_checkpoint_json_text() -> None:
+    checkpoint = SimpleNamespace(
+        summary="Coverage Cleanup",
+        step_name="DocsFollowup",
+        checkpoint_json={
+            "current_objective": "Finish release notes",
+            "next_intended_action": "Resume mainline task",
+            "ignored": "should not be included",
+        },
+    )
+
+    assert checkpoint_detour_text(checkpoint) == (
+        "coverage cleanup docsfollowup finish release notes resume mainline task"
+    )
+
+
+def test_checkpoint_detour_text_returns_empty_string_for_missing_or_non_dict_checkpoint_json() -> (
+    None
+):
+    assert checkpoint_detour_text(None) == ""
+    assert (
+        checkpoint_detour_text(
+            SimpleNamespace(
+                summary=None,
+                step_name=None,
+                checkpoint_json="not-a-dict",
+            )
+        )
+        == ""
+    )
+
+
+def test_checkpoint_mainline_signal_details_tracks_objective_and_next_action_presence() -> None:
+    assert checkpoint_mainline_signal_details(None) == (False, False, False)
+
+    assert checkpoint_mainline_signal_details(SimpleNamespace(checkpoint_json={})) == (
+        False,
+        False,
+        False,
+    )
+
+    assert checkpoint_mainline_signal_details(
+        SimpleNamespace(
+            checkpoint_json={
+                "current_objective": "  Finish task recall ranking  ",
+                "next_intended_action": "   ",
+            }
+        )
+    ) == (True, False, True)
+
+    assert checkpoint_mainline_signal_details(
+        SimpleNamespace(
+            checkpoint_json={
+                "current_objective": "   ",
+                "next_intended_action": "Resume workspace recovery",
+            }
+        )
+    ) == (False, True, True)
+
+    assert checkpoint_mainline_signal_details(
+        SimpleNamespace(
+            checkpoint_json={
+                "current_objective": "Finish task recall ranking",
+                "next_intended_action": "Resume workspace recovery",
+            }
+        )
+    ) == (True, True, True)
+
+
+def test_build_latest_vs_selected_explanations_covers_match_and_difference_paths() -> None:
+    assert build_latest_vs_selected_explanations(
+        selected_equals_latest=True,
+        latest_checkpoint_step_name=" implement ",
+        latest_checkpoint_summary="same summary ",
+        selected_checkpoint_step_name="implement",
+        selected_checkpoint_summary=" same summary",
+        latest_detour_like=False,
+        selected_detour_like=False,
+        latest_return_target_basis="ranked_candidate",
+        selected_return_target_basis="ranked_candidate",
+        latest_task_thread_basis="non_detour_candidate",
+        selected_task_thread_basis="non_detour_candidate",
+    ) == [
+        {
+            "code": "selected_matches_latest",
+            "message": "selected continuation target matched the latest considered workflow",
+        },
+        {
+            "code": "latest_and_selected_checkpoints_match",
+            "message": "latest considered checkpoint matched the selected continuation checkpoint",
+        },
+    ]
+
+    assert build_latest_vs_selected_explanations(
+        selected_equals_latest=False,
+        latest_checkpoint_step_name="latest-step",
+        latest_checkpoint_summary="latest summary",
+        selected_checkpoint_step_name="selected-step",
+        selected_checkpoint_summary="selected summary",
+        latest_detour_like=False,
+        selected_detour_like=True,
+        latest_return_target_basis="latest_candidate",
+        selected_return_target_basis="ranked_candidate",
+        latest_task_thread_basis="latest_candidate",
+        selected_task_thread_basis="non_detour_candidate",
+    ) == [
+        {
+            "code": "selected_differs_from_latest",
+            "message": "selected continuation target differed from the latest considered workflow",
+        },
+        {
+            "code": "latest_and_selected_checkpoints_differ",
+            "message": "latest considered checkpoint differed from the selected continuation checkpoint",
+        },
+        {
+            "code": "latest_and_selected_detour_classification_differs",
+            "message": "latest considered candidate and selected continuation target differed in detour classification",
+        },
+        {
+            "code": "latest_and_selected_return_target_basis_differs",
+            "message": "latest considered candidate and selected continuation target differed in return-target basis",
+        },
+        {
+            "code": "latest_and_selected_task_thread_basis_differs",
+            "message": "latest considered candidate and selected continuation target differed in task-thread basis",
+        },
+    ]
+
+
+def test_build_comparison_summary_explanations_handles_empty_checkpoint_context_and_differences() -> (
+    None
+):
+    assert build_comparison_summary_explanations(
+        selected_equals_latest=True,
+    ) == [
+        {
+            "code": "summary_selected_matches_latest",
+            "message": "summary comparison recorded that the selected continuation target matched the latest considered workflow",
+        }
+    ]
+
+    assert build_comparison_summary_explanations(
+        selected_equals_latest=False,
+        latest_checkpoint_step_name="latest-step",
+        latest_checkpoint_summary="latest summary",
+        selected_checkpoint_step_name="selected-step",
+        selected_checkpoint_summary="selected summary",
+        latest_detour_like=True,
+        selected_detour_like=False,
+        latest_return_target_basis="latest_candidate",
+        selected_return_target_basis="ranked_candidate",
+        latest_task_thread_basis="latest_candidate",
+        selected_task_thread_basis="non_detour_candidate",
+    ) == [
+        {
+            "code": "summary_selected_differs_from_latest",
+            "message": "summary comparison recorded that the selected continuation target differed from the latest considered workflow",
+        },
+        {
+            "code": "summary_latest_and_selected_checkpoints_differ",
+            "message": "summary comparison recorded that the latest considered checkpoint differed from the selected continuation checkpoint",
+        },
+        {
+            "code": "summary_latest_and_selected_detour_classification_differs",
+            "message": "summary comparison recorded that the latest considered candidate and selected continuation target differed in detour classification",
+        },
+        {
+            "code": "summary_latest_and_selected_return_target_basis_differs",
+            "message": "summary comparison recorded that the latest considered candidate and selected continuation target differed in return-target basis",
+        },
+        {
+            "code": "summary_latest_and_selected_task_thread_basis_differs",
+            "message": "summary comparison recorded that the latest considered candidate and selected continuation target differed in task-thread basis",
+        },
+    ]
 
 
 def test_default_workspace_resume_selection_signals_returns_expected_flags() -> None:

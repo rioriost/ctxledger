@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 
 from ctxledger.db import postgres as postgres_module
+from ctxledger.db import postgres_common as postgres_common_module
 from ctxledger.db.postgres import (
     PostgresConfig,
     PostgresDatabaseHealthChecker,
@@ -127,20 +128,18 @@ class FakeConnectionPool:
 def test_require_psycopg_raises_when_driver_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(postgres_module, "psycopg", None)
-    monkeypatch.setattr(postgres_module, "dict_row", None)
+    monkeypatch.setattr(postgres_common_module, "psycopg", None)
+    monkeypatch.setattr(postgres_common_module, "dict_row", None)
 
-    with pytest.raises(
-        RuntimeError, match="psycopg is required for PostgreSQL support"
-    ):
+    with pytest.raises(RuntimeError, match="psycopg is required for PostgreSQL support"):
         _require_psycopg()
 
 
 def test_require_psycopg_succeeds_when_driver_is_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(postgres_module, "psycopg", object())
-    monkeypatch.setattr(postgres_module, "dict_row", object())
+    monkeypatch.setattr(postgres_common_module, "psycopg", object())
+    monkeypatch.setattr(postgres_common_module, "dict_row", object())
 
     _require_psycopg()
 
@@ -219,8 +218,8 @@ def test_connect_uses_psycopg_connect_with_dict_row(
     )
     marker = object()
 
-    monkeypatch.setattr(postgres_module, "psycopg", fake_psycopg)
-    monkeypatch.setattr(postgres_module, "dict_row", marker)
+    monkeypatch.setattr(postgres_common_module, "psycopg", fake_psycopg)
+    monkeypatch.setattr(postgres_common_module, "dict_row", marker)
 
     result = _connect("postgresql://example/db")
 
@@ -259,7 +258,7 @@ def test_health_checker_ping_executes_select_and_session_settings(
     cursor = FakeCursor(fetchone_result={"?column?": 1}, executed=executed)
     connection = FakeConnection(cursor)
 
-    monkeypatch.setattr(postgres_module, "_connect", lambda database_url: connection)
+    monkeypatch.setattr(postgres_common_module, "_connect", lambda database_url: connection)
 
     checker = PostgresDatabaseHealthChecker(
         PostgresConfig(
@@ -290,7 +289,7 @@ def test_health_checker_schema_ready_returns_false_when_tables_are_missing(
     )
     connection = FakeConnection(cursor)
 
-    monkeypatch.setattr(postgres_module, "_connect", lambda database_url: connection)
+    monkeypatch.setattr(postgres_common_module, "_connect", lambda database_url: connection)
 
     checker = PostgresDatabaseHealthChecker(
         PostgresConfig(
@@ -355,9 +354,7 @@ def test_postgres_workspace_repository_getters_create_update_and_row_mapping() -
     assert len(connection._cursor._executed) == 5
 
 
-def test_postgres_workspace_repository_create_and_update_raise_when_no_row_returned() -> (
-    None
-):
+def test_postgres_workspace_repository_create_and_update_raise_when_no_row_returned() -> None:
     connection = FakeConnection(FakeCursor(fetchone_result=None))
     repo = PostgresWorkspaceRepository(connection)
     now = datetime(2024, 1, 1, tzinfo=UTC)
@@ -415,9 +412,7 @@ def test_postgres_workflow_instance_repository_covers_crud_and_row_mapping() -> 
     assert updated.updated_at == updated_at
 
 
-def test_postgres_workflow_instance_repository_create_and_update_raise_when_missing_row() -> (
-    None
-):
+def test_postgres_workflow_instance_repository_create_and_update_raise_when_missing_row() -> None:
     connection = FakeConnection(FakeCursor(fetchone_result=None))
     repo = PostgresWorkflowInstanceRepository(connection)
     now = datetime(2024, 1, 1, tzinfo=UTC)
@@ -438,9 +433,7 @@ def test_postgres_workflow_instance_repository_create_and_update_raise_when_miss
         repo.update(workflow)
 
 
-def test_postgres_workflow_attempt_repository_covers_crud_queries_and_row_mapping() -> (
-    None
-):
+def test_postgres_workflow_attempt_repository_covers_crud_queries_and_row_mapping() -> None:
     attempt_id = uuid4()
     workflow_instance_id = uuid4()
     started_at = datetime(2024, 1, 5, tzinfo=UTC)
@@ -475,9 +468,7 @@ def test_postgres_workflow_attempt_repository_covers_crud_queries_and_row_mappin
     assert attempt.attempt_number == 2
 
     next_number_cursor = FakeCursor(fetchone_result={"max_attempt_number": 4})
-    next_number_repo = PostgresWorkflowAttemptRepository(
-        FakeConnection(next_number_cursor)
-    )
+    next_number_repo = PostgresWorkflowAttemptRepository(FakeConnection(next_number_cursor))
     assert next_number_repo.get_next_attempt_number(workflow_instance_id) == 5
 
     empty_next_number_cursor = FakeCursor(fetchone_result=None)
@@ -493,9 +484,7 @@ def test_postgres_workflow_attempt_repository_covers_crud_queries_and_row_mappin
     assert updated.updated_at == updated_at
 
 
-def test_postgres_workflow_attempt_repository_create_and_update_raise_when_missing_row() -> (
-    None
-):
+def test_postgres_workflow_attempt_repository_create_and_update_raise_when_missing_row() -> None:
     connection = FakeConnection(FakeCursor(fetchone_result=None))
     repo = PostgresWorkflowAttemptRepository(connection)
     now = datetime(2024, 1, 1, tzinfo=UTC)
@@ -519,9 +508,7 @@ def test_postgres_workflow_attempt_repository_create_and_update_raise_when_missi
         repo.update(attempt)
 
 
-def test_postgres_workflow_checkpoint_repository_covers_read_create_and_row_mapping() -> (
-    None
-):
+def test_postgres_workflow_checkpoint_repository_covers_read_create_and_row_mapping() -> None:
     checkpoint_id = uuid4()
     workflow_instance_id = uuid4()
     attempt_id = uuid4()
@@ -551,9 +538,7 @@ def test_postgres_workflow_checkpoint_repository_covers_read_create_and_row_mapp
     assert created.checkpoint_id == checkpoint_id
 
 
-def test_postgres_workflow_checkpoint_repository_create_raises_when_missing_row() -> (
-    None
-):
+def test_postgres_workflow_checkpoint_repository_create_raises_when_missing_row() -> None:
     connection = FakeConnection(FakeCursor(fetchone_result=None))
     repo = PostgresWorkflowCheckpointRepository(connection)
     checkpoint = SimpleNamespace(
@@ -628,9 +613,7 @@ def test_postgres_unit_of_work_commit_rollback_and_context_lifecycle(
         assert isinstance(uow.workspaces, PostgresWorkspaceRepository)
         assert isinstance(uow.workflow_instances, PostgresWorkflowInstanceRepository)
         assert isinstance(uow.workflow_attempts, PostgresWorkflowAttemptRepository)
-        assert isinstance(
-            uow.workflow_checkpoints, PostgresWorkflowCheckpointRepository
-        )
+        assert isinstance(uow.workflow_checkpoints, PostgresWorkflowCheckpointRepository)
         assert isinstance(uow.verify_reports, PostgresVerifyReportRepository)
         uow.commit()
 

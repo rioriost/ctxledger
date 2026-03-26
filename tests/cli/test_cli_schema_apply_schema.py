@@ -22,6 +22,23 @@ from ctxledger.workflow.service import (
 from .conftest import make_settings
 
 
+def test_print_json_payload_emits_sorted_indented_json(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cli_module._print_json_payload({"b": 2, "a": 1})
+    captured = capsys.readouterr()
+
+    assert captured.err == ""
+    assert captured.out == '{\n  "a": 1,\n  "b": 2\n}\n'
+
+
+def test_isoformat_or_none_returns_none_or_isoformatted_text() -> None:
+    assert cli_module._isoformat_or_none(None) is None
+    assert cli_module._isoformat_or_none(datetime(2024, 1, 1, tzinfo=UTC)) == (
+        "2024-01-01T00:00:00+00:00"
+    )
+
+
 def test_apply_schema_reports_missing_database_url(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -350,3 +367,124 @@ def test_apply_schema_uses_settings_database_url_when_argument_is_none(
     assert connect_calls == ["postgresql://from-settings/db"]
     assert executed_sql == ["SELECT 42;"]
     assert commit_calls == ["commit"]
+
+
+def test_refresh_age_summary_graph_reports_missing_graph_name(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: SimpleNamespace(
+            database=SimpleNamespace(
+                url="postgresql://from-settings/db",
+                age_graph_name="",
+            )
+        ),
+    )
+
+    exit_code = cli_module._refresh_age_summary_graph(
+        argparse.Namespace(
+            database_url="postgresql://explicit/db",
+            graph_name="",
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert (
+        "AGE graph name is required. Set CTXLEDGER_DB_AGE_GRAPH_NAME or pass --graph-name."
+        in captured.err
+    )
+
+
+def test_refresh_age_summary_graph_uses_settings_database_url_and_graph_name(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    executed_queries: list[tuple[str, object | None]] = []
+    connect_calls: list[str] = []
+    commit_calls: list[str] = []
+
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.fetchone_results: list[object] = [{"?column?": 1}, {"count": 0}, {"count": 0}]
+
+        def __enter__(self) -> "FakeCursor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def execute(self, query: str, params: object = None) -> None:
+            executed_queries.append((query, params))
+
+        def fetchone(self) -> object:
+            return self.fetchone_results.pop(0)
+
+        def fetchall(self) -> list[object]:
+            last_query = executed_queries[-1][0]
+            if "FROM public.memory_summaries" in last_query:
+                return []
+            if "FROM public.memory_summary_memberships" in last_query:
+                return []
+            return []
+
+    class FakeConnection:
+        def __enter__(self) -> "FakeConnection":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+        def commit(self) -> None:
+            commit_calls.append("commit")
+
+    fake_psycopg = SimpleNamespace(
+        connect=lambda database_url: connect_calls.append(database_url) or FakeConnection()
+    )
+
+    monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: SimpleNamespace(
+            database=SimpleNamespace(
+                url="postgresql://from-settings/db",
+                age_graph_name="ctxledger_settings_graph",
+            )
+        ),
+    )
+
+    exit_code = cli_module._refresh_age_summary_graph(
+        argparse.Namespace(
+            database_url=None,
+            graph_name=None,
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert (
+        "AGE summary graph refresh completed for 'ctxledger_settings_graph' "
+        "(memory_summary nodes rebuilt=0, summarizes edges rebuilt=0)." in captured.out
+    )
+    assert connect_calls == ["postgresql://from-settings/db"]
+    assert commit_calls == ["commit"]
+    assert executed_queries[0] == ("LOAD 'age'", None)
+    assert executed_queries[1] == ('SET search_path = ag_catalog, "$user", public', None)
+    assert executed_queries[2] == (
+        """
+                    SELECT 1
+                    FROM ag_catalog.ag_graph
+                    WHERE name = %s
+                    LIMIT 1
+                    """,
+        ("ctxledger_settings_graph",),
+    )
+    assert "FROM public.memory_summaries" in executed_queries[5][0]
+    assert "FROM public.memory_summary_memberships" in executed_queries[6][0]

@@ -346,6 +346,10 @@ class MemoryService(
             selected_task_recall_workflow_id=selected_task_recall_workflow_id,
             latest_task_recall_workflow_id=latest_task_recall_workflow_id,
         )
+        latest_task_recall_ticket_detour_like = False
+        latest_task_recall_checkpoint_detour_like = False
+        selected_task_recall_ticket_detour_like = False
+        selected_task_recall_checkpoint_detour_like = False
 
         for memory_item in memory_items:
             lexical_score, matched_fields = self._score_memory_item_for_query(

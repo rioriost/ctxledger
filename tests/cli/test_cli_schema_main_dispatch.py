@@ -169,6 +169,232 @@ def test_build_episode_summary_reports_failure(
     assert "Failed to build episode summary: builder exploded" in captured.err
 
 
+def test_build_episode_summary_reports_missing_database_url_from_builder_runtime_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    episode_id = uuid4()
+
+    monkeypatch.setattr(
+        cli_module,
+        "_build_postgres_workflow_service",
+        lambda: (_ for _ in ()).throw(RuntimeError("missing_database_url")),
+    )
+
+    exit_code = cli_module._build_episode_summary(
+        argparse.Namespace(
+            episode_id=str(episode_id),
+            summary_kind="episode_summary",
+            no_replace_existing=False,
+            format="text",
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+
+
+def test_build_episode_summary_renders_text_output_and_closes_pool(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    episode_id = uuid4()
+    summary_id = uuid4()
+    workspace_id = uuid4()
+    membership_id = uuid4()
+    memory_id = uuid4()
+    close_calls: list[str] = []
+
+    result = SimpleNamespace(
+        feature=SimpleNamespace(value="build_episode_summary"),
+        implemented=True,
+        message="Episode summary built successfully.",
+        status="ok",
+        available_in_version="0.6.0",
+        timestamp=datetime(2024, 11, 6, tzinfo=UTC),
+        summary_built=True,
+        skipped_reason=None,
+        replaced_existing_summary=False,
+        summary=SimpleNamespace(
+            memory_summary_id=summary_id,
+            workspace_id=workspace_id,
+            episode_id=episode_id,
+            summary_text="Built summary text",
+            summary_kind="episode_summary",
+            metadata={"scope": "episode"},
+            created_at=datetime(2024, 11, 6, tzinfo=UTC),
+            updated_at=datetime(2024, 11, 6, tzinfo=UTC),
+        ),
+        memberships=(
+            SimpleNamespace(
+                memory_summary_membership_id=membership_id,
+                memory_summary_id=summary_id,
+                memory_id=memory_id,
+                membership_order=1,
+                metadata={"source": "test"},
+                created_at=datetime(2024, 11, 6, tzinfo=UTC),
+            ),
+        ),
+        details={"builder": "cli-test"},
+    )
+
+    received_requests: list[object] = []
+
+    class DummyMemoryService:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def build_episode_summary(self, request: object) -> object:
+            received_requests.append(request)
+            return result
+
+    class DummyConnectionPool:
+        def close(self) -> None:
+            close_calls.append("close")
+
+    monkeypatch.setattr(
+        cli_module,
+        "_build_postgres_workflow_service",
+        lambda: (object(), object(), DummyConnectionPool()),
+    )
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url="postgresql://ctxledger/db"),
+    )
+
+    class FakePostgresConfig:
+        @classmethod
+        def from_settings(cls, settings: object) -> object:
+            return SimpleNamespace(database_url="postgresql://ctxledger/db")
+
+    monkeypatch.setattr("ctxledger.db.postgres.PostgresConfig", FakePostgresConfig)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config, pool: "uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresDatabaseHealthChecker",
+        lambda config: "health-checker",
+    )
+    monkeypatch.setattr(
+        "ctxledger.memory.service.MemoryService",
+        DummyMemoryService,
+    )
+
+    exit_code = cli_module._build_episode_summary(
+        argparse.Namespace(
+            episode_id=str(episode_id),
+            summary_kind="episode_summary",
+            no_replace_existing=False,
+            format="text",
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "Build episode summary" in captured.out
+    assert f"Episode: {episode_id}" in captured.out
+    assert "Summary built: yes" in captured.out
+    assert "Replaced existing summary: no" in captured.out
+    assert f"Summary ID: {summary_id}" in captured.out
+    assert f"Workspace ID: {workspace_id}" in captured.out
+    assert "Summary text: Built summary text" in captured.out
+    assert "Membership count: 1" in captured.out
+    assert close_calls == ["close"]
+    assert len(received_requests) == 1
+    request = received_requests[0]
+    assert request.episode_id == str(episode_id)
+    assert request.summary_kind == "episode_summary"
+    assert request.replace_existing is True
+
+
+def test_build_episode_summary_renders_json_output_without_summary_and_closes_pool(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    episode_id = uuid4()
+    close_calls: list[str] = []
+
+    result = SimpleNamespace(
+        feature=SimpleNamespace(value="build_episode_summary"),
+        implemented=True,
+        message="Episode summary skipped.",
+        status="ok",
+        available_in_version="0.6.0",
+        timestamp=datetime(2024, 11, 7, tzinfo=UTC),
+        summary_built=False,
+        skipped_reason="already_exists",
+        replaced_existing_summary=True,
+        summary=None,
+        memberships=(),
+        details={"builder": "cli-test"},
+    )
+
+    class DummyMemoryService:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        def build_episode_summary(self, request: object) -> object:
+            return result
+
+    class DummyConnectionPool:
+        def close(self) -> None:
+            close_calls.append("close")
+
+    monkeypatch.setattr(
+        cli_module,
+        "_build_postgres_workflow_service",
+        lambda: (object(), object(), DummyConnectionPool()),
+    )
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings",
+        lambda: make_settings(database_url="postgresql://ctxledger/db"),
+    )
+
+    class FakePostgresConfig:
+        @classmethod
+        def from_settings(cls, settings: object) -> object:
+            return SimpleNamespace(database_url="postgresql://ctxledger/db")
+
+    monkeypatch.setattr("ctxledger.db.postgres.PostgresConfig", FakePostgresConfig)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        lambda config, pool: "uow-factory",
+    )
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresDatabaseHealthChecker",
+        lambda config: "health-checker",
+    )
+    monkeypatch.setattr(
+        "ctxledger.memory.service.MemoryService",
+        DummyMemoryService,
+    )
+
+    exit_code = cli_module._build_episode_summary(
+        argparse.Namespace(
+            episode_id=str(episode_id),
+            summary_kind="episode_summary",
+            no_replace_existing=True,
+            format="json",
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["feature"] == "build_episode_summary"
+    assert payload["summary_built"] is False
+    assert payload["skipped_reason"] == "already_exists"
+    assert payload["replaced_existing_summary"] is True
+    assert payload["summary"] is None
+    assert payload["memberships"] == []
+    assert close_calls == ["close"]
+
+
 def test_refresh_age_summary_graph_reports_failure_with_current_narrow_fake_graph_substrate(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -387,12 +613,12 @@ def test_format_stats_text_renders_values() -> None:
         episode_count=15,
         memory_item_count=16,
         memory_embedding_count=17,
-        latest_workflow_updated_at=None,
-        latest_checkpoint_created_at=None,
-        latest_verify_report_created_at=None,
-        latest_episode_created_at=None,
-        latest_memory_item_created_at=None,
-        latest_memory_embedding_created_at=None,
+        latest_workflow_updated_at="2024-10-01T00:00:00+00:00",
+        latest_checkpoint_created_at="2024-10-02T00:00:00+00:00",
+        latest_verify_report_created_at="2024-10-03T00:00:00+00:00",
+        latest_episode_created_at="2024-10-04T00:00:00+00:00",
+        latest_memory_item_created_at="2024-10-05T00:00:00+00:00",
+        latest_memory_embedding_created_at="2024-10-06T00:00:00+00:00",
     )
 
     rendered = cli_module._format_stats_text(stats)
@@ -410,6 +636,233 @@ def test_format_stats_text_renders_values() -> None:
     assert "- episodes: 15" in rendered
     assert "- memory_items: 16" in rendered
     assert "- memory_embeddings: 17" in rendered
+    assert "- workflow_updated_at: 2024-10-01T00:00:00+00:00" in rendered
+    assert "- memory_embedding_created_at: 2024-10-06T00:00:00+00:00" in rendered
+
+
+def test_build_postgres_workflow_service_returns_settings_service_and_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings(database_url="postgresql://ctxledger/db")
+    config_marker = object()
+    pool_marker = object()
+    uow_factory_marker = object()
+    workflow_service_calls: list[object] = []
+
+    class FakePostgresConfig:
+        @classmethod
+        def from_settings(cls, received_settings: object) -> object:
+            assert received_settings is settings
+            return config_marker
+
+    def fake_build_connection_pool(received_config: object) -> object:
+        assert received_config is config_marker
+        return pool_marker
+
+    def fake_build_postgres_uow_factory(received_config: object, received_pool: object) -> object:
+        assert received_config is config_marker
+        assert received_pool is pool_marker
+        return uow_factory_marker
+
+    class FakeWorkflowService:
+        def __init__(self, uow_factory: object) -> None:
+            workflow_service_calls.append(uow_factory)
+
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+    monkeypatch.setattr("ctxledger.db.postgres.PostgresConfig", FakePostgresConfig)
+    monkeypatch.setattr("ctxledger.db.postgres.build_connection_pool", fake_build_connection_pool)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_postgres_uow_factory",
+        fake_build_postgres_uow_factory,
+    )
+    monkeypatch.setattr("ctxledger.workflow.service.WorkflowService", FakeWorkflowService)
+
+    returned_settings, workflow_service, connection_pool = (
+        cli_module._build_postgres_workflow_service()
+    )
+
+    assert returned_settings is settings
+    assert isinstance(workflow_service, FakeWorkflowService)
+    assert connection_pool is pool_marker
+    assert workflow_service_calls == [uow_factory_marker]
+
+
+def test_build_postgres_workflow_service_raises_for_missing_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings(database_url=""))
+
+    with pytest.raises(RuntimeError, match="missing_database_url"):
+        cli_module._build_postgres_workflow_service()
+
+
+def test_stats_renders_json_output_and_closes_pool(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stats = WorkflowStats(
+        workspace_count=2,
+        workflow_status_counts={"running": 1},
+        attempt_status_counts={"succeeded": 3},
+        verify_status_counts={"passed": 4},
+        checkpoint_count=5,
+        episode_count=6,
+        memory_item_count=7,
+        memory_embedding_count=8,
+        latest_workflow_updated_at=datetime(2024, 11, 1, tzinfo=UTC),
+        latest_checkpoint_created_at=None,
+        latest_verify_report_created_at=None,
+        latest_episode_created_at=None,
+        latest_memory_item_created_at=None,
+        latest_memory_embedding_created_at=None,
+    )
+    close_calls: list[str] = []
+
+    class DummyWorkflowService:
+        def get_stats(self) -> WorkflowStats:
+            return stats
+
+    class DummyConnectionPool:
+        def close(self) -> None:
+            close_calls.append("close")
+
+    monkeypatch.setattr(
+        cli_module,
+        "_build_postgres_workflow_service",
+        lambda: (object(), DummyWorkflowService(), DummyConnectionPool()),
+    )
+
+    exit_code = cli_module._stats(argparse.Namespace(format="json"))
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["workspace_count"] == 2
+    assert payload["memory_embedding_count"] == 8
+    assert payload["latest_workflow_updated_at"] == "2024-11-01T00:00:00+00:00"
+    assert close_calls == ["close"]
+
+
+def test_stats_reports_missing_database_url_from_builder_runtime_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        cli_module,
+        "_build_postgres_workflow_service",
+        lambda: (_ for _ in ()).throw(RuntimeError("missing_database_url")),
+    )
+
+    exit_code = cli_module._stats(argparse.Namespace(format="text"))
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Database URL is required. Set CTXLEDGER_DATABASE_URL." in captured.err
+
+
+def test_stats_reports_get_stats_failure_and_still_closes_pool(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    close_calls: list[str] = []
+
+    class ExplodingWorkflowService:
+        def get_stats(self) -> WorkflowStats:
+            raise RuntimeError("stats lookup exploded")
+
+    class DummyConnectionPool:
+        def close(self) -> None:
+            close_calls.append("close")
+
+    monkeypatch.setattr(
+        cli_module,
+        "_build_postgres_workflow_service",
+        lambda: (object(), ExplodingWorkflowService(), DummyConnectionPool()),
+    )
+
+    exit_code = cli_module._stats(argparse.Namespace(format="text"))
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to load stats: stats lookup exploded" in captured.err
+    assert close_calls == ["close"]
+
+
+def test_memory_stats_renders_text_output_and_closes_pool(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    memory_stats = MemoryStats(
+        episode_count=3,
+        memory_item_count=4,
+        memory_embedding_count=5,
+        memory_relation_count=6,
+        memory_item_provenance_counts={"episode": 4},
+        latest_episode_created_at=datetime(2024, 11, 2, tzinfo=UTC),
+        latest_memory_item_created_at=datetime(2024, 11, 3, tzinfo=UTC),
+        latest_memory_embedding_created_at=datetime(2024, 11, 4, tzinfo=UTC),
+        latest_memory_relation_created_at=datetime(2024, 11, 5, tzinfo=UTC),
+    )
+    close_calls: list[str] = []
+
+    class DummyWorkflowService:
+        def get_memory_stats(self) -> MemoryStats:
+            return memory_stats
+
+    class DummyConnectionPool:
+        def close(self) -> None:
+            close_calls.append("close")
+
+    monkeypatch.setattr(
+        cli_module,
+        "_build_postgres_workflow_service",
+        lambda: (object(), DummyWorkflowService(), DummyConnectionPool()),
+    )
+
+    exit_code = cli_module._memory_stats(argparse.Namespace(format="text"))
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "ctxledger memory-stats" in captured.out
+    assert "- episodes: 3" in captured.out
+    assert "- memory_items: 4" in captured.out
+    assert "- memory_embeddings: 5" in captured.out
+    assert "- memory_relations: 6" in captured.out
+    assert "- memory_relation_created_at: 2024-11-05 00:00:00+00:00" in captured.out
+    assert close_calls == ["close"]
+
+
+def test_memory_stats_reports_service_failure_and_still_closes_pool(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    close_calls: list[str] = []
+
+    class ExplodingWorkflowService:
+        def get_memory_stats(self) -> MemoryStats:
+            raise RuntimeError("memory stats exploded")
+
+    class DummyConnectionPool:
+        def close(self) -> None:
+            close_calls.append("close")
+
+    monkeypatch.setattr(
+        cli_module,
+        "_build_postgres_workflow_service",
+        lambda: (object(), ExplodingWorkflowService(), DummyConnectionPool()),
+    )
+
+    exit_code = cli_module._memory_stats(argparse.Namespace(format="json"))
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "Failed to load memory stats: memory stats exploded" in captured.err
+    assert close_calls == ["close"]
 
 
 def test_workflows_reports_invalid_workspace_id_error(

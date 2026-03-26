@@ -426,10 +426,16 @@ Current status note:
   - selected-versus-latest comparison details in divergent multi-candidate contexts
   - a small selected-continuation-target bonus in bounded divergent contexts
 - this means the milestone is no longer only at the heuristic-ranking stage; it now has a more explicit explanation and inspection surface for continuation selection and a first bounded concept-to-task recovery bridge in `memory_search`
+- the intended `0.7.0` boundary should now be read as:
+  - keep concept-to-task recovery centered on:
+    - `memory_get_context`
+    - workspace-scoped `memory_search`
+  - treat workspace-resume-facing reasoning as an adjacent explanation surface, not as a separate concept-routing authority
+  - defer broader retrieval-surface rollout unless a later narrow slice shows it is still necessary and explainable
 - the main remaining gaps are:
-  - stronger concept-to-task recovery beyond the current bounded `memory_get_context` and `memory_search` task-recall path
-  - broader integration of these task-recall ideas into other retrieval surfaces where justified
   - release-facing closeout alignment so the bounded `0.7.0` slice has an explicit behavior summary and acceptance reading
+  - explicit recording that broader concept-to-task expansion beyond the bounded current surfaces is deferred past `0.7.0`
+  - explicit recording that broader task-recall rollout into other retrieval surfaces is deferred past `0.7.0` unless later justified
   - closeout recording for the now-complete maintainability hardening stream for oversized task-recall-related `src/` and `tests/` files, with:
     - the runtime task-recall test split already landed
     - the oversized visibility-focused memory-context test split already landed

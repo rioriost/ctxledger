@@ -8,8 +8,10 @@ from uuid import uuid4
 
 import pytest
 
+from ctxledger.db import postgres_common as postgres_common_module
+from ctxledger.db import postgres_uow as postgres_uow_module
 from ctxledger.memory.types import MemoryRelationRecord
-from ctxledger.workflow.service import PersistenceError
+from ctxledger.workflow.service import PersistenceError, VerifyStatus
 from tests.postgres.conftest import FakeConnection
 
 
@@ -59,10 +61,8 @@ def test_postgres_low_level_helpers_and_pool_builder() -> None:
     assert postgres._to_uuid(str(value_uuid)) == value_uuid
     assert postgres._optional_datetime(None) is None
     assert postgres._optional_datetime(aware) == aware
-    assert postgres._optional_str_enum(postgres.VerifyStatus, None) is None
-    assert (
-        postgres._optional_str_enum(postgres.VerifyStatus, "passed") == postgres.VerifyStatus.PASSED
-    )
+    assert postgres._optional_str_enum(VerifyStatus, None) is None
+    assert postgres._optional_str_enum(VerifyStatus, "passed") == VerifyStatus.PASSED
     assert postgres._normalized_schema_name(None) == "public"
     assert postgres._normalized_schema_name("  ") == "public"
     assert postgres._normalized_schema_name(" custom ") == "custom"
@@ -79,9 +79,9 @@ def test_postgres_low_level_helpers_and_pool_builder() -> None:
         def __init__(self, **kwargs: object) -> None:
             self.kwargs = kwargs
 
-    original_pool = postgres.ConnectionPool
+    original_pool = postgres_common_module.ConnectionPool
     try:
-        postgres.ConnectionPool = FakePool
+        postgres_common_module.ConnectionPool = FakePool
         config = postgres.PostgresConfig(
             database_url="postgresql://example/db",
             pool_min_size=2,
@@ -90,7 +90,7 @@ def test_postgres_low_level_helpers_and_pool_builder() -> None:
         )
         pool = postgres.build_connection_pool(config)
     finally:
-        postgres.ConnectionPool = original_pool
+        postgres_common_module.ConnectionPool = original_pool
 
     assert isinstance(pool, FakePool)
     assert pool.kwargs["conninfo"] == "postgresql://example/db"
@@ -189,13 +189,13 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
     )
 
     ping_connector = FakeConnector()
-    original_connect = postgres._connect
-    postgres._connect = ping_connector
+    original_connect = postgres_common_module._connect
+    postgres_common_module._connect = ping_connector
     try:
         checker = postgres.PostgresDatabaseHealthChecker(config)
         checker.ping()
     finally:
-        postgres._connect = original_connect
+        postgres_common_module._connect = original_connect
 
     assert ping_connector.calls == ["postgresql://example/db"]
     ping_queries = [
@@ -216,12 +216,12 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
             {"table_name": "verify_reports"},
         ]
     )
-    postgres._connect = ready_connector
+    postgres_common_module._connect = ready_connector
     try:
         checker = postgres.PostgresDatabaseHealthChecker(config)
         assert checker.schema_ready() is True
     finally:
-        postgres._connect = original_connect
+        postgres_common_module._connect = original_connect
 
     not_ready_connector = FakeConnector(
         rows=[
@@ -229,20 +229,20 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
             {"table_name": "workflow_instances"},
         ]
     )
-    postgres._connect = not_ready_connector
+    postgres_common_module._connect = not_ready_connector
     try:
         checker = postgres.PostgresDatabaseHealthChecker(config)
         assert checker.schema_ready() is False
     finally:
-        postgres._connect = original_connect
+        postgres_common_module._connect = original_connect
 
     age_ready_connector = FakeConnector()
-    postgres._connect = age_ready_connector
+    postgres_common_module._connect = age_ready_connector
     try:
         checker = postgres.PostgresDatabaseHealthChecker(config)
         assert checker.age_available() is True
     finally:
-        postgres._connect = original_connect
+        postgres_common_module._connect = original_connect
 
     class EmptyFetchoneCursor(FakeCursor):
         def fetchone(self) -> dict[str, int] | None:
@@ -262,23 +262,23 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
             return connection
 
     age_not_ready_connector = EmptyFetchoneConnector()
-    postgres._connect = age_not_ready_connector
+    postgres_common_module._connect = age_not_ready_connector
     try:
         checker = postgres.PostgresDatabaseHealthChecker(config)
         assert checker.age_available() is False
         assert checker.age_graph_available("ctxledger_memory") is False
         assert checker.age_graph_status("ctxledger_memory").value == "age_unavailable"
     finally:
-        postgres._connect = original_connect
+        postgres_common_module._connect = original_connect
 
     graph_ready_connector = FakeConnector()
-    postgres._connect = graph_ready_connector
+    postgres_common_module._connect = graph_ready_connector
     try:
         checker = postgres.PostgresDatabaseHealthChecker(config)
         assert checker.age_graph_available("ctxledger_memory") is True
         assert checker.age_graph_status("ctxledger_memory").value == "graph_ready"
     finally:
-        postgres._connect = original_connect
+        postgres_common_module._connect = original_connect
 
     class GraphMissingCursor(FakeCursor):
         def __init__(self, rows: list[object] | None = None) -> None:
@@ -303,13 +303,13 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
             return connection
 
     graph_not_ready_connector = GraphMissingConnector()
-    postgres._connect = graph_not_ready_connector
+    postgres_common_module._connect = graph_not_ready_connector
     try:
         checker = postgres.PostgresDatabaseHealthChecker(config)
         assert checker.age_graph_available("ctxledger_memory") is False
         assert checker.age_graph_status("ctxledger_memory").value == "graph_unavailable"
     finally:
-        postgres._connect = original_connect
+        postgres_common_module._connect = original_connect
 
 
 def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guards() -> None:
@@ -699,12 +699,12 @@ def test_postgres_row_mapping_helpers_cover_memory_records() -> None:
 
 def test_postgres_connect_requires_driver_and_passes_row_factory() -> None:
     postgres = importlib.import_module("ctxledger.db.postgres")
-    original_psycopg = postgres.psycopg
-    original_dict_row = postgres.dict_row
+    original_psycopg = postgres_common_module.psycopg
+    original_dict_row = postgres_common_module.dict_row
 
     try:
-        postgres.psycopg = None
-        postgres.dict_row = None
+        postgres_common_module.psycopg = None
+        postgres_common_module.dict_row = None
         with pytest.raises(RuntimeError, match="psycopg is required"):
             postgres._require_psycopg()
 
@@ -717,12 +717,12 @@ def test_postgres_connect_requires_driver_and_passes_row_factory() -> None:
                 return "CONNECTION"
 
         fake_psycopg = FakePsycopg()
-        postgres.psycopg = fake_psycopg
-        postgres.dict_row = "DICT_ROW"
+        postgres_common_module.psycopg = fake_psycopg
+        postgres_common_module.dict_row = "DICT_ROW"
         connection = postgres._connect("postgresql://example/db")
     finally:
-        postgres.psycopg = original_psycopg
-        postgres.dict_row = original_dict_row
+        postgres_common_module.psycopg = original_psycopg
+        postgres_common_module.dict_row = original_dict_row
 
     assert connection == "CONNECTION"
     assert fake_psycopg.calls == [("postgresql://example/db", "DICT_ROW")]

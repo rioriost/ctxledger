@@ -6,6 +6,7 @@ from types import SimpleNamespace, TracebackType
 
 import pytest
 
+from ctxledger.db import postgres_uow as postgres_uow_module
 from ctxledger.memory.protocols import (
     MemorySummaryMembershipRepository,
     MemorySummaryRepository,
@@ -91,7 +92,7 @@ def test_postgres_unit_of_work_records_checkout_and_session_timing_fields() -> N
         schema_name="ctxledger",
     )
 
-    original_perf_counter = postgres_module.time.perf_counter
+    original_perf_counter = postgres_uow_module.time.perf_counter
     perf_counter_values = iter(
         [
             100.0,
@@ -105,13 +106,13 @@ def test_postgres_unit_of_work_records_checkout_and_session_timing_fields() -> N
         ]
     )
 
-    postgres_module.time.perf_counter = lambda: next(perf_counter_values)
+    postgres_uow_module.time.perf_counter = lambda: next(perf_counter_values)
 
     try:
         uow = postgres_module.PostgresUnitOfWork(config, pool)
         entered = uow.__enter__()
     finally:
-        postgres_module.time.perf_counter = original_perf_counter
+        postgres_uow_module.time.perf_counter = original_perf_counter
 
     assert entered is uow
     assert 0 <= uow.checkout_context_create_duration_ms <= 2
