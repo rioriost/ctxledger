@@ -1024,6 +1024,212 @@ def test_memory_service_search_applies_selected_continuation_target_bonus() -> N
         )
 
 
+def test_memory_service_search_surfaces_latest_vs_selected_task_recall_details() -> None:
+    primary_workflow_id = uuid4()
+    detour_workflow_id = uuid4()
+    older_background_workflow_id = uuid4()
+    primary_episode_id = uuid4()
+    detour_episode_id = uuid4()
+    selected_memory_id = uuid4()
+    detour_memory_id = uuid4()
+    created_at = datetime(2024, 4, 20, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=primary_episode_id,
+            workflow_instance_id=primary_workflow_id,
+            summary="Primary implementation work before detour",
+            metadata={"kind": "primary"},
+            created_at=created_at.replace(day=18),
+            updated_at=created_at.replace(day=18),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=detour_episode_id,
+            workflow_instance_id=detour_workflow_id,
+            summary="Latest coverage detour",
+            metadata={"kind": "detour"},
+            created_at=created_at.replace(day=20),
+            updated_at=created_at.replace(day=20),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=older_background_workflow_id,
+            summary="Older background investigation",
+            metadata={"kind": "background"},
+            created_at=created_at.replace(day=17),
+            updated_at=created_at.replace(day=17),
+        )
+    )
+
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=selected_memory_id,
+            workspace_id=UUID("00000000-0000-0000-0000-000000000001"),
+            episode_id=primary_episode_id,
+            type="episode_note",
+            provenance="episode",
+            content="selected continuation target memory",
+            metadata={"kind": "selected"},
+            created_at=created_at.replace(day=18, hour=1),
+            updated_at=created_at.replace(day=18, hour=1),
+        )
+    )
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=detour_memory_id,
+            workspace_id=UUID("00000000-0000-0000-0000-000000000001"),
+            episode_id=detour_episode_id,
+            type="episode_note",
+            provenance="episode",
+            content="latest detour coverage memory",
+            metadata={"kind": "detour"},
+            created_at=created_at.replace(day=20, hour=1),
+            updated_at=created_at.replace(day=20, hour=1),
+        )
+    )
+
+    class RawOrderWorkflowLookup(InMemoryWorkflowLookupRepository):
+        def workflow_ids_by_workspace_id_raw_order(
+            self,
+            workspace_id: str,
+            *,
+            limit: int,
+        ) -> tuple[UUID, ...]:
+            assert workspace_id == "00000000-0000-0000-0000-000000000001"
+            return (
+                detour_workflow_id,
+                primary_workflow_id,
+                older_background_workflow_id,
+            )[:limit]
+
+    workflow_lookup = RawOrderWorkflowLookup(
+        workflows_by_id={
+            primary_workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TASK-PRIMARY",
+                "workflow_status": "in_progress",
+                "workflow_is_terminal": False,
+                "workflow_updated_at": created_at.replace(day=18),
+                "has_latest_attempt": True,
+                "latest_attempt_status": "running",
+                "latest_attempt_is_terminal": False,
+                "latest_attempt_started_at": created_at.replace(day=18),
+                "has_latest_checkpoint": True,
+                "latest_checkpoint_created_at": created_at.replace(day=18),
+                "latest_checkpoint_step_name": "resume_primary_work",
+                "latest_checkpoint_summary": "Return to the primary implementation thread",
+                "latest_checkpoint_current_objective": "Finish the hierarchical memory implementation",
+                "latest_checkpoint_next_intended_action": "Resume the primary implementation work",
+            },
+            detour_workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TASK-COVERAGE",
+                "workflow_status": "in_progress",
+                "workflow_is_terminal": False,
+                "workflow_updated_at": created_at.replace(day=20),
+                "has_latest_attempt": True,
+                "latest_attempt_status": "running",
+                "latest_attempt_is_terminal": False,
+                "latest_attempt_started_at": created_at.replace(day=20),
+                "has_latest_checkpoint": True,
+                "latest_checkpoint_created_at": created_at.replace(day=20),
+                "latest_checkpoint_step_name": "coverage_followup",
+                "latest_checkpoint_summary": "Increase coverage for the recent retrieval changes",
+                "latest_checkpoint_current_objective": None,
+                "latest_checkpoint_next_intended_action": None,
+            },
+            older_background_workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TASK-BACKGROUND",
+                "workflow_status": "in_progress",
+                "workflow_is_terminal": False,
+                "workflow_updated_at": created_at.replace(day=17),
+                "has_latest_attempt": True,
+                "latest_attempt_status": "running",
+                "latest_attempt_is_terminal": False,
+                "latest_attempt_started_at": created_at.replace(day=17),
+                "has_latest_checkpoint": True,
+                "latest_checkpoint_created_at": created_at.replace(day=17),
+                "latest_checkpoint_step_name": "background_investigation",
+                "latest_checkpoint_summary": "Investigate related background issue",
+                "latest_checkpoint_current_objective": None,
+                "latest_checkpoint_next_intended_action": None,
+            },
+        }
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=workflow_lookup,
+    )
+
+    search_response = service.search(
+        SearchMemoryRequest(
+            query="selected continuation",
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert search_response.results
+    assert search_response.results[0].memory_id == selected_memory_id
+    assert search_response.details["task_recall_context_present"] is True
+    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
+        detour_workflow_id
+    )
+    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(
+        primary_workflow_id
+    )
+    assert search_response.details["task_recall_selected_equals_latest"] is False
+    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is True
+
+    latest_vs_selected = search_response.details["task_recall_latest_vs_selected_candidate_details"]
+    assert latest_vs_selected["latest_workflow_instance_id"] == str(detour_workflow_id)
+    assert latest_vs_selected["selected_workflow_instance_id"] == str(primary_workflow_id)
+    assert latest_vs_selected["comparison_source"] == "memory_search_task_recall_context"
+    assert latest_vs_selected["latest_considered"]["workflow_instance_id"] == str(
+        detour_workflow_id
+    )
+    assert latest_vs_selected["selected"]["workflow_instance_id"] == str(primary_workflow_id)
+
+    assert search_response.details["task_recall_comparison_summary_explanations_present"] is True
+    assert {
+        explanation["code"]
+        for explanation in search_response.details["task_recall_comparison_summary_explanations"]
+    } == {
+        "search_selected_differs_from_latest",
+        "search_latest_and_selected_checkpoints_differ",
+        "search_latest_and_selected_return_target_basis_differs",
+        "search_latest_and_selected_task_thread_basis_differs",
+    }
+
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "latest_considered_workflow_instance_id"
+    ] == str(detour_workflow_id)
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "selected_workflow_instance_id"
+    ] == str(primary_workflow_id)
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_continuation_target_bonus_applied"
+        ]
+        is True
+    )
+
+
 def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()

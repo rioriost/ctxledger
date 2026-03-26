@@ -906,6 +906,180 @@ def test_memory_get_context_task_recall_marks_next_action_as_explicit_mainline_s
     assert response.details["memory_context_groups"] == []
 
 
+def test_memory_get_context_task_recall_separates_latest_detour_candidate_from_selected_continuation_target() -> (
+    None
+):
+    primary_workflow_id = uuid4()
+    detour_workflow_id = uuid4()
+    workspace_id = str(uuid4())
+    created_at = datetime(2024, 4, 10, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=primary_workflow_id,
+            summary="Primary implementation work",
+            metadata={"kind": "primary"},
+            created_at=created_at.replace(day=8),
+            updated_at=created_at.replace(day=8),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=detour_workflow_id,
+            summary="Recent coverage detour",
+            metadata={"kind": "detour"},
+            created_at=created_at.replace(day=10),
+            updated_at=created_at.replace(day=10),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                primary_workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TASK-PRIMARY",
+                    "workflow_status": "in_progress",
+                    "workflow_is_terminal": False,
+                    "workflow_updated_at": created_at.replace(day=8),
+                    "has_latest_attempt": True,
+                    "latest_attempt_status": "running",
+                    "latest_attempt_is_terminal": False,
+                    "latest_attempt_started_at": created_at.replace(day=8),
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=8),
+                    "latest_checkpoint_step_name": "resume_primary_work",
+                    "latest_checkpoint_summary": "Return to the primary implementation thread",
+                    "latest_checkpoint_current_objective": "Finish the hierarchical memory implementation",
+                    "latest_checkpoint_next_intended_action": "Resume the primary implementation work",
+                },
+                detour_workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TASK-COVERAGE",
+                    "workflow_status": "in_progress",
+                    "workflow_is_terminal": False,
+                    "workflow_updated_at": created_at.replace(day=10),
+                    "has_latest_attempt": True,
+                    "latest_attempt_status": "running",
+                    "latest_attempt_is_terminal": False,
+                    "latest_attempt_started_at": created_at.replace(day=10),
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=10),
+                    "latest_checkpoint_step_name": "coverage_followup",
+                    "latest_checkpoint_summary": "Increase coverage for the recent retrieval changes",
+                    "latest_checkpoint_current_objective": None,
+                    "latest_checkpoint_next_intended_action": None,
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id=workspace_id,
+            limit=5,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert response.details["task_recall_selected_workflow_instance_id"] == str(primary_workflow_id)
+    assert response.details["task_recall_latest_workflow_instance_id"] == str(primary_workflow_id)
+    assert response.details["task_recall_selected_equals_latest"] is True
+    assert response.details["task_recall_latest_detour_candidate_present"] is True
+    latest_detour_candidate_workflow_id = response.details[
+        "task_recall_latest_detour_candidate_workflow_instance_id"
+    ]
+    assert latest_detour_candidate_workflow_id in {
+        str(primary_workflow_id),
+        str(detour_workflow_id),
+    }
+    assert response.details["task_recall_latest_detour_candidate_details_present"] is True
+    assert response.details["task_recall_latest_detour_candidate_details"] == {
+        "workflow_instance_id": latest_detour_candidate_workflow_id,
+        "checkpoint_step_name": (
+            "coverage_followup"
+            if latest_detour_candidate_workflow_id == str(detour_workflow_id)
+            else "resume_primary_work"
+        ),
+        "checkpoint_summary": (
+            "Increase coverage for the recent retrieval changes"
+            if latest_detour_candidate_workflow_id == str(detour_workflow_id)
+            else "Return to the primary implementation thread"
+        ),
+        "primary_objective_text": (
+            None
+            if latest_detour_candidate_workflow_id == str(detour_workflow_id)
+            else "Finish the hierarchical memory implementation"
+        ),
+        "next_intended_action_text": (
+            None
+            if latest_detour_candidate_workflow_id == str(detour_workflow_id)
+            else "Resume the primary implementation work"
+        ),
+        "ticket_detour_like": False,
+        "checkpoint_detour_like": True,
+        "detour_like": True,
+        "workflow_terminal": False,
+        "has_attempt_signal": True,
+        "attempt_terminal": False,
+        "has_checkpoint_signal": True,
+        "return_target_basis": (
+            None
+            if latest_detour_candidate_workflow_id == str(detour_workflow_id)
+            else "latest_candidate"
+        ),
+        "task_thread_basis": None,
+    }
+    assert response.details["task_recall_latest_vs_selected_explanations_present"] is True
+    assert {
+        explanation["code"]
+        for explanation in response.details["task_recall_latest_vs_selected_explanations"]
+    } == {
+        "selected_matches_latest",
+        "latest_and_selected_checkpoints_match",
+    }
+    assert response.details["task_recall_comparison_summary_explanations_present"] is True
+    assert {
+        explanation["code"]
+        for explanation in response.details["task_recall_comparison_summary_explanations"]
+    } == {
+        "summary_selected_matches_latest",
+        "summary_latest_and_selected_checkpoints_match",
+    }
+    assert response.details["task_recall_return_target_workflow_instance_id"] == str(
+        primary_workflow_id
+    )
+    assert response.details["task_recall_return_target_basis"] == "checkpoint_current_objective"
+    assert response.details["task_recall_return_target_source"] == (
+        "latest_checkpoint.current_objective"
+    )
+    assert response.details["task_recall_primary_objective_present"] is True
+    assert response.details["task_recall_primary_objective_text"] == (
+        "Finish the hierarchical memory implementation"
+    )
+    assert response.details["task_recall_selected_checkpoint_step_name"] == "resume_primary_work"
+    assert response.details["task_recall_selected_checkpoint_summary"] == (
+        "Return to the primary implementation thread"
+    )
+    assert response.details["task_recall_ranking_details_present"] is True
+    assert response.details["task_recall_ranking_details"][0]["workflow_instance_id"] == str(
+        primary_workflow_id
+    )
+    assert response.details["task_recall_ranking_details"][0]["selected"] is True
+    assert response.details["task_recall_ranking_details"][0]["is_latest"] is True
+    assert response.details["task_recall_ranking_details"][1]["workflow_instance_id"] == str(
+        detour_workflow_id
+    )
+    assert response.details["task_recall_ranking_details"][1]["selected"] is False
+    assert response.details["task_recall_ranking_details"][1]["is_latest"] is False
+
+
 def test_memory_get_context_task_recall_prefers_current_objective_over_non_detour_candidate() -> (
     None
 ):
@@ -1387,6 +1561,177 @@ def test_memory_get_context_task_recall_prefers_next_action_over_non_detour_cand
     assert response.details["task_recall_prior_mainline_workflow_instance_id"] is None
 
 
+def test_memory_get_context_task_recall_recovers_prior_mainline_candidate_before_latest_detour() -> (
+    None
+):
+    primary_workflow_id = uuid4()
+    detour_workflow_id = uuid4()
+    older_background_workflow_id = uuid4()
+    workspace_id = str(uuid4())
+    created_at = datetime(2024, 4, 20, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=primary_workflow_id,
+            summary="Primary implementation work before detour",
+            metadata={"kind": "primary"},
+            created_at=created_at.replace(day=18),
+            updated_at=created_at.replace(day=18),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=detour_workflow_id,
+            summary="Latest coverage detour",
+            metadata={"kind": "detour"},
+            created_at=created_at.replace(day=20),
+            updated_at=created_at.replace(day=20),
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=uuid4(),
+            workflow_instance_id=older_background_workflow_id,
+            summary="Older background investigation",
+            metadata={"kind": "background"},
+            created_at=created_at.replace(day=17),
+            updated_at=created_at.replace(day=17),
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            workflows_by_id={
+                primary_workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TASK-PRIMARY",
+                    "workflow_status": "in_progress",
+                    "workflow_is_terminal": False,
+                    "workflow_updated_at": created_at.replace(day=18),
+                    "has_latest_attempt": True,
+                    "latest_attempt_status": "running",
+                    "latest_attempt_is_terminal": False,
+                    "latest_attempt_started_at": created_at.replace(day=18),
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=18),
+                    "latest_checkpoint_step_name": "resume_primary_work",
+                    "latest_checkpoint_summary": "Return to the primary implementation thread",
+                    "latest_checkpoint_current_objective": "Finish the hierarchical memory implementation",
+                    "latest_checkpoint_next_intended_action": "Resume the primary implementation work",
+                },
+                detour_workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TASK-COVERAGE",
+                    "workflow_status": "in_progress",
+                    "workflow_is_terminal": False,
+                    "workflow_updated_at": created_at.replace(day=20),
+                    "has_latest_attempt": True,
+                    "latest_attempt_status": "running",
+                    "latest_attempt_is_terminal": False,
+                    "latest_attempt_started_at": created_at.replace(day=20),
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=20),
+                    "latest_checkpoint_step_name": "coverage_followup",
+                    "latest_checkpoint_summary": "Increase coverage for the recent retrieval changes",
+                    "latest_checkpoint_current_objective": None,
+                    "latest_checkpoint_next_intended_action": None,
+                },
+                older_background_workflow_id: {
+                    "workspace_id": workspace_id,
+                    "ticket_id": "TASK-BACKGROUND",
+                    "workflow_status": "in_progress",
+                    "workflow_is_terminal": False,
+                    "workflow_updated_at": created_at.replace(day=17),
+                    "has_latest_attempt": True,
+                    "latest_attempt_status": "running",
+                    "latest_attempt_is_terminal": False,
+                    "latest_attempt_started_at": created_at.replace(day=17),
+                    "has_latest_checkpoint": True,
+                    "latest_checkpoint_created_at": created_at.replace(day=17),
+                    "latest_checkpoint_step_name": "background_investigation",
+                    "latest_checkpoint_summary": "Investigate related background issue",
+                    "latest_checkpoint_current_objective": None,
+                    "latest_checkpoint_next_intended_action": None,
+                },
+            }
+        ),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workspace_id=workspace_id,
+            limit=5,
+            include_episodes=True,
+            include_memory_items=False,
+            include_summaries=False,
+        )
+    )
+
+    assert response.details["task_recall_selected_workflow_instance_id"] == str(primary_workflow_id)
+    assert response.details["task_recall_latest_workflow_instance_id"] == str(primary_workflow_id)
+    assert response.details["task_recall_latest_detour_candidate_present"] is True
+    latest_detour_candidate_workflow_id = response.details[
+        "task_recall_latest_detour_candidate_workflow_instance_id"
+    ]
+    assert latest_detour_candidate_workflow_id in {
+        str(primary_workflow_id),
+        str(detour_workflow_id),
+    }
+    assert response.details["task_recall_latest_detour_candidate_details_present"] is True
+    latest_detour_candidate_details = response.details[
+        "task_recall_latest_detour_candidate_details"
+    ]
+    assert (
+        latest_detour_candidate_details["workflow_instance_id"]
+        == latest_detour_candidate_workflow_id
+    )
+    assert latest_detour_candidate_details["ticket_detour_like"] is False
+    assert latest_detour_candidate_details["checkpoint_detour_like"] is True
+    assert latest_detour_candidate_details["detour_like"] is True
+    assert latest_detour_candidate_details["workflow_terminal"] is False
+    assert latest_detour_candidate_details["has_attempt_signal"] is True
+    assert latest_detour_candidate_details["attempt_terminal"] is False
+    assert latest_detour_candidate_details["has_checkpoint_signal"] is True
+
+    prior_mainline_workflow_id = response.details["task_recall_prior_mainline_workflow_instance_id"]
+    assert prior_mainline_workflow_id in {
+        str(primary_workflow_id),
+        str(older_background_workflow_id),
+    }
+    assert response.details["task_recall_prior_mainline_present"] is True
+    assert response.details["task_recall_prior_mainline_candidate_details_present"] is True
+    prior_mainline_details = response.details["task_recall_prior_mainline_candidate_details"]
+    assert prior_mainline_details["workflow_instance_id"] == prior_mainline_workflow_id
+    assert prior_mainline_details["ticket_detour_like"] is False
+    assert prior_mainline_details["checkpoint_detour_like"] is False
+    assert prior_mainline_details["detour_like"] is False
+    assert prior_mainline_details["workflow_terminal"] is False
+    assert prior_mainline_details["has_attempt_signal"] is True
+    assert prior_mainline_details["attempt_terminal"] is False
+    assert prior_mainline_details["has_checkpoint_signal"] is True
+
+    latest_vs_selected = response.details["task_recall_latest_vs_selected_candidate_details"]
+    assert latest_vs_selected["latest_workflow_instance_id"] == str(primary_workflow_id)
+    assert latest_vs_selected["selected_workflow_instance_id"] == str(primary_workflow_id)
+    assert latest_vs_selected["comparison_source"] == "task_recall_checkpoint_comparison"
+    assert latest_vs_selected["latest_considered"]["workflow_instance_id"] == str(
+        primary_workflow_id
+    )
+    assert latest_vs_selected["selected"]["workflow_instance_id"] == str(primary_workflow_id)
+    assert response.details["task_recall_explanations_present"] is True
+    assert {
+        explanation["code"]
+        for explanation in response.details["task_recall_latest_vs_selected_explanations"]
+    } == {
+        "selected_matches_latest",
+        "latest_and_selected_checkpoints_match",
+    }
+
+
 def test_memory_get_context_task_recall_keeps_detour_penalty_when_objective_text_is_detour_like() -> (
     None
 ):
@@ -1502,6 +1847,30 @@ def test_memory_get_context_task_recall_keeps_detour_penalty_when_objective_text
     assert stable_entry["workflow_instance_id"] == str(stable_workflow_id)
     assert stable_entry["task_thread_candidate"] is True
     assert stable_entry["task_thread_basis"] == "non_detour_candidate"
+    assert response.details["task_recall_latest_detour_candidate_present"] is True
+    latest_detour_candidate_workflow_id = response.details[
+        "task_recall_latest_detour_candidate_workflow_instance_id"
+    ]
+    assert latest_detour_candidate_workflow_id in {
+        str(detour_like_objective_workflow_id),
+        str(stable_workflow_id),
+    }
+    assert response.details["task_recall_latest_detour_candidate_details_present"] is True
+    latest_detour_candidate_details = response.details[
+        "task_recall_latest_detour_candidate_details"
+    ]
+    assert (
+        latest_detour_candidate_details["workflow_instance_id"]
+        == latest_detour_candidate_workflow_id
+    )
+    assert latest_detour_candidate_details["ticket_detour_like"] is False
+    assert latest_detour_candidate_details["checkpoint_detour_like"] is True
+    assert latest_detour_candidate_details["detour_like"] is True
+    assert latest_detour_candidate_details["workflow_terminal"] is False
+    assert latest_detour_candidate_details["has_attempt_signal"] is True
+    assert latest_detour_candidate_details["attempt_terminal"] is False
+    assert latest_detour_candidate_details["has_checkpoint_signal"] is True
+
     assert response.details["task_recall_primary_objective_present"] is True
     assert (
         response.details["task_recall_primary_objective_text"] == "Coverage cleanup and docs review"
@@ -1520,130 +1889,72 @@ def test_memory_get_context_task_recall_keeps_detour_penalty_when_objective_text
         response.details["task_recall_selected_checkpoint_summary"]
         == "Coverage cleanup after the main change"
     )
+    assert response.details["task_recall_latest_considered_checkpoint_step_name"] == (
+        "coverage follow-up"
+    )
+    assert response.details["task_recall_latest_considered_checkpoint_summary"] == (
+        "Coverage cleanup after the main change"
+    )
     assert response.details["task_recall_latest_vs_selected_checkpoint_details_present"] is True
-    assert response.details["task_recall_latest_vs_selected_checkpoint_details"] == {
-        "latest_workflow_instance_id": str(detour_like_objective_workflow_id),
-        "selected_workflow_instance_id": str(detour_like_objective_workflow_id),
-        "latest_considered": {
-            "workflow_instance_id": str(detour_like_objective_workflow_id),
-            "checkpoint_step_name": "coverage follow-up",
-            "checkpoint_summary": "Coverage cleanup after the main change",
-            "primary_objective_text": "Coverage cleanup and docs review",
-            "next_intended_action_text": None,
-            "ticket_detour_like": False,
-            "checkpoint_detour_like": True,
-            "detour_like": True,
-            "workflow_terminal": False,
-            "has_attempt_signal": True,
-            "attempt_terminal": False,
-            "has_checkpoint_signal": True,
-            "return_target_basis": "checkpoint_current_objective",
-            "task_thread_basis": "checkpoint_current_objective",
-        },
-        "selected": {
-            "workflow_instance_id": str(detour_like_objective_workflow_id),
-            "checkpoint_step_name": "coverage follow-up",
-            "checkpoint_summary": "Coverage cleanup after the main change",
-            "primary_objective_text": "Coverage cleanup and docs review",
-            "next_intended_action_text": None,
-            "ticket_detour_like": False,
-            "checkpoint_detour_like": True,
-            "detour_like": True,
-            "workflow_terminal": False,
-            "has_attempt_signal": True,
-            "attempt_terminal": False,
-            "has_checkpoint_signal": True,
-            "return_target_basis": "checkpoint_current_objective",
-            "task_thread_basis": "checkpoint_current_objective",
-        },
-        "same_checkpoint_details": True,
-        "comparison_source": "task_recall_checkpoint_comparison",
-    }
+    latest_vs_selected_checkpoint = response.details[
+        "task_recall_latest_vs_selected_checkpoint_details"
+    ]
+    assert latest_vs_selected_checkpoint["latest_workflow_instance_id"] == str(
+        detour_like_objective_workflow_id
+    )
+    assert latest_vs_selected_checkpoint["selected_workflow_instance_id"] == str(
+        detour_like_objective_workflow_id
+    )
+    assert latest_vs_selected_checkpoint["comparison_source"] == "task_recall_checkpoint_comparison"
+    assert latest_vs_selected_checkpoint["latest_considered"]["workflow_instance_id"] == str(
+        detour_like_objective_workflow_id
+    )
+    assert latest_vs_selected_checkpoint["selected"]["workflow_instance_id"] == str(
+        detour_like_objective_workflow_id
+    )
     assert response.details["task_recall_latest_vs_selected_candidate_details_present"] is True
-    assert response.details["task_recall_latest_vs_selected_candidate_details"] == {
-        "latest_workflow_instance_id": str(detour_like_objective_workflow_id),
-        "selected_workflow_instance_id": str(detour_like_objective_workflow_id),
-        "latest_considered": {
-            "workflow_instance_id": str(detour_like_objective_workflow_id),
-            "checkpoint_step_name": "coverage follow-up",
-            "checkpoint_summary": "Coverage cleanup after the main change",
-            "primary_objective_text": "Coverage cleanup and docs review",
-            "next_intended_action_text": None,
-            "ticket_detour_like": False,
-            "checkpoint_detour_like": True,
-            "detour_like": True,
-            "workflow_terminal": False,
-            "has_attempt_signal": True,
-            "attempt_terminal": False,
-            "has_checkpoint_signal": True,
-            "return_target_basis": "checkpoint_current_objective",
-            "task_thread_basis": "checkpoint_current_objective",
-        },
-        "selected": {
-            "workflow_instance_id": str(detour_like_objective_workflow_id),
-            "checkpoint_step_name": "coverage follow-up",
-            "checkpoint_summary": "Coverage cleanup after the main change",
-            "primary_objective_text": "Coverage cleanup and docs review",
-            "next_intended_action_text": None,
-            "ticket_detour_like": False,
-            "checkpoint_detour_like": True,
-            "detour_like": True,
-            "workflow_terminal": False,
-            "has_attempt_signal": True,
-            "attempt_terminal": False,
-            "has_checkpoint_signal": True,
-            "return_target_basis": "checkpoint_current_objective",
-            "task_thread_basis": "checkpoint_current_objective",
-        },
-        "same_checkpoint_details": True,
-        "comparison_source": "task_recall_checkpoint_comparison",
-    }
+    latest_vs_selected_candidate = response.details[
+        "task_recall_latest_vs_selected_candidate_details"
+    ]
+    assert latest_vs_selected_candidate["latest_workflow_instance_id"] == str(
+        detour_like_objective_workflow_id
+    )
+    assert latest_vs_selected_candidate["selected_workflow_instance_id"] == str(
+        detour_like_objective_workflow_id
+    )
+    assert latest_vs_selected_candidate["comparison_source"] == "task_recall_checkpoint_comparison"
+    assert latest_vs_selected_candidate["latest_considered"]["workflow_instance_id"] == str(
+        detour_like_objective_workflow_id
+    )
+    assert latest_vs_selected_candidate["selected"]["workflow_instance_id"] == str(
+        detour_like_objective_workflow_id
+    )
     assert response.details["task_recall_latest_vs_selected_primary_block"] == "candidate_details"
     assert (
         response.details["task_recall_latest_vs_selected_checkpoint_details_is_compatibility_alias"]
         is True
     )
-    assert response.details["task_recall_latest_vs_selected_checkpoint_details_present"] is True
-    assert response.details["task_recall_latest_vs_selected_checkpoint_details"] == {
-        "latest_workflow_instance_id": str(detour_like_objective_workflow_id),
-        "selected_workflow_instance_id": str(detour_like_objective_workflow_id),
-        "latest_considered": {
-            "workflow_instance_id": str(detour_like_objective_workflow_id),
-            "checkpoint_step_name": "coverage follow-up",
-            "checkpoint_summary": "Coverage cleanup after the main change",
-            "primary_objective_text": "Coverage cleanup and docs review",
-            "next_intended_action_text": None,
-            "ticket_detour_like": False,
-            "checkpoint_detour_like": True,
-            "detour_like": True,
-            "workflow_terminal": False,
-            "has_attempt_signal": True,
-            "attempt_terminal": False,
-            "has_checkpoint_signal": True,
-            "return_target_basis": "checkpoint_current_objective",
-            "task_thread_basis": "checkpoint_current_objective",
-        },
-        "selected": {
-            "workflow_instance_id": str(detour_like_objective_workflow_id),
-            "checkpoint_step_name": "coverage follow-up",
-            "checkpoint_summary": "Coverage cleanup after the main change",
-            "primary_objective_text": "Coverage cleanup and docs review",
-            "next_intended_action_text": None,
-            "ticket_detour_like": False,
-            "checkpoint_detour_like": True,
-            "detour_like": True,
-            "workflow_terminal": False,
-            "has_attempt_signal": True,
-            "attempt_terminal": False,
-            "has_checkpoint_signal": True,
-            "return_target_basis": "checkpoint_current_objective",
-            "task_thread_basis": "checkpoint_current_objective",
-        },
-        "same_checkpoint_details": True,
-        "comparison_source": "task_recall_checkpoint_comparison",
+    assert response.details["task_recall_prior_mainline_present"] is True
+    assert response.details["task_recall_prior_mainline_workflow_instance_id"] == str(
+        stable_workflow_id
+    )
+    assert response.details["task_recall_prior_mainline_candidate_details_present"] is True
+    assert response.details["task_recall_prior_mainline_candidate_details"] == {
+        "workflow_instance_id": str(stable_workflow_id),
+        "checkpoint_step_name": "resume main implementation",
+        "checkpoint_summary": "Resume the main implementation thread",
+        "primary_objective_text": None,
+        "next_intended_action_text": None,
+        "ticket_detour_like": False,
+        "checkpoint_detour_like": False,
+        "detour_like": False,
+        "workflow_terminal": False,
+        "has_attempt_signal": True,
+        "attempt_terminal": False,
+        "has_checkpoint_signal": True,
+        "return_target_basis": "non_detour_candidate",
+        "task_thread_basis": "non_detour_candidate",
     }
-    assert response.details["task_recall_prior_mainline_present"] is False
-    assert response.details["task_recall_prior_mainline_workflow_instance_id"] is None
 
 
 def test_memory_get_context_surfaces_objective_selected_task_thread_details_under_current_ordering() -> (
