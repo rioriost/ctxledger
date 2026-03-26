@@ -742,7 +742,17 @@ Current memory state should be read as:
 
 - episodic memory is real
 - semantic search is present in an initial form
-- `memory_get_context` now exposes richer retrieval assembly details, including summary-selection metadata and task-recall workflow-selection diagnostics
+- `memory_get_context` now exposes richer retrieval assembly details, including summary-selection metadata, task-recall workflow-selection diagnostics, and latest-versus-selected continuation comparison details
+- `memory_search` now has a bounded task-recall bridge for workspace-scoped searches, including:
+  - latest considered workflow identity
+  - selected continuation workflow identity
+  - selected-versus-latest comparison details in divergent multi-candidate contexts
+  - a small selected-continuation-target bonus in bounded divergent contexts
+- the task-recall surface can now explain:
+  - which continuation target was selected
+  - which candidate was considered latest
+  - how their checkpoint/objective/next-action details compare
+  - how their detour classification and resumability signals compare
 - hierarchical retrieval is still an early, explainable surface rather than a mature relevance-ranked retrieval contract
 
 ### Observability

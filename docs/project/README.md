@@ -47,6 +47,7 @@ Current files include:
 - `releases/CHANGELOG.md`
 - `releases/v0.1.0_acceptance_evidence.md`
 - `releases/plans/...`
+- `releases/plans/versioned/remember_path_0_8_0_plan.md`
 
 The `releases/plans/` subtree is itself organized so that **version semantics**
 and **topic/domain semantics** are easier to distinguish:

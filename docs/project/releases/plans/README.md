@@ -38,6 +38,7 @@ Current examples include:
 - `versioned/test_suite_split_and_coverage_0_5_5_plan.md`
 - `versioned/hierarchical_memory_0_6_0_plan.md`
 - `versioned/task_recall_0_7_0_plan.md`
+- `versioned/remember_path_0_8_0_plan.md`
 
 ### `domains/`
 

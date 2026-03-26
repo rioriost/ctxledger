@@ -66,6 +66,29 @@ The project currently follows a lightweight, human-maintained changelog style.
   - workflow summary targeting policy
   - optional AGE summary mirroring
 - README guidance for the constrained AGE prototype controls, readiness checks, summary graph refresh path, and explicit summary build flow
+- objective-aware task-recall continuation signals for `0.7.0`, including:
+  - latest checkpoint candidate signals for:
+    - `step_name`
+    - `summary`
+    - `current_objective`
+    - `next_intended_action`
+  - normalized checkpoint objective / next-action presence flags in workflow candidate ordering details
+  - objective-aware task-recall ranking that can treat explicit checkpoint objective evidence as a stronger mainline signal
+  - focused detour-recovery scenario coverage for mainline selection and explicit next-action continuation signals
+  - structured latest-versus-selected task-recall comparison details that can surface:
+    - latest considered candidate workflow id
+    - selected continuation candidate workflow id
+    - latest and selected checkpoint step/summary details
+    - latest and selected primary-objective / next-intended-action text
+    - latest and selected detour classification
+    - latest and selected return-target / task-thread basis
+    - latest and selected resumability-oriented signals
+  - a candidate-level comparison block as the primary surface, while preserving the older checkpoint-oriented naming as a compatibility alias
+  - a bounded `memory_search` task-recall bridge for workspace-scoped searches, including:
+    - top-level latest-considered and selected workflow context
+    - latest-versus-selected candidate comparison details in divergent multi-candidate contexts
+    - top-level comparison-summary explanations for divergent contexts
+    - a small selected-continuation-target bonus in divergent multi-candidate contexts
 
 ### Changed
 
@@ -87,6 +110,23 @@ The project currently follows a lightweight, human-maintained changelog style.
   - first-seen-by-source distinct target ordering
   - relation metadata continuity for grouped relation outputs
   - relational canonical storage as the system of record
+- task-recall workflow ordering can now prefer explicit checkpoint objective / next-intended-action signals before falling back to pure recency in focused continuation-selection scenarios
+- task-recall ranking details now surface richer candidate-level explanation fields, including:
+  - checkpoint detour classification
+  - explicit checkpoint objective presence
+  - explicit checkpoint next-intended-action presence
+  - explicit mainline-signal presence
+- task-recall detail shaping now includes a latest-versus-selected candidate comparison surface so operators and agents can inspect:
+  - whether the latest considered workflow matched the selected continuation target
+  - whether the latest considered checkpoint matched the selected continuation checkpoint
+  - which checkpoint/objective/next-action fields differed
+  - which detour and resumability signals differed
+- `memory_search` now includes a bounded task-recall bridge so search results and top-level search details can expose:
+  - latest considered workflow identity
+  - selected continuation workflow identity
+  - divergent latest-versus-selected candidate comparison details where applicable
+  - bounded comparison-summary explanations for divergent contexts
+  - a small selected-continuation-target ranking bonus where the selected continuation thread should be slightly preferred
 
 ### Validation
 
@@ -141,6 +181,17 @@ The project currently follows a lightweight, human-maintained changelog style.
     - PostgreSQL canonical behavior preserved
     - AGE boundary documented as derived and degradable
     - `0.7.0` Mnemis-oriented evaluation remains explicitly deferred
+- roadmap/planning direction has now been updated so that:
+  - `0.8.0` is the remember-path strengthening milestone
+  - `0.9.0` is the earliest planned Mnemis-style architectural evaluation milestone
+- objective-aware task-recall continuation validation passed across:
+  - memory context details
+  - memory query/scope behavior
+  - memory service core
+  - runtime task-recall helpers
+  - workflow lookup coverage
+  - `python -m pytest -q`
+  - `966 passed, 1 skipped`
 
 ### Notes
 
@@ -171,6 +222,25 @@ The project currently follows a lightweight, human-maintained changelog style.
   - explicit `ctxledger build-episode-summary` remains the primary write path
   - `ctxledger refresh-age-summary-graph` remains the rebuild path for derived summary graph state
   - degraded or unavailable AGE summary graph state should reduce enrichment, not invalidate canonical summary correctness
+- the current `0.7.0` task-recall slice should be read as:
+  - objective-aware ranking layered on top of canonical checkpoint data
+  - no new canonical return-target entity yet
+  - explicit checkpoint objective / next-action evidence improving continuation selection without changing the canonical system-of-record boundary
+  - latest-versus-selected comparison details remaining a derived explanation surface rather than a new canonical task-thread record
+  - the newer `memory_search` task-recall bridge should also be read as a derived explanation and ranking-support surface rather than as a second workflow-truth mechanism
+- the current roadmap should now be read as:
+  - `0.8.0` focusing on strengthening the remember path so completion-centered work more reliably becomes:
+    - episodes
+    - memory items
+    - embeddings
+    - memory relations
+    - graph/summarization inputs
+  - `0.9.0` deferring broader Mnemis-style graph-memory alignment questions until after the remember path is materially stronger
+- the remember-path problem statement for the new `0.8.0` planning slice is:
+  - the system can store workflow progress correctly while still failing to accumulate enough linked memory structure
+  - `memory_relations` can remain empty in otherwise healthy deployments
+  - AGE graph bootstrap/refresh is downstream of canonical relational memory creation and therefore cannot compensate for a weak remember path
+  - AI-agent memory capture still depends too much on discretionary or ad hoc tool usage instead of a stronger operational contract
 - the planned second deployment pattern remains:
   - `large`
   - HTTPS

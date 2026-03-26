@@ -83,6 +83,61 @@ It should instead strengthen the retrieval and assembly layers on top of existin
 
 This milestone should remain tightly scoped to **return-to-main-task retrieval** and **detour-aware recall**.
 
+## 4.1 Current implementation progress
+
+The current `0.7.0` slice has started to move from generic workflow freshness toward more explicit task-recall signals.
+
+Implemented in the current slice:
+
+- workflow candidate signals now surface latest checkpoint fields needed for task-recall interpretation, including:
+  - `latest_checkpoint_step_name`
+  - `latest_checkpoint_summary`
+  - `latest_checkpoint_current_objective`
+  - `latest_checkpoint_next_intended_action`
+  - normalized presence flags for objective and next-action signals
+- task-recall ranking can now treat explicit checkpoint objective / next-action evidence as a stronger mainline signal than the older non-detour-only heuristic
+- workspace-scoped workflow ordering now prefers explicit mainline checkpoint signals before falling back to pure recency when ranking continuation candidates
+- `memory_search` now has a bounded task-recall integration for workspace-scoped searches, including:
+  - top-level search-context details for the latest considered workflow and the selected continuation workflow
+  - candidate-level comparison details for latest-versus-selected continuation context when those diverge
+  - a small selected-continuation-target bonus in divergent multi-candidate contexts
+- focused detour-recovery tests now cover:
+  - selection of a workflow with explicit checkpoint objective evidence
+  - selection of a workflow with explicit next-intended-action evidence
+  - preservation of detour penalties for side-work-like candidates
+
+What this slice does **not** yet claim:
+
+- a complete task-thread model
+- a first-class persisted return-target entity
+- broad concept-to-task routing beyond the current bounded `memory_get_context` and `memory_search` task-recall path
+- replacement of recency/resumability signals with objective-aware signals; this slice augments them
+
+This should therefore be read as an incremental `0.7.0` retrieval improvement, not full milestone closeout.
+
+Rough progress reading at the current repository state:
+
+- `0.7.0` appears to be in the middle-to-late implementation phase rather than early exploration
+- a practical shorthand is:
+  - roughly `70%` complete
+- that estimate is based on:
+  - explicit task-recall ranking already being present
+  - objective-aware continuation signals already being present
+  - return-target, task-thread, and latest-versus-selected explanation surfaces already being present
+  - focused validation already covering a meaningful continuation-selection surface
+- the estimate should **not** be read as release readiness
+- it should be read as:
+  - core retrieval/explanation scaffolding is real
+  - remaining work is now concentrated in the harder continuation-recovery gaps rather than in initial surface creation
+
+Main remaining gaps at this stage:
+
+- stronger recovery of the previous primary workflow before the latest detour
+- better preservation and surfacing of “latest considered detour” versus “selected continuation target” as distinct operational concepts across more cases
+- stronger concept-to-task recovery beyond the current bounded `memory_get_context` and `memory_search` task-recall path
+- broader integration of task-recall semantics into adjacent retrieval surfaces only where that remains explainable and justified
+- a final `0.7.0` hardening slice that semantically splits oversized `src/` and `tests/` files so the task-recall implementation remains maintainable and easier to reason about
+
 ---
 
 ## 5. Why This Milestone Exists
@@ -255,6 +310,29 @@ For a given workspace, the system should be able to answer:
 
 This should be available even when the latest workflow chronologically is not the desired continuation target.
 
+## 8.4 Current implementation note
+
+The current implementation now partially supports this direction by:
+
+- exposing checkpoint objective and next-intended-action signals in candidate ordering details
+- using those signals during task-recall ranking
+- allowing explicit mainline checkpoint evidence to outrank a more recent but less task-central candidate in focused scenarios
+- surfacing a structured latest-versus-selected comparison block that can show:
+  - the latest considered candidate
+  - the selected continuation candidate
+  - checkpoint step/summary details for both
+  - primary-objective and next-intended-action text for both where present
+  - detour classification and continuation-basis details for both
+  - resumability-oriented signals for both
+- treating the candidate-level latest-versus-selected block as the primary comparison surface, with the older checkpoint-oriented naming preserved as a compatibility alias
+
+However, the current behavior should still be read as a bounded heuristic layer:
+
+- detour-like detection remains token- and wording-driven
+- explicit objective presence is treated as strong evidence, not definitive canonical intent
+- return-target selection is still expressed through ranked workflow selection rather than a separate first-class return-target object
+- the latest-versus-selected comparison block improves explanation quality, but does not by itself guarantee full historical primary-thread recovery
+
 ---
 
 ## 9. Canonical vs Derived Responsibilities
@@ -306,6 +384,11 @@ Potential additions:
 - return-target details
 - detour-aware selection explanations
 - clearer reporting of why a particular workflow/thread was foregrounded
+- latest-versus-selected candidate comparison details that make it easier to inspect:
+  - what the system considered latest
+  - what it ultimately selected
+  - which checkpoint/objective/next-action details differed
+  - which detour and resumability signals differed
 
 ## 10.2 `memory_search`
 
@@ -315,6 +398,25 @@ Potential additions:
 - workflow/checkpoint/thread-aware explanations
 - stronger coupling to workspace continuation semantics
 - better support for concept-word recovery that surfaces operationally relevant threads
+
+Current implemented direction:
+
+- `memory_search` now has a bounded workspace-scoped task-recall context surface layered into search results and top-level search details
+- that bounded surface can now expose:
+  - latest considered workflow identity
+  - selected continuation workflow identity
+  - selected-versus-latest equality
+  - selected and latest checkpoint/objective/next-action context where available
+  - candidate-level latest-versus-selected comparison details in divergent contexts
+  - top-level comparison-summary explanations for divergent contexts
+- `memory_search` also now applies a small selected-continuation-target bonus in bounded divergent contexts so concept search can begin to lean toward the currently preferred continuation thread without turning the search surface into a full workflow-selection replacement
+
+This should still be read as a deliberately constrained integration:
+
+- the search path remains primarily a memory-item search surface
+- task-recall signals are additive and bounded
+- the selected-continuation bonus is intentionally small and gated to divergent multi-candidate contexts
+- this is concept-to-task recovery scaffolding, not a claim that `memory_search` is already a complete task-thread retrieval surface
 
 ## 10.3 `workflow_resume`
 
@@ -343,6 +445,17 @@ Whether this becomes a new tool or an extension of existing ones should be decid
 ## 11. Data and Model Changes to Consider
 
 `0.7.0` may require explicit new derived concepts and possibly new canonical link fields.
+
+Current implemented direction in this area:
+
+- no new canonical workflow or checkpoint ownership rules were introduced in this slice
+- the added objective-aware task-recall behavior reads existing canonical checkpoint payload fields rather than creating a parallel source of truth
+- the ranking layer remains derived and explainable through surfaced candidate signals, reason lists, and latest-versus-selected comparison details
+- the newer candidate-level comparison block should be read as a derived explanation surface layered over canonical workflow/checkpoint records, not as a replacement source of truth
+- the newer `memory_search` task-recall context and comparison details should also be read as derived explanation and ranking-support surfaces layered over canonical workflow/checkpoint records, not as a second workflow-truth mechanism
+
+This preserves the intended architectural boundary while still improving continuation recall quality.
+
 
 These should be introduced conservatively.
 
@@ -522,6 +635,7 @@ Deliverables:
 - full validation pass
 - docs alignment
 - release-ready behavior summary
+- semantic splitting of oversized `src/` and `tests/` files as a final maintainability hardening step for the `0.7.0` task-recall slice
 
 ---
 

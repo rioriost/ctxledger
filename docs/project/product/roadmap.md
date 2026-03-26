@@ -412,20 +412,102 @@ Expected themes:
 - keep PostgreSQL as the canonical source of truth while improving the recall path that sits on top of it
 - treat this as resumability and durable-memory product work, not merely observability or docs cleanup
 
+Current status note:
+
+- the current `0.7.0` slice now has a materially richer task-recall explanation surface in `memory_get_context`, including:
+  - return-target details
+  - primary-objective details
+  - task-thread details
+  - selected-versus-latest continuation comparison details
+  - candidate-level comparison details for checkpoint, detour, basis, and resumability signals
+- `memory_search` now also has a bounded task-recall integration for workspace-scoped searches, including:
+  - latest considered workflow identity
+  - selected continuation workflow identity
+  - selected-versus-latest comparison details in divergent multi-candidate contexts
+  - a small selected-continuation-target bonus in bounded divergent contexts
+- this means the milestone is no longer only at the heuristic-ranking stage; it now has a more explicit explanation and inspection surface for continuation selection and a first bounded concept-to-task recovery bridge in `memory_search`
+- the main remaining gaps are:
+  - more robust recovery of the previous primary workflow before the latest detour
+  - stronger concept-to-task recovery beyond the current bounded `memory_get_context` and `memory_search` task-recall path
+  - broader integration of these task-recall ideas into other retrieval surfaces where justified
+
 ## 0.8
 
 Planned focus:
 
-- evaluate whether ctxledger should move closer to a Mnemis-style hierarchical graph memory design
-- compare ctxledger’s `0.6.0` and `0.7.0` implementation against Mnemis-style dual-route retrieval ideas
-- decide whether any architectural alignment is justified after the task-recall improvements are working
+- strengthen the remember path so `ctxledger` reliably records multi-layer memory rather than stopping at sparse episodic notes
+- make completion-centered memory capture materially more automatic and structurally useful for AI-agent-driven workflows
+- ensure the canonical relational memory model actually accumulates:
+  - episodes
+  - memory items
+  - embeddings
+  - memory relations
+- make the AGE-backed graph layer operationally meaningful by ensuring its canonical relational inputs are recorded first
 
 Expected themes:
 
-- review Mnemis as a design input, not a constraint on the `0.7.0` task-recall work
-- compare relation modeling, hierarchy construction, and retrieval strategy
+- improve completion-to-memory capture so meaningful workflow closeout and checkpoint knowledge is consistently remembered
+- define and implement a clearer multi-layer remember pipeline from:
+  - workflow and checkpoint state
+  - to episodes
+  - to memory items
+  - to embeddings
+  - to relations
+  - to derived graph and summary structures
+- strengthen agent-facing operational guidance so MCP-capable agents following repository `.rules` are more likely to record memory automatically and correctly
+- introduce explicit relation-generation behavior for the first useful canonical relation types, with `supports` as the likely first constrained target
+- improve observability so operators can distinguish:
+  - episodes created
+  - memory items created
+  - embeddings created
+  - relations created
+  - relation/summary/auto-memory skips and why they happened
+- keep PostgreSQL canonical and treat vector indexes, relations, summaries, and AGE graph state as layered retrieval-support structures rather than competing sources of truth
+
+Current problem statement for `0.8`:
+
+- `ctxledger` already has canonical workflow state, episodic recording, initial semantic search, and constrained AGE read paths
+- but the practical remember path is still too weak for the intended multi-layer memory model
+- memory relations can remain at zero, which means the graph layer has little to mirror or retrieve
+- completion-driven recording currently tends to stop at episode and memory-item creation instead of building richer linked memory structure
+- AI-agent compliance with memory recording expectations depends too much on voluntary or ad hoc tool usage rather than a strong operational contract
+- as a result, the system risks being able to persist work without accumulating enough structured memory to support later recall from concept, entity, or time anchors
+
+Implementation direction for `0.8`:
+
+- define the minimum acceptable remember pipeline for an agent-completed work loop
+- decide which completion events should automatically create:
+  - episodes
+  - memory items
+  - embeddings
+  - relation candidates
+- add the first constrained canonical relation-writing path so `memory_relations` is no longer structurally optional in normal usage
+- make relation and summary generation visible, explainable, and diagnosable in operator-facing outputs
+- improve memory-writing guidance and tool expectations so agent behavior aligns with the repository’s durable-memory goals
+
+Success shape for `0.8`:
+
+- a normal AI-agent work loop can leave behind useful canonical memory without depending on local notes
+- completion and checkpoint information are more consistently transformed into reusable memory records
+- memory relations are no longer usually empty in a healthy active deployment
+- AGE graph bootstrap/refresh reads from a meaningfully populated canonical relational substrate
+- operators can tell whether the system is failing to remember, skipping memory generation by policy, or succeeding end-to-end
+- `ctxledger` is better positioned for later graph-memory architectural evaluation because the remember path is no longer the limiting factor
+
+## 0.9
+
+Planned focus:
+
+- evaluate whether ctxledger should move closer to a Mnemis-style hierarchical graph memory design
+- compare ctxledger’s `0.6.0`, `0.7.0`, and `0.8.0` implementation against Mnemis-style dual-route retrieval ideas
+- decide whether any architectural alignment is justified after the remember-path and task-recall improvements are working
+
+Expected themes:
+
+- review Mnemis as a design input, not a constraint on the current remember-path or task-recall work
+- compare relation modeling, hierarchy construction, remember-path structure, and retrieval strategy
 - evaluate whether dual-route retrieval concepts should influence later ctxledger versions
-- keep any Mnemis-driven redesign scoped to explicit post-`0.7.0` work
+- keep any Mnemis-driven redesign scoped to explicit post-`0.8.0` work
 
 ## 0.0
 

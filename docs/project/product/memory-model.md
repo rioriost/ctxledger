@@ -46,9 +46,13 @@ In the current repository state:
 
 - Layer 1 is the most mature and is the primary `v0.1.0` implementation focus
 - Layer 2 has begun to become real
-- Layer 3 is still largely planned
+- Layer 3 is only partially real:
+  - canonical `memory_items`, `memory_embeddings`, and `memory_relations` exist
+  - but the practical remember path still tends to accumulate episodes and some memory items more reliably than relation-rich semantic/procedural memory
 - Layer 4 is still largely planned, but `memory_get_context` now exposes a small hierarchy-aware response shape as an early bridge toward later hierarchical retrieval
 - within that early bridge, `memory_context_groups` should be treated as the primary grouped hierarchy-aware surface, while flatter compatibility-oriented fields remain derived or compatibility views
+
+This means the current bottleneck is no longer only “can the system store work?”, but also “does the system turn meaningful work into enough linked memory structure to matter later?”
 
 ---
 
@@ -85,6 +89,10 @@ If derived structures are stale or missing, the system should still retain corre
 
 This also applies to the current minimal hierarchy-aware retrieval slice:
 grouped or inherited context presentation in `memory_get_context` is a derived read model layered over canonical workflow, episode, and memory-item records.
+
+It also applies to the current AGE-backed graph layer:
+the graph is only as meaningful as the canonical relational memory it mirrors.
+If canonical memory relations are sparse or absent, graph bootstrap and refresh can still succeed mechanically while remaining semantically weak.
 
 ## 3.5 Resumability is different from recall
 
@@ -213,8 +221,15 @@ In the current repository state:
 - `memory_context_groups` should now be interpreted as the primary grouped hierarchy-aware surface of the current `memory_get_context` response
 - PostgreSQL-backed episode persistence exists
 - PostgreSQL-backed retrieval for the initial context path exists
+- workflow-completion auto-memory can create:
+  - an episode
+  - a memory item
+  - an embedding when enabled
 
 This means Layer 2 is no longer only conceptual.
+
+However, the current remember path is still uneven:
+useful workflow and checkpoint knowledge can stop at the episode or single-memory-item stage instead of consistently flowing into richer linked memory structures.
 
 ## 5.5 Current behavior
 
@@ -251,6 +266,12 @@ At present, episodic behavior includes:
   - `inherited_memory_items`
   - `related_memory_items`
   - `related_memory_items_by_episode`
+- exposing an increasingly explicit task-recall detail layer in `memory_get_context`, including:
+  - selected continuation target details
+  - latest considered candidate details
+  - selected and latest checkpoint step/summary details
+  - selected primary-objective and next-action details where present
+  - candidate-level latest-versus-selected comparison details as a derived explanation surface
 - keeping related context semantics explicit across primary, compatibility, and convenience surfaces:
   - `memory_context_groups` is the primary grouped hierarchy-aware surface in the current slice
   - relation-scoped entries inside `memory_context_groups` are the current primary structured grouped relation-aware surface
@@ -280,8 +301,15 @@ At present, episodic behavior includes:
 - exposing a first minimal relation-aware detail surface through:
   - `related_memory_items`
   - current behavior limited to one outgoing `supports` hop from returned episode memory items
+- exposing a task-recall comparison surface that can now distinguish between:
+  - the latest considered workflow/candidate
+  - the selected continuation target
+  - whether their checkpoint details match or differ
+  - whether their detour classification differs
+  - whether their continuation basis differs
+  - whether their resumability-oriented signals differ
 
-This is still an early version of episodic memory, but it is a real working path and now includes a first minimal hierarchy-aware retrieval slice plus a constrained relation-aware extension.
+This is still an early version of episodic memory, but it is a real working path and now includes a first minimal hierarchy-aware retrieval slice, a constrained relation-aware extension, and a more explicit continuation-selection explanation surface.
 
 ## 5.6 Workflow / checkpoint / episode relationship
 
@@ -325,6 +353,17 @@ Current gaps include:
 - more mature workspace-scoped and ticket-scoped retrieval behavior
 - more explicit provenance/filtering behavior built on top of the now-canonical `attempt_id`
 - more explicit use of episode detail tables beyond the base episode record
+- more consistent promotion of meaningful checkpoint/completion content into reusable memory artifacts
+- fuller latest-versus-selected primary-thread recovery that can robustly preserve:
+  - the latest considered detour candidate
+  - the selected continuation target
+  - the previous primary workflow before the latest detour
+  as distinct concepts rather than only as explanation-friendly surfaced details
+- stronger concept-to-task recovery beyond the current bounded task-recall path in:
+  - `memory_get_context`
+  - `memory_search`
+
+One practical consequence is that an installation can look healthy from a workflow perspective while still remembering too little in a reusable form.
 
 ---
 
@@ -358,6 +397,19 @@ Layer 3 should make it possible to retrieve knowledge that is:
 - reusable across repositories, tasks, or tickets when appropriate
 - meaningfully ranked or filtered
 
+It is also the layer where the system starts to need explicit anchors and links, such as:
+
+- enough task-recall context to connect a concept match back to the current continuation thread
+- a bounded distinction between:
+  - the latest considered workflow
+  - the selected continuation target
+- structured comparison context that can explain why a search result may matter to the currently preferred task thread
+
+- meaningful memory items rather than only free-form episode summaries
+- embeddings that support semantic lookup
+- canonical relations that connect reusable units of memory
+- enough structure for later graph or hierarchy layers to mirror usefully
+
 ## 6.4 Procedural versus semantic memory
 
 This layer may contain both:
@@ -377,12 +429,73 @@ Patterns for how to do something, such as:
 This layer is still future work.
 
 In current terms:
+In the current repository state:
 
-- `memory_search` remains stubbed
-- embedding-backed retrieval is not implemented
-- relation-aware retrieval is not implemented
+- `memory_search` is implemented as a bounded memory-item search surface
+- lexical and embedding-backed ranking signals are present where configured
+- relation-aware retrieval is not implemented in a mature general form
+- `memory_search` now has a bounded task-recall integration for workspace-scoped searches, including:
+  - latest considered workflow identity
+  - selected continuation workflow identity
+  - selected-versus-latest equality
+  - selected and latest checkpoint/objective/next-action context where available
+  - selected-versus-latest candidate comparison details in divergent multi-candidate contexts
+  - a small selected-continuation-target bonus in bounded divergent contexts
+  - top-level comparison-summary explanations for divergent contexts
+
+This should still be read as a constrained integration:
+
+- `memory_search` remains primarily a memory-item search surface
+- task-recall signals are additive and gated
+- the search path is not yet a complete task-thread retrieval surface
 
 ---
+
+## 6.6 Current remember-path gap
+
+At the moment, the system is better at **recording workflow progress** than at **accumulating rich linked memory** from that progress.
+
+A practical unhealthy-but-plausible state today is:
+
+- workflow state is correct
+- episodes are present
+- some memory items are present
+- embeddings may be present
+- `memory_relations` is still empty
+- AGE graph bootstrap and refresh can still run, but have little useful relation structure to mirror
+
+That means the graph layer is not necessarily malfunctioning.
+It may simply be downstream of a weak remember path.
+
+The current remember-path weakness can be summarized as:
+
+- completion-centered memory capture is still too sparse
+- agent memory recording depends too much on discretionary tool use
+- checkpoint and completion structure does not yet flow reliably into canonical relations
+- semantic/procedural memory remains under-populated compared to workflow truth
+
+This is the main reason `0.8.0` is now planned as a remember-path milestone.
+
+## 6.7 Planned 0.8.0 focus
+
+The current intended `0.8.0` direction is to strengthen the remember path so the system more reliably accumulates:
+
+- episodes
+- memory items
+- embeddings
+- memory relations
+- graph/hierarchy inputs derived from those canonical records
+
+The central goals of that milestone are:
+
+- make completion-centered memory capture more reliable
+- define the minimum useful memory artifacts a normal work loop should leave behind
+- introduce the first constrained canonical relation-writing behavior
+- improve observability so operators can tell where memory creation is succeeding, skipping, or failing
+- strengthen agent-facing operational guidance so MCP-capable agents following repository rules are more likely to record memory correctly and automatically
+
+This work is intentionally earlier than any broader Mnemis-style architectural evaluation.
+The repository should first become better at **remembering**, then later decide whether it also needs a broader graph-memory redesign.
 
 ## 7. Layer 4 — Hierarchical Memory
 
