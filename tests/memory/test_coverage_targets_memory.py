@@ -22,6 +22,7 @@ from ctxledger.memory.embeddings import (
     compute_content_hash,
 )
 from ctxledger.memory.service import (
+    EpisodeRecord,
     GetMemoryContextRequest,
     InMemoryEpisodeRepository,
     InMemoryMemoryEmbeddingRepository,
@@ -1328,7 +1329,7 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert "content" in search_response.results[0].matched_fields
     assert search_response.results[0].lexical_score > 0
     assert search_response.results[0].semantic_score == 0.0
-    assert search_response.results[0].score == search_response.results[0].lexical_score
+    assert search_response.results[0].score >= search_response.results[0].lexical_score
 
     assert context_response.feature == MemoryFeature.GET_CONTEXT
 
@@ -1493,6 +1494,119 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         search_response.results[0].ranking_details["task_recall_detail"]["workspace_constrained"]
         is True
     )
+    assert search_response.details["task_recall_context_present"] is True
+    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
+        workflow_id
+    )
+    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(workflow_id)
+    assert search_response.details["task_recall_selected_equals_latest"] is True
+    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is False
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "task_recall_context_present"
+        ]
+        is True
+    )
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "latest_considered_workflow_instance_id"
+    ] == str(workflow_id)
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "selected_workflow_instance_id"
+    ] == str(workflow_id)
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        is True
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_step_name"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_summary"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_primary_objective_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_next_intended_action_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_checkpoint_step_name"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_checkpoint_summary"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_primary_objective_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_next_intended_action_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_ticket_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_ticket_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_checkpoint_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_workflow_terminal"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_workflow_terminal"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_vs_selected_comparison_present"
+        ]
+        is False
+    )
     assert search_response.results[0].score > search_response.results[1].score
     assert search_response.results[1].lexical_score == 0.0
     assert search_response.results[1].ranking_details["lexical_component"] == 0.0
@@ -1543,7 +1657,530 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         search_response.results[1].ranking_details["task_recall_detail"]["workspace_constrained"]
         is True
     )
+    assert search_response.details["task_recall_context_present"] is True
+    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
+        workflow_id
+    )
+    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(workflow_id)
+    assert search_response.details["task_recall_selected_equals_latest"] is True
+    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is False
+    assert search_response.details["task_recall_comparison_summary_explanations_present"] is False
+    assert search_response.details["task_recall_comparison_summary_explanations"] == []
+    assert search_response.details["task_recall_comparison_summary_explanations_present"] is False
+    assert search_response.details["task_recall_comparison_summary_explanations"] == []
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "task_recall_context_present"
+        ]
+        is True
+    )
+    assert search_response.results[1].ranking_details["task_recall_detail"][
+        "latest_considered_workflow_instance_id"
+    ] == str(workflow_id)
+    assert search_response.results[1].ranking_details["task_recall_detail"][
+        "selected_workflow_instance_id"
+    ] == str(workflow_id)
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        is True
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_step_name"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_summary"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "latest_considered_primary_objective_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "latest_considered_next_intended_action_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "selected_checkpoint_step_name"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "selected_checkpoint_summary"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "selected_primary_objective_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "selected_next_intended_action_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "selected_workflow_terminal"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "latest_vs_selected_comparison_present"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "selected_continuation_target_bonus_applied"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "selected_continuation_target_bonus"
+        ]
+        == 0.0
+    )
     assert search_response.results[1].semantic_score == 1.0
+
+
+def test_memory_service_search_applies_selected_continuation_target_bonus() -> None:
+    selected_workflow_id = uuid4()
+    other_workflow_id = uuid4()
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    created_at = datetime(2024, 2, 1, tzinfo=UTC)
+    selected_episode_id = uuid4()
+    other_episode_id = uuid4()
+    selected_memory_id = uuid4()
+    other_memory_id = uuid4()
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=selected_episode_id,
+            workflow_instance_id=selected_workflow_id,
+            summary="Selected continuation episode",
+            metadata={"kind": "feature"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=other_episode_id,
+            workflow_instance_id=other_workflow_id,
+            summary="Secondary episode",
+            metadata={"kind": "feature"},
+            created_at=created_at.replace(day=2),
+            updated_at=created_at.replace(day=2),
+        )
+    )
+
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=selected_memory_id,
+            workspace_id=UUID("00000000-0000-0000-0000-000000000001"),
+            episode_id=selected_episode_id,
+            type="episode_note",
+            provenance="episode",
+            content="selected continuation target memory",
+            metadata={"kind": "selected"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=other_memory_id,
+            workspace_id=UUID("00000000-0000-0000-0000-000000000001"),
+            episode_id=other_episode_id,
+            type="episode_note",
+            provenance="episode",
+            content="secondary continuation memory selected",
+            metadata={"kind": "secondary"},
+            created_at=created_at.replace(day=2),
+            updated_at=created_at.replace(day=2),
+        )
+    )
+
+    class RawOrderWorkflowLookup(InMemoryWorkflowLookupRepository):
+        def workflow_ids_by_workspace_id_raw_order(
+            self,
+            workspace_id: str,
+            *,
+            limit: int,
+        ) -> tuple[UUID, ...]:
+            assert workspace_id == "00000000-0000-0000-0000-000000000001"
+            return (
+                other_workflow_id,
+                selected_workflow_id,
+            )[:limit]
+
+    workflow_lookup = RawOrderWorkflowLookup(
+        workflows_by_id={
+            selected_workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TASK-SEARCH-BONUS",
+                "workflow_status": "in_progress",
+                "workflow_is_terminal": False,
+                "workflow_updated_at": created_at,
+                "has_latest_attempt": True,
+                "latest_attempt_status": "running",
+                "latest_attempt_is_terminal": False,
+                "latest_attempt_started_at": created_at,
+                "has_latest_checkpoint": True,
+                "latest_checkpoint_created_at": created_at,
+                "latest_checkpoint_step_name": "resume_selected_target",
+                "latest_checkpoint_summary": "Continue selected target",
+                "latest_checkpoint_current_objective": "Finish the selected continuation path",
+                "latest_checkpoint_next_intended_action": "Apply the selected target bonus",
+            },
+            other_workflow_id: {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "ticket_id": "TASK-SEARCH-COVERAGE",
+                "workflow_status": "in_progress",
+                "workflow_is_terminal": False,
+                "workflow_updated_at": created_at.replace(day=2),
+                "has_latest_attempt": True,
+                "latest_attempt_status": "running",
+                "latest_attempt_is_terminal": False,
+                "latest_attempt_started_at": created_at.replace(day=2),
+                "has_latest_checkpoint": True,
+                "latest_checkpoint_created_at": created_at.replace(day=2),
+                "latest_checkpoint_step_name": "coverage_followup",
+                "latest_checkpoint_summary": "Improve coverage for recent task recall changes",
+                "latest_checkpoint_current_objective": None,
+                "latest_checkpoint_next_intended_action": None,
+            },
+        }
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=workflow_lookup,
+    )
+
+    search_response = service.search(
+        SearchMemoryRequest(
+            query="selected continuation",
+            workspace_id="00000000-0000-0000-0000-000000000001",
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert search_response.results
+    assert search_response.results[0].memory_id == selected_memory_id
+    if len(search_response.results) > 1:
+        assert search_response.results[0].score > search_response.results[1].score
+        assert search_response.results[1].memory_id == other_memory_id
+    assert search_response.details["task_recall_context_present"] is True
+    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
+        other_workflow_id
+    )
+    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(
+        selected_workflow_id
+    )
+    assert search_response.details["task_recall_selected_equals_latest"] is False
+    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is True
+    assert search_response.details["task_recall_latest_vs_selected_candidate_details"] == {
+        "latest_workflow_instance_id": str(other_workflow_id),
+        "selected_workflow_instance_id": str(selected_workflow_id),
+        "latest_considered": {
+            "workflow_instance_id": str(other_workflow_id),
+            "checkpoint_step_name": "coverage_followup",
+            "checkpoint_summary": "Improve coverage for recent task recall changes",
+            "primary_objective_text": None,
+            "next_intended_action_text": None,
+            "ticket_detour_like": False,
+            "checkpoint_detour_like": True,
+            "detour_like": True,
+            "workflow_terminal": False,
+            "has_attempt_signal": True,
+            "attempt_terminal": False,
+            "has_checkpoint_signal": True,
+        },
+        "selected": {
+            "workflow_instance_id": str(selected_workflow_id),
+            "checkpoint_step_name": "resume_selected_target",
+            "checkpoint_summary": "Continue selected target",
+            "primary_objective_text": "Finish the selected continuation path",
+            "next_intended_action_text": "Apply the selected target bonus",
+            "ticket_detour_like": False,
+            "checkpoint_detour_like": False,
+            "detour_like": False,
+            "workflow_terminal": False,
+            "has_attempt_signal": True,
+            "attempt_terminal": False,
+            "has_checkpoint_signal": True,
+        },
+        "same_workflow": False,
+        "same_checkpoint_details": False,
+        "comparison_source": "memory_search_task_recall_context",
+    }
+    assert search_response.details["task_recall_latest_vs_selected_primary_block"] == (
+        "candidate_details"
+    )
+    assert (
+        search_response.details[
+            "task_recall_latest_vs_selected_checkpoint_details_is_compatibility_alias"
+        ]
+        is True
+    )
+    assert (
+        search_response.details["task_recall_latest_vs_selected_checkpoint_details_present"] is True
+    )
+    assert search_response.details["task_recall_latest_vs_selected_checkpoint_details"] == {
+        "latest_workflow_instance_id": str(other_workflow_id),
+        "selected_workflow_instance_id": str(selected_workflow_id),
+        "latest_considered": {
+            "workflow_instance_id": str(other_workflow_id),
+            "checkpoint_step_name": "coverage_followup",
+            "checkpoint_summary": "Improve coverage for recent task recall changes",
+            "primary_objective_text": None,
+            "next_intended_action_text": None,
+            "ticket_detour_like": False,
+            "checkpoint_detour_like": True,
+            "detour_like": True,
+            "workflow_terminal": False,
+            "has_attempt_signal": True,
+            "attempt_terminal": False,
+            "has_checkpoint_signal": True,
+        },
+        "selected": {
+            "workflow_instance_id": str(selected_workflow_id),
+            "checkpoint_step_name": "resume_selected_target",
+            "checkpoint_summary": "Continue selected target",
+            "primary_objective_text": "Finish the selected continuation path",
+            "next_intended_action_text": "Apply the selected target bonus",
+            "ticket_detour_like": False,
+            "checkpoint_detour_like": False,
+            "detour_like": False,
+            "workflow_terminal": False,
+            "has_attempt_signal": True,
+            "attempt_terminal": False,
+            "has_checkpoint_signal": True,
+        },
+        "same_workflow": False,
+        "same_checkpoint_details": False,
+        "comparison_source": "memory_search_task_recall_context",
+    }
+    assert search_response.details["task_recall_comparison_summary_explanations_present"] is True
+    assert search_response.details["task_recall_comparison_summary_explanations"] == [
+        {
+            "code": "search_selected_differs_from_latest",
+            "message": "search task-recall context recorded that the selected continuation target differed from the latest considered workflow",
+        },
+        {
+            "code": "search_latest_and_selected_checkpoints_differ",
+            "message": "search task-recall context recorded that the latest considered checkpoint differed from the selected continuation checkpoint",
+        },
+        {
+            "code": "search_latest_and_selected_detour_classification_differs",
+            "message": "search task-recall context recorded that the latest considered candidate and selected continuation target differed in detour classification",
+        },
+        {
+            "code": "search_latest_and_selected_return_target_basis_differs",
+            "message": "search task-recall context recorded that the latest considered candidate and selected continuation target differed in return-target basis",
+        },
+        {
+            "code": "search_latest_and_selected_task_thread_basis_differs",
+            "message": "search task-recall context recorded that the latest considered candidate and selected continuation target differed in task-thread basis",
+        },
+    ]
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_continuation_target_bonus_applied"
+        ]
+        is True
+    )
+
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "latest_considered_workflow_instance_id"
+    ] == str(other_workflow_id)
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "selected_workflow_instance_id"
+    ] == str(selected_workflow_id)
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_step_name"
+        ]
+        == "coverage_followup"
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_summary"
+        ]
+        == "Improve coverage for recent task recall changes"
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_primary_objective_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_next_intended_action_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_checkpoint_step_name"
+        ]
+        == "resume_selected_target"
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_checkpoint_summary"
+        ]
+        == "Continue selected target"
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_primary_objective_text"
+        ]
+        == "Finish the selected continuation path"
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_next_intended_action_text"
+        ]
+        == "Apply the selected target bonus"
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_ticket_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_detour_like"
+        ]
+        is True
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_ticket_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_checkpoint_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_workflow_terminal"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_workflow_terminal"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_vs_selected_comparison_present"
+        ]
+        is True
+    )
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "latest_vs_selected_candidate_details"
+    ] == {
+        "latest_workflow_instance_id": str(other_workflow_id),
+        "selected_workflow_instance_id": str(selected_workflow_id),
+        "latest_considered": {
+            "workflow_instance_id": str(other_workflow_id),
+            "checkpoint_step_name": "coverage_followup",
+            "checkpoint_summary": "Improve coverage for recent task recall changes",
+            "primary_objective_text": None,
+            "next_intended_action_text": None,
+            "ticket_detour_like": False,
+            "checkpoint_detour_like": True,
+            "detour_like": True,
+            "workflow_terminal": False,
+            "has_attempt_signal": True,
+            "attempt_terminal": False,
+            "has_checkpoint_signal": True,
+        },
+        "selected": {
+            "workflow_instance_id": str(selected_workflow_id),
+            "checkpoint_step_name": "resume_selected_target",
+            "checkpoint_summary": "Continue selected target",
+            "primary_objective_text": "Finish the selected continuation path",
+            "next_intended_action_text": "Apply the selected target bonus",
+            "ticket_detour_like": False,
+            "checkpoint_detour_like": False,
+            "detour_like": False,
+            "workflow_terminal": False,
+            "has_attempt_signal": True,
+            "attempt_terminal": False,
+            "has_checkpoint_signal": True,
+        },
+        "same_workflow": False,
+        "same_checkpoint_details": False,
+        "comparison_source": "memory_search_task_recall_context",
+    }
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_continuation_target_bonus_applied"
+        ]
+        is True
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_continuation_target_bonus"
+        ]
+        == 0.5
+    )
+    assert {
+        reason["code"] for reason in search_response.results[0].ranking_details["reason_list"]
+    } >= {
+        "lexical_signal_present",
+        "semantic_signal_absent",
+        "lexical_only_score_mode",
+        "selected_continuation_target_bonus",
+    }
+    if len(search_response.results) > 1:
+        assert (
+            search_response.results[1].ranking_details["task_recall_detail"][
+                "selected_continuation_target_bonus_applied"
+            ]
+            is False
+        )
+        assert (
+            search_response.results[1].ranking_details["task_recall_detail"][
+                "selected_continuation_target_bonus"
+            ]
+            == 0.0
+        )
 
 
 def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:
@@ -1726,6 +2363,115 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
     assert (
         search_response.results[0].ranking_details["task_recall_detail"]["workspace_constrained"]
         is True
+    )
+    assert search_response.details["task_recall_context_present"] is True
+    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
+        workflow_id
+    )
+    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(workflow_id)
+    assert search_response.details["task_recall_selected_equals_latest"] is True
+    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is False
+    assert search_response.details["task_recall_comparison_summary_explanations_present"] is False
+    assert search_response.details["task_recall_comparison_summary_explanations"] == []
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "task_recall_context_present"
+        ]
+        is True
+    )
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "latest_considered_workflow_instance_id"
+    ] == str(workflow_id)
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "selected_workflow_instance_id"
+    ] == str(workflow_id)
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        is True
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_step_name"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_summary"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_primary_objective_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_next_intended_action_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_checkpoint_step_name"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_checkpoint_summary"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_primary_objective_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_next_intended_action_text"
+        ]
+        is None
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_ticket_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_checkpoint_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_ticket_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_checkpoint_detour_like"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "latest_considered_workflow_terminal"
+        ]
+        is False
+    )
+    assert (
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_workflow_terminal"
+        ]
+        is False
     )
     assert search_response.results[1].ranking_details["lexical_component"] == 0.0
     assert search_response.results[1].ranking_details["semantic_component"] == (

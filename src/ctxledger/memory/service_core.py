@@ -472,6 +472,17 @@ class MemoryService:
                 limit=request.limit,
             )
 
+        (
+            latest_task_recall_workflow_id,
+            selected_task_recall_workflow_id,
+            latest_task_recall_signals,
+            selected_task_recall_signals,
+            task_recall_selected_equals_latest,
+        ) = self._task_recall_search_context(
+            workspace_id=workspace_id,
+            limit=request.limit,
+        )
+
         semantic_matches: tuple[MemoryEmbeddingRecord, ...] = ()
         semantic_query_generated = False
         semantic_generation_skipped_reason: str | None = None
@@ -553,6 +564,12 @@ class MemoryService:
         lexical_weight = 1.0
         semantic_weight = 1.0
         semantic_only_discount = 0.75
+        selected_task_recall_memory_bonus = 0.5
+        selected_task_recall_bonus_enabled = (
+            selected_task_recall_workflow_id is not None
+            and latest_task_recall_workflow_id is not None
+            and selected_task_recall_workflow_id != latest_task_recall_workflow_id
+        )
 
         for memory_item in memory_items:
             lexical_score, matched_fields = self._score_memory_item_for_query(
@@ -578,6 +595,42 @@ class MemoryService:
                 semantic_only_discount_applied = True
             elif lexical_score > 0 and semantic_score <= 0:
                 score_mode = "lexical_only"
+
+            selected_continuation_target_bonus_applied = False
+            selected_task_recall_memory_ids: set[UUID] = set()
+            selected_task_recall_episode_id: UUID | None = None
+            if selected_task_recall_bonus_enabled and selected_task_recall_workflow_id is not None:
+                try:
+                    selected_task_recall_uuid = UUID(selected_task_recall_workflow_id)
+                except ValueError:
+                    selected_task_recall_uuid = None
+                if selected_task_recall_uuid is not None:
+                    selected_task_recall_episodes = self._episode_repository.list_by_workflow_id(
+                        selected_task_recall_uuid,
+                        limit=request.limit,
+                    )
+                    selected_task_recall_memory_ids = {
+                        candidate_memory_item.memory_id
+                        for selected_task_recall_episode in selected_task_recall_episodes
+                        for candidate_memory_item in self._memory_item_repository.list_by_episode_id(
+                            selected_task_recall_episode.episode_id,
+                            limit=request.limit,
+                        )
+                    }
+                    if selected_task_recall_episodes:
+                        selected_task_recall_episode_id = selected_task_recall_episodes[
+                            0
+                        ].episode_id
+
+            if selected_task_recall_bonus_enabled and (
+                memory_item.memory_id in selected_task_recall_memory_ids
+                or (
+                    selected_task_recall_episode_id is not None
+                    and memory_item.episode_id == selected_task_recall_episode_id
+                )
+            ):
+                hybrid_score += selected_task_recall_memory_bonus
+                selected_continuation_target_bonus_applied = True
 
             if hybrid_score <= 0:
                 continue
@@ -648,12 +701,239 @@ class MemoryService:
                     }
                 )
 
+            if selected_continuation_target_bonus_applied:
+                ranking_reasons.append(
+                    {
+                        "code": "selected_continuation_target_bonus",
+                        "message": "the memory item aligned with the selected continuation target",
+                        "value": selected_task_recall_memory_bonus,
+                    }
+                )
+
+            latest_task_recall_ticket_detour_like, latest_task_recall_checkpoint_detour_like, _ = (
+                self._task_recall_search_detour_details(latest_task_recall_signals)
+            )
+            (
+                selected_task_recall_ticket_detour_like,
+                selected_task_recall_checkpoint_detour_like,
+                _,
+            ) = self._task_recall_search_detour_details(selected_task_recall_signals)
+
             task_recall_detail = {
                 "matched_fields": list(combined_fields),
                 "memory_item_type": memory_item.type,
                 "memory_item_provenance": memory_item.provenance,
                 "metadata_match_candidates": list(metadata_query_strings(memory_item.metadata)),
                 "workspace_constrained": workspace_id is not None,
+                "task_recall_context_present": workspace_id is not None
+                and selected_task_recall_workflow_id is not None,
+                "latest_considered_workflow_instance_id": latest_task_recall_workflow_id,
+                "selected_workflow_instance_id": selected_task_recall_workflow_id,
+                "selected_equals_latest": task_recall_selected_equals_latest,
+                "latest_considered_checkpoint_step_name": latest_task_recall_signals.get(
+                    "latest_checkpoint_step_name"
+                ),
+                "latest_considered_checkpoint_summary": latest_task_recall_signals.get(
+                    "latest_checkpoint_summary"
+                ),
+                "latest_considered_primary_objective_text": latest_task_recall_signals.get(
+                    "latest_checkpoint_current_objective"
+                ),
+                "latest_considered_next_intended_action_text": latest_task_recall_signals.get(
+                    "latest_checkpoint_next_intended_action"
+                ),
+                "selected_checkpoint_step_name": selected_task_recall_signals.get(
+                    "latest_checkpoint_step_name"
+                ),
+                "selected_checkpoint_summary": selected_task_recall_signals.get(
+                    "latest_checkpoint_summary"
+                ),
+                "selected_primary_objective_text": selected_task_recall_signals.get(
+                    "latest_checkpoint_current_objective"
+                ),
+                "selected_next_intended_action_text": selected_task_recall_signals.get(
+                    "latest_checkpoint_next_intended_action"
+                ),
+                "latest_considered_ticket_detour_like": latest_task_recall_ticket_detour_like,
+                "latest_considered_checkpoint_detour_like": (
+                    latest_task_recall_checkpoint_detour_like
+                ),
+                "selected_ticket_detour_like": selected_task_recall_ticket_detour_like,
+                "selected_checkpoint_detour_like": selected_task_recall_checkpoint_detour_like,
+                "latest_considered_workflow_terminal": bool(
+                    latest_task_recall_signals.get("workflow_is_terminal", False)
+                ),
+                "selected_workflow_terminal": bool(
+                    selected_task_recall_signals.get("workflow_is_terminal", False)
+                ),
+                "latest_vs_selected_comparison_present": (
+                    selected_task_recall_workflow_id is not None
+                    and latest_task_recall_workflow_id is not None
+                    and selected_task_recall_workflow_id != latest_task_recall_workflow_id
+                ),
+                "latest_vs_selected_candidate_details": (
+                    {
+                        "latest_workflow_instance_id": latest_task_recall_workflow_id,
+                        "selected_workflow_instance_id": selected_task_recall_workflow_id,
+                        "latest_considered": {
+                            "workflow_instance_id": latest_task_recall_workflow_id,
+                            "checkpoint_step_name": latest_task_recall_signals.get(
+                                "latest_checkpoint_step_name"
+                            ),
+                            "checkpoint_summary": latest_task_recall_signals.get(
+                                "latest_checkpoint_summary"
+                            ),
+                            "primary_objective_text": latest_task_recall_signals.get(
+                                "latest_checkpoint_current_objective"
+                            ),
+                            "next_intended_action_text": latest_task_recall_signals.get(
+                                "latest_checkpoint_next_intended_action"
+                            ),
+                            "ticket_detour_like": latest_task_recall_ticket_detour_like,
+                            "checkpoint_detour_like": latest_task_recall_checkpoint_detour_like,
+                            "detour_like": (
+                                latest_task_recall_ticket_detour_like
+                                or latest_task_recall_checkpoint_detour_like
+                            ),
+                            "workflow_terminal": bool(
+                                latest_task_recall_signals.get("workflow_is_terminal", False)
+                            ),
+                            "has_attempt_signal": bool(
+                                latest_task_recall_signals.get("has_latest_attempt", False)
+                            ),
+                            "attempt_terminal": bool(
+                                latest_task_recall_signals.get("latest_attempt_is_terminal", False)
+                            ),
+                            "has_checkpoint_signal": bool(
+                                latest_task_recall_signals.get("has_latest_checkpoint", False)
+                            ),
+                        },
+                        "selected": {
+                            "workflow_instance_id": selected_task_recall_workflow_id,
+                            "checkpoint_step_name": selected_task_recall_signals.get(
+                                "latest_checkpoint_step_name"
+                            ),
+                            "checkpoint_summary": selected_task_recall_signals.get(
+                                "latest_checkpoint_summary"
+                            ),
+                            "primary_objective_text": selected_task_recall_signals.get(
+                                "latest_checkpoint_current_objective"
+                            ),
+                            "next_intended_action_text": selected_task_recall_signals.get(
+                                "latest_checkpoint_next_intended_action"
+                            ),
+                            "ticket_detour_like": selected_task_recall_ticket_detour_like,
+                            "checkpoint_detour_like": selected_task_recall_checkpoint_detour_like,
+                            "detour_like": (
+                                selected_task_recall_ticket_detour_like
+                                or selected_task_recall_checkpoint_detour_like
+                            ),
+                            "workflow_terminal": bool(
+                                selected_task_recall_signals.get("workflow_is_terminal", False)
+                            ),
+                            "has_attempt_signal": bool(
+                                selected_task_recall_signals.get("has_latest_attempt", False)
+                            ),
+                            "attempt_terminal": bool(
+                                selected_task_recall_signals.get(
+                                    "latest_attempt_is_terminal",
+                                    False,
+                                )
+                            ),
+                            "has_checkpoint_signal": bool(
+                                selected_task_recall_signals.get("has_latest_checkpoint", False)
+                            ),
+                        },
+                        "same_workflow": task_recall_selected_equals_latest,
+                        "same_checkpoint_details": (
+                            latest_task_recall_signals.get("latest_checkpoint_step_name")
+                            == selected_task_recall_signals.get("latest_checkpoint_step_name")
+                            and latest_task_recall_signals.get("latest_checkpoint_summary")
+                            == selected_task_recall_signals.get("latest_checkpoint_summary")
+                            and latest_task_recall_signals.get(
+                                "latest_checkpoint_current_objective"
+                            )
+                            == selected_task_recall_signals.get(
+                                "latest_checkpoint_current_objective"
+                            )
+                            and latest_task_recall_signals.get(
+                                "latest_checkpoint_next_intended_action"
+                            )
+                            == selected_task_recall_signals.get(
+                                "latest_checkpoint_next_intended_action"
+                            )
+                            and latest_task_recall_ticket_detour_like
+                            == selected_task_recall_ticket_detour_like
+                            and latest_task_recall_checkpoint_detour_like
+                            == selected_task_recall_checkpoint_detour_like
+                            and bool(latest_task_recall_signals.get("workflow_is_terminal", False))
+                            == bool(selected_task_recall_signals.get("workflow_is_terminal", False))
+                            and bool(latest_task_recall_signals.get("has_latest_attempt", False))
+                            == bool(selected_task_recall_signals.get("has_latest_attempt", False))
+                            and bool(
+                                latest_task_recall_signals.get("latest_attempt_is_terminal", False)
+                            )
+                            == bool(
+                                selected_task_recall_signals.get(
+                                    "latest_attempt_is_terminal", False
+                                )
+                            )
+                            and bool(latest_task_recall_signals.get("has_latest_checkpoint", False))
+                            == bool(
+                                selected_task_recall_signals.get("has_latest_checkpoint", False)
+                            )
+                        ),
+                        "comparison_source": "memory_search_task_recall_context",
+                    }
+                    if (
+                        selected_task_recall_workflow_id is not None
+                        and latest_task_recall_workflow_id is not None
+                        and selected_task_recall_workflow_id != latest_task_recall_workflow_id
+                    )
+                    else {
+                        "latest_workflow_instance_id": None,
+                        "selected_workflow_instance_id": None,
+                        "latest_considered": {
+                            "workflow_instance_id": None,
+                            "checkpoint_step_name": None,
+                            "checkpoint_summary": None,
+                            "primary_objective_text": None,
+                            "next_intended_action_text": None,
+                            "ticket_detour_like": False,
+                            "checkpoint_detour_like": False,
+                            "detour_like": False,
+                            "workflow_terminal": False,
+                            "has_attempt_signal": False,
+                            "attempt_terminal": False,
+                            "has_checkpoint_signal": False,
+                        },
+                        "selected": {
+                            "workflow_instance_id": None,
+                            "checkpoint_step_name": None,
+                            "checkpoint_summary": None,
+                            "primary_objective_text": None,
+                            "next_intended_action_text": None,
+                            "ticket_detour_like": False,
+                            "checkpoint_detour_like": False,
+                            "detour_like": False,
+                            "workflow_terminal": False,
+                            "has_attempt_signal": False,
+                            "attempt_terminal": False,
+                            "has_checkpoint_signal": False,
+                        },
+                        "same_workflow": True,
+                        "same_checkpoint_details": True,
+                        "comparison_source": "memory_search_task_recall_context",
+                    }
+                ),
+                "selected_continuation_target_bonus_applied": (
+                    selected_continuation_target_bonus_applied
+                ),
+                "selected_continuation_target_bonus": (
+                    selected_task_recall_memory_bonus
+                    if selected_continuation_target_bonus_applied
+                    else 0.0
+                ),
             }
 
             scored_results.append(
@@ -725,6 +1005,263 @@ class MemoryService:
             if has_lexical_signal and has_semantic_signal:
                 result_composition["with_both_signals"] += 1
 
+        latest_vs_selected_search_context_present = (
+            selected_task_recall_workflow_id is not None
+            and latest_task_recall_workflow_id is not None
+            and selected_task_recall_workflow_id != latest_task_recall_workflow_id
+        )
+        latest_vs_selected_search_context = (
+            {
+                "latest_workflow_instance_id": latest_task_recall_workflow_id,
+                "selected_workflow_instance_id": selected_task_recall_workflow_id,
+                "latest_considered": {
+                    "workflow_instance_id": latest_task_recall_workflow_id,
+                    "checkpoint_step_name": latest_task_recall_signals.get(
+                        "latest_checkpoint_step_name"
+                    ),
+                    "checkpoint_summary": latest_task_recall_signals.get(
+                        "latest_checkpoint_summary"
+                    ),
+                    "primary_objective_text": latest_task_recall_signals.get(
+                        "latest_checkpoint_current_objective"
+                    ),
+                    "next_intended_action_text": latest_task_recall_signals.get(
+                        "latest_checkpoint_next_intended_action"
+                    ),
+                    "ticket_detour_like": latest_task_recall_ticket_detour_like,
+                    "checkpoint_detour_like": latest_task_recall_checkpoint_detour_like,
+                    "detour_like": (
+                        latest_task_recall_ticket_detour_like
+                        or latest_task_recall_checkpoint_detour_like
+                    ),
+                    "workflow_terminal": bool(
+                        latest_task_recall_signals.get("workflow_is_terminal", False)
+                    ),
+                    "has_attempt_signal": bool(
+                        latest_task_recall_signals.get("has_latest_attempt", False)
+                    ),
+                    "attempt_terminal": bool(
+                        latest_task_recall_signals.get("latest_attempt_is_terminal", False)
+                    ),
+                    "has_checkpoint_signal": bool(
+                        latest_task_recall_signals.get("has_latest_checkpoint", False)
+                    ),
+                },
+                "selected": {
+                    "workflow_instance_id": selected_task_recall_workflow_id,
+                    "checkpoint_step_name": selected_task_recall_signals.get(
+                        "latest_checkpoint_step_name"
+                    ),
+                    "checkpoint_summary": selected_task_recall_signals.get(
+                        "latest_checkpoint_summary"
+                    ),
+                    "primary_objective_text": selected_task_recall_signals.get(
+                        "latest_checkpoint_current_objective"
+                    ),
+                    "next_intended_action_text": selected_task_recall_signals.get(
+                        "latest_checkpoint_next_intended_action"
+                    ),
+                    "ticket_detour_like": selected_task_recall_ticket_detour_like,
+                    "checkpoint_detour_like": selected_task_recall_checkpoint_detour_like,
+                    "detour_like": (
+                        selected_task_recall_ticket_detour_like
+                        or selected_task_recall_checkpoint_detour_like
+                    ),
+                    "workflow_terminal": bool(
+                        selected_task_recall_signals.get("workflow_is_terminal", False)
+                    ),
+                    "has_attempt_signal": bool(
+                        selected_task_recall_signals.get("has_latest_attempt", False)
+                    ),
+                    "attempt_terminal": bool(
+                        selected_task_recall_signals.get("latest_attempt_is_terminal", False)
+                    ),
+                    "has_checkpoint_signal": bool(
+                        selected_task_recall_signals.get("has_latest_checkpoint", False)
+                    ),
+                },
+                "same_workflow": task_recall_selected_equals_latest,
+                "same_checkpoint_details": (
+                    latest_task_recall_signals.get("latest_checkpoint_step_name")
+                    == selected_task_recall_signals.get("latest_checkpoint_step_name")
+                    and latest_task_recall_signals.get("latest_checkpoint_summary")
+                    == selected_task_recall_signals.get("latest_checkpoint_summary")
+                    and latest_task_recall_signals.get("latest_checkpoint_current_objective")
+                    == selected_task_recall_signals.get("latest_checkpoint_current_objective")
+                    and latest_task_recall_signals.get("latest_checkpoint_next_intended_action")
+                    == selected_task_recall_signals.get("latest_checkpoint_next_intended_action")
+                    and latest_task_recall_ticket_detour_like
+                    == selected_task_recall_ticket_detour_like
+                    and latest_task_recall_checkpoint_detour_like
+                    == selected_task_recall_checkpoint_detour_like
+                    and bool(latest_task_recall_signals.get("workflow_is_terminal", False))
+                    == bool(selected_task_recall_signals.get("workflow_is_terminal", False))
+                    and bool(latest_task_recall_signals.get("has_latest_attempt", False))
+                    == bool(selected_task_recall_signals.get("has_latest_attempt", False))
+                    and bool(latest_task_recall_signals.get("latest_attempt_is_terminal", False))
+                    == bool(selected_task_recall_signals.get("latest_attempt_is_terminal", False))
+                    and bool(latest_task_recall_signals.get("has_latest_checkpoint", False))
+                    == bool(selected_task_recall_signals.get("has_latest_checkpoint", False))
+                ),
+                "comparison_source": "memory_search_task_recall_context",
+            }
+            if latest_vs_selected_search_context_present
+            else {
+                "latest_workflow_instance_id": None,
+                "selected_workflow_instance_id": None,
+                "latest_considered": {
+                    "workflow_instance_id": None,
+                    "checkpoint_step_name": None,
+                    "checkpoint_summary": None,
+                    "primary_objective_text": None,
+                    "next_intended_action_text": None,
+                    "ticket_detour_like": False,
+                    "checkpoint_detour_like": False,
+                    "detour_like": False,
+                    "workflow_terminal": False,
+                    "has_attempt_signal": False,
+                    "attempt_terminal": False,
+                    "has_checkpoint_signal": False,
+                },
+                "selected": {
+                    "workflow_instance_id": None,
+                    "checkpoint_step_name": None,
+                    "checkpoint_summary": None,
+                    "primary_objective_text": None,
+                    "next_intended_action_text": None,
+                    "ticket_detour_like": False,
+                    "checkpoint_detour_like": False,
+                    "detour_like": False,
+                    "workflow_terminal": False,
+                    "has_attempt_signal": False,
+                    "attempt_terminal": False,
+                    "has_checkpoint_signal": False,
+                },
+                "same_workflow": True,
+                "same_checkpoint_details": True,
+                "comparison_source": "memory_search_task_recall_context",
+            }
+        )
+        latest_vs_selected_search_comparison_summary_explanations = (
+            [
+                {
+                    "code": "search_selected_differs_from_latest",
+                    "message": "search task-recall context recorded that the selected continuation target differed from the latest considered workflow",
+                },
+                *(
+                    [
+                        {
+                            "code": "search_latest_and_selected_checkpoints_differ",
+                            "message": "search task-recall context recorded that the latest considered checkpoint differed from the selected continuation checkpoint",
+                        }
+                    ]
+                    if (
+                        latest_task_recall_signals.get("latest_checkpoint_step_name")
+                        != selected_task_recall_signals.get("latest_checkpoint_step_name")
+                        or latest_task_recall_signals.get("latest_checkpoint_summary")
+                        != selected_task_recall_signals.get("latest_checkpoint_summary")
+                        or latest_task_recall_signals.get("latest_checkpoint_current_objective")
+                        != selected_task_recall_signals.get("latest_checkpoint_current_objective")
+                        or latest_task_recall_signals.get("latest_checkpoint_next_intended_action")
+                        != selected_task_recall_signals.get(
+                            "latest_checkpoint_next_intended_action"
+                        )
+                    )
+                    else []
+                ),
+                *(
+                    [
+                        {
+                            "code": "search_latest_and_selected_detour_classification_differs",
+                            "message": "search task-recall context recorded that the latest considered candidate and selected continuation target differed in detour classification",
+                        }
+                    ]
+                    if (
+                        latest_task_recall_ticket_detour_like
+                        != selected_task_recall_ticket_detour_like
+                        or latest_task_recall_checkpoint_detour_like
+                        != selected_task_recall_checkpoint_detour_like
+                    )
+                    else []
+                ),
+                *(
+                    [
+                        {
+                            "code": "search_latest_and_selected_return_target_basis_differs",
+                            "message": "search task-recall context recorded that the latest considered candidate and selected continuation target differed in return-target basis",
+                        }
+                    ]
+                    if (
+                        (
+                            "checkpoint_current_objective"
+                            if bool(
+                                selected_task_recall_signals.get(
+                                    "latest_checkpoint_has_current_objective",
+                                    False,
+                                )
+                            )
+                            else (
+                                "checkpoint_next_intended_action"
+                                if bool(
+                                    selected_task_recall_signals.get(
+                                        "latest_checkpoint_has_next_intended_action",
+                                        False,
+                                    )
+                                )
+                                else "ranked_candidate"
+                            )
+                        )
+                        != (
+                            "detour_penalized_candidate"
+                            if (
+                                latest_task_recall_ticket_detour_like
+                                or latest_task_recall_checkpoint_detour_like
+                            )
+                            else "latest_candidate"
+                        )
+                    )
+                    else []
+                ),
+                *(
+                    [
+                        {
+                            "code": "search_latest_and_selected_task_thread_basis_differs",
+                            "message": "search task-recall context recorded that the latest considered candidate and selected continuation target differed in task-thread basis",
+                        }
+                    ]
+                    if (
+                        (
+                            "checkpoint_objective_or_next_action"
+                            if bool(
+                                selected_task_recall_signals.get(
+                                    "latest_checkpoint_has_current_objective",
+                                    False,
+                                )
+                            )
+                            or bool(
+                                selected_task_recall_signals.get(
+                                    "latest_checkpoint_has_next_intended_action",
+                                    False,
+                                )
+                            )
+                            else "non_detour_candidate"
+                        )
+                        != (
+                            "detour_penalized_candidate"
+                            if (
+                                latest_task_recall_ticket_detour_like
+                                or latest_task_recall_checkpoint_detour_like
+                            )
+                            else "non_detour_candidate"
+                        )
+                    )
+                    else []
+                ),
+            ]
+            if latest_vs_selected_search_context_present
+            else []
+        )
+
         details = {
             "query": request.query,
             "normalized_query": normalized_query,
@@ -743,6 +1280,28 @@ class MemoryService:
             "result_mode_counts": result_mode_counts,
             "result_composition": result_composition,
             "results_returned": len(limited_results),
+            "semantic_generation_skipped_reason": semantic_generation_skipped_reason,
+            "task_recall_context_present": workspace_id is not None
+            and selected_task_recall_workflow_id is not None,
+            "task_recall_latest_considered_workflow_instance_id": latest_task_recall_workflow_id,
+            "task_recall_selected_workflow_instance_id": selected_task_recall_workflow_id,
+            "task_recall_selected_equals_latest": task_recall_selected_equals_latest,
+            "task_recall_latest_vs_selected_comparison_present": (
+                latest_vs_selected_search_context_present
+            ),
+            "task_recall_latest_vs_selected_candidate_details": latest_vs_selected_search_context,
+            "task_recall_latest_vs_selected_primary_block": "candidate_details",
+            "task_recall_latest_vs_selected_checkpoint_details_is_compatibility_alias": True,
+            "task_recall_latest_vs_selected_checkpoint_details_present": (
+                latest_vs_selected_search_context_present
+            ),
+            "task_recall_latest_vs_selected_checkpoint_details": latest_vs_selected_search_context,
+            "task_recall_comparison_summary_explanations_present": bool(
+                latest_vs_selected_search_comparison_summary_explanations
+            ),
+            "task_recall_comparison_summary_explanations": (
+                latest_vs_selected_search_comparison_summary_explanations
+            ),
         }
         if semantic_generation_skipped_reason is not None:
             details["semantic_generation_skipped_reason"] = semantic_generation_skipped_reason
@@ -819,16 +1378,38 @@ class MemoryService:
             resolved_workflow_instance_id = str(workflow_instance_id)
         elif self._workflow_lookup is not None:
             if self._has_text(request.workspace_id):
-                workspace_workflow_ids = self._workflow_lookup.workflow_ids_by_workspace_id(
-                    request.workspace_id or "",
-                    limit=request.limit,
+                raw_workspace_lookup = getattr(
+                    self._workflow_lookup,
+                    "workflow_ids_by_workspace_id_raw_order",
+                    None,
                 )
+                if callable(raw_workspace_lookup):
+                    workspace_workflow_ids = raw_workspace_lookup(
+                        request.workspace_id or "",
+                        limit=request.limit,
+                    )
+                else:
+                    workspace_workflow_ids = self._workflow_lookup.workflow_ids_by_workspace_id(
+                        request.workspace_id or "",
+                        limit=request.limit,
+                    )
 
             if self._has_text(request.ticket_id):
-                ticket_workflow_ids = self._workflow_lookup.workflow_ids_by_ticket_id(
-                    request.ticket_id or "",
-                    limit=request.limit,
+                raw_ticket_lookup = getattr(
+                    self._workflow_lookup,
+                    "workflow_ids_by_ticket_id_raw_order",
+                    None,
                 )
+                if callable(raw_ticket_lookup):
+                    ticket_workflow_ids = raw_ticket_lookup(
+                        request.ticket_id or "",
+                        limit=request.limit,
+                    )
+                else:
+                    ticket_workflow_ids = self._workflow_lookup.workflow_ids_by_ticket_id(
+                        request.ticket_id or "",
+                        limit=request.limit,
+                    )
 
             if workspace_workflow_ids and ticket_workflow_ids:
                 lookup_scope = "workspace_and_ticket"
@@ -853,8 +1434,13 @@ class MemoryService:
             if resolved_workflow_instance_id is None
             else resolved_workflow_ids
         )
+        raw_ordering_signals: dict[str, dict[str, str | bool | None]] = {}
         if resolved_workflow_instance_id is None:
             resolved_workflow_ids = signal_ordered_workflow_ids
+            if resolver_ordered_workflow_ids:
+                raw_ordering_signals = self._workflow_ordering_signals(
+                    workflow_ids=resolver_ordered_workflow_ids
+                )
             ordering_signals = self._workflow_ordering_signals(workflow_ids=resolved_workflow_ids)
         elif resolved_workflow_ids:
             ordering_signals = self._workflow_ordering_signals(workflow_ids=resolved_workflow_ids)
@@ -887,7 +1473,11 @@ class MemoryService:
             and selected_task_recall_workflow_id == latest_task_recall_workflow_id
         )
         latest_task_recall_signals = (
-            ordering_signals.get(latest_task_recall_workflow_id, {})
+            (
+                raw_ordering_signals.get(latest_task_recall_workflow_id, {})
+                if raw_ordering_signals
+                else ordering_signals.get(latest_task_recall_workflow_id, {})
+            )
             if latest_task_recall_workflow_id is not None
             else {}
         )
@@ -896,6 +1486,22 @@ class MemoryService:
             if selected_task_recall_workflow_id is not None
             else {}
         )
+        latest_task_recall_checkpoint_json = {
+            "current_objective": latest_task_recall_signals.get(
+                "latest_checkpoint_current_objective"
+            ),
+            "next_intended_action": latest_task_recall_signals.get(
+                "latest_checkpoint_next_intended_action"
+            ),
+        }
+        selected_task_recall_checkpoint_json = {
+            "current_objective": selected_task_recall_signals.get(
+                "latest_checkpoint_current_objective"
+            ),
+            "next_intended_action": selected_task_recall_signals.get(
+                "latest_checkpoint_next_intended_action"
+            ),
+        }
         task_recall_latest_workflow_terminal = bool(
             latest_task_recall_signals.get("workflow_is_terminal", False)
         )
@@ -908,7 +1514,12 @@ class MemoryService:
             checkpoint = SimpleNamespace(
                 step_name=signal_map.get("latest_checkpoint_step_name"),
                 summary=signal_map.get("latest_checkpoint_summary"),
-                checkpoint_json={},
+                checkpoint_json={
+                    "current_objective": signal_map.get("latest_checkpoint_current_objective"),
+                    "next_intended_action": signal_map.get(
+                        "latest_checkpoint_next_intended_action"
+                    ),
+                },
             )
             return build_detour_like_signal_details(
                 workflow=workflow,
@@ -928,6 +1539,19 @@ class MemoryService:
             task_recall_selected_checkpoint_detour_like,
             _,
         ) = _task_recall_detour_like(selected_task_recall_signals)
+        task_recall_selected_primary_objective_text = (
+            str(selected_task_recall_signals.get("latest_checkpoint_current_objective")).strip()
+            if selected_task_recall_signals.get("latest_checkpoint_current_objective") is not None
+            and str(selected_task_recall_signals.get("latest_checkpoint_current_objective")).strip()
+            else None
+        )
+        task_recall_prior_mainline_workflow_id = None
+        if (
+            selected_task_recall_workflow_id is not None
+            and latest_task_recall_workflow_id is not None
+            and selected_task_recall_workflow_id != latest_task_recall_workflow_id
+        ):
+            task_recall_prior_mainline_workflow_id = selected_task_recall_workflow_id
 
         for index, workflow_id in enumerate(
             [str(workflow_id) for workflow_id in resolved_workflow_ids]
@@ -945,6 +1569,12 @@ class MemoryService:
                 checkpoint_detour_like,
                 _,
             ) = _task_recall_detour_like(signal_map)
+            checkpoint_has_current_objective = bool(
+                signal_map.get("latest_checkpoint_has_current_objective", False)
+            )
+            checkpoint_has_next_intended_action = bool(
+                signal_map.get("latest_checkpoint_has_next_intended_action", False)
+            )
 
             task_recall_ranking_details.append(
                 build_task_recall_ranking_entry(
@@ -958,6 +1588,8 @@ class MemoryService:
                     has_latest_checkpoint=has_latest_checkpoint,
                     ticket_detour_like=ticket_detour_like,
                     checkpoint_detour_like=checkpoint_detour_like,
+                    checkpoint_has_current_objective=checkpoint_has_current_objective,
+                    checkpoint_has_next_intended_action=checkpoint_has_next_intended_action,
                 )
             )
 
@@ -1056,12 +1688,18 @@ class MemoryService:
             "resolved_workflow_ids": [str(workflow_id) for workflow_id in resolved_workflow_ids],
             **build_memory_context_task_recall_details(
                 selected_workflow=(
-                    SimpleNamespace(workflow_instance_id=selected_task_recall_workflow_id)
+                    SimpleNamespace(
+                        workflow_instance_id=selected_task_recall_workflow_id,
+                        checkpoint_json=selected_task_recall_checkpoint_json,
+                    )
                     if selected_task_recall_workflow_id is not None
                     else None
                 ),
                 latest_workflow=(
-                    SimpleNamespace(workflow_instance_id=latest_task_recall_workflow_id)
+                    SimpleNamespace(
+                        workflow_instance_id=latest_task_recall_workflow_id,
+                        checkpoint_json=latest_task_recall_checkpoint_json,
+                    )
                     if latest_task_recall_workflow_id is not None
                     else None
                 ),
@@ -1074,11 +1712,138 @@ class MemoryService:
                     "latest_checkpoint_detour_like": task_recall_latest_checkpoint_detour_like,
                     "selected_ticket_detour_like": task_recall_selected_ticket_detour_like,
                     "selected_checkpoint_detour_like": task_recall_selected_checkpoint_detour_like,
+                    "latest_has_attempt_signal": bool(
+                        latest_task_recall_signals.get("has_latest_attempt", False)
+                    ),
+                    "selected_has_attempt_signal": bool(
+                        selected_task_recall_signals.get("has_latest_attempt", False)
+                    ),
+                    "latest_attempt_terminal": bool(
+                        latest_task_recall_signals.get("latest_attempt_is_terminal", False)
+                    ),
+                    "selected_attempt_terminal": bool(
+                        selected_task_recall_signals.get("latest_attempt_is_terminal", False)
+                    ),
+                    "latest_has_checkpoint_signal": bool(
+                        latest_task_recall_signals.get("has_latest_checkpoint", False)
+                    ),
+                    "selected_has_checkpoint_signal": bool(
+                        selected_task_recall_signals.get("has_latest_checkpoint", False)
+                    ),
                     "detour_override_applied": task_recall_detour_override_applied,
+                    "return_target_basis": (
+                        "checkpoint_current_objective"
+                        if bool(
+                            selected_task_recall_signals.get(
+                                "latest_checkpoint_has_current_objective",
+                                False,
+                            )
+                        )
+                        else (
+                            "checkpoint_next_intended_action"
+                            if bool(
+                                selected_task_recall_signals.get(
+                                    "latest_checkpoint_has_next_intended_action",
+                                    False,
+                                )
+                            )
+                            else (
+                                "terminal_override"
+                                if (
+                                    selected_task_recall_workflow_id is not None
+                                    and latest_task_recall_workflow_id is not None
+                                    and selected_task_recall_workflow_id
+                                    != latest_task_recall_workflow_id
+                                    and task_recall_latest_workflow_terminal
+                                )
+                                else (
+                                    "detour_override"
+                                    if task_recall_detour_override_applied
+                                    else (
+                                        "latest_candidate"
+                                        if task_recall_selected_equals_latest
+                                        else "ranked_candidate"
+                                    )
+                                )
+                            )
+                        )
+                    ),
+                    "return_target_source": (
+                        "latest_checkpoint.current_objective"
+                        if bool(
+                            selected_task_recall_signals.get(
+                                "latest_checkpoint_has_current_objective",
+                                False,
+                            )
+                        )
+                        else (
+                            "latest_checkpoint.next_intended_action"
+                            if bool(
+                                selected_task_recall_signals.get(
+                                    "latest_checkpoint_has_next_intended_action",
+                                    False,
+                                )
+                            )
+                            else (
+                                "workflow_selection.detour_override"
+                                if task_recall_detour_override_applied
+                                else (
+                                    "workflow_selection.terminal_override"
+                                    if (
+                                        selected_task_recall_workflow_id is not None
+                                        and latest_task_recall_workflow_id is not None
+                                        and selected_task_recall_workflow_id
+                                        != latest_task_recall_workflow_id
+                                        and task_recall_latest_workflow_terminal
+                                    )
+                                    else "workflow_selection.ranking"
+                                )
+                            )
+                        )
+                    ),
+                    "task_thread_present": bool(
+                        selected_task_recall_signals.get("task_thread_candidate", False)
+                    )
+                    or selected_task_recall_workflow_id is not None,
+                    "task_thread_basis": selected_task_recall_signals.get("task_thread_basis"),
+                    "task_thread_source": (
+                        "selected_task_recall_ranking"
+                        if bool(
+                            selected_task_recall_signals.get(
+                                "task_thread_candidate",
+                                False,
+                            )
+                        )
+                        else None
+                    ),
+                    "selected_checkpoint_step_name": selected_task_recall_signals.get(
+                        "latest_checkpoint_step_name"
+                    ),
+                    "selected_checkpoint_summary": selected_task_recall_signals.get(
+                        "latest_checkpoint_summary"
+                    ),
                 },
                 explanations=task_recall_explanations,
                 ranking_details=task_recall_ranking_details,
                 selected_workflow_terminal=task_recall_selected_workflow_terminal,
+                selected_primary_objective_text=task_recall_selected_primary_objective_text,
+                prior_mainline_workflow=(
+                    SimpleNamespace(workflow_instance_id=task_recall_prior_mainline_workflow_id)
+                    if task_recall_prior_mainline_workflow_id is not None
+                    else None
+                ),
+                latest_checkpoint_step_name=(
+                    str(latest_task_recall_signals.get("latest_checkpoint_step_name")).strip()
+                    if latest_task_recall_signals.get("latest_checkpoint_step_name") is not None
+                    and str(latest_task_recall_signals.get("latest_checkpoint_step_name")).strip()
+                    else None
+                ),
+                latest_checkpoint_summary=(
+                    str(latest_task_recall_signals.get("latest_checkpoint_summary")).strip()
+                    if latest_task_recall_signals.get("latest_checkpoint_summary") is not None
+                    and str(latest_task_recall_signals.get("latest_checkpoint_summary")).strip()
+                    else None
+                ),
             ),
         }
 
@@ -1557,6 +2322,8 @@ class MemoryService:
                 bool,
                 bool,
                 bool,
+                bool,
+                bool,
                 datetime,
                 datetime,
                 datetime,
@@ -1580,6 +2347,12 @@ class MemoryService:
             latest_attempt_is_terminal = bool(freshness.get("latest_attempt_is_terminal") or False)
             has_latest_attempt = bool(freshness.get("has_latest_attempt") or False)
             has_latest_checkpoint = bool(freshness.get("has_latest_checkpoint") or False)
+            checkpoint_has_current_objective = bool(
+                freshness.get("latest_checkpoint_current_objective")
+            )
+            checkpoint_has_next_intended_action = bool(
+                freshness.get("latest_checkpoint_next_intended_action")
+            )
             latest_checkpoint_created_at = freshness.get(
                 "latest_checkpoint_created_at"
             ) or datetime.min.replace(tzinfo=timezone.utc)
@@ -1598,6 +2371,8 @@ class MemoryService:
                 (
                     not workflow_is_terminal,
                     not latest_attempt_is_terminal,
+                    checkpoint_has_current_objective,
+                    checkpoint_has_next_intended_action,
                     has_latest_attempt,
                     has_latest_checkpoint,
                     latest_checkpoint_created_at,
@@ -1616,8 +2391,8 @@ class MemoryService:
         self,
         *,
         workflow_ids: tuple[UUID, ...],
-    ) -> dict[str, dict[str, str | None]]:
-        signals: dict[str, dict[str, str | None]] = {}
+    ) -> dict[str, dict[str, str | bool | None]]:
+        signals: dict[str, dict[str, str | bool | None]] = {}
 
         for workflow_id in workflow_ids:
             freshness = (
@@ -1628,6 +2403,12 @@ class MemoryService:
             latest_episode = self._episode_repository.list_by_workflow_id(
                 workflow_id,
                 limit=1,
+            )
+            latest_checkpoint_current_objective = freshness.get(
+                "latest_checkpoint_current_objective"
+            )
+            latest_checkpoint_next_intended_action = freshness.get(
+                "latest_checkpoint_next_intended_action"
             )
             signals[str(workflow_id)] = {
                 "workflow_status": (
@@ -1660,6 +2441,11 @@ class MemoryService:
                     if freshness.get("latest_attempt_verify_status") is not None
                     else None
                 ),
+                "latest_attempt_started_at": (
+                    freshness.get("latest_attempt_started_at").isoformat()
+                    if freshness.get("latest_attempt_started_at") is not None
+                    else None
+                ),
                 "has_latest_checkpoint": (
                     bool(freshness.get("has_latest_checkpoint"))
                     if freshness.get("has_latest_checkpoint") is not None
@@ -1670,6 +2456,36 @@ class MemoryService:
                     if freshness.get("latest_checkpoint_created_at") is not None
                     else None
                 ),
+                "latest_checkpoint_step_name": (
+                    str(freshness.get("latest_checkpoint_step_name"))
+                    if freshness.get("latest_checkpoint_step_name") is not None
+                    else None
+                ),
+                "latest_checkpoint_summary": (
+                    str(freshness.get("latest_checkpoint_summary"))
+                    if freshness.get("latest_checkpoint_summary") is not None
+                    else None
+                ),
+                "latest_checkpoint_current_objective": (
+                    str(latest_checkpoint_current_objective)
+                    if latest_checkpoint_current_objective is not None
+                    else None
+                ),
+                "latest_checkpoint_next_intended_action": (
+                    str(latest_checkpoint_next_intended_action)
+                    if latest_checkpoint_next_intended_action is not None
+                    else None
+                ),
+                "latest_checkpoint_has_current_objective": (
+                    bool(str(latest_checkpoint_current_objective).strip())
+                    if latest_checkpoint_current_objective is not None
+                    else False
+                ),
+                "latest_checkpoint_has_next_intended_action": (
+                    bool(str(latest_checkpoint_next_intended_action).strip())
+                    if latest_checkpoint_next_intended_action is not None
+                    else False
+                ),
                 "latest_verify_report_created_at": (
                     freshness.get("latest_verify_report_created_at").isoformat()
                     if freshness.get("latest_verify_report_created_at") is not None
@@ -1677,11 +2493,6 @@ class MemoryService:
                 ),
                 "latest_episode_created_at": (
                     latest_episode[0].created_at.isoformat() if latest_episode else None
-                ),
-                "latest_attempt_started_at": (
-                    freshness.get("latest_attempt_started_at").isoformat()
-                    if freshness.get("latest_attempt_started_at") is not None
-                    else None
                 ),
                 "workflow_updated_at": (
                     freshness.get("workflow_updated_at").isoformat()
@@ -1691,6 +2502,91 @@ class MemoryService:
             }
 
         return signals
+
+    def _task_recall_search_context(
+        self,
+        *,
+        workspace_id: UUID | None,
+        limit: int,
+    ) -> tuple[
+        str | None,
+        str | None,
+        dict[str, Any],
+        dict[str, Any],
+        bool,
+    ]:
+        if workspace_id is None or self._workflow_lookup is None:
+            return (None, None, {}, {}, False)
+
+        raw_workspace_lookup = getattr(
+            self._workflow_lookup,
+            "workflow_ids_by_workspace_id_raw_order",
+            None,
+        )
+        if callable(raw_workspace_lookup):
+            workspace_workflow_ids = raw_workspace_lookup(
+                str(workspace_id),
+                limit=limit,
+            )
+        else:
+            workspace_workflow_ids = self._workflow_lookup.workflow_ids_by_workspace_id(
+                str(workspace_id),
+                limit=limit,
+            )
+
+        if not workspace_workflow_ids:
+            return (None, None, {}, {}, False)
+
+        signal_ordered_workflow_ids = self._order_workflow_ids_by_freshness_signals(
+            workflow_ids=workspace_workflow_ids,
+            limit=limit,
+        )
+        raw_ordering_signals = self._workflow_ordering_signals(
+            workflow_ids=workspace_workflow_ids,
+        )
+        ordering_signals = self._workflow_ordering_signals(
+            workflow_ids=signal_ordered_workflow_ids,
+        )
+
+        latest_task_recall_workflow_id = str(workspace_workflow_ids[0])
+        selected_task_recall_workflow_id = str(signal_ordered_workflow_ids[0])
+        task_recall_selected_equals_latest = (
+            latest_task_recall_workflow_id == selected_task_recall_workflow_id
+        )
+        latest_task_recall_signals = raw_ordering_signals.get(
+            latest_task_recall_workflow_id,
+            {},
+        )
+        selected_task_recall_signals = ordering_signals.get(
+            selected_task_recall_workflow_id,
+            {},
+        )
+
+        return (
+            latest_task_recall_workflow_id,
+            selected_task_recall_workflow_id,
+            latest_task_recall_signals,
+            selected_task_recall_signals,
+            task_recall_selected_equals_latest,
+        )
+
+    def _task_recall_search_detour_details(
+        self,
+        signal_map: dict[str, Any],
+    ) -> tuple[bool, bool, bool]:
+        workflow = SimpleNamespace(ticket_id=signal_map.get("ticket_id"))
+        checkpoint = SimpleNamespace(
+            step_name=signal_map.get("latest_checkpoint_step_name"),
+            summary=signal_map.get("latest_checkpoint_summary"),
+            checkpoint_json={
+                "current_objective": signal_map.get("latest_checkpoint_current_objective"),
+                "next_intended_action": signal_map.get("latest_checkpoint_next_intended_action"),
+            },
+        )
+        return build_detour_like_signal_details(
+            workflow=workflow,
+            checkpoint=checkpoint,
+        )
 
     def _build_episode_explanations(
         self,

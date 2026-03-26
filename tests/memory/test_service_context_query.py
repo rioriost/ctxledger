@@ -113,6 +113,12 @@ def test_memory_get_context_applies_initial_query_filtering() -> None:
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": False,
                 "latest_checkpoint_created_at": None,
+                "latest_checkpoint_step_name": None,
+                "latest_checkpoint_summary": None,
+                "latest_checkpoint_current_objective": None,
+                "latest_checkpoint_next_intended_action": None,
+                "latest_checkpoint_has_current_objective": False,
+                "latest_checkpoint_has_next_intended_action": False,
                 "latest_verify_report_created_at": None,
                 "latest_episode_created_at": created_at.replace(day=2).isoformat(),
                 "latest_attempt_started_at": None,
@@ -164,9 +170,7 @@ def test_memory_get_context_matches_query_against_metadata_keys() -> None:
         )
     )
 
-    assert [episode.summary for episode in response.episodes] == [
-        "Document release checklist"
-    ]
+    assert [episode.summary for episode in response.episodes] == ["Document release checklist"]
     assert response.details["query"] == "component"
     assert response.details["normalized_query"] == "component"
     assert response.details["query_tokens"] == ["component"]
@@ -223,6 +227,12 @@ def test_memory_get_context_matches_query_against_metadata_keys() -> None:
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": False,
                 "latest_checkpoint_created_at": None,
+                "latest_checkpoint_step_name": None,
+                "latest_checkpoint_summary": None,
+                "latest_checkpoint_current_objective": None,
+                "latest_checkpoint_next_intended_action": None,
+                "latest_checkpoint_has_current_objective": False,
+                "latest_checkpoint_has_next_intended_action": False,
                 "latest_verify_report_created_at": None,
                 "latest_episode_created_at": created_at.replace(day=6).isoformat(),
                 "latest_attempt_started_at": None,
@@ -274,9 +284,7 @@ def test_memory_get_context_matches_query_against_metadata_values() -> None:
         )
     )
 
-    assert [episode.summary for episode in response.episodes] == [
-        "Document release checklist"
-    ]
+    assert [episode.summary for episode in response.episodes] == ["Document release checklist"]
     assert response.details["query"] == "release"
     assert response.details["normalized_query"] == "release"
     assert response.details["query_tokens"] == ["release"]
@@ -333,6 +341,12 @@ def test_memory_get_context_matches_query_against_metadata_values() -> None:
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": False,
                 "latest_checkpoint_created_at": None,
+                "latest_checkpoint_step_name": None,
+                "latest_checkpoint_summary": None,
+                "latest_checkpoint_current_objective": None,
+                "latest_checkpoint_next_intended_action": None,
+                "latest_checkpoint_has_current_objective": False,
+                "latest_checkpoint_has_next_intended_action": False,
                 "latest_verify_report_created_at": None,
                 "latest_episode_created_at": created_at.replace(day=8).isoformat(),
                 "latest_attempt_started_at": None,
@@ -443,6 +457,12 @@ def test_memory_get_context_matches_multi_token_query_against_summary() -> None:
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": False,
                 "latest_checkpoint_created_at": None,
+                "latest_checkpoint_step_name": None,
+                "latest_checkpoint_summary": None,
+                "latest_checkpoint_current_objective": None,
+                "latest_checkpoint_next_intended_action": None,
+                "latest_checkpoint_has_current_objective": False,
+                "latest_checkpoint_has_next_intended_action": False,
                 "latest_verify_report_created_at": None,
                 "latest_episode_created_at": created_at.replace(day=10).isoformat(),
                 "latest_attempt_started_at": None,
@@ -494,9 +514,7 @@ def test_memory_get_context_matches_multi_token_query_against_metadata() -> None
         )
     )
 
-    assert [episode.summary for episode in response.episodes] == [
-        "Capture workflow evidence"
-    ]
+    assert [episode.summary for episode in response.episodes] == ["Capture workflow evidence"]
     assert response.details["query"] == "postgres primary"
     assert response.details["normalized_query"] == "postgres primary"
     assert response.details["query_tokens"] == ["postgres", "primary"]
@@ -553,6 +571,12 @@ def test_memory_get_context_matches_multi_token_query_against_metadata() -> None
                 "latest_attempt_verify_status": None,
                 "has_latest_checkpoint": False,
                 "latest_checkpoint_created_at": None,
+                "latest_checkpoint_step_name": None,
+                "latest_checkpoint_summary": None,
+                "latest_checkpoint_current_objective": None,
+                "latest_checkpoint_next_intended_action": None,
+                "latest_checkpoint_has_current_objective": False,
+                "latest_checkpoint_has_next_intended_action": False,
                 "latest_verify_report_created_at": None,
                 "latest_episode_created_at": created_at.replace(day=12).isoformat(),
                 "latest_attempt_started_at": None,

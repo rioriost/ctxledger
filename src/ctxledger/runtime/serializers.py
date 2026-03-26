@@ -183,6 +183,115 @@ def serialize_get_context_response(
     details.setdefault("task_recall_selected_workflow_instance_id", None)
     details.setdefault("task_recall_latest_workflow_instance_id", None)
     details.setdefault("task_recall_running_workflow_instance_id", None)
+    details.setdefault("task_recall_return_target_present", False)
+    details.setdefault("task_recall_return_target_workflow_instance_id", None)
+    details.setdefault("task_recall_return_target_basis", None)
+    details.setdefault("task_recall_return_target_source", None)
+    details.setdefault("task_recall_task_thread_present", False)
+    details.setdefault("task_recall_task_thread_basis", None)
+    details.setdefault("task_recall_task_thread_source", None)
+    details.setdefault("task_recall_selected_checkpoint_step_name", None)
+    details.setdefault("task_recall_selected_checkpoint_summary", None)
+    details.setdefault("task_recall_latest_considered_checkpoint_step_name", None)
+    details.setdefault("task_recall_latest_considered_checkpoint_summary", None)
+    details.setdefault("task_recall_latest_vs_selected_candidate_details_present", False)
+    details.setdefault(
+        "task_recall_latest_vs_selected_candidate_details",
+        {
+            "latest_workflow_instance_id": None,
+            "selected_workflow_instance_id": None,
+            "latest_considered": {
+                "workflow_instance_id": None,
+                "checkpoint_step_name": None,
+                "checkpoint_summary": None,
+                "primary_objective_text": None,
+                "next_intended_action_text": None,
+                "ticket_detour_like": False,
+                "checkpoint_detour_like": False,
+                "detour_like": False,
+                "workflow_terminal": False,
+                "has_attempt_signal": False,
+                "attempt_terminal": False,
+                "has_checkpoint_signal": False,
+                "return_target_basis": None,
+                "task_thread_basis": None,
+            },
+            "selected": {
+                "workflow_instance_id": None,
+                "checkpoint_step_name": None,
+                "checkpoint_summary": None,
+                "primary_objective_text": None,
+                "next_intended_action_text": None,
+                "ticket_detour_like": False,
+                "checkpoint_detour_like": False,
+                "detour_like": False,
+                "workflow_terminal": False,
+                "has_attempt_signal": False,
+                "attempt_terminal": False,
+                "has_checkpoint_signal": False,
+                "return_target_basis": None,
+                "task_thread_basis": None,
+            },
+            "same_checkpoint_details": True,
+            "comparison_source": "task_recall_checkpoint_comparison",
+        },
+    )
+    details.setdefault("task_recall_latest_vs_selected_checkpoint_details_present", False)
+    details.setdefault(
+        "task_recall_latest_vs_selected_checkpoint_details",
+        {
+            "latest_workflow_instance_id": None,
+            "selected_workflow_instance_id": None,
+            "latest_considered": {
+                "workflow_instance_id": None,
+                "checkpoint_step_name": None,
+                "checkpoint_summary": None,
+                "primary_objective_text": None,
+                "next_intended_action_text": None,
+                "ticket_detour_like": False,
+                "checkpoint_detour_like": False,
+                "detour_like": False,
+                "workflow_terminal": False,
+                "has_attempt_signal": False,
+                "attempt_terminal": False,
+                "has_checkpoint_signal": False,
+                "return_target_basis": None,
+                "task_thread_basis": None,
+            },
+            "selected": {
+                "workflow_instance_id": None,
+                "checkpoint_step_name": None,
+                "checkpoint_summary": None,
+                "primary_objective_text": None,
+                "next_intended_action_text": None,
+                "ticket_detour_like": False,
+                "checkpoint_detour_like": False,
+                "detour_like": False,
+                "workflow_terminal": False,
+                "has_attempt_signal": False,
+                "attempt_terminal": False,
+                "has_checkpoint_signal": False,
+                "return_target_basis": None,
+                "task_thread_basis": None,
+            },
+            "same_checkpoint_details": True,
+            "comparison_source": "task_recall_checkpoint_comparison",
+        },
+    )
+    details.setdefault("task_recall_latest_vs_selected_primary_block", "candidate_details")
+    details.setdefault(
+        "task_recall_latest_vs_selected_checkpoint_details_is_compatibility_alias",
+        True,
+    )
+    details.setdefault("task_recall_prior_mainline_present", False)
+    details.setdefault("task_recall_prior_mainline_workflow_instance_id", None)
+    details.setdefault("task_recall_primary_objective_present", False)
+    details.setdefault("task_recall_primary_objective_text", None)
+    details.setdefault("task_recall_primary_objective_source", None)
+    details.setdefault("task_recall_latest_vs_selected_explanations_present", False)
+    details.setdefault("task_recall_latest_vs_selected_explanations", [])
+    details.setdefault("task_recall_comparison_summary_explanations_present", False)
+    details.setdefault("task_recall_comparison_summary_explanations", [])
     details.setdefault("task_recall_selected_equals_latest", False)
     details.setdefault("task_recall_selected_equals_running", False)
     details.setdefault("task_recall_latest_workflow_terminal", False)

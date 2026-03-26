@@ -82,6 +82,10 @@ class UnitOfWorkWorkflowLookupRepository:
                     "latest_attempt_started_at": None,
                     "has_latest_checkpoint": False,
                     "latest_checkpoint_created_at": None,
+                    "latest_checkpoint_step_name": None,
+                    "latest_checkpoint_summary": None,
+                    "latest_checkpoint_current_objective": None,
+                    "latest_checkpoint_next_intended_action": None,
                     "latest_verify_report_created_at": None,
                 }
 
@@ -117,6 +121,24 @@ class UnitOfWorkWorkflowLookupRepository:
                 "has_latest_checkpoint": latest_checkpoint is not None,
                 "latest_checkpoint_created_at": (
                     latest_checkpoint.created_at if latest_checkpoint is not None else None
+                ),
+                "latest_checkpoint_step_name": (
+                    latest_checkpoint.step_name if latest_checkpoint is not None else None
+                ),
+                "latest_checkpoint_summary": (
+                    latest_checkpoint.summary if latest_checkpoint is not None else None
+                ),
+                "latest_checkpoint_current_objective": (
+                    latest_checkpoint.checkpoint_json.get("current_objective")
+                    if latest_checkpoint is not None
+                    and isinstance(latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "latest_checkpoint_next_intended_action": (
+                    latest_checkpoint.checkpoint_json.get("next_intended_action")
+                    if latest_checkpoint is not None
+                    and isinstance(latest_checkpoint.checkpoint_json, dict)
+                    else None
                 ),
                 "latest_verify_report_created_at": (
                     latest_verify_report.created_at if latest_verify_report is not None else None
@@ -216,6 +238,17 @@ class InMemoryWorkflowLookupRepository:
         ]
         return tuple(matches[:limit])
 
+    def workflow_ids_by_workspace_id_raw_order(
+        self,
+        workspace_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]:
+        return self.workflow_ids_by_workspace_id(
+            workspace_id,
+            limit=limit,
+        )
+
     def workflow_ids_by_ticket_id(
         self,
         ticket_id: str,
@@ -228,6 +261,17 @@ class InMemoryWorkflowLookupRepository:
             if workflow_info.get("ticket_id") == ticket_id
         ]
         return tuple(matches[:limit])
+
+    def workflow_ids_by_ticket_id_raw_order(
+        self,
+        ticket_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]:
+        return self.workflow_ids_by_ticket_id(
+            ticket_id,
+            limit=limit,
+        )
 
     def workflow_freshness_by_id(
         self,
@@ -254,6 +298,14 @@ class InMemoryWorkflowLookupRepository:
                 workflow_info.get("latest_checkpoint_created_at") is not None,
             ),
             "latest_checkpoint_created_at": workflow_info.get("latest_checkpoint_created_at"),
+            "latest_checkpoint_step_name": workflow_info.get("latest_checkpoint_step_name"),
+            "latest_checkpoint_summary": workflow_info.get("latest_checkpoint_summary"),
+            "latest_checkpoint_current_objective": workflow_info.get(
+                "latest_checkpoint_current_objective"
+            ),
+            "latest_checkpoint_next_intended_action": workflow_info.get(
+                "latest_checkpoint_next_intended_action"
+            ),
             "latest_verify_report_created_at": workflow_info.get("latest_verify_report_created_at"),
         }
 

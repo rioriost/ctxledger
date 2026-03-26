@@ -1585,7 +1585,25 @@ def test_memory_service_get_context_uses_workspace_and_ticket_lookup_paths() -> 
             self.workspace_calls.append((workspace_id, limit))
             return (matching_workflow_id,)
 
+        def workflow_ids_by_workspace_id_raw_order(
+            self,
+            workspace_id: str,
+            *,
+            limit: int,
+        ) -> tuple[UUID, ...]:
+            self.workspace_calls.append((workspace_id, limit))
+            return (matching_workflow_id,)
+
         def workflow_ids_by_ticket_id(
+            self,
+            ticket_id: str,
+            *,
+            limit: int,
+        ) -> tuple[UUID, ...]:
+            self.ticket_calls.append((ticket_id, limit))
+            return (matching_workflow_id,)
+
+        def workflow_ids_by_ticket_id_raw_order(
             self,
             ticket_id: str,
             *,
@@ -1609,6 +1627,10 @@ def test_memory_service_get_context_uses_workspace_and_ticket_lookup_paths() -> 
                 "latest_attempt_started_at": None,
                 "has_latest_checkpoint": False,
                 "latest_checkpoint_created_at": None,
+                "latest_checkpoint_step_name": None,
+                "latest_checkpoint_summary": None,
+                "latest_checkpoint_current_objective": None,
+                "latest_checkpoint_next_intended_action": None,
                 "latest_verify_report_created_at": None,
             }
 
@@ -1707,6 +1729,12 @@ def test_memory_service_workflow_ordering_signals_without_lookup() -> None:
             "latest_attempt_verify_status": None,
             "has_latest_checkpoint": None,
             "latest_checkpoint_created_at": None,
+            "latest_checkpoint_step_name": None,
+            "latest_checkpoint_summary": None,
+            "latest_checkpoint_current_objective": None,
+            "latest_checkpoint_next_intended_action": None,
+            "latest_checkpoint_has_current_objective": False,
+            "latest_checkpoint_has_next_intended_action": False,
             "latest_verify_report_created_at": None,
             "latest_episode_created_at": episode.created_at.isoformat(),
             "latest_attempt_started_at": None,

@@ -138,15 +138,10 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
     assert len(episode_repository.episodes) == 1
     assert len(memory_item_repository.memory_items) == 1
     assert len(memory_embedding_repository.embeddings) == 1
-    assert (
-        memory_embedding_repository.embeddings[0].memory_id
-        == result.memory_item.memory_id
-    )
+    assert memory_embedding_repository.embeddings[0].memory_id == result.memory_item.memory_id
 
 
-def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources() -> (
-    None
-):
+def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     workflow_id = uuid4()
@@ -198,9 +193,7 @@ def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources(
     }
 
 
-def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation_fails() -> (
-    None
-):
+def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation_fails() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     class FailingEmbeddingGenerator:
@@ -357,9 +350,7 @@ def test_workflow_memory_bridge_post_init_swallows_settings_error(
     assert bridge.embedding_generator is None
 
 
-def test_workflow_memory_bridge_returns_skip_result_when_summary_sources_are_absent() -> (
-    None
-):
+def test_workflow_memory_bridge_returns_skip_result_when_summary_sources_are_absent() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     workflow_id = uuid4()
@@ -476,9 +467,7 @@ def test_workflow_memory_bridge_recent_memory_handles_non_callable_listing() -> 
     assert episodes == ()
 
 
-def test_workflow_memory_bridge_recent_memory_handles_non_tuple_listing_result() -> (
-    None
-):
+def test_workflow_memory_bridge_recent_memory_handles_non_tuple_listing_result() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     bridge = WorkflowMemoryBridge(
@@ -549,9 +538,7 @@ def test_workflow_memory_bridge_extract_closeout_fields_without_summary_uses_fal
     }
 
 
-def test_workflow_memory_bridge_weighted_similarity_without_shared_fields_is_zero() -> (
-    None
-):
+def test_workflow_memory_bridge_weighted_similarity_without_shared_fields_is_zero() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     bridge = WorkflowMemoryBridge(
@@ -663,9 +650,7 @@ def test_workflow_memory_bridge_build_completion_summary_includes_failure_reason
     )
 
 
-def test_workflow_memory_bridge_build_completion_metadata_includes_optional_fields() -> (
-    None
-):
+def test_workflow_memory_bridge_build_completion_metadata_includes_optional_fields() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     workflow_id = uuid4()
@@ -892,9 +877,7 @@ def test_workflow_memory_bridge_recent_memory_filters_non_auto_memory_entries() 
     assert episodes == (auto_episode,)
 
 
-def test_workflow_memory_bridge_maybe_store_embedding_skips_without_dependencies() -> (
-    None
-):
+def test_workflow_memory_bridge_maybe_store_embedding_skips_without_dependencies() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     bridge = WorkflowMemoryBridge(
@@ -918,9 +901,7 @@ def test_workflow_memory_bridge_maybe_store_embedding_skips_without_dependencies
     }
 
 
-def test_workflow_memory_bridge_checkpoint_next_action_handles_non_string_value() -> (
-    None
-):
+def test_workflow_memory_bridge_checkpoint_next_action_handles_non_string_value() -> None:
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     checkpoint = WorkflowCheckpoint(
@@ -998,6 +979,24 @@ def test_memory_service_get_context_uses_workspace_and_ticket_lookup_paths() -> 
             self.ticket_calls.append((ticket_id, limit))
             return (matching_workflow_id,)
 
+        def workflow_ids_by_workspace_id_raw_order(
+            self,
+            workspace_id: str,
+            *,
+            limit: int,
+        ) -> tuple[UUID, ...]:
+            self.workspace_calls.append((workspace_id, limit))
+            return (matching_workflow_id,)
+
+        def workflow_ids_by_ticket_id_raw_order(
+            self,
+            ticket_id: str,
+            *,
+            limit: int,
+        ) -> tuple[UUID, ...]:
+            self.ticket_calls.append((ticket_id, limit))
+            return (matching_workflow_id,)
+
         def workflow_freshness_by_id(
             self,
             workflow_instance_id: UUID,
@@ -1042,9 +1041,7 @@ def test_memory_service_get_context_uses_workspace_and_ticket_lookup_paths() -> 
     ]
 
 
-def test_memory_get_context_includes_episode_explanations_without_query_filter() -> (
-    None
-):
+def test_memory_get_context_includes_episode_explanations_without_query_filter() -> None:
     workflow_id = uuid4()
     created_at = datetime(2024, 9, 10, tzinfo=UTC)
 

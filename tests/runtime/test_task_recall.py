@@ -4,7 +4,9 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from ctxledger.runtime.task_recall import (
+    build_checkpoint_current_objective_bonus_reason,
     build_checkpoint_detour_like_penalty_reason,
+    build_checkpoint_next_intended_action_bonus_reason,
     build_detour_like_signal_details,
     build_latest_attempt_present_bonus_reason,
     build_latest_attempt_present_explanations,
@@ -14,7 +16,7 @@ from ctxledger.runtime.task_recall import (
     build_latest_candidate_retained_explanations,
     build_latest_checkpoint_present_bonus_reason,
     build_latest_checkpoint_present_explanations,
-    build_mainline_like_bonus_reason,
+    build_non_detour_candidate_bonus_reason,
     build_resumability_explanations,
     build_running_workflow_priority_reason,
     build_selected_candidate_reason,
@@ -61,14 +63,19 @@ def test_shared_candidate_reason_helpers_return_expected_payloads() -> None:
         "message": "latest checkpoint looked detour-like",
         "impact": -10,
     }
-    assert build_mainline_like_bonus_reason(impact=10) == {
-        "code": "mainline_like_bonus",
-        "message": "candidate looks aligned with the main task line",
+    assert build_non_detour_candidate_bonus_reason(impact=5) == {
+        "code": "non_detour_candidate_bonus",
+        "message": "candidate avoids detour-like wording and remains continuation-friendly",
+        "impact": 5,
+    }
+    assert build_checkpoint_current_objective_bonus_reason(impact=10) == {
+        "code": "checkpoint_current_objective_bonus",
+        "message": "latest checkpoint carries an explicit current objective",
         "impact": 10,
     }
-    assert build_mainline_like_bonus_reason(impact=5) == {
-        "code": "mainline_like_bonus",
-        "message": "candidate looks aligned with the main task line",
+    assert build_checkpoint_next_intended_action_bonus_reason(impact=5) == {
+        "code": "checkpoint_next_intended_action_bonus",
+        "message": "latest checkpoint carries an explicit next intended action",
         "impact": 5,
     }
     assert build_latest_candidate_reason(context="resume") == {
@@ -367,6 +374,17 @@ def test_build_task_recall_ranking_entry_returns_expected_payload_for_mainline_s
         "has_latest_attempt": True,
         "latest_attempt_terminal": False,
         "has_latest_checkpoint": True,
+        "ticket_detour_like": False,
+        "checkpoint_detour_like": False,
+        "checkpoint_has_current_objective": False,
+        "checkpoint_has_next_intended_action": False,
+        "detour_like": False,
+        "explicit_mainline_signal_present": False,
+        "return_target_candidate": True,
+        "return_target_basis": "non_detour_candidate",
+        "task_thread_candidate": True,
+        "task_thread_basis": "non_detour_candidate",
+        "primary_objective_present": False,
         "score": 40,
         "reason_list": [
             {
@@ -389,8 +407,8 @@ def test_build_task_recall_ranking_entry_returns_expected_payload_for_mainline_s
                 "impact": 5,
             },
             {
-                "code": "mainline_like_bonus",
-                "message": "candidate looks aligned with the main task line",
+                "code": "non_detour_candidate_bonus",
+                "message": "candidate avoids detour-like wording and remains continuation-friendly",
                 "impact": 5,
             },
             {
@@ -424,6 +442,17 @@ def test_build_task_recall_ranking_entry_returns_expected_payload_for_detour_ter
         "has_latest_attempt": False,
         "latest_attempt_terminal": True,
         "has_latest_checkpoint": False,
+        "ticket_detour_like": True,
+        "checkpoint_detour_like": True,
+        "checkpoint_has_current_objective": False,
+        "checkpoint_has_next_intended_action": False,
+        "detour_like": True,
+        "explicit_mainline_signal_present": False,
+        "return_target_candidate": False,
+        "return_target_basis": "detour_penalized_candidate",
+        "task_thread_candidate": False,
+        "task_thread_basis": "detour_penalized_candidate",
+        "primary_objective_present": False,
         "score": -40,
         "reason_list": [
             {
@@ -484,8 +513,8 @@ def test_task_recall_and_workspace_resume_use_different_mainline_bonus_weights()
             "impact": 25,
         },
         {
-            "code": "mainline_like_bonus",
-            "message": "candidate looks aligned with the main task line",
+            "code": "non_detour_candidate_bonus",
+            "message": "candidate avoids detour-like wording and remains continuation-friendly",
             "impact": 5,
         },
     ]

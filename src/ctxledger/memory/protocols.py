@@ -33,7 +33,21 @@ class WorkflowLookupRepository(Protocol):
         limit: int,
     ) -> tuple[UUID, ...]: ...
 
+    def workflow_ids_by_workspace_id_raw_order(
+        self,
+        workspace_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]: ...
+
     def workflow_ids_by_ticket_id(
+        self,
+        ticket_id: str,
+        *,
+        limit: int,
+    ) -> tuple[UUID, ...]: ...
+
+    def workflow_ids_by_ticket_id_raw_order(
         self,
         ticket_id: str,
         *,
