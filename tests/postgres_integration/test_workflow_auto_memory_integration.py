@@ -164,8 +164,12 @@ def test_postgres_workflow_complete_auto_records_memory_and_embedding(
             auto_episode.episode_id,
             limit=10,
         )
-        assert len(episode_memory_items) == 1
-        auto_memory_item = episode_memory_items[0]
+        assert len(episode_memory_items) == 3
+        auto_memory_item = next(
+            memory_item
+            for memory_item in episode_memory_items
+            if memory_item.type == "workflow_completion_note"
+        )
 
         memory_embeddings = uow.memory_embeddings.list_by_memory_id(
             auto_memory_item.memory_id,
@@ -197,6 +201,8 @@ def test_postgres_workflow_complete_auto_records_memory_and_embedding(
     )
     assert "Last planned next action: Review diff and commit" in auto_episode.summary
     assert "Verify status: passed" in auto_episode.summary
+    assert "Workflow status: completed" in auto_episode.summary
+    assert "Workflow status: completed" in auto_episode.summary
 
     assert auto_memory_item.workspace_id == workspace.workspace_id
     assert auto_memory_item.episode_id == auto_episode.episode_id
@@ -204,6 +210,16 @@ def test_postgres_workflow_complete_auto_records_memory_and_embedding(
     assert auto_memory_item.provenance == "workflow_complete_auto"
     assert auto_memory_item.content == auto_episode.summary
     assert auto_memory_item.metadata == auto_episode.metadata
+    assert {memory_item.type for memory_item in episode_memory_items} == {
+        "workflow_completion_note",
+        "workflow_next_action",
+        "workflow_verification_outcome",
+    }
+    assert {memory_item.type for memory_item in episode_memory_items} == {
+        "workflow_completion_note",
+        "workflow_next_action",
+        "workflow_verification_outcome",
+    }
 
     assert len(memory_embeddings) == 1
     assert memory_embeddings[0].memory_id == auto_memory_item.memory_id
@@ -286,7 +302,8 @@ def test_postgres_workflow_complete_auto_memory_is_searchable(
         "Completion summary: Validated projection drift fix and semantic retrieval\n"
         "Latest checkpoint summary: Investigated projection drift root cause in deployment workflow\n"
         "Last planned next action: Write fix and validate semantic retrieval\n"
-        "Verify status: passed"
+        "Verify status: passed\n"
+        "Workflow status: completed"
     )
     assert top_result.semantic_score > 0.0
     assert top_result.score > 0.0
@@ -372,6 +389,13 @@ def test_postgres_workflow_complete_auto_memory_skips_low_signal_closeout(
     assert completed.auto_memory_details == {
         "auto_memory_recorded": False,
         "auto_memory_skipped_reason": "low_signal_checkpoint_closeout",
+        "stage_details": {
+            "gating": {
+                "attempted": True,
+                "status": "skipped",
+                "skipped_reason": "low_signal_checkpoint_closeout",
+            }
+        },
     }
     assert completed.warnings == ()
     assert auto_episodes == []
@@ -469,7 +493,7 @@ def test_postgres_workflow_complete_auto_memory_builds_summary_when_gated_builde
     assert summary_build_details["summary_build_replaced_existing_summary"] is False
     assert summary_build_details["built_memory_summary_id"] == str(built_summary.memory_summary_id)
     assert summary_build_details["built_summary_kind"] == "episode_summary"
-    assert summary_build_details["built_summary_membership_count"] == 1
+    assert summary_build_details["built_summary_membership_count"] == 3
     assert completed.warnings == ()
     assert built_summary.summary_kind == "episode_summary"
     assert built_summary.metadata["builder"] == "minimal_episode_summary_builder"
@@ -478,7 +502,25 @@ def test_postgres_workflow_complete_auto_memory_builds_summary_when_gated_builde
         started.workflow_instance.workflow_instance_id
     )
     assert built_summary.metadata["auto_memory_episode_id"] == str(auto_episode.episode_id)
-    assert len(memberships) == 1
+    assert built_summary.metadata["remember_path_memory_origins"] == ["workflow_complete_auto"]
+    assert built_summary.metadata["remember_path_promotion_fields"] == [
+        "next_intended_action",
+        "verify_status",
+    ]
+    assert built_summary.metadata["remember_path_promotion_sources"] == [
+        "latest_checkpoint.next_intended_action",
+        "verify_report.status",
+    ]
+    assert built_summary.metadata["remember_path_memory_origins"] == ["workflow_complete_auto"]
+    assert built_summary.metadata["remember_path_promotion_fields"] == [
+        "next_intended_action",
+        "verify_status",
+    ]
+    assert built_summary.metadata["remember_path_promotion_sources"] == [
+        "latest_checkpoint.next_intended_action",
+        "verify_report.status",
+    ]
+    assert len(memberships) == 3
 
     context = memory_service.get_context(
         GetMemoryContextRequest(
@@ -493,15 +535,42 @@ def test_postgres_workflow_complete_auto_memory_builds_summary_when_gated_builde
     assert context.feature == MemoryFeature.GET_CONTEXT
     assert context.details["summary_selection_applied"] is True
     assert context.details["summary_selection_kind"] == "episode_summary_first"
-    assert context.details["summaries"] == [
-        {
-            "episode_id": str(auto_episode.episode_id),
-            "workflow_instance_id": str(started.workflow_instance.workflow_instance_id),
-            "memory_item_count": 1,
-            "memory_item_types": ["workflow_completion_note"],
-            "memory_item_provenance": ["workflow_complete_auto"],
-        }
+    matching_summaries = [
+        summary
+        for summary in context.details["summaries"]
+        if summary["episode_id"] == str(auto_episode.episode_id)
     ]
+    assert len(matching_summaries) == 1
+    auto_summary = matching_summaries[0]
+    assert auto_summary["workflow_instance_id"] == str(
+        started.workflow_instance.workflow_instance_id
+    )
+    assert auto_summary["memory_item_count"] == 3
+    assert set(auto_summary["memory_item_types"]) == {
+        "workflow_completion_note",
+        "workflow_next_action",
+        "workflow_verification_outcome",
+    }
+    assert auto_summary["memory_item_provenance"] == [
+        "workflow_complete_auto",
+        "workflow_complete_auto",
+        "workflow_complete_auto",
+    ]
+    assert auto_summary["remember_path_explainability"] == {
+        "memory_origins": ["workflow_complete_auto"],
+        "promotion_fields": [
+            "next_intended_action",
+            "verify_status",
+        ],
+        "promotion_sources": [
+            "latest_checkpoint.next_intended_action",
+            "verify_report.status",
+        ],
+        "relation_reasons": [],
+        "relation_reason_primary": None,
+        "relation_reasons_frontloaded": False,
+        "relation_origins": [],
+    }
 
 
 def test_postgres_workflow_complete_auto_memory_skips_summary_build_when_trigger_is_absent(
@@ -616,15 +685,42 @@ def test_postgres_workflow_complete_auto_memory_skips_summary_build_when_trigger
     assert context.feature == MemoryFeature.GET_CONTEXT
     assert context.details["summary_selection_applied"] is True
     assert context.details["summary_selection_kind"] == "episode_summary_first"
-    assert context.details["summaries"] == [
-        {
-            "episode_id": str(auto_episode.episode_id),
-            "workflow_instance_id": str(started.workflow_instance.workflow_instance_id),
-            "memory_item_count": 1,
-            "memory_item_types": ["workflow_completion_note"],
-            "memory_item_provenance": ["workflow_complete_auto"],
-        }
+    matching_summaries = [
+        summary
+        for summary in context.details["summaries"]
+        if summary["episode_id"] == str(auto_episode.episode_id)
     ]
+    assert len(matching_summaries) == 1
+    auto_summary = matching_summaries[0]
+    assert auto_summary["workflow_instance_id"] == str(
+        started.workflow_instance.workflow_instance_id
+    )
+    assert auto_summary["memory_item_count"] == 3
+    assert set(auto_summary["memory_item_types"]) == {
+        "workflow_completion_note",
+        "workflow_next_action",
+        "workflow_verification_outcome",
+    }
+    assert auto_summary["memory_item_provenance"] == [
+        "workflow_complete_auto",
+        "workflow_complete_auto",
+        "workflow_complete_auto",
+    ]
+    assert auto_summary["remember_path_explainability"] == {
+        "memory_origins": ["workflow_complete_auto"],
+        "promotion_fields": [
+            "next_intended_action",
+            "verify_status",
+        ],
+        "promotion_sources": [
+            "latest_checkpoint.next_intended_action",
+            "verify_report.status",
+        ],
+        "relation_reasons": [],
+        "relation_reason_primary": None,
+        "relation_reasons_frontloaded": False,
+        "relation_origins": [],
+    }
 
 
 def test_postgres_workflow_complete_auto_memory_suppresses_duplicate_closeout(
@@ -707,19 +803,35 @@ def test_postgres_workflow_complete_auto_memory_suppresses_duplicate_closeout(
             if episode.metadata.get("memory_origin") == "workflow_complete_auto"
         ]
 
-    assert first_completed.auto_memory_details == {
-        "auto_memory_recorded": True,
-        "embedding_persistence_status": "stored",
-        "embedding_generation_skipped_reason": None,
-        "embedding_provider": "local_stub",
-        "embedding_model": "local-stub-v1",
-        "embedding_vector_dimensions": 1536,
-        "embedding_content_hash": first_completed.auto_memory_details["embedding_content_hash"],
-    }
+    assert first_completed.auto_memory_details is not None
+    assert first_completed.auto_memory_details["auto_memory_recorded"] is True
+    assert first_completed.auto_memory_details["embedding_persistence_status"] == "stored"
+    assert first_completed.auto_memory_details["embedding_generation_skipped_reason"] is None
+    assert first_completed.auto_memory_details["embedding_provider"] == "local_stub"
+    assert first_completed.auto_memory_details["embedding_model"] == "local-stub-v1"
+    assert first_completed.auto_memory_details["embedding_vector_dimensions"] == 1536
+    assert first_completed.auto_memory_details["embedding_content_hash"] is not None
     assert duplicate_result is not None
-    assert duplicate_result.details == {
-        "auto_memory_recorded": False,
-        "auto_memory_skipped_reason": "duplicate_closeout_auto_memory",
+    assert duplicate_result.details["auto_memory_recorded"] is False
+    assert duplicate_result.details["auto_memory_skipped_reason"] == (
+        "duplicate_closeout_auto_memory"
+    )
+    assert duplicate_result.details["stage_details"] == {
+        "gating": {
+            "attempted": True,
+            "status": "passed",
+            "skipped_reason": None,
+        },
+        "summary_selection": {
+            "attempted": True,
+            "status": "built",
+            "skipped_reason": None,
+        },
+        "duplicate_check": {
+            "attempted": True,
+            "status": "skipped",
+            "skipped_reason": "duplicate_closeout_auto_memory",
+        },
     }
     assert len(auto_episodes) == 1
 
@@ -804,9 +916,26 @@ def test_postgres_workflow_complete_auto_memory_suppresses_near_duplicate_closeo
     assert first_completed.auto_memory_details is not None
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
     assert near_duplicate_result is not None
-    assert near_duplicate_result.details == {
-        "auto_memory_recorded": False,
-        "auto_memory_skipped_reason": "near_duplicate_checkpoint_closeout",
+    assert near_duplicate_result.details["auto_memory_recorded"] is False
+    assert near_duplicate_result.details["auto_memory_skipped_reason"] == (
+        "near_duplicate_checkpoint_closeout"
+    )
+    assert near_duplicate_result.details["stage_details"] == {
+        "gating": {
+            "attempted": True,
+            "status": "passed",
+            "skipped_reason": None,
+        },
+        "summary_selection": {
+            "attempted": True,
+            "status": "built",
+            "skipped_reason": None,
+        },
+        "duplicate_check": {
+            "attempted": True,
+            "status": "skipped",
+            "skipped_reason": "near_duplicate_checkpoint_closeout",
+        },
     }
     assert len(auto_episodes) == 1
 
@@ -891,9 +1020,26 @@ def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_with_high_s
     assert first_completed.auto_memory_details is not None
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
     assert near_duplicate_result is not None
-    assert near_duplicate_result.details == {
-        "auto_memory_recorded": False,
-        "auto_memory_skipped_reason": "near_duplicate_checkpoint_closeout",
+    assert near_duplicate_result.details["auto_memory_recorded"] is False
+    assert near_duplicate_result.details["auto_memory_skipped_reason"] == (
+        "near_duplicate_checkpoint_closeout"
+    )
+    assert near_duplicate_result.details["stage_details"] == {
+        "gating": {
+            "attempted": True,
+            "status": "passed",
+            "skipped_reason": None,
+        },
+        "summary_selection": {
+            "attempted": True,
+            "status": "built",
+            "skipped_reason": None,
+        },
+        "duplicate_check": {
+            "attempted": True,
+            "status": "skipped",
+            "skipped_reason": "near_duplicate_checkpoint_closeout",
+        },
     }
     assert len(auto_episodes) == 1
 
@@ -978,9 +1124,26 @@ def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_when_simila
     assert first_completed.auto_memory_details is not None
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
     assert near_duplicate_result is not None
-    assert near_duplicate_result.details == {
-        "auto_memory_recorded": False,
-        "auto_memory_skipped_reason": "near_duplicate_checkpoint_closeout",
+    assert near_duplicate_result.details["auto_memory_recorded"] is False
+    assert near_duplicate_result.details["auto_memory_skipped_reason"] == (
+        "near_duplicate_checkpoint_closeout"
+    )
+    assert near_duplicate_result.details["stage_details"] == {
+        "gating": {
+            "attempted": True,
+            "status": "passed",
+            "skipped_reason": None,
+        },
+        "summary_selection": {
+            "attempted": True,
+            "status": "built",
+            "skipped_reason": None,
+        },
+        "duplicate_check": {
+            "attempted": True,
+            "status": "skipped",
+            "skipped_reason": "near_duplicate_checkpoint_closeout",
+        },
     }
     assert len(auto_episodes) == 1
 
@@ -1197,15 +1360,13 @@ def test_postgres_workflow_complete_auto_memory_records_when_summary_similarity_
     assert first_completed.auto_memory_details is not None
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
     assert different_result is not None
-    assert different_result.details == {
-        "auto_memory_recorded": True,
-        "embedding_persistence_status": "stored",
-        "embedding_generation_skipped_reason": None,
-        "embedding_provider": "local_stub",
-        "embedding_model": "local-stub-v1",
-        "embedding_vector_dimensions": 1536,
-        "embedding_content_hash": different_result.details["embedding_content_hash"],
-    }
+    assert different_result.details["auto_memory_recorded"] is True
+    assert different_result.details["embedding_persistence_status"] == "stored"
+    assert different_result.details["embedding_generation_skipped_reason"] is None
+    assert different_result.details["embedding_provider"] == "local_stub"
+    assert different_result.details["embedding_model"] == "local-stub-v1"
+    assert different_result.details["embedding_vector_dimensions"] == 1536
+    assert different_result.details["embedding_content_hash"] is not None
     assert len(auto_episodes) == 2
 
 
@@ -1291,9 +1452,26 @@ def test_postgres_workflow_complete_auto_memory_uses_extracted_and_metadata_fiel
     assert first_completed.auto_memory_details is not None
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
     assert near_duplicate_result is not None
-    assert near_duplicate_result.details == {
-        "auto_memory_recorded": False,
-        "auto_memory_skipped_reason": "near_duplicate_checkpoint_closeout",
+    assert near_duplicate_result.details["auto_memory_recorded"] is False
+    assert near_duplicate_result.details["auto_memory_skipped_reason"] == (
+        "near_duplicate_checkpoint_closeout"
+    )
+    assert near_duplicate_result.details["stage_details"] == {
+        "gating": {
+            "attempted": True,
+            "status": "passed",
+            "skipped_reason": None,
+        },
+        "summary_selection": {
+            "attempted": True,
+            "status": "built",
+            "skipped_reason": None,
+        },
+        "duplicate_check": {
+            "attempted": True,
+            "status": "skipped",
+            "skipped_reason": "near_duplicate_checkpoint_closeout",
+        },
     }
     assert len(auto_episodes) == 1
 
@@ -1390,15 +1568,13 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_attempt
     assert first_completed.auto_memory_details is not None
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
     assert attempt_different_result is not None
-    assert attempt_different_result.details == {
-        "auto_memory_recorded": True,
-        "embedding_persistence_status": "stored",
-        "embedding_generation_skipped_reason": None,
-        "embedding_provider": "local_stub",
-        "embedding_model": "local-stub-v1",
-        "embedding_vector_dimensions": 1536,
-        "embedding_content_hash": attempt_different_result.details["embedding_content_hash"],
-    }
+    assert attempt_different_result.details["auto_memory_recorded"] is True
+    assert attempt_different_result.details["embedding_persistence_status"] == "stored"
+    assert attempt_different_result.details["embedding_generation_skipped_reason"] is None
+    assert attempt_different_result.details["embedding_provider"] == "local_stub"
+    assert attempt_different_result.details["embedding_model"] == "local-stub-v1"
+    assert attempt_different_result.details["embedding_vector_dimensions"] == 1536
+    assert attempt_different_result.details["embedding_content_hash"] is not None
     assert len(auto_episodes) == 2
     assert any(episode.metadata.get("attempt_status") == "failed" for episode in auto_episodes)
 
@@ -1497,15 +1673,13 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_failure
     assert first_completed.auto_memory_details is not None
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
     assert failure_reason_different_result is not None
-    assert failure_reason_different_result.details == {
-        "auto_memory_recorded": True,
-        "embedding_persistence_status": "stored",
-        "embedding_generation_skipped_reason": None,
-        "embedding_provider": "local_stub",
-        "embedding_model": "local-stub-v1",
-        "embedding_vector_dimensions": 1536,
-        "embedding_content_hash": failure_reason_different_result.details["embedding_content_hash"],
-    }
+    assert failure_reason_different_result.details["auto_memory_recorded"] is True
+    assert failure_reason_different_result.details["embedding_persistence_status"] == "stored"
+    assert failure_reason_different_result.details["embedding_generation_skipped_reason"] is None
+    assert failure_reason_different_result.details["embedding_provider"] == "local_stub"
+    assert failure_reason_different_result.details["embedding_model"] == "local-stub-v1"
+    assert failure_reason_different_result.details["embedding_vector_dimensions"] == 1536
+    assert failure_reason_different_result.details["embedding_content_hash"] is not None
     assert len(auto_episodes) == 2
     assert any(
         episode.metadata.get("failure_reason") == "second failure path" for episode in auto_episodes
@@ -1602,14 +1776,12 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_verify_
     assert first_completed.auto_memory_details is not None
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
     assert verify_different_result is not None
-    assert verify_different_result.details == {
-        "auto_memory_recorded": True,
-        "embedding_persistence_status": "stored",
-        "embedding_generation_skipped_reason": None,
-        "embedding_provider": "local_stub",
-        "embedding_model": "local-stub-v1",
-        "embedding_vector_dimensions": 1536,
-        "embedding_content_hash": verify_different_result.details["embedding_content_hash"],
-    }
+    assert verify_different_result.details["auto_memory_recorded"] is True
+    assert verify_different_result.details["embedding_persistence_status"] == "stored"
+    assert verify_different_result.details["embedding_generation_skipped_reason"] is None
+    assert verify_different_result.details["embedding_provider"] == "local_stub"
+    assert verify_different_result.details["embedding_model"] == "local-stub-v1"
+    assert verify_different_result.details["embedding_vector_dimensions"] == 1536
+    assert verify_different_result.details["embedding_content_hash"] is not None
     assert len(auto_episodes) == 2
     assert any(episode.metadata.get("verify_status") == "failed" for episode in auto_episodes)

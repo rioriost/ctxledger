@@ -343,6 +343,8 @@ def test_build_workflow_checkpoint_tool_handler_returns_success_payload() -> Non
                 "workflow_instance": resume.workflow_instance,
                 "attempt": resume.attempt,
                 "verify_report": resume.latest_verify_report,
+                "warnings": (),
+                "auto_memory_details": None,
             },
         )(),
     )
@@ -375,6 +377,8 @@ def test_build_workflow_checkpoint_tool_handler_returns_success_payload() -> Non
             "step_name": resume.latest_checkpoint.step_name,
             "created_at": resume.latest_checkpoint.created_at.isoformat(),
             "latest_verify_status": resume.latest_verify_report.status.value,
+            "warnings": [],
+            "auto_memory_details": None,
         },
     }
     assert fake_workflow_service.create_checkpoint_calls == [

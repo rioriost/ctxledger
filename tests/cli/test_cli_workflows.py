@@ -664,6 +664,8 @@ def test_main_memory_stats_renders_json_output(
 
     assert exit_code == 0
     assert payload == {
+        "checkpoint_auto_memory_recorded_count": 0,
+        "checkpoint_auto_memory_skipped_count": 0,
         "episode_count": 3,
         "latest_episode_created_at": "2026-03-15T09:00:00+00:00",
         "latest_memory_embedding_created_at": None,
@@ -676,6 +678,8 @@ def test_main_memory_stats_renders_json_output(
             "workflow_complete_auto": 2,
         },
         "memory_relation_count": 0,
+        "workflow_completion_auto_memory_recorded_count": 0,
+        "workflow_completion_auto_memory_skipped_count": 0,
     }
     assert captured.err == ""
 

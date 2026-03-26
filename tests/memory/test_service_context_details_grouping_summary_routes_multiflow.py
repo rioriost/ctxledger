@@ -199,41 +199,39 @@ def test_memory_get_context_summary_group_parent_scope_id_is_null_for_multi_work
         "relation_supports_auxiliary": [],
         "graph_summary_auxiliary": [],
     }
-    assert response.details["memory_context_groups"] == [
-        {
-            "scope": "summary",
-            "scope_id": None,
-            "group_id": "summary:episode_summary_first",
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": None,
-            "selection_kind": "episode_summary_first",
-            "selection_route": "summary_first",
-            "child_episode_ids": [
-                str(first_episode.episode_id),
-                str(second_episode.episode_id),
-            ],
-            "child_episode_count": 2,
-            "child_episode_ordering": "returned_episode_order",
-            "child_episode_groups_emitted": False,
-            "child_episode_groups_emission_reason": "memory_items_disabled",
-            "summaries": [
-                {
-                    "episode_id": str(first_episode.episode_id),
-                    "workflow_instance_id": str(first_workflow_id),
-                    "memory_item_count": 1,
-                    "memory_item_types": ["episode_note"],
-                    "memory_item_provenance": ["episode"],
-                },
-                {
-                    "episode_id": str(second_episode.episode_id),
-                    "workflow_instance_id": str(second_workflow_id),
-                    "memory_item_count": 1,
-                    "memory_item_types": ["episode_note"],
-                    "memory_item_provenance": ["episode"],
-                },
-            ],
-        }
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "summary",
     ]
+    summary_group = response.details["memory_context_groups"][0]
+    assert summary_group["scope_id"] is None
+    assert summary_group["group_id"] == "summary:episode_summary_first"
+    assert summary_group["parent_scope"] == "workflow_instance"
+    assert summary_group["parent_scope_id"] is None
+    assert summary_group["selection_kind"] == "episode_summary_first"
+    assert summary_group["selection_route"] == "summary_first"
+    assert summary_group["child_episode_ids"] == [
+        str(first_episode.episode_id),
+        str(second_episode.episode_id),
+    ]
+    assert summary_group["child_episode_count"] == 2
+    assert summary_group["child_episode_ordering"] == "returned_episode_order"
+    assert summary_group["child_episode_groups_emitted"] is False
+    assert summary_group["child_episode_groups_emission_reason"] == "memory_items_disabled"
+    assert len(summary_group["summaries"]) == 2
+    first_summary = summary_group["summaries"][0]
+    second_summary = summary_group["summaries"][1]
+    assert first_summary["episode_id"] == str(first_episode.episode_id)
+    assert first_summary["workflow_instance_id"] == str(first_workflow_id)
+    assert first_summary["memory_item_count"] == 1
+    assert first_summary["memory_item_types"] == ["episode_note"]
+    assert first_summary["memory_item_provenance"] == ["episode"]
+    assert first_summary["remember_path_explainability"] == {}
+    assert second_summary["episode_id"] == str(second_episode.episode_id)
+    assert second_summary["workflow_instance_id"] == str(second_workflow_id)
+    assert second_summary["memory_item_count"] == 1
+    assert second_summary["memory_item_types"] == ["episode_note"]
+    assert second_summary["memory_item_provenance"] == ["episode"]
+    assert second_summary["remember_path_explainability"] == {}
 
 
 def test_memory_get_context_multi_workflow_summary_first_with_memory_items_keeps_child_set_and_episode_parents() -> (
@@ -359,95 +357,164 @@ def test_memory_get_context_multi_workflow_summary_first_with_memory_items_keeps
         "relation_supports_auxiliary": 0,
         "graph_summary_auxiliary": 0,
     }
-    assert response.details["memory_context_groups"] == [
-        {
-            "scope": "summary",
-            "scope_id": None,
-            "group_id": "summary:episode_summary_first",
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": None,
-            "selection_kind": "episode_summary_first",
-            "selection_route": "summary_first",
-            "child_episode_ids": [
-                str(first_episode.episode_id),
-                str(second_episode.episode_id),
-            ],
-            "child_episode_count": 2,
-            "child_episode_ordering": "returned_episode_order",
-            "child_episode_groups_emitted": True,
-            "child_episode_groups_emission_reason": "memory_items_enabled",
-            "summaries": [
-                {
-                    "episode_id": str(first_episode.episode_id),
-                    "workflow_instance_id": str(first_workflow_id),
-                    "memory_item_count": 1,
-                    "memory_item_types": ["episode_note"],
-                    "memory_item_provenance": ["episode"],
-                },
-                {
-                    "episode_id": str(second_episode.episode_id),
-                    "workflow_instance_id": str(second_workflow_id),
-                    "memory_item_count": 1,
-                    "memory_item_types": ["episode_note"],
-                    "memory_item_provenance": ["episode"],
-                },
-            ],
-        },
-        {
-            "scope": "episode",
-            "scope_id": str(first_episode.episode_id),
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": str(first_workflow_id),
-            "parent_group_scope": "summary",
-            "parent_group_id": "summary:episode_summary_first",
-            "selection_kind": "direct_episode",
-            "selection_route": "summary_first",
-            "selected_via_summary_first": True,
-            "memory_items": [
-                {
-                    "memory_id": str(first_memory_item.memory_id),
-                    "workspace_id": workspace_id,
-                    "episode_id": str(first_episode.episode_id),
-                    "type": "episode_note",
-                    "provenance": "episode",
-                    "content": "First workflow memory item",
-                    "metadata": {"kind": "first"},
-                    "created_at": first_memory_item.created_at.isoformat(),
-                    "updated_at": first_memory_item.updated_at.isoformat(),
-                }
-            ],
-            "related_memory_items": [],
-            "related_memory_item_provenance": [],
-            "related_memory_relation_edges": [],
-        },
-        {
-            "scope": "episode",
-            "scope_id": str(second_episode.episode_id),
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": str(second_workflow_id),
-            "parent_group_scope": "summary",
-            "parent_group_id": "summary:episode_summary_first",
-            "selection_kind": "direct_episode",
-            "selection_route": "summary_first",
-            "selected_via_summary_first": True,
-            "memory_items": [
-                {
-                    "memory_id": str(second_memory_item.memory_id),
-                    "workspace_id": workspace_id,
-                    "episode_id": str(second_episode.episode_id),
-                    "type": "episode_note",
-                    "provenance": "episode",
-                    "content": "Second workflow memory item",
-                    "metadata": {"kind": "second"},
-                    "created_at": second_memory_item.created_at.isoformat(),
-                    "updated_at": second_memory_item.updated_at.isoformat(),
-                }
-            ],
-            "related_memory_items": [],
-            "related_memory_item_provenance": [],
-            "related_memory_relation_edges": [],
-        },
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "summary",
+        "episode",
+        "episode",
     ]
+
+    summary_group = response.details["memory_context_groups"][0]
+    assert summary_group["scope_id"] is None
+    assert summary_group["group_id"] == "summary:episode_summary_first"
+    assert summary_group["parent_scope"] == "workflow_instance"
+    assert summary_group["parent_scope_id"] is None
+    assert summary_group["selection_kind"] == "episode_summary_first"
+    assert summary_group["selection_route"] == "summary_first"
+    assert summary_group["child_episode_ids"] == [
+        str(first_episode.episode_id),
+        str(second_episode.episode_id),
+    ]
+    assert summary_group["child_episode_count"] == 2
+    assert summary_group["child_episode_ordering"] == "returned_episode_order"
+    assert summary_group["child_episode_groups_emitted"] is True
+    assert summary_group["child_episode_groups_emission_reason"] == "memory_items_enabled"
+    assert len(summary_group["summaries"]) == 2
+    first_summary = summary_group["summaries"][0]
+    second_summary = summary_group["summaries"][1]
+    assert first_summary["episode_id"] == str(first_episode.episode_id)
+    assert first_summary["workflow_instance_id"] == str(first_workflow_id)
+    assert first_summary["memory_item_count"] == 1
+    assert first_summary["memory_item_types"] == ["episode_note"]
+    assert first_summary["memory_item_provenance"] == ["episode"]
+    assert first_summary["remember_path_explainability"] == {
+        "memory_origins": [],
+        "promotion_fields": [],
+        "promotion_sources": [],
+        "relation_reasons": [],
+        "relation_reason_primary": None,
+        "relation_reasons_frontloaded": False,
+        "relation_origins": [],
+    }
+    assert second_summary["episode_id"] == str(second_episode.episode_id)
+    assert second_summary["workflow_instance_id"] == str(second_workflow_id)
+    assert second_summary["memory_item_count"] == 1
+    assert second_summary["memory_item_types"] == ["episode_note"]
+    assert second_summary["memory_item_provenance"] == ["episode"]
+    assert second_summary["remember_path_explainability"] == {
+        "memory_origins": [],
+        "promotion_fields": [],
+        "promotion_sources": [],
+        "relation_reasons": [],
+        "relation_reason_primary": None,
+        "relation_reasons_frontloaded": False,
+        "relation_origins": [],
+    }
+
+    first_episode_group = response.details["memory_context_groups"][1]
+    assert first_episode_group["scope"] == "episode"
+    assert first_episode_group["scope_id"] == str(first_episode.episode_id)
+    assert first_episode_group["parent_scope"] == "workflow_instance"
+    assert first_episode_group["parent_scope_id"] == str(first_workflow_id)
+    assert first_episode_group["parent_group_scope"] == "summary"
+    assert first_episode_group["parent_group_id"] == "summary:episode_summary_first"
+    assert first_episode_group["selection_kind"] == "direct_episode"
+    assert first_episode_group["selection_route"] == "summary_first"
+    assert first_episode_group["selected_via_summary_first"] is True
+    assert first_episode_group["memory_items"] == [
+        {
+            "memory_id": str(first_memory_item.memory_id),
+            "workspace_id": workspace_id,
+            "episode_id": str(first_episode.episode_id),
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "First workflow memory item",
+            "metadata": {"kind": "first"},
+            "created_at": first_memory_item.created_at.isoformat(),
+            "updated_at": first_memory_item.updated_at.isoformat(),
+        }
+    ]
+    assert first_episode_group["related_memory_items"] == []
+    assert first_episode_group["related_memory_item_provenance"] == []
+    assert first_episode_group["related_memory_relation_edges"] == []
+    assert first_episode_group["remember_path_memory_items"] == [
+        {
+            "memory_id": str(first_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
+    assert first_episode_group["remember_path_memory_summary"] == {
+        "memory_origin_counts": {},
+        "promotion_field_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+    assert first_episode_group["remember_path_relation_explanations"] == []
+    assert first_episode_group["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+
+    second_episode_group = response.details["memory_context_groups"][2]
+    assert second_episode_group["scope"] == "episode"
+    assert second_episode_group["scope_id"] == str(second_episode.episode_id)
+    assert second_episode_group["parent_scope"] == "workflow_instance"
+    assert second_episode_group["parent_scope_id"] == str(second_workflow_id)
+    assert second_episode_group["parent_group_scope"] == "summary"
+    assert second_episode_group["parent_group_id"] == "summary:episode_summary_first"
+    assert second_episode_group["selection_kind"] == "direct_episode"
+    assert second_episode_group["selection_route"] == "summary_first"
+    assert second_episode_group["selected_via_summary_first"] is True
+    assert second_episode_group["memory_items"] == [
+        {
+            "memory_id": str(second_memory_item.memory_id),
+            "workspace_id": workspace_id,
+            "episode_id": str(second_episode.episode_id),
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "Second workflow memory item",
+            "metadata": {"kind": "second"},
+            "created_at": second_memory_item.created_at.isoformat(),
+            "updated_at": second_memory_item.updated_at.isoformat(),
+        }
+    ]
+    assert second_episode_group["related_memory_items"] == []
+    assert second_episode_group["related_memory_item_provenance"] == []
+    assert second_episode_group["related_memory_relation_edges"] == []
+    assert second_episode_group["remember_path_memory_items"] == [
+        {
+            "memory_id": str(second_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
+    assert second_episode_group["remember_path_memory_summary"] == {
+        "memory_origin_counts": {},
+        "promotion_field_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+    assert second_episode_group["remember_path_relation_explanations"] == []
+    assert second_episode_group["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
 
 
 def test_memory_get_context_ticket_only_multi_workflow_summary_first_with_memory_items_keeps_child_set_and_episode_parents() -> (
@@ -572,95 +639,164 @@ def test_memory_get_context_ticket_only_multi_workflow_summary_first_with_memory
         "relation_supports_auxiliary": 0,
         "graph_summary_auxiliary": 0,
     }
-    assert response.details["memory_context_groups"] == [
-        {
-            "scope": "summary",
-            "scope_id": None,
-            "group_id": "summary:episode_summary_first",
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": None,
-            "selection_kind": "episode_summary_first",
-            "selection_route": "summary_first",
-            "child_episode_ids": [
-                str(first_episode.episode_id),
-                str(second_episode.episode_id),
-            ],
-            "child_episode_count": 2,
-            "child_episode_ordering": "returned_episode_order",
-            "child_episode_groups_emitted": True,
-            "child_episode_groups_emission_reason": "memory_items_enabled",
-            "summaries": [
-                {
-                    "episode_id": str(first_episode.episode_id),
-                    "workflow_instance_id": str(first_workflow_id),
-                    "memory_item_count": 1,
-                    "memory_item_types": ["episode_note"],
-                    "memory_item_provenance": ["episode"],
-                },
-                {
-                    "episode_id": str(second_episode.episode_id),
-                    "workflow_instance_id": str(second_workflow_id),
-                    "memory_item_count": 1,
-                    "memory_item_types": ["episode_note"],
-                    "memory_item_provenance": ["episode"],
-                },
-            ],
-        },
-        {
-            "scope": "episode",
-            "scope_id": str(first_episode.episode_id),
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": str(first_workflow_id),
-            "parent_group_scope": "summary",
-            "parent_group_id": "summary:episode_summary_first",
-            "selection_kind": "direct_episode",
-            "selection_route": "summary_first",
-            "selected_via_summary_first": True,
-            "memory_items": [
-                {
-                    "memory_id": str(first_memory_item.memory_id),
-                    "workspace_id": workspace_id,
-                    "episode_id": str(first_episode.episode_id),
-                    "type": "episode_note",
-                    "provenance": "episode",
-                    "content": "First ticket-only workflow memory item",
-                    "metadata": {"kind": "first"},
-                    "created_at": first_memory_item.created_at.isoformat(),
-                    "updated_at": first_memory_item.updated_at.isoformat(),
-                }
-            ],
-            "related_memory_items": [],
-            "related_memory_item_provenance": [],
-            "related_memory_relation_edges": [],
-        },
-        {
-            "scope": "episode",
-            "scope_id": str(second_episode.episode_id),
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": str(second_workflow_id),
-            "parent_group_scope": "summary",
-            "parent_group_id": "summary:episode_summary_first",
-            "selection_kind": "direct_episode",
-            "selection_route": "summary_first",
-            "selected_via_summary_first": True,
-            "memory_items": [
-                {
-                    "memory_id": str(second_memory_item.memory_id),
-                    "workspace_id": workspace_id,
-                    "episode_id": str(second_episode.episode_id),
-                    "type": "episode_note",
-                    "provenance": "episode",
-                    "content": "Second ticket-only workflow memory item",
-                    "metadata": {"kind": "second"},
-                    "created_at": second_memory_item.created_at.isoformat(),
-                    "updated_at": second_memory_item.updated_at.isoformat(),
-                }
-            ],
-            "related_memory_items": [],
-            "related_memory_item_provenance": [],
-            "related_memory_relation_edges": [],
-        },
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "summary",
+        "episode",
+        "episode",
     ]
+
+    summary_group = response.details["memory_context_groups"][0]
+    assert summary_group["scope_id"] is None
+    assert summary_group["group_id"] == "summary:episode_summary_first"
+    assert summary_group["parent_scope"] == "workflow_instance"
+    assert summary_group["parent_scope_id"] is None
+    assert summary_group["selection_kind"] == "episode_summary_first"
+    assert summary_group["selection_route"] == "summary_first"
+    assert summary_group["child_episode_ids"] == [
+        str(first_episode.episode_id),
+        str(second_episode.episode_id),
+    ]
+    assert summary_group["child_episode_count"] == 2
+    assert summary_group["child_episode_ordering"] == "returned_episode_order"
+    assert summary_group["child_episode_groups_emitted"] is True
+    assert summary_group["child_episode_groups_emission_reason"] == "memory_items_enabled"
+    assert len(summary_group["summaries"]) == 2
+    first_summary = summary_group["summaries"][0]
+    second_summary = summary_group["summaries"][1]
+    assert first_summary["episode_id"] == str(first_episode.episode_id)
+    assert first_summary["workflow_instance_id"] == str(first_workflow_id)
+    assert first_summary["memory_item_count"] == 1
+    assert first_summary["memory_item_types"] == ["episode_note"]
+    assert first_summary["memory_item_provenance"] == ["episode"]
+    assert first_summary["remember_path_explainability"] == {
+        "memory_origins": [],
+        "promotion_fields": [],
+        "promotion_sources": [],
+        "relation_reasons": [],
+        "relation_reason_primary": None,
+        "relation_reasons_frontloaded": False,
+        "relation_origins": [],
+    }
+    assert second_summary["episode_id"] == str(second_episode.episode_id)
+    assert second_summary["workflow_instance_id"] == str(second_workflow_id)
+    assert second_summary["memory_item_count"] == 1
+    assert second_summary["memory_item_types"] == ["episode_note"]
+    assert second_summary["memory_item_provenance"] == ["episode"]
+    assert second_summary["remember_path_explainability"] == {
+        "memory_origins": [],
+        "promotion_fields": [],
+        "promotion_sources": [],
+        "relation_reasons": [],
+        "relation_reason_primary": None,
+        "relation_reasons_frontloaded": False,
+        "relation_origins": [],
+    }
+
+    first_episode_group = response.details["memory_context_groups"][1]
+    assert first_episode_group["scope"] == "episode"
+    assert first_episode_group["scope_id"] == str(first_episode.episode_id)
+    assert first_episode_group["parent_scope"] == "workflow_instance"
+    assert first_episode_group["parent_scope_id"] == str(first_workflow_id)
+    assert first_episode_group["parent_group_scope"] == "summary"
+    assert first_episode_group["parent_group_id"] == "summary:episode_summary_first"
+    assert first_episode_group["selection_kind"] == "direct_episode"
+    assert first_episode_group["selection_route"] == "summary_first"
+    assert first_episode_group["selected_via_summary_first"] is True
+    assert first_episode_group["memory_items"] == [
+        {
+            "memory_id": str(first_memory_item.memory_id),
+            "workspace_id": workspace_id,
+            "episode_id": str(first_episode.episode_id),
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "First ticket-only workflow memory item",
+            "metadata": {"kind": "first"},
+            "created_at": first_memory_item.created_at.isoformat(),
+            "updated_at": first_memory_item.updated_at.isoformat(),
+        }
+    ]
+    assert first_episode_group["related_memory_items"] == []
+    assert first_episode_group["related_memory_item_provenance"] == []
+    assert first_episode_group["related_memory_relation_edges"] == []
+    assert first_episode_group["remember_path_memory_items"] == [
+        {
+            "memory_id": str(first_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
+    assert first_episode_group["remember_path_memory_summary"] == {
+        "memory_origin_counts": {},
+        "promotion_field_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+    assert first_episode_group["remember_path_relation_explanations"] == []
+    assert first_episode_group["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+
+    second_episode_group = response.details["memory_context_groups"][2]
+    assert second_episode_group["scope"] == "episode"
+    assert second_episode_group["scope_id"] == str(second_episode.episode_id)
+    assert second_episode_group["parent_scope"] == "workflow_instance"
+    assert second_episode_group["parent_scope_id"] == str(second_workflow_id)
+    assert second_episode_group["parent_group_scope"] == "summary"
+    assert second_episode_group["parent_group_id"] == "summary:episode_summary_first"
+    assert second_episode_group["selection_kind"] == "direct_episode"
+    assert second_episode_group["selection_route"] == "summary_first"
+    assert second_episode_group["selected_via_summary_first"] is True
+    assert second_episode_group["memory_items"] == [
+        {
+            "memory_id": str(second_memory_item.memory_id),
+            "workspace_id": workspace_id,
+            "episode_id": str(second_episode.episode_id),
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "Second ticket-only workflow memory item",
+            "metadata": {"kind": "second"},
+            "created_at": second_memory_item.created_at.isoformat(),
+            "updated_at": second_memory_item.updated_at.isoformat(),
+        }
+    ]
+    assert second_episode_group["related_memory_items"] == []
+    assert second_episode_group["related_memory_item_provenance"] == []
+    assert second_episode_group["related_memory_relation_edges"] == []
+    assert second_episode_group["remember_path_memory_items"] == [
+        {
+            "memory_id": str(second_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
+    assert second_episode_group["remember_path_memory_summary"] == {
+        "memory_origin_counts": {},
+        "promotion_field_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+    assert second_episode_group["remember_path_relation_explanations"] == []
+    assert second_episode_group["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
 
 
 def test_memory_get_context_ticket_only_multi_workflow_query_filter_summary_first_uses_surviving_child_set() -> (
@@ -789,58 +925,92 @@ def test_memory_get_context_ticket_only_multi_workflow_query_filter_summary_firs
         "relation_supports_auxiliary": 0,
         "graph_summary_auxiliary": 0,
     }
-    assert response.details["memory_context_groups"] == [
-        {
-            "scope": "summary",
-            "scope_id": None,
-            "group_id": "summary:episode_summary_first",
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": None,
-            "selection_kind": "episode_summary_first",
-            "selection_route": "summary_first",
-            "child_episode_ids": [str(matching_episode.episode_id)],
-            "child_episode_count": 1,
-            "child_episode_ordering": "returned_episode_order",
-            "child_episode_groups_emitted": True,
-            "child_episode_groups_emission_reason": "memory_items_enabled",
-            "summaries": [
-                {
-                    "episode_id": str(matching_episode.episode_id),
-                    "workflow_instance_id": str(first_workflow_id),
-                    "memory_item_count": 1,
-                    "memory_item_types": ["episode_note"],
-                    "memory_item_provenance": ["episode"],
-                }
-            ],
-        },
-        {
-            "scope": "episode",
-            "scope_id": str(matching_episode.episode_id),
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": str(first_workflow_id),
-            "parent_group_scope": "summary",
-            "parent_group_id": "summary:episode_summary_first",
-            "selection_kind": "direct_episode",
-            "selection_route": "summary_first",
-            "selected_via_summary_first": True,
-            "memory_items": [
-                {
-                    "memory_id": str(matching_memory_item.memory_id),
-                    "workspace_id": workspace_id,
-                    "episode_id": str(matching_episode.episode_id),
-                    "type": "episode_note",
-                    "provenance": "episode",
-                    "content": "Matching ticket-only multi-workflow memory item",
-                    "metadata": {"kind": "matching"},
-                    "created_at": matching_memory_item.created_at.isoformat(),
-                    "updated_at": matching_memory_item.updated_at.isoformat(),
-                }
-            ],
-            "related_memory_items": [],
-            "related_memory_item_provenance": [],
-            "related_memory_relation_edges": [],
-        },
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "summary",
+        "episode",
     ]
+
+    summary_group = response.details["memory_context_groups"][0]
+    assert summary_group["scope_id"] is None
+    assert summary_group["group_id"] == "summary:episode_summary_first"
+    assert summary_group["parent_scope"] == "workflow_instance"
+    assert summary_group["parent_scope_id"] is None
+    assert summary_group["selection_kind"] == "episode_summary_first"
+    assert summary_group["selection_route"] == "summary_first"
+    assert summary_group["child_episode_ids"] == [str(matching_episode.episode_id)]
+    assert summary_group["child_episode_count"] == 1
+    assert summary_group["child_episode_ordering"] == "returned_episode_order"
+    assert summary_group["child_episode_groups_emitted"] is True
+    assert summary_group["child_episode_groups_emission_reason"] == "memory_items_enabled"
+    assert len(summary_group["summaries"]) == 1
+    first_summary = summary_group["summaries"][0]
+    assert first_summary["episode_id"] == str(matching_episode.episode_id)
+    assert first_summary["workflow_instance_id"] == str(first_workflow_id)
+    assert first_summary["memory_item_count"] == 1
+    assert first_summary["memory_item_types"] == ["episode_note"]
+    assert first_summary["memory_item_provenance"] == ["episode"]
+    assert first_summary["remember_path_explainability"] == {
+        "memory_origins": [],
+        "promotion_fields": [],
+        "promotion_sources": [],
+        "relation_reasons": [],
+        "relation_reason_primary": None,
+        "relation_reasons_frontloaded": False,
+        "relation_origins": [],
+    }
+
+    episode_group = response.details["memory_context_groups"][1]
+    assert episode_group["scope"] == "episode"
+    assert episode_group["scope_id"] == str(matching_episode.episode_id)
+    assert episode_group["parent_scope"] == "workflow_instance"
+    assert episode_group["parent_scope_id"] == str(first_workflow_id)
+    assert episode_group["parent_group_scope"] == "summary"
+    assert episode_group["parent_group_id"] == "summary:episode_summary_first"
+    assert episode_group["selection_kind"] == "direct_episode"
+    assert episode_group["selection_route"] == "summary_first"
+    assert episode_group["selected_via_summary_first"] is True
+    assert episode_group["memory_items"] == [
+        {
+            "memory_id": str(matching_memory_item.memory_id),
+            "workspace_id": workspace_id,
+            "episode_id": str(matching_episode.episode_id),
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "Matching ticket-only multi-workflow memory item",
+            "metadata": {"kind": "matching"},
+            "created_at": matching_memory_item.created_at.isoformat(),
+            "updated_at": matching_memory_item.updated_at.isoformat(),
+        }
+    ]
+    assert episode_group["related_memory_items"] == []
+    assert episode_group["related_memory_item_provenance"] == []
+    assert episode_group["related_memory_relation_edges"] == []
+    assert episode_group["remember_path_memory_items"] == [
+        {
+            "memory_id": str(matching_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
+    assert episode_group["remember_path_memory_summary"] == {
+        "memory_origin_counts": {},
+        "promotion_field_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+    assert episode_group["remember_path_relation_explanations"] == []
+    assert episode_group["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
     assert response.details["episode_explanations"] == [
         {
             "episode_id": str(matching_episode.episode_id),
@@ -1000,92 +1170,166 @@ def test_memory_get_context_workspace_only_multi_workflow_summary_first_with_wor
         "graph_summary_auxiliary": 0,
     }
     assert response.details["inherited_memory_items"] == []
-    assert response.details["memory_context_groups"] == [
-        {
-            "scope": "summary",
-            "scope_id": None,
-            "group_id": "summary:episode_summary_first",
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": None,
-            "selection_kind": "episode_summary_first",
-            "selection_route": "summary_first",
-            "child_episode_ids": [
-                str(first_episode.episode_id),
-                str(second_episode.episode_id),
-            ],
-            "child_episode_count": 2,
-            "child_episode_ordering": "returned_episode_order",
-            "child_episode_groups_emitted": True,
-            "child_episode_groups_emission_reason": "memory_items_enabled",
-            "summaries": [
-                {
-                    "episode_id": str(first_episode.episode_id),
-                    "workflow_instance_id": str(first_workflow_id),
-                    "memory_item_count": 1,
-                    "memory_item_types": ["episode_note"],
-                    "memory_item_provenance": ["episode"],
-                },
-                {
-                    "episode_id": str(second_episode.episode_id),
-                    "workflow_instance_id": str(second_workflow_id),
-                    "memory_item_count": 1,
-                    "memory_item_types": ["episode_note"],
-                    "memory_item_provenance": ["episode"],
-                },
-            ],
-        },
-        {
-            "scope": "episode",
-            "scope_id": str(first_episode.episode_id),
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": str(first_workflow_id),
-            "parent_group_scope": "summary",
-            "parent_group_id": "summary:episode_summary_first",
-            "selection_kind": "direct_episode",
-            "selection_route": "summary_first",
-            "selected_via_summary_first": True,
-            "memory_items": [
-                {
-                    "memory_id": str(first_memory_item.memory_id),
-                    "workspace_id": workspace_id,
-                    "episode_id": str(first_episode.episode_id),
-                    "type": "episode_note",
-                    "provenance": "episode",
-                    "content": "First workspace-only workflow memory item",
-                    "metadata": {"kind": "first"},
-                    "created_at": first_memory_item.created_at.isoformat(),
-                    "updated_at": first_memory_item.updated_at.isoformat(),
-                }
-            ],
-            "related_memory_items": [],
-            "related_memory_item_provenance": [],
-            "related_memory_relation_edges": [],
-        },
-        {
-            "scope": "episode",
-            "scope_id": str(second_episode.episode_id),
-            "parent_scope": "workflow_instance",
-            "parent_scope_id": str(second_workflow_id),
-            "parent_group_scope": "summary",
-            "parent_group_id": "summary:episode_summary_first",
-            "selection_kind": "direct_episode",
-            "selection_route": "summary_first",
-            "selected_via_summary_first": True,
-            "memory_items": [
-                {
-                    "memory_id": str(second_memory_item.memory_id),
-                    "workspace_id": workspace_id,
-                    "episode_id": str(second_episode.episode_id),
-                    "type": "episode_note",
-                    "provenance": "episode",
-                    "content": "Second workspace-only workflow memory item",
-                    "metadata": {"kind": "second"},
-                    "created_at": second_memory_item.created_at.isoformat(),
-                    "updated_at": second_memory_item.updated_at.isoformat(),
-                }
-            ],
-            "related_memory_items": [],
-            "related_memory_item_provenance": [],
-            "related_memory_relation_edges": [],
-        },
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "summary",
+        "episode",
+        "episode",
     ]
+    summary_group = response.details["memory_context_groups"][0]
+    assert summary_group["scope_id"] is None
+    assert summary_group["group_id"] == "summary:episode_summary_first"
+    assert summary_group["parent_scope"] == "workflow_instance"
+    assert summary_group["parent_scope_id"] is None
+    assert summary_group["selection_kind"] == "episode_summary_first"
+    assert summary_group["selection_route"] == "summary_first"
+    assert summary_group["child_episode_ids"] == [
+        str(first_episode.episode_id),
+        str(second_episode.episode_id),
+    ]
+    assert summary_group["child_episode_count"] == 2
+    assert summary_group["child_episode_ordering"] == "returned_episode_order"
+    assert summary_group["child_episode_groups_emitted"] is True
+    assert summary_group["child_episode_groups_emission_reason"] == "memory_items_enabled"
+    assert len(summary_group["summaries"]) == 2
+    first_summary = summary_group["summaries"][0]
+    second_summary = summary_group["summaries"][1]
+    assert first_summary["episode_id"] == str(first_episode.episode_id)
+    assert first_summary["workflow_instance_id"] == str(first_workflow_id)
+    assert first_summary["memory_item_count"] == 1
+    assert first_summary["memory_item_types"] == ["episode_note"]
+    assert first_summary["memory_item_provenance"] == ["episode"]
+    assert first_summary["remember_path_explainability"] == {
+        "memory_origins": [],
+        "promotion_fields": [],
+        "promotion_sources": [],
+        "relation_reasons": [],
+        "relation_reason_primary": None,
+        "relation_reasons_frontloaded": False,
+        "relation_origins": [],
+    }
+    assert second_summary["episode_id"] == str(second_episode.episode_id)
+    assert second_summary["workflow_instance_id"] == str(second_workflow_id)
+    assert second_summary["memory_item_count"] == 1
+    assert second_summary["memory_item_types"] == ["episode_note"]
+    assert second_summary["memory_item_provenance"] == ["episode"]
+    assert second_summary["remember_path_explainability"] == {
+        "memory_origins": [],
+        "promotion_fields": [],
+        "promotion_sources": [],
+        "relation_reasons": [],
+        "relation_reason_primary": None,
+        "relation_reasons_frontloaded": False,
+        "relation_origins": [],
+    }
+
+    assert [group["scope"] for group in response.details["memory_context_groups"]] == [
+        "summary",
+        "episode",
+        "episode",
+    ]
+
+    first_episode_group = response.details["memory_context_groups"][1]
+    assert first_episode_group["scope"] == "episode"
+    assert first_episode_group["scope_id"] == str(first_episode.episode_id)
+    assert first_episode_group["parent_scope"] == "workflow_instance"
+    assert first_episode_group["parent_scope_id"] == str(first_workflow_id)
+    assert first_episode_group["parent_group_scope"] == "summary"
+    assert first_episode_group["parent_group_id"] == "summary:episode_summary_first"
+    assert first_episode_group["selection_kind"] == "direct_episode"
+    assert first_episode_group["selection_route"] == "summary_first"
+    assert first_episode_group["selected_via_summary_first"] is True
+    assert first_episode_group["memory_items"] == [
+        {
+            "memory_id": str(first_memory_item.memory_id),
+            "workspace_id": workspace_id,
+            "episode_id": str(first_episode.episode_id),
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "First workspace-only workflow memory item",
+            "metadata": {"kind": "first"},
+            "created_at": first_memory_item.created_at.isoformat(),
+            "updated_at": first_memory_item.updated_at.isoformat(),
+        }
+    ]
+    assert first_episode_group["related_memory_items"] == []
+    assert first_episode_group["related_memory_item_provenance"] == []
+    assert first_episode_group["related_memory_relation_edges"] == []
+    assert first_episode_group["remember_path_memory_items"] == [
+        {
+            "memory_id": str(first_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
+    assert first_episode_group["remember_path_memory_summary"] == {
+        "memory_origin_counts": {},
+        "promotion_field_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+    assert first_episode_group["remember_path_relation_explanations"] == []
+    assert first_episode_group["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+
+    second_episode_group = response.details["memory_context_groups"][2]
+    assert second_episode_group["scope"] == "episode"
+    assert second_episode_group["scope_id"] == str(second_episode.episode_id)
+    assert second_episode_group["parent_scope"] == "workflow_instance"
+    assert second_episode_group["parent_scope_id"] == str(second_workflow_id)
+    assert second_episode_group["parent_group_scope"] == "summary"
+    assert second_episode_group["parent_group_id"] == "summary:episode_summary_first"
+    assert second_episode_group["selection_kind"] == "direct_episode"
+    assert second_episode_group["selection_route"] == "summary_first"
+    assert second_episode_group["selected_via_summary_first"] is True
+    assert second_episode_group["memory_items"] == [
+        {
+            "memory_id": str(second_memory_item.memory_id),
+            "workspace_id": workspace_id,
+            "episode_id": str(second_episode.episode_id),
+            "type": "episode_note",
+            "provenance": "episode",
+            "content": "Second workspace-only workflow memory item",
+            "metadata": {"kind": "second"},
+            "created_at": second_memory_item.created_at.isoformat(),
+            "updated_at": second_memory_item.updated_at.isoformat(),
+        }
+    ]
+    assert second_episode_group["related_memory_items"] == []
+    assert second_episode_group["related_memory_item_provenance"] == []
+    assert second_episode_group["related_memory_relation_edges"] == []
+    assert second_episode_group["remember_path_memory_items"] == [
+        {
+            "memory_id": str(second_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
+    assert second_episode_group["remember_path_memory_summary"] == {
+        "memory_origin_counts": {},
+        "promotion_field_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+    assert second_episode_group["remember_path_relation_explanations"] == []
+    assert second_episode_group["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }

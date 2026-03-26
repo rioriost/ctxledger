@@ -110,47 +110,47 @@ def test_main_stats_renders_json_output(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     class FakeStatsWorkflowService:
-        def __init__(self, stats_result: object) -> None:
+        def __init__(self, stats_result: WorkflowStats) -> None:
             self.stats_result = stats_result
 
-        def get_stats(self) -> object:
+        def get_stats(self) -> WorkflowStats:
             return self.stats_result
 
-    stats = type(
-        "StatsStub",
-        (),
-        {
-            "workspace_count": 2,
-            "workflow_status_counts": {
-                "running": 1,
-                "completed": 1,
-                "failed": 0,
-                "cancelled": 0,
-            },
-            "attempt_status_counts": {
-                "running": 1,
-                "succeeded": 1,
-                "failed": 0,
-                "cancelled": 0,
-            },
-            "verify_status_counts": {
-                "pending": 0,
-                "passed": 2,
-                "failed": 0,
-                "skipped": 0,
-            },
-            "checkpoint_count": 5,
-            "episode_count": 3,
-            "memory_item_count": 4,
-            "memory_embedding_count": 1,
-            "latest_workflow_updated_at": datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
-            "latest_checkpoint_created_at": None,
-            "latest_verify_report_created_at": None,
-            "latest_episode_created_at": None,
-            "latest_memory_item_created_at": None,
-            "latest_memory_embedding_created_at": None,
+    stats = WorkflowStats(
+        workspace_count=2,
+        workflow_status_counts={
+            "running": 1,
+            "completed": 1,
+            "failed": 0,
+            "cancelled": 0,
         },
-    )()
+        attempt_status_counts={
+            "running": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        verify_status_counts={
+            "pending": 0,
+            "passed": 2,
+            "failed": 0,
+            "skipped": 0,
+        },
+        checkpoint_count=5,
+        episode_count=3,
+        memory_item_count=4,
+        memory_embedding_count=1,
+        checkpoint_auto_memory_recorded_count=0,
+        checkpoint_auto_memory_skipped_count=0,
+        workflow_completion_auto_memory_recorded_count=0,
+        workflow_completion_auto_memory_skipped_count=0,
+        latest_workflow_updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
+        latest_checkpoint_created_at=None,
+        latest_verify_report_created_at=None,
+        latest_episode_created_at=None,
+        latest_memory_item_created_at=None,
+        latest_memory_embedding_created_at=None,
+    )
 
     settings = make_settings()
 
@@ -158,10 +158,7 @@ def test_main_stats_renders_json_output(
     patch_cli_postgres_config(monkeypatch)
     patch_cli_connection_pool(monkeypatch)
     patch_cli_postgres_uow_factory(monkeypatch, "fake-uow-factory")
-    patch_cli_workflow_service(
-        monkeypatch,
-        lambda uow_factory: FakeStatsWorkflowService(stats),
-    )
+    patch_cli_workflow_service(monkeypatch, FakeStatsWorkflowService(stats))
 
     exit_code = cli_module.main(["stats", "--format", "json"])
 
@@ -176,6 +173,8 @@ def test_main_stats_renders_json_output(
             "running": 1,
             "succeeded": 1,
         },
+        "checkpoint_auto_memory_recorded_count": 0,
+        "checkpoint_auto_memory_skipped_count": 0,
         "checkpoint_count": 5,
         "episode_count": 3,
         "latest_checkpoint_created_at": None,
@@ -192,6 +191,8 @@ def test_main_stats_renders_json_output(
             "pending": 0,
             "skipped": 0,
         },
+        "workflow_completion_auto_memory_recorded_count": 0,
+        "workflow_completion_auto_memory_skipped_count": 0,
         "workflow_status_counts": {
             "cancelled": 0,
             "completed": 1,
@@ -416,6 +417,8 @@ def test_main_memory_stats_renders_json_output(
 
     assert exit_code == 0
     assert payload == {
+        "checkpoint_auto_memory_recorded_count": 0,
+        "checkpoint_auto_memory_skipped_count": 0,
         "episode_count": 3,
         "latest_episode_created_at": "2026-03-15T09:00:00+00:00",
         "latest_memory_embedding_created_at": None,
@@ -428,6 +431,8 @@ def test_main_memory_stats_renders_json_output(
             "workflow_complete_auto": 2,
         },
         "memory_relation_count": 0,
+        "workflow_completion_auto_memory_recorded_count": 0,
+        "workflow_completion_auto_memory_skipped_count": 0,
     }
     assert captured.err == ""
 

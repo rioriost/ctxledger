@@ -308,6 +308,10 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
             "source_group_scope": "episode",
             "target_group_scope": "workspace",
             "target_group_selection_kind": "supports_related_auxiliary",
+            "source_memory_origin": None,
+            "relation_reason": None,
+            "source_memory_type": None,
+            "target_memory_type": None,
         }
     ]
     assert response.details["memory_context_groups"][0]["related_memory_relation_edges"] == [
@@ -320,66 +324,124 @@ def test_memory_get_context_returns_supports_related_memory_items_for_episode_it
             "created_at": memory_relation_repository.relations[0].created_at.isoformat(),
         }
     ]
-    assert response.details["memory_context_groups"][1] == {
-        "scope": "workspace",
-        "scope_id": str(workspace_id),
-        "parent_scope": None,
-        "parent_scope_id": None,
-        "parent_group_scope": None,
-        "parent_group_id": None,
-        "selection_kind": "inherited_workspace",
-        "selection_route": "workspace_inherited_auxiliary",
-        "memory_items": [
-            {
-                "memory_id": str(supports_target_item.memory_id),
-                "workspace_id": str(workspace_id),
-                "episode_id": None,
-                "type": "workspace_note",
-                "provenance": "workspace",
-                "content": "Supporting workspace memory item",
-                "metadata": {"kind": "support"},
-                "created_at": supports_target_item.created_at.isoformat(),
-                "updated_at": supports_target_item.updated_at.isoformat(),
-            },
-            {
-                "memory_id": str(workspace_root_item.memory_id),
-                "workspace_id": str(workspace_id),
-                "episode_id": None,
-                "type": "workspace_note",
-                "provenance": "workspace",
-                "content": "Workspace root memory item",
-                "metadata": {"kind": "workspace-root"},
-                "created_at": workspace_root_item.created_at.isoformat(),
-                "updated_at": workspace_root_item.updated_at.isoformat(),
-            },
-        ],
+    assert response.details["memory_context_groups"][0]["remember_path_memory_items"] == [
+        {
+            "memory_id": str(direct_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
+    assert response.details["memory_context_groups"][0]["remember_path_memory_summary"] == {
+        "memory_origin_counts": {},
+        "promotion_field_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
     }
-    assert response.details["memory_context_groups"][2] == {
-        "scope": "relation",
-        "scope_id": "supports",
-        "group_id": "relation:supports_auxiliary",
-        "parent_scope": "workflow_instance",
-        "parent_scope_id": str(workflow_id),
-        "parent_group_scope": None,
-        "parent_group_id": None,
-        "selection_kind": "supports_related_auxiliary",
-        "selection_route": "relation_supports_auxiliary",
-        "relation_type": "supports",
-        "source_episode_ids": [str(episode.episode_id)],
-        "source_memory_ids": [str(direct_memory_item.memory_id)],
-        "memory_items": [
-            {
-                "memory_id": str(supports_target_item.memory_id),
-                "workspace_id": str(workspace_id),
-                "episode_id": None,
-                "type": "workspace_note",
-                "provenance": "workspace",
-                "content": "Supporting workspace memory item",
-                "metadata": {"kind": "support"},
-                "created_at": supports_target_item.created_at.isoformat(),
-                "updated_at": supports_target_item.updated_at.isoformat(),
-            }
-        ],
+    assert response.details["memory_context_groups"][0]["remember_path_relation_explanations"] == [
+        {
+            "memory_relation_id": str(memory_relation_repository.relations[0].memory_relation_id),
+            "relation_type": "supports",
+            "relation_reason": None,
+            "relation_description": None,
+            "memory_origin": None,
+            "source_memory_type": None,
+            "target_memory_type": None,
+            "source_memory_id": str(direct_memory_item.memory_id),
+            "target_memory_id": str(supports_target_item.memory_id),
+        }
+    ]
+    assert response.details["memory_context_groups"][0]["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
+    }
+    workspace_group = response.details["memory_context_groups"][1]
+    assert workspace_group["scope"] == "workspace"
+    assert workspace_group["scope_id"] == str(workspace_id)
+    assert workspace_group["parent_scope"] is None
+    assert workspace_group["parent_scope_id"] is None
+    assert workspace_group.get("parent_group_scope") is None
+    assert workspace_group.get("parent_group_id") is None
+    assert workspace_group["selection_kind"] == "inherited_workspace"
+    assert workspace_group["selection_route"] == "workspace_inherited_auxiliary"
+    assert workspace_group["memory_items"] == [
+        {
+            "memory_id": str(supports_target_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Supporting workspace memory item",
+            "metadata": {"kind": "support"},
+            "created_at": supports_target_item.created_at.isoformat(),
+            "updated_at": supports_target_item.updated_at.isoformat(),
+        },
+        {
+            "memory_id": str(workspace_root_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Workspace root memory item",
+            "metadata": {"kind": "workspace-root"},
+            "created_at": workspace_root_item.created_at.isoformat(),
+            "updated_at": workspace_root_item.updated_at.isoformat(),
+        },
+    ]
+    assert workspace_group.get("remember_path_memory_items", []) == []
+    assert workspace_group.get("remember_path_memory_summary", {}) == {}
+    assert workspace_group.get("remember_path_relation_explanations", []) == []
+    assert workspace_group.get("remember_path_relation_summary", {}) == {}
+    relation_group = response.details["memory_context_groups"][2]
+    assert relation_group["scope"] == "relation"
+    assert relation_group["scope_id"] == "supports"
+    assert relation_group["group_id"] == "relation:supports_auxiliary"
+    assert relation_group["parent_scope"] == "workflow_instance"
+    assert relation_group["parent_scope_id"] == str(workflow_id)
+    assert relation_group.get("parent_group_scope") is None
+    assert relation_group.get("parent_group_id") is None
+    assert relation_group["selection_kind"] == "supports_related_auxiliary"
+    assert relation_group["selection_route"] == "relation_supports_auxiliary"
+    assert relation_group["relation_type"] == "supports"
+    assert relation_group["source_episode_ids"] == [str(episode.episode_id)]
+    assert relation_group["source_memory_ids"] == [str(direct_memory_item.memory_id)]
+    assert relation_group["memory_items"] == [
+        {
+            "memory_id": str(supports_target_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Supporting workspace memory item",
+            "metadata": {"kind": "support"},
+            "created_at": supports_target_item.created_at.isoformat(),
+            "updated_at": supports_target_item.updated_at.isoformat(),
+        }
+    ]
+    assert relation_group["remember_path_relation_explanations"] == [
+        {
+            "memory_relation_id": str(memory_relation_repository.relations[0].memory_relation_id),
+            "relation_type": "supports",
+            "relation_reason": None,
+            "relation_description": None,
+            "memory_origin": None,
+            "source_memory_type": None,
+            "target_memory_type": None,
+            "source_memory_id": str(direct_memory_item.memory_id),
+            "target_memory_id": str(supports_target_item.memory_id),
+        }
+    ]
+    assert relation_group["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
     }
 
 

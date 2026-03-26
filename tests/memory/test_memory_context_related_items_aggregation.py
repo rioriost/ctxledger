@@ -208,64 +208,119 @@ def test_memory_get_context_aggregates_supports_relation_auxiliary_group_across_
         "relation_supports_auxiliary": 3,
         "graph_summary_auxiliary": 0,
     }
-    assert response.details["memory_context_groups"][3] == {
-        "scope": "relation",
-        "scope_id": "supports",
-        "group_id": "relation:supports_auxiliary",
-        "parent_scope": "workflow_instance",
-        "parent_scope_id": str(workflow_id),
-        "parent_group_scope": None,
-        "parent_group_id": None,
-        "selection_kind": "supports_related_auxiliary",
-        "selection_route": "relation_supports_auxiliary",
+    relation_group = response.details["memory_context_groups"][3]
+    assert relation_group["scope"] == "relation"
+    assert relation_group["scope_id"] == "supports"
+    assert relation_group["group_id"] == "relation:supports_auxiliary"
+    assert relation_group["parent_scope"] == "workflow_instance"
+    assert relation_group["parent_scope_id"] == str(workflow_id)
+    assert relation_group["parent_group_scope"] is None
+    assert relation_group["parent_group_id"] is None
+    assert relation_group["selection_kind"] == "supports_related_auxiliary"
+    assert relation_group["selection_route"] == "relation_supports_auxiliary"
+    assert relation_group["relation_type"] == "supports"
+    assert relation_group["source_episode_ids"] == sorted(
+        [
+            str(first_episode.episode_id),
+            str(second_episode.episode_id),
+        ]
+    )
+    assert relation_group["source_memory_ids"] == sorted(
+        [
+            str(first_source_memory_item.memory_id),
+            str(second_source_memory_item.memory_id),
+        ]
+    )
+    assert relation_group["memory_items"] == [
+        {
+            "memory_id": str(later_seen_supports_target_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Later-seen supporting workspace memory item",
+            "metadata": {"kind": "later-seen-support"},
+            "created_at": later_seen_supports_target_item.created_at.isoformat(),
+            "updated_at": later_seen_supports_target_item.updated_at.isoformat(),
+        },
+        {
+            "memory_id": str(shared_supports_target_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "Shared supporting workspace memory item",
+            "metadata": {"kind": "shared-support"},
+            "created_at": shared_supports_target_item.created_at.isoformat(),
+            "updated_at": shared_supports_target_item.updated_at.isoformat(),
+        },
+        {
+            "memory_id": str(first_seen_supports_target_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": None,
+            "type": "workspace_note",
+            "provenance": "workspace",
+            "content": "First-seen supporting workspace memory item",
+            "metadata": {"kind": "first-seen-support"},
+            "created_at": first_seen_supports_target_item.created_at.isoformat(),
+            "updated_at": first_seen_supports_target_item.updated_at.isoformat(),
+        },
+    ]
+    assert len(relation_group["remember_path_relation_explanations"]) == 4
+    assert relation_group["remember_path_relation_explanations"][0] == {
+        "memory_relation_id": str(fourth_support_relation.memory_relation_id),
         "relation_type": "supports",
-        "source_episode_ids": sorted(
-            [
-                str(first_episode.episode_id),
-                str(second_episode.episode_id),
-            ]
+        "relation_reason": None,
+        "relation_description": None,
+        "memory_origin": None,
+        "source_memory_type": None,
+        "target_memory_type": None,
+        "source_memory_id": str(fourth_support_relation.source_memory_id),
+        "target_memory_id": str(fourth_support_relation.target_memory_id),
+    }
+    assert relation_group["remember_path_relation_explanations"][1] == {
+        "memory_relation_id": str(second_support_relation.memory_relation_id),
+        "relation_type": "supports",
+        "relation_reason": None,
+        "relation_description": None,
+        "memory_origin": None,
+        "source_memory_type": None,
+        "target_memory_type": None,
+        "source_memory_id": str(second_support_relation.source_memory_id),
+        "target_memory_id": str(second_support_relation.target_memory_id),
+    }
+    assert {
+        (
+            explanation["memory_relation_id"],
+            explanation["source_memory_id"],
+            explanation["target_memory_id"],
+        )
+        for explanation in relation_group["remember_path_relation_explanations"][2:]
+    } == {
+        (
+            str(first_support_relation.memory_relation_id),
+            str(first_support_relation.source_memory_id),
+            str(first_support_relation.target_memory_id),
         ),
-        "source_memory_ids": sorted(
-            [
-                str(first_source_memory_item.memory_id),
-                str(second_source_memory_item.memory_id),
-            ]
+        (
+            str(third_support_relation.memory_relation_id),
+            str(third_support_relation.source_memory_id),
+            str(third_support_relation.target_memory_id),
         ),
-        "memory_items": [
-            {
-                "memory_id": str(later_seen_supports_target_item.memory_id),
-                "workspace_id": str(workspace_id),
-                "episode_id": None,
-                "type": "workspace_note",
-                "provenance": "workspace",
-                "content": "Later-seen supporting workspace memory item",
-                "metadata": {"kind": "later-seen-support"},
-                "created_at": later_seen_supports_target_item.created_at.isoformat(),
-                "updated_at": later_seen_supports_target_item.updated_at.isoformat(),
-            },
-            {
-                "memory_id": str(shared_supports_target_item.memory_id),
-                "workspace_id": str(workspace_id),
-                "episode_id": None,
-                "type": "workspace_note",
-                "provenance": "workspace",
-                "content": "Shared supporting workspace memory item",
-                "metadata": {"kind": "shared-support"},
-                "created_at": shared_supports_target_item.created_at.isoformat(),
-                "updated_at": shared_supports_target_item.updated_at.isoformat(),
-            },
-            {
-                "memory_id": str(first_seen_supports_target_item.memory_id),
-                "workspace_id": str(workspace_id),
-                "episode_id": None,
-                "type": "workspace_note",
-                "provenance": "workspace",
-                "content": "First-seen supporting workspace memory item",
-                "metadata": {"kind": "first-seen-support"},
-                "created_at": first_seen_supports_target_item.created_at.isoformat(),
-                "updated_at": first_seen_supports_target_item.updated_at.isoformat(),
-            },
-        ],
+    }
+    assert all(
+        explanation["relation_type"] == "supports"
+        and explanation["relation_reason"] is None
+        and explanation["relation_description"] is None
+        and explanation["memory_origin"] is None
+        and explanation["source_memory_type"] is None
+        and explanation["target_memory_type"] is None
+        for explanation in relation_group["remember_path_relation_explanations"][2:]
+    )
+    assert relation_group["remember_path_relation_summary"] == {
+        "relation_reason_counts": {},
+        "checkpoint_origin_present": False,
+        "completion_origin_present": False,
     }
 
 
