@@ -46,6 +46,9 @@ Current files include:
 
 - `releases/CHANGELOG.md`
 - `releases/v0.1.0_acceptance_evidence.md`
+- `releases/0.7.0_status_review.md`
+- `releases/0.7.0_behavior_summary.md`
+- `releases/0.7.0_acceptance_review.md`
 - `releases/plans/...`
 - `releases/plans/versioned/remember_path_0_8_0_plan.md`
 
@@ -99,6 +102,9 @@ Start with:
 Start with:
 
 - `releases/CHANGELOG.md`
+- `releases/0.7.0_status_review.md`
+- `releases/0.7.0_behavior_summary.md`
+- `releases/0.7.0_acceptance_review.md`
 - `releases/plans/README.md`
 - `releases/plans/versioned/`
 - `releases/plans/domains/`

@@ -226,8 +226,38 @@ The project currently follows a lightweight, human-maintained changelog style.
   - objective-aware ranking layered on top of canonical checkpoint data
   - no new canonical return-target entity yet
   - explicit checkpoint objective / next-action evidence improving continuation selection without changing the canonical system-of-record boundary
-  - latest-versus-selected comparison details remaining a derived explanation surface rather than a new canonical task-thread record
+  - `memory_get_context` now also has a materially richer bounded task-recall detail surface, including:
+    - return-target details
+    - primary-objective details
+    - task-thread details
+    - latest-versus-selected continuation comparison details
+    - latest detour candidate details
+    - prior-mainline candidate details
+  - latest-versus-selected comparison details and task-thread fields should still be read as derived explanation surfaces rather than as new canonical task-thread records
   - the newer `memory_search` task-recall bridge should also be read as a derived explanation and ranking-support surface rather than as a second workflow-truth mechanism
+  - bounded prior-mainline recovery and latest-detour-versus-selected-continuation separation are now part of the implemented `0.7.0` slice, even though broader milestone closeout work still remains
+  - maintainability hardening for the bounded `0.7.0` slice has now completed its oversized task-recall-related source/test split stream through semantic splitting of oversized files, including:
+    - runtime task-recall source splits
+    - runtime task-recall test splits
+    - the completed split of the oversized visibility-focused memory-context test file into:
+      - `tests/memory/test_service_context_details_visibility_basic.py`
+      - `tests/memory/test_service_context_details_visibility_query_filters.py`
+    - the completed split of the oversized grouping-focused memory-context test file into:
+      - `tests/memory/test_service_context_details_grouping_visibility.py`
+      - `tests/memory/test_service_context_details_grouping_summary_routes.py`
+    - the completed split of the oversized task-recall-focused memory-context test file into:
+      - `tests/memory/test_service_context_details_task_recall_basics.py`
+      - `tests/memory/test_service_context_details_task_recall_ordering.py`
+    - the completed split of the final oversized grouping-summary-routes memory-context test file into:
+      - `tests/memory/test_service_context_details_grouping_summary_routes_multiflow.py`
+      - `tests/memory/test_service_context_details_grouping_summary_routes_ordering.py`
+- the current `0.7.0` closeout reading should now be:
+  - implementation is further along than the older “roughly `70%` complete” planning shorthand suggested
+  - the main remaining `0.7.0` work is now:
+    - stronger concept-to-task recovery beyond the current bounded `memory_get_context` and `memory_search` path
+    - broader integration of task-recall semantics into other retrieval surfaces where justified
+    - release-facing behavior summary and acceptance/closeout alignment for the bounded `0.7.0` slice
+    - continued maintainability hardening for the remaining oversized memory-context test files after the runtime, visibility, grouping, and task-recall splits already landed
 - the current roadmap should now be read as:
   - `0.8.0` focusing on strengthening the remember path so completion-centered work more reliably becomes:
     - episodes

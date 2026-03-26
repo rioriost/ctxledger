@@ -97,6 +97,13 @@ Implemented in the current slice:
   - normalized presence flags for objective and next-action signals
 - task-recall ranking can now treat explicit checkpoint objective / next-action evidence as a stronger mainline signal than the older non-detour-only heuristic
 - workspace-scoped workflow ordering now prefers explicit mainline checkpoint signals before falling back to pure recency when ranking continuation candidates
+- `memory_get_context` now has a materially richer task-recall detail surface, including:
+  - return-target details
+  - primary-objective details
+  - task-thread details
+  - latest-versus-selected continuation comparison details
+  - latest detour candidate details
+  - prior-mainline candidate details
 - `memory_search` now has a bounded task-recall integration for workspace-scoped searches, including:
   - top-level search-context details for the latest considered workflow and the selected continuation workflow
   - candidate-level comparison details for latest-versus-selected continuation context when those diverge
@@ -105,6 +112,8 @@ Implemented in the current slice:
   - selection of a workflow with explicit checkpoint objective evidence
   - selection of a workflow with explicit next-intended-action evidence
   - preservation of detour penalties for side-work-like candidates
+  - prior-mainline recovery before a latest detour-like workflow
+  - separation of latest detour context from selected continuation context
 
 What this slice does **not** yet claim:
 
@@ -113,30 +122,34 @@ What this slice does **not** yet claim:
 - broad concept-to-task routing beyond the current bounded `memory_get_context` and `memory_search` task-recall path
 - replacement of recency/resumability signals with objective-aware signals; this slice augments them
 
-This should therefore be read as an incremental `0.7.0` retrieval improvement, not full milestone closeout.
+This should therefore be read as a substantial bounded `0.7.0` retrieval improvement, but still not full milestone closeout.
 
 Rough progress reading at the current repository state:
 
-- `0.7.0` appears to be in the middle-to-late implementation phase rather than early exploration
-- a practical shorthand is:
-  - roughly `70%` complete
-- that estimate is based on:
+- `0.7.0` now appears materially further along than early or mid-slice exploration
+- a better shorthand is:
+  - core bounded task-recall behavior is implemented
+  - milestone closeout and broader completion questions still remain
+- this reading is based on:
   - explicit task-recall ranking already being present
   - objective-aware continuation signals already being present
   - return-target, task-thread, and latest-versus-selected explanation surfaces already being present
+  - latest detour versus selected continuation separation already being present
+  - prior-mainline recovery already being present in the bounded `memory_get_context` path
   - focused validation already covering a meaningful continuation-selection surface
-- the estimate should **not** be read as release readiness
+- this should **not** be read as release readiness
 - it should be read as:
   - core retrieval/explanation scaffolding is real
-  - remaining work is now concentrated in the harder continuation-recovery gaps rather than in initial surface creation
+  - several originally open continuation-recovery gaps now have bounded implementation
+  - remaining work is now concentrated in closeout, broader concept-to-task scope decisions, and maintainability hardening
 
 Main remaining gaps at this stage:
 
-- stronger recovery of the previous primary workflow before the latest detour
-- better preservation and surfacing of “latest considered detour” versus “selected continuation target” as distinct operational concepts across more cases
 - stronger concept-to-task recovery beyond the current bounded `memory_get_context` and `memory_search` task-recall path
 - broader integration of task-recall semantics into adjacent retrieval surfaces only where that remains explainable and justified
 - a final `0.7.0` hardening slice that semantically splits oversized `src/` and `tests/` files so the task-recall implementation remains maintainable and easier to reason about
+- a release-ready behavior summary and closeout-oriented acceptance reading for the bounded `0.7.0` slice
+- an explicit milestone decision on whether the current derived return-target and task-thread surfaces are sufficient for `0.7.0`, or whether any further bounded hardening is still required
 
 ---
 

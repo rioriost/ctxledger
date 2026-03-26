@@ -107,6 +107,9 @@ Use this when your question is primarily:
 Go up one level and use:
 
 - `../CHANGELOG.md`
+- `../0.7.0_status_review.md`
+- `../0.7.0_behavior_summary.md`
+- `../0.7.0_acceptance_review.md`
 - `../v0.1.0_acceptance_evidence.md`
 
 Those are release artifacts, not planning taxonomy entries.
