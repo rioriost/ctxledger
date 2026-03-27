@@ -29,6 +29,126 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 18,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "episode"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Episodes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "memory_item"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Memory items"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "memory_embedding"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Embeddings"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('hour', event_at) AS time, event_type AS metric, COUNT(*)::bigint AS value\nFROM observability.runtime_activity_timeline\nWHERE event_at IS NOT NULL\n  AND event_type IN ('episode', 'memory_item', 'memory_embedding')\nGROUP BY 1, 2\nORDER BY 1, 2;",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Activity Timeline",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "thresholds"
           },
           "decimals": 0,
@@ -50,7 +170,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 0
+        "y": 11
       },
       "id": 1,
       "options": {
@@ -111,7 +231,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 0
+        "y": 11
       },
       "id": 2,
       "options": {
@@ -172,7 +292,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 0
+        "y": 11
       },
       "id": 3,
       "options": {
@@ -233,9 +353,9 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 0
+        "y": 11
       },
-      "id": 3,
+      "id": 18,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
@@ -293,8 +413,8 @@
       "gridPos": {
         "h": 5,
         "w": 6,
-        "x": 12,
-        "y": 5
+        "x": 0,
+        "y": 16
       },
       "id": 15,
       "options": {
@@ -354,8 +474,8 @@
       "gridPos": {
         "h": 5,
         "w": 6,
-        "x": 18,
-        "y": 0
+        "x": 6,
+        "y": 16
       },
       "id": 4,
       "options": {
@@ -395,8 +515,70 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 16
+      },
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(SUM(memory_item_count), 0) AS \"Auto Workflow Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance IN ('workflow_checkpoint_auto', 'workflow_complete_auto');",
+          "refId": "A"
+        }
+      ],
+      "title": "Auto Workflow Memory Items",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -409,69 +591,26 @@
           },
           "unit": "none"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "episode"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Episodes"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "memory_item"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Memory items"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "memory_embedding"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Embeddings"
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
-        "h": 9,
-        "w": 10,
-        "x": 0,
-        "y": 10
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 16
       },
-      "id": 5,
+      "id": 12,
       "options": {
-        "displayLabels": ["name", "value", "percent"],
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "pieType": "pie",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
         "reduceOptions": {
           "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "textMode": "value_and_name"
       },
       "pluginVersion": "11.1.4",
       "targets": [
@@ -483,12 +622,12 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT initcap(replace(provenance, '_', ' '))::text AS provenance, memory_item_count AS \"Memory Items\" FROM observability.memory_item_provenance_counts ORDER BY memory_item_count DESC, provenance ASC;",
+          "rawSql": "SELECT COALESCE(memory_summary_count, 0) AS \"Canonical Summaries\"\nFROM observability.memory_overview;",
           "refId": "A"
         }
       ],
-      "title": "Memory Item Provenance",
-      "type": "piechart"
+      "title": "Canonical Summaries",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -498,112 +637,41 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 18,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
+          "decimals": 0,
           "mappings": [],
-          "unit": "short"
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "latest_episode_created_at"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Latest episode"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "latest_memory_item_created_at"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Latest memory item"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "latest_memory_embedding_created_at"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Latest embedding"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "latest_memory_relation_created_at"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Latest relation"
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
-        "h": 9,
-        "w": 14,
-        "x": 10,
-        "y": 10
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 21
       },
-      "id": 6,
+      "id": 13,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "textMode": "value_and_name"
       },
       "pluginVersion": "11.1.4",
       "targets": [
@@ -613,14 +681,189 @@
             "uid": "ctxledger-postgres"
           },
           "editorMode": "code",
-          "format": "time_series",
+          "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('hour', event_at) AS time, event_type AS metric, COUNT(*)::bigint AS value\nFROM observability.runtime_activity_timeline\nWHERE event_at IS NOT NULL\n  AND event_type IN ('episode', 'memory_item', 'memory_embedding')\nGROUP BY 1, 2\nORDER BY 1, 2;",
+          "rawSql": "SELECT COALESCE(memory_summary_membership_count, 0) AS \"Summary Memberships\"\nFROM observability.memory_overview;",
           "refId": "A"
         }
       ],
-      "title": "Memory Activity Timeline",
-      "type": "timeseries"
+      "title": "Summary Memberships",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "teal",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 21
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS \"Episode Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'episode';",
+          "refId": "A"
+        }
+      ],
+      "title": "Episode Memory Items",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 21
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS \"Derived Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'derived';",
+          "refId": "A"
+        }
+      ],
+      "title": "Derived Memory Items",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "id": 8,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT initcap(replace(provenance, '_', ' '))::text AS provenance, memory_item_count\nFROM observability.memory_item_provenance_counts\nORDER BY memory_item_count DESC, provenance ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Provenance Breakdown",
+      "type": "table"
     },
     {
       "datasource": {
@@ -707,10 +950,10 @@
         ]
       },
       "gridPos": {
-        "h": 9,
-        "w": 24,
-        "x": 0,
-        "y": 19
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
       },
       "id": 16,
       "options": {
@@ -735,7 +978,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "WITH capture_trends AS (\n  SELECT date_trunc('hour', created_at) AS time, 'interaction_memory_items'::text AS metric, COUNT(*)::bigint AS value\n  FROM memory_items\n  WHERE provenance = 'interaction'\n  GROUP BY 1\n  UNION ALL\n  SELECT date_trunc('hour', created_at) AS time, 'file_work_memory_items'::text AS metric, COUNT(*)::bigint AS value\n  FROM memory_items\n  WHERE COALESCE(metadata_json ->> 'file_path', '') <> ''\n     OR COALESCE(metadata_json ->> 'file_paths', '') <> ''\n     OR COALESCE(metadata_json ->> 'file_work_count', '') <> ''\n     OR COALESCE(metadata_json ->> 'file_work_paths', '') <> ''\n  GROUP BY 1\n  UNION ALL\n  SELECT date_trunc('hour', created_at) AS time, 'memory_items'::text AS metric, COUNT(*)::bigint AS value\n  FROM memory_items\n  GROUP BY 1\n)\nSELECT time, metric, value\nFROM capture_trends\nUNION ALL\nSELECT now() AS time, 'interaction_memory_items'::text AS metric, 0::bigint AS value\nWHERE NOT EXISTS (\n  SELECT 1 FROM capture_trends WHERE metric = 'interaction_memory_items'\n)\nUNION ALL\nSELECT now() AS time, 'file_work_memory_items'::text AS metric, 0::bigint AS value\nWHERE NOT EXISTS (\n  SELECT 1 FROM capture_trends WHERE metric = 'file_work_memory_items'\n)\nUNION ALL\nSELECT now() AS time, 'memory_items'::text AS metric, 0::bigint AS value\nWHERE NOT EXISTS (\n  SELECT 1 FROM capture_trends WHERE metric = 'memory_items'\n)\nORDER BY 1, 2;",
+          "rawSql": "SELECT\n  date_trunc('hour', created_at) AS time,\n  COUNT(*) FILTER (\n    WHERE provenance = 'interaction'\n  )::bigint AS interaction_memory_items,\n  COUNT(*) FILTER (\n    WHERE COALESCE(metadata_json ->> 'file_path', '') <> ''\n       OR COALESCE(metadata_json ->> 'file_paths', '') <> ''\n       OR COALESCE(metadata_json ->> 'file_work_count', '') <> ''\n       OR COALESCE(metadata_json ->> 'file_work_paths', '') <> ''\n  )::bigint AS file_work_memory_items,\n  COUNT(*)::bigint AS memory_items\nFROM memory_items\nGROUP BY 1\nORDER BY 1;",
           "refId": "A"
         }
       ],
@@ -815,7 +1058,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 28
+        "y": 34
       },
       "id": 7,
       "options": {
@@ -869,60 +1112,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 28
-      },
-      "id": 8,
-      "options": {
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT initcap(replace(provenance, '_', ' '))::text AS provenance, memory_item_count\nFROM observability.memory_item_provenance_counts\nORDER BY memory_item_count DESC, provenance ASC;",
-          "refId": "A"
-        }
-      ],
-      "title": "Provenance Breakdown",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 14
+        "y": 34
       },
       "id": 17,
       "options": {
@@ -958,311 +1148,6 @@
       },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 0,
-        "y": 36
-      },
-      "id": 9,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value_and_name"
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS \"Auto Workflow Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'workflow_complete_auto';",
-          "refId": "A"
-        }
-      ],
-      "title": "Auto Workflow Memory Items",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "teal",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 8,
-        "y": 36
-      },
-      "id": 10,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value_and_name"
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS \"Episode Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'episode';",
-          "refId": "A"
-        }
-      ],
-      "title": "Episode Memory Items",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "yellow",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 16,
-        "y": 36
-      },
-      "id": 11,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value_and_name"
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS \"Derived Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'derived';",
-          "refId": "A"
-        }
-      ],
-      "title": "Derived Memory Items",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 0,
-        "y": 41
-      },
-      "id": 12,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value_and_name"
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_summary_count, 0) AS \"Canonical Summaries\"\nFROM observability.memory_overview;",
-          "refId": "A"
-        }
-      ],
-      "title": "Canonical Summaries",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 6,
-        "y": 41
-      },
-      "id": 13,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value_and_name"
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_summary_membership_count, 0) AS \"Summary Memberships\"\nFROM observability.memory_overview;",
-          "refId": "A"
-        }
-      ],
-      "title": "Summary Memberships",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -1277,10 +1162,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 10,
+        "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 41
+        "x": 0,
+        "y": 42
       },
       "id": 14,
       "options": {
@@ -1308,6 +1193,109 @@
       ],
       "title": "Summary Layer Status",
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "episode"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Episodes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "memory_item"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Memory items"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "memory_embedding"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Embeddings"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      },
+      "id": 5,
+      "options": {
+        "displayLabels": ["name", "value", "percent"],
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT initcap(replace(provenance, '_', ' '))::text AS provenance, memory_item_count AS \"Memory Items\" FROM observability.memory_item_provenance_counts ORDER BY memory_item_count DESC, provenance ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Item Provenance",
+      "type": "piechart"
     }
   ],
   "refresh": "30s",
@@ -1324,6 +1312,6 @@
   "timezone": "browser",
   "title": "ctxledger Memory Overview",
   "uid": "ctxledger-memory-overview",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

@@ -29,6 +29,126 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 18,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "workflow"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Workflow events"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempt"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Attempt events"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "verify_report"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Verify reports"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('hour', event_at) AS time, event_type AS metric, COUNT(*)::bigint AS value\nFROM observability.runtime_activity_timeline\nWHERE event_at IS NOT NULL\nGROUP BY 1, 2\nORDER BY 1, 2;",
+          "refId": "A"
+        }
+      ],
+      "title": "Runtime Activity Timeline",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "thresholds"
           },
           "decimals": 0,
@@ -50,7 +170,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 0
+        "y": 11
       },
       "id": 1,
       "options": {
@@ -111,7 +231,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 0
+        "y": 11
       },
       "id": 2,
       "options": {
@@ -172,7 +292,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 0
+        "y": 11
       },
       "id": 3,
       "options": {
@@ -233,7 +353,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 0
+        "y": 11
       },
       "id": 4,
       "options": {
@@ -294,7 +414,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 5
+        "y": 16
       },
       "id": 14,
       "options": {
@@ -355,7 +475,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 5
+        "y": 16
       },
       "id": 15,
       "options": {
@@ -395,14 +515,15 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "purple",
                 "value": null
               }
             ]
@@ -412,29 +533,23 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 8,
+        "h": 5,
+        "w": 6,
         "x": 12,
-        "y": 5
+        "y": 16
       },
-      "id": 5,
+      "id": 11,
       "options": {
-        "displayLabels": ["name", "value", "percent"],
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "pieType": "pie",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
         "reduceOptions": {
           "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "textMode": "value_and_name"
       },
       "pluginVersion": "11.1.4",
       "targets": [
@@ -446,28 +561,332 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT initcap(status) AS status, workflow_count AS \"Workflows\" FROM observability.workflow_status_counts ORDER BY status ASC;",
+          "rawSql": "SELECT COALESCE(memory_summary_count, 0) AS \"Canonical Summaries\"\nFROM observability.memory_overview;",
           "refId": "A"
         }
       ],
-      "title": "Workflow Status Distribution",
-      "type": "piechart",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {},
-            "indexByName": {
-              "Workflows": 1,
-              "status": 0
-            },
-            "renameByName": {
-              "Workflows": "Workflows",
-              "status": "Status"
-            }
+      "title": "Canonical Summaries",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "id": 16,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  workflows_updated_last_24h,\n  checkpoints_created_last_24h,\n  verify_reports_created_last_24h,\n  episodes_created_last_24h,\n  memory_items_created_last_24h,\n  interaction_memory_items_created_last_24h,\n  file_work_memory_items_created_last_24h\nFROM observability.runtime_recent_activity_summary;",
+          "refId": "A"
         }
-      ]
+      ],
+      "title": "Recent Activity Summary (24h)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "id": 9,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Updated"
+          }
+        ]
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  workflow_instance_id::text AS \"Workflow ID\",\n  COALESCE(canonical_path, workspace_id::text) AS \"Workspace\",\n  ticket_id::text AS \"Ticket\",\n  workflow_status::text AS \"Status\",\n  COALESCE(latest_step_name, '') AS \"Latest step\",\n  COALESCE(latest_verify_status, '') AS \"Latest verify status\",\n  COALESCE(to_char(updated_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS \"Updated\"\nFROM observability.workflow_recent\nORDER BY updated_at DESC\nLIMIT 20;",
+          "refId": "A"
+        }
+      ],
+      "title": "Recent Workflows",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 29
+      },
+      "id": 10,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  latest_workflow_updated_at,\n  latest_checkpoint_created_at,\n  latest_verify_report_created_at\nFROM observability.workflow_overview;",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Workflow Activity Markers",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "id": 17,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  workflows_updated_last_24h,\n  checkpoints_created_last_24h,\n  verify_reports_created_last_24h,\n  CASE\n    WHEN workflows_updated_last_24h = 0 THEN 'no recent workflow activity'\n    WHEN verify_reports_created_last_24h = 0 AND checkpoints_created_last_24h > 0 THEN 'verify lag possible'\n    WHEN verify_reports_created_last_24h >= checkpoints_created_last_24h THEN 'balanced'\n    ELSE 'recent checkpoint activity without verify follow-through'\n  END AS verify_pressure_reading\nFROM observability.runtime_recent_activity_summary;",
+          "refId": "A"
+        }
+      ],
+      "title": "Verify Pressure Reading",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_workflow_updated_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest workflow update"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_checkpoint_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest checkpoint"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_verify_report_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest verify report"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "id": 13,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  latest_workflow_updated_at,\n  latest_checkpoint_created_at,\n  latest_verify_report_created_at\nFROM observability.workflow_overview;",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Workflow Activity Markers",
+      "type": "table"
     },
     {
       "datasource": {
@@ -497,7 +916,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 10
+        "y": 44
       },
       "id": 6,
       "options": {
@@ -579,7 +998,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 10
+        "y": 44
       },
       "id": 7,
       "options": {
@@ -643,352 +1062,12 @@
           "color": {
             "mode": "palette-classic"
           },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 18,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "workflow"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Workflow events"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "attempt"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Attempt events"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "verify_report"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Verify reports"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 18
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT date_trunc('hour', event_at) AS time, event_type AS metric, COUNT(*)::bigint AS value\nFROM observability.runtime_activity_timeline\nWHERE event_at IS NOT NULL\nGROUP BY 1, 2\nORDER BY 1, 2;",
-          "refId": "A"
-        }
-      ],
-      "title": "Runtime Activity Timeline",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "dateTimeAsIso"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 18
-      },
-      "id": 9,
-      "options": {
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Updated"
-          }
-        ]
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  workflow_instance_id::text AS \"Workflow ID\",\n  COALESCE(canonical_path, workspace_id::text) AS \"Workspace\",\n  ticket_id::text AS \"Ticket\",\n  workflow_status::text AS \"Status\",\n  COALESCE(latest_step_name, '') AS \"Latest step\",\n  COALESCE(latest_verify_status, '') AS \"Latest verify status\",\n  COALESCE(to_char(updated_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS \"Updated\"\nFROM observability.workflow_recent\nORDER BY updated_at DESC\nLIMIT 20;",
-          "refId": "A"
-        }
-      ],
-      "title": "Recent Workflows",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 27
-      },
-      "id": 16,
-      "options": {
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  workflows_updated_last_24h,\n  checkpoints_created_last_24h,\n  verify_reports_created_last_24h,\n  episodes_created_last_24h,\n  memory_items_created_last_24h,\n  interaction_memory_items_created_last_24h,\n  file_work_memory_items_created_last_24h\nFROM observability.runtime_recent_activity_summary;",
-          "refId": "A"
-        }
-      ],
-      "title": "Recent Activity Summary (24h)",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 27
-      },
-      "id": 17,
-      "options": {
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  workflows_updated_last_24h,\n  checkpoints_created_last_24h,\n  verify_reports_created_last_24h,\n  CASE\n    WHEN workflows_updated_last_24h = 0 THEN 'no recent workflow activity'\n    WHEN verify_reports_created_last_24h = 0 AND checkpoints_created_last_24h > 0 THEN 'verify lag possible'\n    WHEN verify_reports_created_last_24h >= checkpoints_created_last_24h THEN 'balanced'\n    ELSE 'recent checkpoint activity without verify follow-through'\n  END AS verify_pressure_reading\nFROM observability.runtime_recent_activity_summary;",
-          "refId": "A"
-        }
-      ],
-      "title": "Verify Pressure Reading",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 34
-      },
-      "id": 10,
-      "options": {
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  latest_workflow_updated_at,\n  latest_checkpoint_created_at,\n  latest_verify_report_created_at\nFROM observability.workflow_overview;",
-          "refId": "A"
-        }
-      ],
-      "title": "Latest Workflow Activity Markers",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "purple",
                 "value": null
               }
             ]
@@ -998,23 +1077,29 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 12,
-        "y": 34
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 44
       },
-      "id": 11,
+      "id": 5,
       "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
+        "displayLabels": ["name", "value", "percent"],
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
         "reduceOptions": {
           "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
-        "textMode": "value_and_name"
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "pluginVersion": "11.1.4",
       "targets": [
@@ -1026,12 +1111,28 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_summary_count, 0) AS \"Canonical Summaries\"\nFROM observability.memory_overview;",
+          "rawSql": "SELECT initcap(status) AS status, workflow_count AS \"Workflows\" FROM observability.workflow_status_counts ORDER BY status ASC;",
           "refId": "A"
         }
       ],
-      "title": "Canonical Summaries",
-      "type": "stat"
+      "title": "Workflow Status Distribution",
+      "type": "piechart",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Workflows": 1,
+              "status": 0
+            },
+            "renameByName": {
+              "Workflows": "Workflows",
+              "status": "Status"
+            }
+          }
+        }
+      ]
     },
     {
       "datasource": {
@@ -1055,9 +1156,9 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 6,
-        "x": 18,
-        "y": 34
+        "w": 8,
+        "x": 0,
+        "y": 52
       },
       "id": 12,
       "options": {
@@ -1085,108 +1186,6 @@
       ],
       "title": "Summary Layer Status",
       "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "ctxledger-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "latest_workflow_updated_at"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Latest workflow update"
-              },
-              {
-                "id": "unit",
-                "value": "dateTimeAsIso"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "latest_checkpoint_created_at"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Latest checkpoint"
-              },
-              {
-                "id": "unit",
-                "value": "dateTimeAsIso"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "latest_verify_report_created_at"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Latest verify report"
-              },
-              {
-                "id": "unit",
-                "value": "dateTimeAsIso"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 24,
-        "x": 0,
-        "y": 41
-      },
-      "id": 13,
-      "options": {
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.1.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "ctxledger-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  latest_workflow_updated_at,\n  latest_checkpoint_created_at,\n  latest_verify_report_created_at\nFROM observability.workflow_overview;",
-          "refId": "A"
-        }
-      ],
-      "title": "Latest Workflow Activity Markers",
-      "type": "table"
     }
   ],
   "refresh": "30s",
@@ -1203,6 +1202,6 @@
   "timezone": "browser",
   "title": "ctxledger Runtime Overview",
   "uid": "ctxledger-runtime-overview",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
