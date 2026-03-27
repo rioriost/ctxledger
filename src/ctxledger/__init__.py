@@ -911,6 +911,14 @@ def _format_stats_text(stats: object) -> str:
         f"- workflow_completion_auto_memory_recorded: {getattr(stats, 'workflow_completion_auto_memory_recorded_count', 0)}",
         f"- workflow_completion_auto_memory_skipped: {getattr(stats, 'workflow_completion_auto_memory_skipped_count', 0)}",
         "",
+        "AGE operator metrics:",
+        f"- memory_summaries: {getattr(stats, 'memory_summary_count', 0)}",
+        f"- memory_summary_memberships: {getattr(stats, 'memory_summary_membership_count', 0)}",
+        f"- age_summary_graph_ready: {getattr(stats, 'age_summary_graph_ready_count', 0)}",
+        f"- age_summary_graph_stale: {getattr(stats, 'age_summary_graph_stale_count', 0)}",
+        f"- age_summary_graph_degraded: {getattr(stats, 'age_summary_graph_degraded_count', 0)}",
+        f"- age_summary_graph_unknown: {getattr(stats, 'age_summary_graph_unknown_count', 0)}",
+        "",
         "Other:",
         f"- checkpoints: {getattr(stats, 'checkpoint_count', 0)}",
         "",
@@ -962,6 +970,12 @@ def _stats(args: argparse.Namespace) -> int:
                     "workflow_completion_auto_memory_skipped_count": (
                         stats.workflow_completion_auto_memory_skipped_count
                     ),
+                    "memory_summary_count": stats.memory_summary_count,
+                    "memory_summary_membership_count": stats.memory_summary_membership_count,
+                    "age_summary_graph_ready_count": stats.age_summary_graph_ready_count,
+                    "age_summary_graph_stale_count": stats.age_summary_graph_stale_count,
+                    "age_summary_graph_degraded_count": stats.age_summary_graph_degraded_count,
+                    "age_summary_graph_unknown_count": stats.age_summary_graph_unknown_count,
                     "latest_workflow_updated_at": _isoformat_or_none(
                         stats.latest_workflow_updated_at
                     ),
@@ -1081,6 +1095,14 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- checkpoint_auto_memory_skipped: {getattr(stats, 'checkpoint_auto_memory_skipped_count', 0)}",
         f"- workflow_completion_auto_memory_recorded: {getattr(stats, 'workflow_completion_auto_memory_recorded_count', 0)}",
         f"- workflow_completion_auto_memory_skipped: {getattr(stats, 'workflow_completion_auto_memory_skipped_count', 0)}",
+        "",
+        "AGE operator metrics:",
+        f"- memory_summaries: {getattr(stats, 'memory_summary_count', 0)}",
+        f"- memory_summary_memberships: {getattr(stats, 'memory_summary_membership_count', 0)}",
+        f"- age_summary_graph_ready: {getattr(stats, 'age_summary_graph_ready_count', 0)}",
+        f"- age_summary_graph_stale: {getattr(stats, 'age_summary_graph_stale_count', 0)}",
+        f"- age_summary_graph_degraded: {getattr(stats, 'age_summary_graph_degraded_count', 0)}",
+        f"- age_summary_graph_unknown: {getattr(stats, 'age_summary_graph_unknown_count', 0)}",
         "",
         "Memory item provenance:",
     ]
@@ -1215,6 +1237,12 @@ def _memory_stats(args: argparse.Namespace) -> int:
                     "workflow_completion_auto_memory_skipped_count": (
                         stats.workflow_completion_auto_memory_skipped_count
                     ),
+                    "memory_summary_count": stats.memory_summary_count,
+                    "memory_summary_membership_count": stats.memory_summary_membership_count,
+                    "age_summary_graph_ready_count": stats.age_summary_graph_ready_count,
+                    "age_summary_graph_stale_count": stats.age_summary_graph_stale_count,
+                    "age_summary_graph_degraded_count": stats.age_summary_graph_degraded_count,
+                    "age_summary_graph_unknown_count": stats.age_summary_graph_unknown_count,
                     "latest_episode_created_at": _isoformat_or_none(
                         stats.latest_episode_created_at
                     ),

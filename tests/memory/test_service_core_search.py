@@ -485,6 +485,93 @@ def test_memory_search_ranking_details_include_completion_origin_explainability(
     }
 
 
+def test_memory_search_prefers_completion_memory_over_checkpoint_memory_when_lexical_scores_tie() -> (
+    None
+):
+    workspace_id = UUID("00000000-0000-0000-0000-0000000000bc")
+    checkpoint_memory_id = uuid4()
+    completion_memory_id = uuid4()
+    created_at = datetime(2024, 3, 2, tzinfo=UTC)
+
+    service = MemoryService(
+        episode_repository=InMemoryEpisodeRepository(),
+        memory_item_repository=InMemoryMemoryItemRepository(),
+        memory_embedding_repository=InMemoryMemoryEmbeddingRepository(),
+        memory_relation_repository=InMemoryMemoryRelationRepository(),
+        workflow_lookup=InMemoryWorkflowLookupRepository(),
+    )
+
+    shared_content = "Investigated projection drift root cause"
+
+    service._memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=checkpoint_memory_id,
+            workspace_id=workspace_id,
+            episode_id=uuid4(),
+            type="workflow_next_action",
+            provenance="workflow_checkpoint_auto",
+            content=shared_content,
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "next_intended_action",
+                "promotion_source": "checkpoint.next_intended_action",
+                "checkpoint_id": "checkpoint-tiebreak-1",
+                "step_name": "checkpoint_tiebreak",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    service._memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=completion_memory_id,
+            workspace_id=workspace_id,
+            episode_id=uuid4(),
+            type="workflow_completion_note",
+            provenance="workflow_complete_auto",
+            content=shared_content,
+            metadata={
+                "memory_origin": "workflow_complete_auto",
+                "step_name": "workflow_complete",
+                "workflow_status": "completed",
+                "attempt_status": "succeeded",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+
+    response = service.search(
+        SearchMemoryRequest(
+            query=shared_content,
+            workspace_id=str(workspace_id),
+            limit=5,
+            filters={},
+        )
+    )
+
+    assert [result.memory_id for result in response.results[:2]] == [
+        completion_memory_id,
+        checkpoint_memory_id,
+    ]
+    assert response.results[0].lexical_score == response.results[1].lexical_score
+    assert response.results[0].semantic_score == response.results[1].semantic_score == 0.0
+    assert response.results[0].ranking_details["score_mode"] == "lexical_only"
+    assert response.results[1].ranking_details["score_mode"] == "lexical_only"
+    assert response.results[0].ranking_details["reason_list"][-1] == {
+        "code": "workflow_complete_auto_tiebreak",
+        "message": "completion-origin memory was preferred over checkpoint-origin memory when lexical evidence tied",
+    }
+    assert response.results[0].ranking_details["remember_path_detail"]["memory_origin"] == (
+        "workflow_complete_auto"
+    )
+    assert response.results[1].ranking_details["remember_path_detail"]["memory_origin"] == (
+        "workflow_checkpoint_auto"
+    )
+
+
 def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()

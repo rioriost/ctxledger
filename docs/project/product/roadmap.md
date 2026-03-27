@@ -306,17 +306,30 @@ Current `0.6.0` positioning:
 - summary ownership and summary-membership ownership remain canonical and relational
 - Apache AGE currently serves as a constrained derived support layer, not canonical hierarchy truth
 - `memory_get_context` is now hierarchy-aware in a narrow, explainable, behavior-preserving way
+- the current request shape now includes a `primary_only` narrowing flag for clients that want the grouped primary surface without flatter compatibility-oriented explainability fields
 - explicit bootstrap, refresh, readiness, and degraded-operation expectations matter as much as the retrieval behavior itself
+- operator-facing stats now also surface canonical summary volume and derived graph-posture metrics, including:
+  - `memory_summary_count`
+  - `memory_summary_membership_count`
+  - `age_summary_graph_ready_count`
+  - `age_summary_graph_stale_count`
+  - `age_summary_graph_degraded_count`
+  - `age_summary_graph_unknown_count`
 
 Remaining work to close out `0.6.0` more confidently:
 
 - keep the roadmap, closeout notes, and operator-facing docs aligned with the now-implemented `0.6.0` boundary
 - continue verifying that summary-first contract details remain stable across service, MCP, HTTP, and PostgreSQL-backed paths
+- continue verifying that the `primary_only` client path remains a response-shaping mode over the same retrieval behavior rather than drifting into a separate retrieval contract
+- confirm that operator metrics continue to reflect their intended current reading:
+  - canonical summary volume first
+  - derived graph posture second
 - confirm that deliverables and validation notes consistently describe the current milestone as:
   - canonical relational summary ownership
   - constrained summary-first retrieval
   - direct member expansion
   - derived and degradable graph support
+  - optional primary-surface-only client shaping through `primary_only`
 - avoid broadening the milestone into recursive hierarchy, graph-owned truth, or Mnemis-alignment work before `0.7.0`
 
 Expected themes:
@@ -369,6 +382,11 @@ Expected themes:
 - project-level knowledge compression
 - graph-backed relation modeling while PostgreSQL remains canonical
 - incremental introduction of Apache AGE without turning the milestone into a broad architecture rewrite
+- clearer separation between:
+  - primary grouped retrieval surfaces
+  - compatibility-oriented flat projections
+  - convenience-oriented additive explainability views
+- stronger operator visibility into canonical summary state versus derived graph readiness state
 
 ## Cross-version guiding rules
 

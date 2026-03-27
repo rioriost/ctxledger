@@ -613,16 +613,27 @@ def test_format_stats_text_renders_values() -> None:
         episode_count=15,
         memory_item_count=16,
         memory_embedding_count=17,
-        latest_workflow_updated_at="2024-10-01T00:00:00+00:00",
-        latest_checkpoint_created_at="2024-10-02T00:00:00+00:00",
-        latest_verify_report_created_at="2024-10-03T00:00:00+00:00",
-        latest_episode_created_at="2024-10-04T00:00:00+00:00",
-        latest_memory_item_created_at="2024-10-05T00:00:00+00:00",
-        latest_memory_embedding_created_at="2024-10-06T00:00:00+00:00",
+        checkpoint_auto_memory_recorded_count=18,
+        checkpoint_auto_memory_skipped_count=19,
+        workflow_completion_auto_memory_recorded_count=20,
+        workflow_completion_auto_memory_skipped_count=21,
+        memory_summary_count=22,
+        memory_summary_membership_count=23,
+        age_summary_graph_ready_count=24,
+        age_summary_graph_stale_count=25,
+        age_summary_graph_degraded_count=26,
+        age_summary_graph_unknown_count=27,
+        latest_workflow_updated_at=datetime(2024, 10, 1, tzinfo=UTC),
+        latest_checkpoint_created_at=datetime(2024, 10, 2, tzinfo=UTC),
+        latest_verify_report_created_at=datetime(2024, 10, 3, tzinfo=UTC),
+        latest_episode_created_at=datetime(2024, 10, 4, tzinfo=UTC),
+        latest_memory_item_created_at=datetime(2024, 10, 5, tzinfo=UTC),
+        latest_memory_embedding_created_at=datetime(2024, 10, 6, tzinfo=UTC),
     )
 
     rendered = cli_module._format_stats_text(stats)
 
+    assert "ctxledger stats" in rendered
     assert "- total: 1" in rendered
     assert "- running: 2" in rendered
     assert "- completed: 3" in rendered
@@ -631,13 +642,24 @@ def test_format_stats_text_renders_values() -> None:
     assert "- succeeded: 7" in rendered
     assert "- pending: 10" in rendered
     assert "- passed: 11" in rendered
-    assert "- skipped: 13" in rendered
-    assert "- checkpoints: 14" in rendered
     assert "- episodes: 15" in rendered
     assert "- memory_items: 16" in rendered
     assert "- memory_embeddings: 17" in rendered
-    assert "- workflow_updated_at: 2024-10-01T00:00:00+00:00" in rendered
-    assert "- memory_embedding_created_at: 2024-10-06T00:00:00+00:00" in rendered
+    assert "- checkpoint_auto_memory_recorded: 18" in rendered
+    assert "- checkpoint_auto_memory_skipped: 19" in rendered
+    assert "- workflow_completion_auto_memory_recorded: 20" in rendered
+    assert "- workflow_completion_auto_memory_skipped: 21" in rendered
+    assert "- memory_summaries: 22" in rendered
+    assert "- memory_summary_memberships: 23" in rendered
+    assert "- age_summary_graph_ready: 24" in rendered
+    assert "- age_summary_graph_stale: 25" in rendered
+    assert "- age_summary_graph_degraded: 26" in rendered
+    assert "- age_summary_graph_unknown: 27" in rendered
+    assert "- checkpoints: 14" in rendered
+    assert "2024-10-01 00:00:00+00:00" in rendered
+    assert "2024-10-06 00:00:00+00:00" in rendered
+    assert "- workflow_updated_at: 2024-10-01 00:00:00+00:00" in rendered
+    assert "- memory_embedding_created_at: 2024-10-06 00:00:00+00:00" in rendered
 
 
 def test_build_postgres_workflow_service_returns_settings_service_and_pool(
@@ -709,6 +731,16 @@ def test_stats_renders_json_output_and_closes_pool(
         episode_count=6,
         memory_item_count=7,
         memory_embedding_count=8,
+        checkpoint_auto_memory_recorded_count=9,
+        checkpoint_auto_memory_skipped_count=10,
+        workflow_completion_auto_memory_recorded_count=11,
+        workflow_completion_auto_memory_skipped_count=12,
+        memory_summary_count=13,
+        memory_summary_membership_count=14,
+        age_summary_graph_ready_count=15,
+        age_summary_graph_stale_count=16,
+        age_summary_graph_degraded_count=17,
+        age_summary_graph_unknown_count=18,
         latest_workflow_updated_at=datetime(2024, 11, 1, tzinfo=UTC),
         latest_checkpoint_created_at=None,
         latest_verify_report_created_at=None,
@@ -740,6 +772,16 @@ def test_stats_renders_json_output_and_closes_pool(
     payload = json.loads(captured.out)
     assert payload["workspace_count"] == 2
     assert payload["memory_embedding_count"] == 8
+    assert payload["checkpoint_auto_memory_recorded_count"] == 9
+    assert payload["checkpoint_auto_memory_skipped_count"] == 10
+    assert payload["workflow_completion_auto_memory_recorded_count"] == 11
+    assert payload["workflow_completion_auto_memory_skipped_count"] == 12
+    assert payload["memory_summary_count"] == 13
+    assert payload["memory_summary_membership_count"] == 14
+    assert payload["age_summary_graph_ready_count"] == 15
+    assert payload["age_summary_graph_stale_count"] == 16
+    assert payload["age_summary_graph_degraded_count"] == 17
+    assert payload["age_summary_graph_unknown_count"] == 18
     assert payload["latest_workflow_updated_at"] == "2024-11-01T00:00:00+00:00"
     assert close_calls == ["close"]
 
@@ -805,6 +847,12 @@ def test_memory_stats_renders_text_output_and_closes_pool(
         checkpoint_auto_memory_skipped_count=1,
         workflow_completion_auto_memory_recorded_count=3,
         workflow_completion_auto_memory_skipped_count=0,
+        memory_summary_count=7,
+        memory_summary_membership_count=8,
+        age_summary_graph_ready_count=1,
+        age_summary_graph_stale_count=0,
+        age_summary_graph_degraded_count=0,
+        age_summary_graph_unknown_count=0,
         latest_episode_created_at=datetime(2024, 11, 2, tzinfo=UTC),
         latest_memory_item_created_at=datetime(2024, 11, 3, tzinfo=UTC),
         latest_memory_embedding_created_at=datetime(2024, 11, 4, tzinfo=UTC),
@@ -840,6 +888,12 @@ def test_memory_stats_renders_text_output_and_closes_pool(
     assert "- checkpoint_auto_memory_skipped: 1" in captured.out
     assert "- workflow_completion_auto_memory_recorded: 3" in captured.out
     assert "- workflow_completion_auto_memory_skipped: 0" in captured.out
+    assert "- memory_summaries: 7" in captured.out
+    assert "- memory_summary_memberships: 8" in captured.out
+    assert "- age_summary_graph_ready: 1" in captured.out
+    assert "- age_summary_graph_stale: 0" in captured.out
+    assert "- age_summary_graph_degraded: 0" in captured.out
+    assert "- age_summary_graph_unknown: 0" in captured.out
     assert "- memory_relation_created_at: 2024-11-05 00:00:00+00:00" in captured.out
     assert close_calls == ["close"]
 

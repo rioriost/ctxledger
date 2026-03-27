@@ -270,5 +270,9 @@ MEMORY_GET_CONTEXT_TOOL_SCHEMA = McpToolSchema(
             "type": "boolean",
             "description": "Whether to include summaries in the response.",
         },
+        "primary_only": {
+            "type": "boolean",
+            "description": "Whether to return only the primary grouped surface and omit compatibility-oriented fields.",
+        },
     },
 )

@@ -37,27 +37,37 @@ def test_main_stats_renders_text_output(
             "cancelled": 0,
         },
         attempt_status_counts={
-            "running": 28,
-            "succeeded": 30,
+            "running": 3,
+            "succeeded": 55,
             "failed": 0,
             "cancelled": 0,
         },
         verify_status_counts={
-            "pending": 109,
-            "passed": 239,
-            "failed": 20,
-            "skipped": 1,
+            "pending": 1,
+            "passed": 51,
+            "failed": 0,
+            "skipped": 6,
         },
-        checkpoint_count=369,
+        checkpoint_count=57,
         episode_count=34,
         memory_item_count=24,
         memory_embedding_count=3,
-        latest_workflow_updated_at=datetime(2026, 3, 15, 9, 45, 52, tzinfo=UTC),
-        latest_checkpoint_created_at=datetime(2026, 3, 15, 10, 55, 8, tzinfo=UTC),
-        latest_verify_report_created_at=datetime(2026, 3, 15, 10, 55, 8, tzinfo=UTC),
-        latest_episode_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
-        latest_memory_item_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
-        latest_memory_embedding_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
+        checkpoint_auto_memory_recorded_count=12,
+        checkpoint_auto_memory_skipped_count=45,
+        workflow_completion_auto_memory_recorded_count=4,
+        workflow_completion_auto_memory_skipped_count=54,
+        memory_summary_count=9,
+        memory_summary_membership_count=21,
+        age_summary_graph_ready_count=1,
+        age_summary_graph_stale_count=0,
+        age_summary_graph_degraded_count=0,
+        age_summary_graph_unknown_count=0,
+        latest_workflow_updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
+        latest_checkpoint_created_at=datetime(2026, 3, 15, 9, 1, 0, tzinfo=UTC),
+        latest_verify_report_created_at=datetime(2026, 3, 15, 9, 2, 0, tzinfo=UTC),
+        latest_episode_created_at=datetime(2026, 3, 15, 9, 3, 0, tzinfo=UTC),
+        latest_memory_item_created_at=datetime(2026, 3, 15, 9, 4, 0, tzinfo=UTC),
+        latest_memory_embedding_created_at=datetime(2026, 3, 15, 9, 5, 0, tzinfo=UTC),
     )
 
     class FakeStatsWorkflowService:
@@ -90,17 +100,37 @@ def test_main_stats_renders_text_output(
     assert "- running: 28" in captured.out
     assert "- completed: 30" in captured.out
     assert "Attempts:" in captured.out
-    assert "- succeeded: 30" in captured.out
+    assert "- running: 3" in captured.out
+    assert "- succeeded: 55" in captured.out
     assert "Verify reports:" in captured.out
-    assert "- passed: 239" in captured.out
+    assert "- pending: 1" in captured.out
+    assert "- passed: 51" in captured.out
+    assert "- skipped: 6" in captured.out
     assert "Memory:" in captured.out
     assert "- episodes: 34" in captured.out
     assert "- memory_items: 24" in captured.out
     assert "- memory_embeddings: 3" in captured.out
+    assert "Remember-path observability:" in captured.out
+    assert "- checkpoint_auto_memory_recorded: 12" in captured.out
+    assert "- checkpoint_auto_memory_skipped: 45" in captured.out
+    assert "- workflow_completion_auto_memory_recorded: 4" in captured.out
+    assert "- workflow_completion_auto_memory_skipped: 54" in captured.out
+    assert "AGE operator metrics:" in captured.out
+    assert "- memory_summaries: 9" in captured.out
+    assert "- memory_summary_memberships: 21" in captured.out
+    assert "- age_summary_graph_ready: 1" in captured.out
+    assert "- age_summary_graph_stale: 0" in captured.out
+    assert "- age_summary_graph_degraded: 0" in captured.out
+    assert "- age_summary_graph_unknown: 0" in captured.out
     assert "Other:" in captured.out
-    assert "- checkpoints: 369" in captured.out
+    assert "- checkpoints: 57" in captured.out
     assert "Latest activity:" in captured.out
-    assert "2026-03-15 09:45:52+00:00" in captured.out
+    assert "2026-03-15 09:00:00+00:00" in captured.out
+    assert "2026-03-15 09:01:00+00:00" in captured.out
+    assert "2026-03-15 09:02:00+00:00" in captured.out
+    assert "2026-03-15 09:03:00+00:00" in captured.out
+    assert "2026-03-15 09:04:00+00:00" in captured.out
+    assert "2026-03-15 09:05:00+00:00" in captured.out
     assert captured.err == ""
     assert fake_service.get_stats_calls == 1
 
@@ -144,6 +174,12 @@ def test_main_stats_renders_json_output(
         checkpoint_auto_memory_skipped_count=0,
         workflow_completion_auto_memory_recorded_count=0,
         workflow_completion_auto_memory_skipped_count=0,
+        memory_summary_count=2,
+        memory_summary_membership_count=5,
+        age_summary_graph_ready_count=1,
+        age_summary_graph_stale_count=0,
+        age_summary_graph_degraded_count=0,
+        age_summary_graph_unknown_count=0,
         latest_workflow_updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_checkpoint_created_at=None,
         latest_verify_report_created_at=None,
@@ -185,6 +221,12 @@ def test_main_stats_renders_json_output(
         "latest_workflow_updated_at": "2026-03-15T09:00:00+00:00",
         "memory_embedding_count": 1,
         "memory_item_count": 4,
+        "memory_summary_count": 2,
+        "memory_summary_membership_count": 5,
+        "age_summary_graph_ready_count": 1,
+        "age_summary_graph_stale_count": 0,
+        "age_summary_graph_degraded_count": 0,
+        "age_summary_graph_unknown_count": 0,
         "verify_status_counts": {
             "failed": 0,
             "passed": 2,
@@ -234,10 +276,20 @@ def test_main_memory_stats_renders_text_output(
             "explicit": 1,
             "workflow_complete_auto": 4,
         },
-        latest_episode_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
-        latest_memory_item_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
-        latest_memory_embedding_created_at=datetime(2026, 3, 15, 8, 57, 11, tzinfo=UTC),
-        latest_memory_relation_created_at=datetime(2026, 3, 15, 9, 5, 0, tzinfo=UTC),
+        checkpoint_auto_memory_recorded_count=12,
+        checkpoint_auto_memory_skipped_count=45,
+        workflow_completion_auto_memory_recorded_count=4,
+        workflow_completion_auto_memory_skipped_count=54,
+        memory_summary_count=9,
+        memory_summary_membership_count=21,
+        age_summary_graph_ready_count=1,
+        age_summary_graph_stale_count=0,
+        age_summary_graph_degraded_count=0,
+        age_summary_graph_unknown_count=0,
+        latest_episode_created_at=datetime(2026, 3, 15, 9, 3, 0, tzinfo=UTC),
+        latest_memory_item_created_at=datetime(2026, 3, 15, 9, 4, 0, tzinfo=UTC),
+        latest_memory_embedding_created_at=datetime(2026, 3, 15, 9, 5, 0, tzinfo=UTC),
+        latest_memory_relation_created_at=datetime(2026, 3, 15, 9, 6, 0, tzinfo=UTC),
     )
 
     class FakeMemoryStatsWorkflowService:
@@ -269,13 +321,28 @@ def test_main_memory_stats_renders_text_output(
     assert "- memory_items: 24" in captured.out
     assert "- memory_embeddings: 3" in captured.out
     assert "- memory_relations: 7" in captured.out
+    assert "Remember-path observability:" in captured.out
+    assert "- checkpoint_auto_memory_recorded: 12" in captured.out
+    assert "- checkpoint_auto_memory_skipped: 45" in captured.out
+    assert "- workflow_completion_auto_memory_recorded: 4" in captured.out
+    assert "- workflow_completion_auto_memory_skipped: 54" in captured.out
+    assert "AGE operator metrics:" in captured.out
+    assert "- memory_summaries: 9" in captured.out
+    assert "- memory_summary_memberships: 21" in captured.out
+    assert "- age_summary_graph_ready: 1" in captured.out
+    assert "- age_summary_graph_stale: 0" in captured.out
+    assert "- age_summary_graph_degraded: 0" in captured.out
+    assert "- age_summary_graph_unknown: 0" in captured.out
     assert "Memory item provenance:" in captured.out
     assert "- derived: 2" in captured.out
     assert "- episode: 17" in captured.out
     assert "- explicit: 1" in captured.out
     assert "- workflow_complete_auto: 4" in captured.out
     assert "Latest activity:" in captured.out
+    assert "2026-03-15 09:03:00+00:00" in captured.out
+    assert "2026-03-15 09:04:00+00:00" in captured.out
     assert "2026-03-15 09:05:00+00:00" in captured.out
+    assert "2026-03-15 09:06:00+00:00" in captured.out
     assert captured.err == ""
     assert fake_service.get_memory_stats_calls == 1
 
@@ -431,6 +498,12 @@ def test_main_memory_stats_renders_json_output(
             "workflow_complete_auto": 2,
         },
         "memory_relation_count": 0,
+        "memory_summary_count": 0,
+        "memory_summary_membership_count": 0,
+        "age_summary_graph_ready_count": 0,
+        "age_summary_graph_stale_count": 0,
+        "age_summary_graph_degraded_count": 0,
+        "age_summary_graph_unknown_count": 0,
         "workflow_completion_auto_memory_recorded_count": 0,
         "workflow_completion_auto_memory_skipped_count": 0,
     }

@@ -27,6 +27,7 @@ The contract currently aims to be:
 - explainable through additive `details` metadata
 - explicit about primary vs auxiliary outputs
 - explicit about compatibility and convenience surfaces
+- capable of serving a primary-only client path that omits compatibility-oriented detail surfaces when the caller only needs the grouped primary contract
 
 ---
 
@@ -45,8 +46,26 @@ The request also supports response-shaping flags including:
 - `include_episodes`
 - `include_memory_items`
 - `include_summaries`
+- `primary_only`
 
 At least one lookup input is required.
+
+### `primary_only`
+
+`primary_only = true` is the current narrowing flag for clients that want to read
+`memory_get_context` primarily through the grouped hierarchy-aware surface and do
+not want compatibility-oriented top-level explainability or convenience fields.
+
+At the current stage, `primary_only = true` should be read as:
+
+- preserving the primary grouped response surface
+- preserving route and selection metadata needed to interpret that grouped
+  surface
+- omitting flatter compatibility-oriented explainability and convenience fields
+  that restate grouped information in less structured form
+
+This is not a different retrieval algorithm.
+It is a response-shaping mode over the same current retrieval behavior.
 
 ---
 
@@ -268,6 +287,15 @@ The current primary explainability surface is:
 - top-level route and selection metadata in `details`
 - top-level retrieval-route aggregation fields in `details`
 
+The current primary-only client path should prefer exactly that surface first.
+
+When `primary_only = true`, the intended client reading is:
+
+1. read `memory_context_groups`
+2. read top-level retrieval-route and selection metadata
+3. avoid depending on flatter compatibility-oriented explainability fields unless
+   the client intentionally requests the broader compatibility shape
+
 Those primary explainability fields are the ones consumers should prefer first when they need to understand:
 
 - which retrieval route produced visible grouped output
@@ -307,6 +335,11 @@ Representative compatibility-oriented explainability fields currently include:
 - `remember_path_relation_reasons`
 - `remember_path_relation_reason_primary`
 
+At the current stage, these are the fields a primary-only client path is allowed
+to ignore by default.
+When `primary_only = true`, they should be treated as omitted compatibility
+surfaces rather than as missing required state.
+
 Representative convenience-oriented explainability fields currently include:
 
 - episode-group-local `related_memory_items`
@@ -319,6 +352,17 @@ Representative convenience-oriented explainability fields currently include:
 
 These compatibility and convenience surfaces remain useful.
 However, they should not be treated as a stronger source of truth than the grouped and route-aware primary explainability fields listed above.
+
+For current client guidance, the recommended preference order is:
+
+1. primary grouped surface:
+   - `memory_context_groups`
+2. top-level primary route and selection metadata:
+   - retrieval-route presence, counts, and selection fields
+3. compatibility or convenience surfaces only when a flatter payload shape is
+   still operationally helpful
+
+This same ordering should be used by clients adopting `primary_only = true`.
 
 rather than the canonical grouped hierarchy model.
 

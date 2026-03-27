@@ -1527,6 +1527,10 @@ def test_http_mcp_rpc_tools_list_returns_registered_tools_with_input_schemas() -
         tools["memory_get_context"]["inputSchema"]["properties"]["include_summaries"]["type"]
         == "boolean"
     )
+    assert (
+        tools["memory_get_context"]["inputSchema"]["properties"]["primary_only"]["type"]
+        == "boolean"
+    )
 
 
 def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payload() -> None:

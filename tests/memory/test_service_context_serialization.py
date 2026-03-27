@@ -89,7 +89,6 @@ def test_serialize_get_context_response_serializes_episode_payloads() -> None:
                 "matched_metadata_values": ["root-cause"],
             }
         ],
-        "memory_items": [],
         "memory_item_counts_by_episode": {},
         "summaries": [],
         "task_recall_selection_present": False,
@@ -231,6 +230,50 @@ def test_serialize_get_context_response_serializes_episode_payloads() -> None:
             "updated_at": created_at.isoformat(),
         }
     ]
+
+
+def test_serialize_get_context_response_preserves_primary_only_omissions() -> None:
+    workflow_id = uuid4()
+    created_at = datetime(2024, 3, 5, 6, 7, 8, tzinfo=UTC)
+    response = GetContextResponse(
+        feature=MemoryFeature.GET_CONTEXT,
+        implemented=True,
+        message="Episode-oriented memory context retrieved successfully.",
+        status="ok",
+        available_in_version="0.2.0",
+        timestamp=created_at,
+        episodes=(),
+        details={
+            "query": None,
+            "normalized_query": None,
+            "lookup_scope": "workflow_instance",
+            "workflow_instance_id": str(workflow_id),
+            "resolved_workflow_count": 1,
+            "resolved_workflow_ids": [str(workflow_id)],
+            "query_filter_applied": False,
+            "episodes_before_query_filter": 0,
+            "matched_episode_count": 0,
+            "episodes_returned": 0,
+            "episode_explanations": [],
+            "memory_item_counts_by_episode": {},
+            "summaries": [],
+            "memory_context_groups_are_primary_output": True,
+            "memory_context_groups_are_primary_explainability_surface": True,
+            "top_level_explainability_prefers_grouped_routes": True,
+            "memory_context_groups": [],
+        },
+    )
+
+    payload = serialize_get_context_response(response)
+
+    assert payload["details"]["memory_context_groups_are_primary_output"] is True
+    assert payload["details"]["memory_context_groups_are_primary_explainability_surface"] is True
+    assert payload["details"]["top_level_explainability_prefers_grouped_routes"] is True
+    assert payload["details"]["memory_context_groups"] == []
+    assert "memory_items" not in payload["details"]
+    assert "readiness_explainability" not in payload["details"]
+    assert "related_memory_items" not in payload["details"]
+    assert "inherited_memory_items" not in payload["details"]
 
 
 def test_serialize_get_context_response_preserves_memory_item_and_summary_details() -> None:

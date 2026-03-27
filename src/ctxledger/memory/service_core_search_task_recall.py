@@ -6,6 +6,17 @@ from uuid import UUID
 from .helpers import metadata_query_strings
 
 
+def completion_memory_tiebreak_priority(memory_item: Any) -> int:
+    memory_origin = memory_item.metadata.get("memory_origin")
+    provenance = getattr(memory_item, "provenance", None)
+
+    if memory_origin == "workflow_complete_auto" or provenance == "workflow_complete_auto":
+        return 2
+    if memory_origin == "workflow_checkpoint_auto" or provenance == "workflow_checkpoint_auto":
+        return 1
+    return 0
+
+
 def selected_task_recall_bonus_enabled(
     *,
     selected_task_recall_workflow_id: str | None,
@@ -49,6 +60,7 @@ def build_search_ranking_reasons(
     semantic_only_discount: float,
     selected_continuation_target_bonus_applied: bool,
     selected_task_recall_memory_bonus: float,
+    completion_tiebreak_applied: bool,
 ) -> list[dict[str, Any]]:
     ranking_reasons: list[dict[str, Any]] = []
 
@@ -123,6 +135,14 @@ def build_search_ranking_reasons(
                 "code": "selected_continuation_target_bonus",
                 "message": "the memory item aligned with the selected continuation target",
                 "value": selected_task_recall_memory_bonus,
+            }
+        )
+
+    if completion_tiebreak_applied:
+        ranking_reasons.append(
+            {
+                "code": "workflow_complete_auto_tiebreak",
+                "message": "completion-origin memory was preferred over checkpoint-origin memory when lexical evidence tied",
             }
         )
 
@@ -677,5 +697,6 @@ __all__ = [
     "build_search_ranking_reasons",
     "build_search_response_details",
     "build_search_task_recall_detail",
+    "completion_memory_tiebreak_priority",
     "selected_task_recall_bonus_enabled",
 ]

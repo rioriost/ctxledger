@@ -749,6 +749,11 @@ def build_memory_get_context_tool_handler(
                         if isinstance(arguments.get("include_summaries"), bool)
                         else True
                     ),
+                    primary_only=(
+                        arguments["primary_only"]
+                        if isinstance(arguments.get("primary_only"), bool)
+                        else False
+                    ),
                 )
             )
             from ..runtime.serializers import serialize_get_context_response

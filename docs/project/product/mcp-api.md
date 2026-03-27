@@ -178,6 +178,16 @@ The current episode-oriented retrieval path is also intentionally conservative:
 it is still driven by canonical workflow linkage first, with only a light initial
 query filter layered on top of that canonical lookup path.
 
+The current request shape also supports an additive narrowing flag:
+
+- `primary_only`
+
+This flag should be read as a response-shaping preference, not as a different
+retrieval algorithm.
+When `primary_only = true`, the service should preserve the primary grouped and
+route-aware interpretation surface while omitting flatter compatibility-oriented
+fields that restate the same retrieval path in a less structured way.
+
 Within that current response shape, `memory_context_groups` should be treated as
 the primary grouped hierarchy-aware surface of `memory_get_context`.
 Other flatter fields remain useful and supported, but they should currently be
@@ -224,11 +234,22 @@ hierarchical summary assembly is now intended for a later milestone than `0.4.0`
 while `0.4.0` focuses on observability-oriented operator surfaces, with Grafana
 as the named near-term optional dashboard deployment path.
 
+For clients that only need the current primary grouped hierarchy path, the
+current recommendation is to prefer `primary_only = true` together with
+`memory_context_groups` and the additive route metadata in `details`.
+
 When consumers need the most hierarchy-aware current reading of the response,
 they should prefer `memory_context_groups` first.
 Top-level flat fields remain important for compatibility and convenience, but the
 grouped surface is now the intended primary structured interpretation for
 hierarchy-aware context assembly.
+
+The current MCP request guidance is therefore:
+
+- use the default broader shape when compatibility-oriented top-level fields are
+  still operationally useful
+- use `primary_only = true` when the client is intentionally written against the
+  grouped primary surface and does not need flatter compatibility projections
 
 ## 3.3 Special Case: `workflow_resume`
 

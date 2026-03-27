@@ -108,9 +108,7 @@ Start the small-pattern stack with the base compose file plus the auth overlay.
 
 For a **first start** or an intentional clean rebuild of the stack, use:
 
-```/dev/null/sh#L1-3
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret \
-CTXLEDGER_EMBEDDING_PROVIDER=local_stub \
+```/dev/null/sh#L1-1
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
 
@@ -118,21 +116,19 @@ This is the safer default local startup shape because it keeps the stack indepen
 
 For a **normal restart** after the stack has already been created, you usually do **not** need `--force-recreate`:
 
-```/dev/null/sh#L1-3
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret \
-CTXLEDGER_EMBEDDING_PROVIDER=local_stub \
+```/dev/null/sh#L1-1
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
 ```
 
 If you changed code or image inputs and want a normal rebuild without forcibly replacing every container, use:
 
-```/dev/null/sh#L1-3
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret \
-CTXLEDGER_EMBEDDING_PROVIDER=local_stub \
+```/dev/null/sh#L1-1
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
 ```
 
 Use `--force-recreate` only when you intentionally want to replace existing containers, such as after a major compose/config change or when you want a known-fresh container set.
+
+For normal local operator use, repository-root `.env` auto-loading is the intended path.
 
 Prefer this escalation order:
 
@@ -319,9 +315,28 @@ Preferred local fix:
 
 Use an external provider only when you explicitly want that mode and have supplied its required credentials.
 
-Operational interpretation:
+## 11.3 Compose does not seem to pick up `.env` values
 
-- for the small local stack, `local_stub` is the safe default posture
+For ordinary local operator use, repository-root `.env` auto-loading is still the
+intended path.
+
+If Compose appears to ignore expected values, check first that:
+
+- `.env` is at the repository root
+- the file uses Compose-compatible `KEY=value` lines
+- the expected variable names match the compose files exactly
+
+Representative symptoms:
+
+- `docker compose config` still shows fallback placeholder values
+- `AUTH_SMALL_BEARER_TOKEN` remains `replace-me-with-a-strong-secret`
+- `GF_SECURITY_ADMIN_PASSWORD` remains the default placeholder
+- `CTXLEDGER_GRAFANA_POSTGRES_PASSWORD` appears empty even though `.env` was edited
+
+Preferred operator interpretation:
+
+- for ordinary local use, this is usually an `.env` formatting or placement issue
+- for the small local stack, `local_stub` remains the safe default posture
 - external embedding providers are opt-in, not required for ordinary local startup
 - the client header value
 - that the header format is exactly `Authorization: Bearer <token>`

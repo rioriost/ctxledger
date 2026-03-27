@@ -372,6 +372,236 @@ def test_memory_get_context_surfaces_remember_path_explainability_details() -> N
     assert response.details["related_context_relation_types"] == ["supports"]
 
 
+def test_memory_get_context_primary_only_omits_compatibility_fields() -> None:
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    episode_id = uuid4()
+    objective_memory_id = uuid4()
+    next_action_memory_id = uuid4()
+    relation_id = uuid4()
+    created_at = datetime(2024, 2, 10, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+    memory_relation_repository = InMemoryMemoryRelationRepository()
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=episode_id,
+            workflow_instance_id=workflow_id,
+            summary="Primary-only response shaping episode",
+            metadata={"kind": "primary-only"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=objective_memory_id,
+            workspace_id=workspace_id,
+            episode_id=episode_id,
+            type="workflow_objective",
+            provenance="workflow_checkpoint_auto",
+            content="Keep the grouped primary path readable without compatibility fields",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "current_objective",
+                "promotion_source": "checkpoint.current_objective",
+                "checkpoint_id": "checkpoint-primary-only-1",
+                "step_name": "primary_only_checkpoint",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=next_action_memory_id,
+            workspace_id=workspace_id,
+            episode_id=episode_id,
+            type="workflow_next_action",
+            provenance="workflow_checkpoint_auto",
+            content="Verify the primary-only contract using grouped route metadata",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "next_intended_action",
+                "promotion_source": "checkpoint.next_intended_action",
+                "checkpoint_id": "checkpoint-primary-only-1",
+                "step_name": "primary_only_checkpoint",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    memory_relation_repository.create(
+        MemoryRelationRecord(
+            memory_relation_id=relation_id,
+            source_memory_id=next_action_memory_id,
+            target_memory_id=objective_memory_id,
+            relation_type="supports",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "relation_reason": "next_action_supports_objective",
+                "relation_description": "next intended action supports the current objective",
+                "source_memory_type": "workflow_next_action",
+                "target_memory_type": "workflow_objective",
+            },
+            created_at=created_at,
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        memory_relation_repository=memory_relation_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=True,
+            primary_only=True,
+        )
+    )
+
+    assert response.details["memory_context_groups_are_primary_output"] is True
+    assert response.details["memory_context_groups_are_primary_explainability_surface"] is True
+    assert response.details["top_level_explainability_prefers_grouped_routes"] is True
+    assert response.details["retrieval_routes_present"] == [
+        "summary_first",
+        "relation_supports_auxiliary",
+    ]
+    assert response.details["primary_retrieval_routes_present"] == ["summary_first"]
+    assert response.details["auxiliary_retrieval_routes_present"] == [
+        "relation_supports_auxiliary",
+    ]
+    assert response.details["related_context_relation_types"] == ["supports"]
+    assert response.details["related_context_selection_route"] == "relation_supports_auxiliary"
+    assert "memory_items" not in response.details
+    assert "related_memory_items_by_episode" not in response.details
+    assert "remember_path_explainability_by_episode" not in response.details
+    assert "remember_path_relation_reasons" not in response.details
+    assert "remember_path_relation_reason_primary" not in response.details
+    assert "remember_path_origin_counts" not in response.details
+    assert "remember_path_promotion_field_counts" not in response.details
+    assert "remember_path_relation_reason_counts" not in response.details
+    assert "readiness_explainability" not in response.details
+    assert "related_memory_items" not in response.details
+    assert "inherited_memory_items" not in response.details
+    assert "flat_related_memory_items_is_compatibility_field" not in response.details
+    assert "related_memory_items_by_episode_are_compatibility_output" not in response.details
+    assert "group_related_memory_items_are_convenience_output" not in response.details
+    assert "readiness_explainability_is_compatibility_output" not in response.details
+    assert "remember_path_explainability_by_episode_is_compatibility_output" not in response.details
+    assert "remember_path_relation_reasons_is_compatibility_output" not in response.details
+    assert "remember_path_relation_reason_primary_is_compatibility_output" not in response.details
+    assert len(response.details["memory_context_groups"]) == 3
+    assert response.details["memory_context_groups"][0]["scope"] == "summary"
+    assert response.details["memory_context_groups"][0]["selection_route"] == "summary_first"
+    assert response.details["memory_context_groups"][1]["scope"] == "episode"
+    assert response.details["memory_context_groups"][1]["selection_route"] == "summary_first"
+    assert response.details["memory_context_groups"][2]["scope"] == "relation"
+    assert response.details["memory_context_groups"][2]["selection_route"] == (
+        "relation_supports_auxiliary"
+    )
+
+
+def test_memory_get_context_primary_only_episode_less_path_omits_compatibility_fields() -> None:
+    workflow_id = uuid4()
+    workspace_id = uuid4()
+    episode_id = uuid4()
+    memory_id = uuid4()
+    created_at = datetime(2024, 2, 11, tzinfo=UTC)
+
+    episode_repository = InMemoryEpisodeRepository()
+    memory_item_repository = InMemoryMemoryItemRepository()
+
+    episode_repository.create(
+        EpisodeRecord(
+            episode_id=episode_id,
+            workflow_instance_id=workflow_id,
+            summary="Episode-less primary-only shaping",
+            metadata={"kind": "episode-less-primary-only"},
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    memory_item_repository.create(
+        MemoryItemRecord(
+            memory_id=memory_id,
+            workspace_id=workspace_id,
+            episode_id=episode_id,
+            type="workflow_next_action",
+            provenance="workflow_checkpoint_auto",
+            content="Keep the episode-less primary-only response free of compatibility fields",
+            metadata={
+                "memory_origin": "workflow_checkpoint_auto",
+                "promotion_field": "next_intended_action",
+                "promotion_source": "checkpoint.next_intended_action",
+                "checkpoint_id": "checkpoint-primary-only-2",
+                "step_name": "primary_only_episode_less",
+                "workflow_status": "running",
+                "attempt_status": "running",
+            },
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+
+    service = MemoryService(
+        episode_repository=episode_repository,
+        memory_item_repository=memory_item_repository,
+        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id}),
+    )
+
+    response = service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(workflow_id),
+            limit=10,
+            include_episodes=False,
+            include_memory_items=True,
+            include_summaries=False,
+            primary_only=True,
+        )
+    )
+
+    assert response.episodes == ()
+    assert response.details["memory_context_groups_are_primary_output"] is True
+    assert response.details["memory_context_groups_are_primary_explainability_surface"] is True
+    assert response.details["top_level_explainability_prefers_grouped_routes"] is True
+    assert response.details["retrieval_routes_present"] == []
+    assert response.details["summary_selection_applied"] is False
+    assert response.details["summary_selection_kind"] is None
+    assert "memory_items" not in response.details
+    assert "related_memory_items_by_episode" not in response.details
+    assert "remember_path_explainability_by_episode" not in response.details
+    assert "remember_path_relation_reasons" not in response.details
+    assert "remember_path_relation_reason_primary" not in response.details
+    assert "remember_path_origin_counts" not in response.details
+    assert "remember_path_promotion_field_counts" not in response.details
+    assert "remember_path_relation_reason_counts" not in response.details
+    assert "readiness_explainability" not in response.details
+    assert "related_memory_items" not in response.details
+    assert "inherited_memory_items" not in response.details
+    assert "flat_related_memory_items_is_compatibility_field" not in response.details
+    assert "related_memory_items_by_episode_are_compatibility_output" not in response.details
+    assert "group_related_memory_items_are_convenience_output" not in response.details
+    assert "readiness_explainability_is_compatibility_output" not in response.details
+    assert "remember_path_explainability_by_episode_is_compatibility_output" not in response.details
+    assert "remember_path_relation_reasons_is_compatibility_output" not in response.details
+    assert "remember_path_relation_reason_primary_is_compatibility_output" not in response.details
+    assert response.details["memory_context_groups"] == []
+
+
 def test_memory_get_context_respects_limit_and_include_episodes_flag() -> None:
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()

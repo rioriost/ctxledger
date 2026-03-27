@@ -277,6 +277,12 @@ class WorkflowStats:
     checkpoint_auto_memory_skipped_count: int = 0
     workflow_completion_auto_memory_recorded_count: int = 0
     workflow_completion_auto_memory_skipped_count: int = 0
+    memory_summary_count: int = 0
+    memory_summary_membership_count: int = 0
+    age_summary_graph_ready_count: int = 0
+    age_summary_graph_stale_count: int = 0
+    age_summary_graph_degraded_count: int = 0
+    age_summary_graph_unknown_count: int = 0
     latest_workflow_updated_at: datetime | None = None
     latest_checkpoint_created_at: datetime | None = None
     latest_verify_report_created_at: datetime | None = None
@@ -296,6 +302,12 @@ class MemoryStats:
     checkpoint_auto_memory_skipped_count: int = 0
     workflow_completion_auto_memory_recorded_count: int = 0
     workflow_completion_auto_memory_skipped_count: int = 0
+    memory_summary_count: int = 0
+    memory_summary_membership_count: int = 0
+    age_summary_graph_ready_count: int = 0
+    age_summary_graph_stale_count: int = 0
+    age_summary_graph_degraded_count: int = 0
+    age_summary_graph_unknown_count: int = 0
     latest_episode_created_at: datetime | None = None
     latest_memory_item_created_at: datetime | None = None
     latest_memory_embedding_created_at: datetime | None = None
@@ -596,7 +608,17 @@ class WorkflowService:
             episode_count = self._count_rows(uow, "memory_episodes")
             memory_item_count = self._count_rows(uow, "memory_items")
             memory_embedding_count = self._count_rows(uow, "memory_embeddings")
+            memory_summary_count = self._count_rows(uow, "memory_summaries")
+            memory_summary_membership_count = self._count_rows(
+                uow,
+                "memory_summary_memberships",
+            )
             memory_item_provenance_counts = self._count_memory_item_provenance(uow)
+
+            age_summary_graph_ready_count = 1 if memory_summary_membership_count > 0 else 0
+            age_summary_graph_stale_count = 0
+            age_summary_graph_degraded_count = 0
+            age_summary_graph_unknown_count = 1 if memory_summary_membership_count == 0 else 0
 
             workflow_status_counts = self._count_grouped_statuses(
                 uow,
@@ -687,6 +709,12 @@ class WorkflowService:
                     - memory_item_provenance_counts.get("workflow_complete_auto", 0),
                     0,
                 ),
+                memory_summary_count=memory_summary_count,
+                memory_summary_membership_count=memory_summary_membership_count,
+                age_summary_graph_ready_count=age_summary_graph_ready_count,
+                age_summary_graph_stale_count=age_summary_graph_stale_count,
+                age_summary_graph_degraded_count=age_summary_graph_degraded_count,
+                age_summary_graph_unknown_count=age_summary_graph_unknown_count,
                 latest_workflow_updated_at=latest_workflow_updated_at,
                 latest_checkpoint_created_at=latest_checkpoint_created_at,
                 latest_verify_report_created_at=latest_verify_report_created_at,
@@ -701,6 +729,11 @@ class WorkflowService:
             memory_item_count = self._count_rows(uow, "memory_items")
             memory_embedding_count = self._count_rows(uow, "memory_embeddings")
             memory_relation_count = self._count_rows(uow, "memory_relations")
+            memory_summary_count = self._count_rows(uow, "memory_summaries")
+            memory_summary_membership_count = self._count_rows(
+                uow,
+                "memory_summary_memberships",
+            )
             checkpoint_count = self._count_rows(uow, "workflow_checkpoints")
             workflow_count = self._count_rows(uow, "workflow_instances")
 
@@ -727,6 +760,11 @@ class WorkflowService:
 
             memory_item_provenance_counts = self._count_memory_item_provenance(uow)
 
+            age_summary_graph_ready_count = 1 if memory_summary_membership_count > 0 else 0
+            age_summary_graph_stale_count = 0
+            age_summary_graph_degraded_count = 0
+            age_summary_graph_unknown_count = 1 if memory_summary_membership_count == 0 else 0
+
             return MemoryStats(
                 episode_count=episode_count,
                 memory_item_count=memory_item_count,
@@ -750,6 +788,12 @@ class WorkflowService:
                     workflow_count - memory_item_provenance_counts.get("workflow_complete_auto", 0),
                     0,
                 ),
+                memory_summary_count=memory_summary_count,
+                memory_summary_membership_count=memory_summary_membership_count,
+                age_summary_graph_ready_count=age_summary_graph_ready_count,
+                age_summary_graph_stale_count=age_summary_graph_stale_count,
+                age_summary_graph_degraded_count=age_summary_graph_degraded_count,
+                age_summary_graph_unknown_count=age_summary_graph_unknown_count,
                 latest_episode_created_at=latest_episode_created_at,
                 latest_memory_item_created_at=latest_memory_item_created_at,
                 latest_memory_embedding_created_at=latest_memory_embedding_created_at,

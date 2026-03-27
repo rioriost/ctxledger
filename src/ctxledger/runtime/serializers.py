@@ -176,7 +176,8 @@ def serialize_get_context_response(
     response: GetContextResponse,
 ) -> dict[str, Any]:
     details = dict(response.details)
-    details.setdefault("memory_items", [])
+    if "memory_items" in details:
+        details.setdefault("memory_items", [])
     details.setdefault("memory_item_counts_by_episode", {})
     details.setdefault("summaries", [])
     details.setdefault("task_recall_selection_present", False)

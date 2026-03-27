@@ -13,6 +13,7 @@ It is intended for operators and developers who need to:
 - verify what retrieval now returns after a rebuild
 - refresh derived AGE summary graph state after canonical summary changes
 - interpret graph-ready, graph-stale, degraded, and unknown readiness states
+- read the currently defined AGE operator metrics that summarize canonical summary volume and derived-graph readiness posture
 - understand how explicit build, gated auto build, and graph refresh relate
 
 This runbook covers:
@@ -321,6 +322,38 @@ state is refreshed.
 After refresh, or when debugging graph-backed auxiliary behavior, inspect
 readiness:
 
+The current operator metrics that matter most in this step are:
+
+- `memory_summary_count`
+- `memory_summary_membership_count`
+- `age_summary_graph_ready_count`
+- `age_summary_graph_stale_count`
+- `age_summary_graph_degraded_count`
+- `age_summary_graph_unknown_count`
+
+At the current stage, these metrics should be read as follows:
+
+- `memory_summary_count`
+  - canonical count of relational summary rows in `memory_summaries`
+- `memory_summary_membership_count`
+  - canonical count of relational membership rows in `memory_summary_memberships`
+- `age_summary_graph_ready_count`
+  - current operator-facing count for runs where derived AGE summary graph state is read as ready
+- `age_summary_graph_stale_count`
+  - current operator-facing count for runs where derived AGE summary graph state is read as stale relative to canonical summary memberships
+- `age_summary_graph_degraded_count`
+  - current operator-facing count for runs where derived AGE summary graph state is degraded
+- `age_summary_graph_unknown_count`
+  - current operator-facing count for runs where derived AGE summary graph state is currently unknown
+
+These are operator metrics, not a replacement for canonical relational inspection.
+Read them as concise operational indicators that help you decide whether to:
+
+- trust current graph-backed auxiliary summary-member traversal as ready
+- refresh derived graph state
+- investigate degraded graph behavior
+- continue treating canonical relational summary state as the sole reliable source of truth for the moment
+
 ```/dev/null/sh#L1-1
 ctxledger age-graph-readiness
 ```
@@ -368,7 +401,33 @@ This runbook flow is intentionally ordered:
 2. verify canonical retrieval behavior
 3. refresh derived graph state if needed
 4. interpret readiness outcome
-5. only then diagnose graph-backed auxiliary behavior
+5. read operator metrics in the same canonical-first order
+6. only then diagnose graph-backed auxiliary behavior
+
+When operator visibility is needed beyond the direct readiness command, also use
+the operator-facing stats surfaces and read the AGE-related fields there in the
+same canonical-first order:
+
+- `ctxledger stats`
+- `ctxledger memory-stats`
+
+In those outputs, the current AGE operator metrics should be interpreted as:
+
+- canonical summary volume first:
+  - `memory_summary_count`
+  - `memory_summary_membership_count`
+- derived graph posture second:
+  - `age_summary_graph_ready_count`
+  - `age_summary_graph_stale_count`
+  - `age_summary_graph_degraded_count`
+  - `age_summary_graph_unknown_count`
+
+That reading order matters.
+If canonical summary metrics show real summary state while readiness-oriented
+graph metrics indicate stale, degraded, or unknown graph posture, the next
+action should still begin from canonical relational interpretation rather than
+from a graph-first assumption.
+
 observability, check current graph readiness:
 
 ```/dev/null/sh#L1-1

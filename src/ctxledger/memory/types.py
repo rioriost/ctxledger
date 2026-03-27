@@ -237,8 +237,8 @@ class SearchMemoryRequest:
 
 
 @dataclass(slots=True, frozen=True)
-class GetMemoryContextRequest:
-    """Request shape for future auxiliary memory context retrieval."""
+class GetContextRequest:
+    """Request shape for future memory context retrieval."""
 
     query: str | None = None
     workspace_id: str | None = None
@@ -248,6 +248,10 @@ class GetMemoryContextRequest:
     include_episodes: bool = True
     include_memory_items: bool = True
     include_summaries: bool = True
+    primary_only: bool = False
+
+
+GetMemoryContextRequest = GetContextRequest
 
 
 @dataclass(slots=True, frozen=True)

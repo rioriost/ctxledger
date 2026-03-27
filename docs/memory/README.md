@@ -110,6 +110,7 @@ Start with:
 
 - `design/memory_get_context_service_contract.md`
 - `decisions/minimal_hierarchy_model_decision.md`
+- for clients that want the grouped primary surface without flatter compatibility fields, read the `primary_only` guidance in `design/memory_get_context_service_contract.md`
 - `decisions/first_age_slice_boundary_decision.md`
 - `decisions/first_memory_get_context_hierarchical_improvement_decision.md`
 - `design/minimal_hierarchy_schema_repository_design.md`

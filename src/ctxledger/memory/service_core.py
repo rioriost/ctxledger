@@ -74,6 +74,7 @@ from .service_core_search_task_recall import (
     build_search_ranking_reasons,
     build_search_response_details,
     build_search_task_recall_detail,
+    completion_memory_tiebreak_priority,
     selected_task_recall_bonus_enabled,
 )
 from .service_core_summary import EpisodeSummaryBuilder
@@ -372,6 +373,7 @@ class MemoryService(
                 semantic_component=semantic_component,
                 semantic_only_discount=semantic_only_discount,
             )
+            completion_tiebreak_priority = completion_memory_tiebreak_priority(memory_item)
 
             selected_continuation_target_bonus_applied = False
             (
@@ -406,6 +408,7 @@ class MemoryService(
                     selected_continuation_target_bonus_applied
                 ),
                 selected_task_recall_memory_bonus=selected_task_recall_memory_bonus,
+                completion_tiebreak_applied=completion_tiebreak_priority > 0,
             )
 
             latest_task_recall_ticket_detour_like, latest_task_recall_checkpoint_detour_like, _ = (
@@ -500,6 +503,7 @@ class MemoryService(
         scored_results.sort(
             key=lambda result: (
                 result.score,
+                completion_memory_tiebreak_priority(result),
                 result.semantic_score,
                 result.lexical_score,
                 result.created_at,
@@ -1300,6 +1304,221 @@ class MemoryService(
         }
 
         if not request.include_episodes:
+            base_details = {
+                **details,
+                "query_filter_applied": False,
+                "episodes_before_query_filter": 0,
+                "matched_episode_count": 0,
+                "episodes_returned": 0,
+                "episode_explanations": [],
+                "memory_items": [],
+                "memory_item_counts_by_episode": {},
+                "summaries": [],
+                "summary_selection_applied": False,
+                "summary_selection_kind": None,
+                "hierarchy_applied": bool(inherited_workspace_items),
+                "inherited_context_is_auxiliary": bool(inherited_workspace_items),
+                "inherited_context_returned_without_episode_matches": False,
+                "inherited_context_returned_as_auxiliary_without_episode_matches": False,
+                "related_context_is_auxiliary": False,
+                "related_context_relation_types": [],
+                "related_context_returned_without_episode_matches": False,
+                "all_episodes_filtered_out_by_query": False,
+                "memory_context_groups_are_primary_output": True,
+                "memory_context_groups_are_primary_explainability_surface": True,
+                "top_level_explainability_prefers_grouped_routes": True,
+                "flat_related_memory_items_is_compatibility_field": False,
+                "flat_related_memory_items_matches_grouped_episode_related_items": False,
+                "related_memory_items_by_episode_is_primary_structured_output": False,
+                "related_memory_items_by_episode_are_compatibility_output": False,
+                "relation_memory_context_groups_are_primary_output": False,
+                "group_related_memory_items_are_convenience_output": False,
+                "readiness_explainability_is_compatibility_output": False,
+                "remember_path_explainability_by_episode_is_compatibility_output": False,
+                "remember_path_relation_reasons_is_compatibility_output": False,
+                "remember_path_relation_reason_primary_is_compatibility_output": False,
+                "retrieval_routes_present": (
+                    ["workspace_inherited_auxiliary"]
+                    if inherited_workspace_items and resolved_workspace_id is not None
+                    else []
+                ),
+                "primary_retrieval_routes_present": [],
+                "auxiliary_retrieval_routes_present": (
+                    ["workspace_inherited_auxiliary"]
+                    if inherited_workspace_items and resolved_workspace_id is not None
+                    else []
+                ),
+                "retrieval_route_group_counts": {
+                    "summary_first": 0,
+                    "episode_direct": 0,
+                    "workspace_inherited_auxiliary": (
+                        1 if inherited_workspace_items and resolved_workspace_id is not None else 0
+                    ),
+                    "relation_supports_auxiliary": 0,
+                    "graph_summary_auxiliary": 0,
+                },
+                "retrieval_route_item_counts": {
+                    "summary_first": 0,
+                    "episode_direct": 0,
+                    "workspace_inherited_auxiliary": len(inherited_workspace_items),
+                    "relation_supports_auxiliary": 0,
+                    "graph_summary_auxiliary": 0,
+                },
+                "retrieval_route_presence": {
+                    "summary_first": {
+                        "group_present": False,
+                        "item_present": False,
+                    },
+                    "episode_direct": {
+                        "group_present": False,
+                        "item_present": False,
+                    },
+                    "workspace_inherited_auxiliary": {
+                        "group_present": bool(
+                            inherited_workspace_items and resolved_workspace_id is not None
+                        ),
+                        "item_present": bool(inherited_workspace_items),
+                    },
+                    "relation_supports_auxiliary": {
+                        "group_present": False,
+                        "item_present": False,
+                    },
+                    "graph_summary_auxiliary": {
+                        "group_present": False,
+                        "item_present": False,
+                    },
+                },
+                "retrieval_route_scope_counts": {
+                    "summary_first": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "episode_direct": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "workspace_inherited_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": (
+                            1
+                            if inherited_workspace_items and resolved_workspace_id is not None
+                            else 0
+                        ),
+                        "relation": 0,
+                    },
+                    "relation_supports_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "graph_summary_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                },
+                "retrieval_route_scope_item_counts": {
+                    "summary_first": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "episode_direct": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "workspace_inherited_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": len(inherited_workspace_items),
+                        "relation": 0,
+                    },
+                    "relation_supports_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                    "graph_summary_auxiliary": {
+                        "summary": 0,
+                        "episode": 0,
+                        "workspace": 0,
+                        "relation": 0,
+                    },
+                },
+                "retrieval_route_scopes_present": {
+                    "summary_first": [],
+                    "episode_direct": [],
+                    "workspace_inherited_auxiliary": (
+                        ["workspace"]
+                        if inherited_workspace_items and resolved_workspace_id is not None
+                        else []
+                    ),
+                    "relation_supports_auxiliary": [],
+                    "graph_summary_auxiliary": [],
+                },
+                "memory_context_groups": (
+                    [
+                        {
+                            "scope": "workspace",
+                            "scope_id": resolved_workspace_id,
+                            "parent_scope": None,
+                            "parent_scope_id": None,
+                            "selection_kind": "inherited_workspace",
+                            "selection_route": "workspace_inherited_auxiliary",
+                            "memory_items": [
+                                self._serialize_memory_item(memory_item)
+                                for memory_item in inherited_workspace_items
+                            ],
+                        }
+                    ]
+                    if resolved_workspace_id is not None
+                    else []
+                ),
+                "inherited_memory_items": [
+                    self._serialize_memory_item(memory_item)
+                    for memory_item in inherited_workspace_items
+                ],
+            }
+            if request.primary_only:
+                base_details = {
+                    key: value
+                    for key, value in base_details.items()
+                    if key
+                    not in {
+                        "memory_items",
+                        "related_memory_items_by_episode",
+                        "remember_path_explainability_by_episode",
+                        "remember_path_relation_reasons",
+                        "remember_path_relation_reason_primary",
+                        "remember_path_origin_counts",
+                        "remember_path_promotion_field_counts",
+                        "remember_path_relation_reason_counts",
+                        "readiness_explainability",
+                        "inherited_memory_items",
+                        "related_memory_items",
+                        "flat_related_memory_items_is_compatibility_field",
+                        "flat_related_memory_items_matches_grouped_episode_related_items",
+                        "related_memory_items_by_episode_is_primary_structured_output",
+                        "related_memory_items_by_episode_are_compatibility_output",
+                        "group_related_memory_items_are_convenience_output",
+                        "readiness_explainability_is_compatibility_output",
+                        "remember_path_explainability_by_episode_is_compatibility_output",
+                        "remember_path_relation_reasons_is_compatibility_output",
+                        "remember_path_relation_reason_primary_is_compatibility_output",
+                    }
+                }
+
             return GetContextResponse(
                 feature=MemoryFeature.GET_CONTEXT,
                 implemented=True,
@@ -1307,194 +1526,7 @@ class MemoryService(
                 status="ok",
                 available_in_version="0.2.0",
                 episodes=(),
-                details={
-                    **details,
-                    "query_filter_applied": False,
-                    "episodes_before_query_filter": 0,
-                    "matched_episode_count": 0,
-                    "episodes_returned": 0,
-                    "episode_explanations": [],
-                    "memory_items": [],
-                    "memory_item_counts_by_episode": {},
-                    "summaries": [],
-                    "summary_selection_applied": False,
-                    "summary_selection_kind": None,
-                    "hierarchy_applied": bool(inherited_workspace_items),
-                    "inherited_context_is_auxiliary": bool(inherited_workspace_items),
-                    "inherited_context_returned_without_episode_matches": False,
-                    "inherited_context_returned_as_auxiliary_without_episode_matches": False,
-                    "related_context_is_auxiliary": False,
-                    "related_context_relation_types": [],
-                    "related_context_returned_without_episode_matches": False,
-                    "all_episodes_filtered_out_by_query": False,
-                    "memory_context_groups_are_primary_output": True,
-                    "memory_context_groups_are_primary_explainability_surface": True,
-                    "top_level_explainability_prefers_grouped_routes": True,
-                    "flat_related_memory_items_is_compatibility_field": False,
-                    "flat_related_memory_items_matches_grouped_episode_related_items": False,
-                    "related_memory_items_by_episode_is_primary_structured_output": False,
-                    "related_memory_items_by_episode_are_compatibility_output": False,
-                    "relation_memory_context_groups_are_primary_output": False,
-                    "group_related_memory_items_are_convenience_output": False,
-                    "readiness_explainability_is_compatibility_output": False,
-                    "remember_path_explainability_by_episode_is_compatibility_output": False,
-                    "remember_path_relation_reasons_is_compatibility_output": False,
-                    "remember_path_relation_reason_primary_is_compatibility_output": False,
-                    "retrieval_routes_present": (
-                        ["workspace_inherited_auxiliary"]
-                        if inherited_workspace_items and resolved_workspace_id is not None
-                        else []
-                    ),
-                    "primary_retrieval_routes_present": [],
-                    "auxiliary_retrieval_routes_present": (
-                        ["workspace_inherited_auxiliary"]
-                        if inherited_workspace_items and resolved_workspace_id is not None
-                        else []
-                    ),
-                    "retrieval_route_group_counts": {
-                        "summary_first": 0,
-                        "episode_direct": 0,
-                        "workspace_inherited_auxiliary": (
-                            1
-                            if inherited_workspace_items and resolved_workspace_id is not None
-                            else 0
-                        ),
-                        "relation_supports_auxiliary": 0,
-                        "graph_summary_auxiliary": 0,
-                    },
-                    "retrieval_route_item_counts": {
-                        "summary_first": 0,
-                        "episode_direct": 0,
-                        "workspace_inherited_auxiliary": len(inherited_workspace_items),
-                        "relation_supports_auxiliary": 0,
-                        "graph_summary_auxiliary": 0,
-                    },
-                    "retrieval_route_presence": {
-                        "summary_first": {
-                            "group_present": False,
-                            "item_present": False,
-                        },
-                        "episode_direct": {
-                            "group_present": False,
-                            "item_present": False,
-                        },
-                        "workspace_inherited_auxiliary": {
-                            "group_present": bool(
-                                inherited_workspace_items and resolved_workspace_id is not None
-                            ),
-                            "item_present": bool(inherited_workspace_items),
-                        },
-                        "relation_supports_auxiliary": {
-                            "group_present": False,
-                            "item_present": False,
-                        },
-                        "graph_summary_auxiliary": {
-                            "group_present": False,
-                            "item_present": False,
-                        },
-                    },
-                    "retrieval_route_scope_counts": {
-                        "summary_first": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": 0,
-                            "relation": 0,
-                        },
-                        "episode_direct": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": 0,
-                            "relation": 0,
-                        },
-                        "workspace_inherited_auxiliary": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": (
-                                1
-                                if inherited_workspace_items and resolved_workspace_id is not None
-                                else 0
-                            ),
-                            "relation": 0,
-                        },
-                        "relation_supports_auxiliary": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": 0,
-                            "relation": 0,
-                        },
-                        "graph_summary_auxiliary": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": 0,
-                            "relation": 0,
-                        },
-                    },
-                    "retrieval_route_scope_item_counts": {
-                        "summary_first": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": 0,
-                            "relation": 0,
-                        },
-                        "episode_direct": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": 0,
-                            "relation": 0,
-                        },
-                        "workspace_inherited_auxiliary": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": len(inherited_workspace_items),
-                            "relation": 0,
-                        },
-                        "relation_supports_auxiliary": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": 0,
-                            "relation": 0,
-                        },
-                        "graph_summary_auxiliary": {
-                            "summary": 0,
-                            "episode": 0,
-                            "workspace": 0,
-                            "relation": 0,
-                        },
-                    },
-                    "retrieval_route_scopes_present": {
-                        "summary_first": [],
-                        "episode_direct": [],
-                        "workspace_inherited_auxiliary": (
-                            ["workspace"]
-                            if inherited_workspace_items and resolved_workspace_id is not None
-                            else []
-                        ),
-                        "relation_supports_auxiliary": [],
-                        "graph_summary_auxiliary": [],
-                    },
-                    "memory_context_groups": (
-                        [
-                            {
-                                "scope": "workspace",
-                                "scope_id": resolved_workspace_id,
-                                "parent_scope": None,
-                                "parent_scope_id": None,
-                                "selection_kind": "inherited_workspace",
-                                "selection_route": "workspace_inherited_auxiliary",
-                                "memory_items": [
-                                    self._serialize_memory_item(memory_item)
-                                    for memory_item in inherited_workspace_items
-                                ],
-                            }
-                        ]
-                        if resolved_workspace_id is not None
-                        else []
-                    ),
-                    "inherited_memory_items": [
-                        self._serialize_memory_item(memory_item)
-                        for memory_item in inherited_workspace_items
-                    ],
-                },
+                details=base_details,
             )
 
         episodes = self._collect_episode_context(
@@ -1586,48 +1618,52 @@ class MemoryService(
             include_memory_items=request.include_memory_items,
         )
 
-        return GetContextResponse(
-            feature=MemoryFeature.GET_CONTEXT,
-            implemented=True,
-            message="Episode-oriented memory context retrieved successfully.",
-            status="ok",
-            available_in_version="0.2.0",
-            episodes=episodes,
-            details={
-                **details,
-                "query_filter_applied": normalized_query is not None,
-                "episodes_before_query_filter": episodes_before_query_filter,
-                "matched_episode_count": matched_episode_count,
-                "episodes_returned": len(episodes),
-                "episode_explanations": list(episode_explanations),
-                "memory_items": [
-                    detail["memory_items"]
+        response_details = {
+            **details,
+            "query_filter_applied": normalized_query is not None,
+            "episodes_before_query_filter": episodes_before_query_filter,
+            "matched_episode_count": matched_episode_count,
+            "episodes_returned": len(episodes),
+            "episode_explanations": list(episode_explanations),
+            "memory_items": [
+                detail["memory_items"]
+                for detail in memory_item_details
+                if isinstance(detail.get("memory_items"), list)
+            ],
+            "related_memory_items_by_episode": {
+                detail["episode_id"]: detail.get("related_memory_items", [])
+                for detail in memory_item_details
+                if isinstance(detail.get("related_memory_items"), list)
+            },
+            "remember_path_explainability_by_episode": {
+                detail["episode_id"]: {
+                    "memory_items": detail.get("remember_path_memory_items", []),
+                    "memory_summary": detail.get("remember_path_memory_summary", {}),
+                    "relation_explanations": detail.get(
+                        "remember_path_relation_explanations",
+                        [],
+                    ),
+                    "relation_summary": detail.get("remember_path_relation_summary", {}),
+                }
+                for detail in memory_item_details
+            },
+            "remember_path_explainability_present": any(
+                bool(detail.get("remember_path_memory_items"))
+                or bool(detail.get("remember_path_relation_explanations"))
+                for detail in memory_item_details
+            ),
+            "remember_path_relation_reasons": sorted(
+                {
+                    relation_reason
                     for detail in memory_item_details
-                    if isinstance(detail.get("memory_items"), list)
-                ],
-                "related_memory_items_by_episode": {
-                    detail["episode_id"]: detail.get("related_memory_items", [])
-                    for detail in memory_item_details
-                    if isinstance(detail.get("related_memory_items"), list)
-                },
-                "remember_path_explainability_by_episode": {
-                    detail["episode_id"]: {
-                        "memory_items": detail.get("remember_path_memory_items", []),
-                        "memory_summary": detail.get("remember_path_memory_summary", {}),
-                        "relation_explanations": detail.get(
-                            "remember_path_relation_explanations",
-                            [],
-                        ),
-                        "relation_summary": detail.get("remember_path_relation_summary", {}),
-                    }
-                    for detail in memory_item_details
-                },
-                "remember_path_explainability_present": any(
-                    bool(detail.get("remember_path_memory_items"))
-                    or bool(detail.get("remember_path_relation_explanations"))
-                    for detail in memory_item_details
-                ),
-                "remember_path_relation_reasons": sorted(
+                    for relation_reason in detail.get("remember_path_relation_summary", {})
+                    .get("relation_reason_counts", {})
+                    .keys()
+                    if isinstance(relation_reason, str) and relation_reason.strip()
+                }
+            ),
+            "remember_path_relation_reason_primary": (
+                sorted(
                     {
                         relation_reason
                         for detail in memory_item_details
@@ -1636,169 +1672,194 @@ class MemoryService(
                         .keys()
                         if isinstance(relation_reason, str) and relation_reason.strip()
                     }
-                ),
-                "remember_path_relation_reason_primary": (
-                    sorted(
-                        {
-                            relation_reason
-                            for detail in memory_item_details
-                            for relation_reason in detail.get("remember_path_relation_summary", {})
-                            .get("relation_reason_counts", {})
-                            .keys()
-                            if isinstance(relation_reason, str) and relation_reason.strip()
-                        }
-                    )[0]
-                    if any(
-                        detail.get("remember_path_relation_summary", {}).get(
-                            "relation_reason_counts",
-                            {},
-                        )
-                        for detail in memory_item_details
+                )[0]
+                if any(
+                    detail.get("remember_path_relation_summary", {}).get(
+                        "relation_reason_counts",
+                        {},
                     )
-                    else None
-                ),
-                "remember_path_origin_counts": {
-                    origin: sum(
-                        detail.get("remember_path_memory_summary", {})
-                        .get("memory_origin_counts", {})
-                        .get(origin, 0)
-                        for detail in memory_item_details
-                    )
-                    for origin in sorted(
-                        {
-                            origin
-                            for detail in memory_item_details
-                            for origin in detail.get("remember_path_memory_summary", {})
-                            .get("memory_origin_counts", {})
-                            .keys()
-                            if isinstance(origin, str) and origin.strip()
-                        }
-                    )
-                },
-                "remember_path_promotion_field_counts": {
-                    promotion_field: sum(
-                        detail.get("remember_path_memory_summary", {})
-                        .get("promotion_field_counts", {})
-                        .get(promotion_field, 0)
-                        for detail in memory_item_details
-                    )
-                    for promotion_field in sorted(
-                        {
-                            promotion_field
-                            for detail in memory_item_details
-                            for promotion_field in detail.get("remember_path_memory_summary", {})
-                            .get("promotion_field_counts", {})
-                            .keys()
-                            if isinstance(promotion_field, str) and promotion_field.strip()
-                        }
-                    )
-                },
-                "remember_path_relation_reason_counts": {
-                    relation_reason: sum(
-                        detail.get("remember_path_relation_summary", {})
-                        .get("relation_reason_counts", {})
-                        .get(relation_reason, 0)
-                        for detail in memory_item_details
-                    )
-                    for relation_reason in sorted(
-                        {
-                            relation_reason
-                            for detail in memory_item_details
-                            for relation_reason in detail.get("remember_path_relation_summary", {})
-                            .get("relation_reason_counts", {})
-                            .keys()
-                            if isinstance(relation_reason, str) and relation_reason.strip()
-                        }
-                    )
-                },
-                "memory_item_counts_by_episode": {
-                    detail["episode_id"]: detail["memory_item_count"]
                     for detail in memory_item_details
-                },
-                "summaries": list(summaries),
-                "summary_selection_applied": summary_selection_applied,
-                "summary_selection_kind": summary_selection_kind,
-                "hierarchy_applied": bool(inherited_memory_items),
-                "inherited_context_is_auxiliary": bool(inherited_memory_items),
-                "inherited_context_returned_without_episode_matches": bool(
-                    inherited_memory_items and matched_episode_count == 0
-                ),
-                "inherited_context_returned_as_auxiliary_without_episode_matches": bool(
-                    inherited_memory_items and matched_episode_count == 0
-                ),
-                "related_context_is_auxiliary": bool(
-                    related_memory_items or graph_summary_related_memory_items
-                ),
-                "related_context_relation_types": (["supports"] if related_memory_items else [])
-                + (["summarizes"] if graph_summary_related_memory_items else []),
-                "related_context_selection_route": (
-                    "graph_summary_auxiliary"
-                    if graph_summary_related_memory_items
-                    else ("relation_supports_auxiliary" if related_memory_items else None)
-                ),
-                **self._build_retrieval_route_details(
-                    memory_item_details=memory_item_details,
-                    summaries=summaries,
-                    summary_selection_applied=summary_selection_applied,
-                    matched_episode_count=matched_episode_count,
-                    include_memory_items=request.include_memory_items,
-                    inherited_memory_items=inherited_memory_items,
-                    related_memory_items=related_memory_items,
-                    graph_summary_related_memory_items=graph_summary_related_memory_items,
-                ),
-                "related_context_returned_without_episode_matches": False,
-                "all_episodes_filtered_out_by_query": (all_episodes_filtered_out_by_query),
-                "memory_context_groups_are_primary_output": True,
-                "memory_context_groups_are_primary_explainability_surface": True,
-                "top_level_explainability_prefers_grouped_routes": True,
-                "flat_related_memory_items_is_compatibility_field": bool(
-                    related_memory_items or graph_summary_related_memory_items
-                ),
-                "flat_related_memory_items_matches_grouped_episode_related_items": bool(
-                    related_memory_items or graph_summary_related_memory_items
-                ),
-                "related_memory_items_by_episode_is_primary_structured_output": False,
-                "related_memory_items_by_episode_are_compatibility_output": bool(
-                    related_memory_items or graph_summary_related_memory_items
-                ),
-                "relation_memory_context_groups_are_primary_output": bool(
-                    related_memory_items or graph_summary_related_memory_items
-                ),
-                "group_related_memory_items_are_convenience_output": bool(
-                    related_memory_items or graph_summary_related_memory_items
-                ),
-                "readiness_explainability_is_compatibility_output": True,
-                "remember_path_explainability_by_episode_is_compatibility_output": True,
-                "remember_path_relation_reasons_is_compatibility_output": True,
-                "remember_path_relation_reason_primary_is_compatibility_output": True,
-                "readiness_explainability": {
-                    "graph_summary_auxiliary": next(
-                        (
-                            group.get("readiness_explainability", {})
-                            for group in memory_context_groups
-                            if group.get("selection_route") == "graph_summary_auxiliary"
-                        ),
-                        {},
-                    ),
-                    "summary_graph_mirroring": next(
-                        (
-                            group.get("readiness_explainability", {})
-                            for group in memory_context_groups
-                            if group.get("selection_route") == "graph_summary_auxiliary"
-                        ),
-                        {},
-                    ),
-                },
-                "memory_context_groups": memory_context_groups,
-                "inherited_memory_items": [
-                    self._serialize_memory_item(memory_item)
-                    for memory_item in inherited_memory_items
-                ],
-                "related_memory_items": [
-                    self._serialize_memory_item(memory_item)
-                    for memory_item in (related_memory_items or graph_summary_related_memory_items)
-                ],
+                )
+                else None
+            ),
+            "remember_path_origin_counts": {
+                origin: sum(
+                    detail.get("remember_path_memory_summary", {})
+                    .get("memory_origin_counts", {})
+                    .get(origin, 0)
+                    for detail in memory_item_details
+                )
+                for origin in sorted(
+                    {
+                        origin
+                        for detail in memory_item_details
+                        for origin in detail.get("remember_path_memory_summary", {})
+                        .get("memory_origin_counts", {})
+                        .keys()
+                        if isinstance(origin, str) and origin.strip()
+                    }
+                )
             },
+            "remember_path_promotion_field_counts": {
+                promotion_field: sum(
+                    detail.get("remember_path_memory_summary", {})
+                    .get("promotion_field_counts", {})
+                    .get(promotion_field, 0)
+                    for detail in memory_item_details
+                )
+                for promotion_field in sorted(
+                    {
+                        promotion_field
+                        for detail in memory_item_details
+                        for promotion_field in detail.get("remember_path_memory_summary", {})
+                        .get("promotion_field_counts", {})
+                        .keys()
+                        if isinstance(promotion_field, str) and promotion_field.strip()
+                    }
+                )
+            },
+            "remember_path_relation_reason_counts": {
+                relation_reason: sum(
+                    detail.get("remember_path_relation_summary", {})
+                    .get("relation_reason_counts", {})
+                    .get(relation_reason, 0)
+                    for detail in memory_item_details
+                )
+                for relation_reason in sorted(
+                    {
+                        relation_reason
+                        for detail in memory_item_details
+                        for relation_reason in detail.get("remember_path_relation_summary", {})
+                        .get("relation_reason_counts", {})
+                        .keys()
+                        if isinstance(relation_reason, str) and relation_reason.strip()
+                    }
+                )
+            },
+            "memory_item_counts_by_episode": {
+                detail["episode_id"]: detail["memory_item_count"] for detail in memory_item_details
+            },
+            "summaries": list(summaries),
+            "summary_selection_applied": summary_selection_applied,
+            "summary_selection_kind": summary_selection_kind,
+            "hierarchy_applied": bool(inherited_memory_items),
+            "inherited_context_is_auxiliary": bool(inherited_memory_items),
+            "inherited_context_returned_without_episode_matches": bool(
+                inherited_memory_items and matched_episode_count == 0
+            ),
+            "inherited_context_returned_as_auxiliary_without_episode_matches": bool(
+                inherited_memory_items and matched_episode_count == 0
+            ),
+            "related_context_is_auxiliary": bool(
+                related_memory_items or graph_summary_related_memory_items
+            ),
+            "related_context_relation_types": (["supports"] if related_memory_items else [])
+            + (["summarizes"] if graph_summary_related_memory_items else []),
+            "related_context_selection_route": (
+                "graph_summary_auxiliary"
+                if graph_summary_related_memory_items
+                else ("relation_supports_auxiliary" if related_memory_items else None)
+            ),
+            **self._build_retrieval_route_details(
+                memory_item_details=memory_item_details,
+                summaries=summaries,
+                summary_selection_applied=summary_selection_applied,
+                matched_episode_count=matched_episode_count,
+                include_memory_items=request.include_memory_items,
+                inherited_memory_items=inherited_memory_items,
+                related_memory_items=related_memory_items,
+                graph_summary_related_memory_items=graph_summary_related_memory_items,
+            ),
+            "related_context_returned_without_episode_matches": False,
+            "all_episodes_filtered_out_by_query": (all_episodes_filtered_out_by_query),
+            "memory_context_groups_are_primary_output": True,
+            "memory_context_groups_are_primary_explainability_surface": True,
+            "top_level_explainability_prefers_grouped_routes": True,
+            "flat_related_memory_items_is_compatibility_field": bool(
+                related_memory_items or graph_summary_related_memory_items
+            ),
+            "flat_related_memory_items_matches_grouped_episode_related_items": bool(
+                related_memory_items or graph_summary_related_memory_items
+            ),
+            "related_memory_items_by_episode_is_primary_structured_output": False,
+            "related_memory_items_by_episode_are_compatibility_output": bool(
+                related_memory_items or graph_summary_related_memory_items
+            ),
+            "relation_memory_context_groups_are_primary_output": bool(
+                related_memory_items or graph_summary_related_memory_items
+            ),
+            "group_related_memory_items_are_convenience_output": bool(
+                related_memory_items or graph_summary_related_memory_items
+            ),
+            "readiness_explainability_is_compatibility_output": True,
+            "remember_path_explainability_by_episode_is_compatibility_output": True,
+            "remember_path_relation_reasons_is_compatibility_output": True,
+            "remember_path_relation_reason_primary_is_compatibility_output": True,
+            "readiness_explainability": {
+                "graph_summary_auxiliary": next(
+                    (
+                        group.get("readiness_explainability", {})
+                        for group in memory_context_groups
+                        if group.get("selection_route") == "graph_summary_auxiliary"
+                    ),
+                    {},
+                ),
+                "summary_graph_mirroring": next(
+                    (
+                        group.get("readiness_explainability", {})
+                        for group in memory_context_groups
+                        if group.get("selection_route") == "graph_summary_auxiliary"
+                    ),
+                    {},
+                ),
+            },
+            "memory_context_groups": memory_context_groups,
+            "inherited_memory_items": [
+                self._serialize_memory_item(memory_item) for memory_item in inherited_memory_items
+            ],
+            "related_memory_items": [
+                self._serialize_memory_item(memory_item)
+                for memory_item in (related_memory_items or graph_summary_related_memory_items)
+            ],
+        }
+
+        if request.primary_only:
+            response_details = {
+                key: value
+                for key, value in response_details.items()
+                if key
+                not in {
+                    "memory_items",
+                    "related_memory_items_by_episode",
+                    "remember_path_explainability_by_episode",
+                    "remember_path_relation_reasons",
+                    "remember_path_relation_reason_primary",
+                    "remember_path_origin_counts",
+                    "remember_path_promotion_field_counts",
+                    "remember_path_relation_reason_counts",
+                    "readiness_explainability",
+                    "inherited_memory_items",
+                    "related_memory_items",
+                    "flat_related_memory_items_is_compatibility_field",
+                    "flat_related_memory_items_matches_grouped_episode_related_items",
+                    "related_memory_items_by_episode_is_primary_structured_output",
+                    "related_memory_items_by_episode_are_compatibility_output",
+                    "group_related_memory_items_are_convenience_output",
+                    "readiness_explainability_is_compatibility_output",
+                    "remember_path_explainability_by_episode_is_compatibility_output",
+                    "remember_path_relation_reasons_is_compatibility_output",
+                    "remember_path_relation_reason_primary_is_compatibility_output",
+                }
+            }
+
+        return GetContextResponse(
+            feature=MemoryFeature.GET_CONTEXT,
+            implemented=True,
+            message="Episode-oriented memory context retrieved successfully.",
+            status="ok",
+            available_in_version="0.2.0",
+            episodes=episodes,
+            details=response_details,
         )
 
     def _not_implemented(

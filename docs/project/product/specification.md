@@ -1,6 +1,29 @@
 
 # ctxledger: Durable Workflow Runtime with Multi-Layer Memory (MCP 2025-03-26)
 
+## Current Operator Metrics
+
+The current operator-facing stats surfaces also expose canonical-summary and derived-graph posture metrics.
+
+Canonical summary volume metrics:
+
+- `memory_summary_count`
+- `memory_summary_membership_count`
+
+Derived AGE graph posture metrics:
+
+- `age_summary_graph_ready_count`
+- `age_summary_graph_stale_count`
+- `age_summary_graph_degraded_count`
+- `age_summary_graph_unknown_count`
+
+These should be interpreted in this order:
+
+1. canonical relational summary volume first
+2. derived graph posture second
+
+A degraded, stale, or unknown graph posture should not be interpreted as canonical summary loss when the relational summary metrics still show canonical summary state.
+
 ## Overview
 This project provides a **remote MCP server** implementing:
 
@@ -110,6 +133,13 @@ Operational Layer:
 
 The system uses a **multi-layer memory architecture**.
 
+The current `memory_get_context` contract also supports a response-shaping flag:
+
+- `primary_only`
+
+This flag should be read as a narrowing preference over the same retrieval behavior, not as a separate retrieval algorithm.
+When `primary_only = true`, clients should expect the primary grouped hierarchy-aware surface and route metadata to remain available, while flatter compatibility-oriented explainability fields may be omitted.
+
 ## Layer 1 — Workflow Control
 
 Tables:
@@ -179,6 +209,13 @@ Capabilities:
 - retrieve relevant past work
 - retrieve high-level project knowledge
 - support long-context reasoning
+- expose a grouped primary retrieval surface that can be consumed directly by clients using `primary_only = true`
+
+Current interpretation rules:
+
+- `memory_context_groups` is the primary grouped hierarchy-aware surface
+- route and selection metadata in `details` should be treated as the primary additive explainability surface
+- flatter compatibility-oriented fields remain supported, but they should be read as derived or compatibility views rather than as the strongest contract shape
 
 ---
 

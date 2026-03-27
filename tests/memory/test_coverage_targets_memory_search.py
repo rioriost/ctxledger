@@ -108,6 +108,19 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
             include_summaries=False,
         )
     )
+    primary_only_context_response = service.get_context(
+        GetMemoryContextRequest(
+            query="relevant context",
+            workspace_id="ws-1",
+            workflow_instance_id=str(workflow_id),
+            ticket_id="TICKET-1",
+            limit=3,
+            include_episodes=False,
+            include_memory_items=True,
+            include_summaries=False,
+            primary_only=True,
+        )
+    )
 
     assert isinstance(remember_response, RememberEpisodeResponse)
     assert remember_response.feature == MemoryFeature.REMEMBER_EPISODE
@@ -173,6 +186,22 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert search_response.results[0].score >= search_response.results[0].lexical_score
 
     assert context_response.feature == MemoryFeature.GET_CONTEXT
+    assert primary_only_context_response.feature == MemoryFeature.GET_CONTEXT
+    assert primary_only_context_response.details["memory_context_groups_are_primary_output"] is True
+    assert (
+        primary_only_context_response.details[
+            "memory_context_groups_are_primary_explainability_surface"
+        ]
+        is True
+    )
+    assert (
+        primary_only_context_response.details["top_level_explainability_prefers_grouped_routes"]
+        is True
+    )
+    assert "memory_items" not in primary_only_context_response.details
+    assert "readiness_explainability" not in primary_only_context_response.details
+    assert "related_memory_items" not in primary_only_context_response.details
+    assert "inherited_memory_items" not in primary_only_context_response.details
 
 
 def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
