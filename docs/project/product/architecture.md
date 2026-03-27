@@ -745,7 +745,7 @@ They are used for:
 
 They are not replacements for canonical raw memory.
 
-For the current `0.6.0` hierarchical memory slice, the canonical summary source
+For the current `0.9.0` release, the canonical summary source
 remains relational PostgreSQL state, especially:
 
 - `memory_summaries`

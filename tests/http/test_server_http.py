@@ -1486,7 +1486,7 @@ def test_http_mcp_rpc_initialize_returns_success_payload() -> None:
             "protocolVersion": "2024-11-05",
             "serverInfo": {
                 "name": "ctxledger",
-                "version": "0.1.0",
+                "version": "0.9.0",
             },
             "capabilities": {
                 "tools": {},

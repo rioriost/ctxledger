@@ -384,7 +384,7 @@ Current progress already landed toward `0.6.0`:
   - episode-derived summary fallback remains available when canonical summaries are absent
   - grouped hierarchy-aware output remains the primary response surface
   - additive retrieval-route metadata explains primary and auxiliary context assembly
-- constrained graph-backed support has been added for the current `0.6.0` slice
+- constrained graph-backed support has been added for the current `0.9.0` release
   - PostgreSQL remains the canonical system of record
   - Apache AGE state is treated as derived, supplementary, and rebuildable
   - graph usage is gated by capability and readiness checks
@@ -401,9 +401,9 @@ Current progress already landed toward `0.6.0`:
   - derived graph-summary auxiliary behavior
 - the current broad repository validation state for this slice is green
 
-Current `0.6.0` positioning:
+Current `0.9.0` positioning:
 
-- the current milestone should be read as a bounded hierarchical memory slice rather than broad graph-first memory redesign
+- the current release should be read as a bounded hierarchical memory slice rather than broad graph-first memory redesign
 - the minimal implemented hierarchy remains:
   - `summary -> memory_item`
 - summary ownership and summary-membership ownership remain canonical and relational

@@ -13,7 +13,7 @@ For the planned optional AGE-capable local/dev environment path, see:
 This runbook describes how to validate the current constrained Apache AGE
 prototype in a practical, operator-facing way.
 
-It is intended for the current `0.8.0`-oriented prototype state where:
+It is intended for the current `0.9.0`-oriented prototype state where:
 
 - relational PostgreSQL tables remain canonical
 - AGE-backed graph usage is optional
@@ -24,7 +24,7 @@ It is intended for the current `0.8.0`-oriented prototype state where:
 
 This runbook is intentionally narrow.
 
-It stays within the current `0.8.0` constrained prototype boundary.
+It stays within the current `0.9.0` constrained prototype boundary.
 
 It does **not** define a full production graph operations model.
 

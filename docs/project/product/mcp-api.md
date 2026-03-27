@@ -1048,7 +1048,7 @@ It may also:
 - attach failure or cancellation context
 - trigger completion-centered automatic memory recording
 
-For the current `0.8.0` remember-path direction, `workflow_complete` should be read as the primary closeout-memory entry point for normal work-loop completion.
+For the current `0.9.0` release, `workflow_complete` should be read as the primary closeout-memory entry point for normal work-loop completion.
 
 The current bounded closeout path may:
 
@@ -1099,7 +1099,7 @@ Writes to:
 - future failure records
 - projection failure records on projection update failure
 
-The remember-path reading for `0.8.0` should be:
+The remember-path reading for `0.9.0` should be:
 
 - workflow / checkpoint state remains canonical operational truth
 - completion auto-memory writes canonical memory artifacts derived from that truth
@@ -1123,7 +1123,7 @@ Typical response content:
 - `warnings`
 - `auto_memory_details` (optional)
 
-For the current `0.8.0` remember-path slice, `auto_memory_details` should be read as additive completion-memory reporting rather than as a second workflow-truth mechanism.
+For the current `0.9.0` release, `auto_memory_details` should be read as additive completion-memory reporting rather than as a second workflow-truth mechanism.
 
 Representative fields may include:
 
@@ -1191,7 +1191,7 @@ Implemented in the current repository state.
 - persists append-only episodic records
 - returns the recorded episode payload on success
 
-For the current `0.8.0` remember-path reading, `memory_remember_episode` should be treated as the explicit episodic write path for **high-signal knowledge** that should not depend on workflow completion timing.
+For the current `0.9.0` release, `memory_remember_episode` should be treated as the explicit episodic write path for **high-signal knowledge** that should not depend on workflow completion timing.
 
 Representative intended uses are:
 
@@ -1365,7 +1365,7 @@ minimal summary-oriented entry in `memory_context_groups`:
 - `summaries = [...]`
 
 ### Minimal Hierarchy-Aware Contract
-The current `0.6.0` slice introduces a small but explicit hierarchy-aware contract.
+The current `0.9.0` release preserves a small but explicit hierarchy-aware contract.
 
 When `include_memory_items=true`, the response may now distinguish:
 

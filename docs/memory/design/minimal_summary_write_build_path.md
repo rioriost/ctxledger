@@ -1,5 +1,9 @@
 # Minimal Summary Write/Build Path for `0.6.0`
 
+> Historical design record: this document captures the first `0.6.0` summary
+> write/build slice. For the current release posture, read it as historical
+> background rather than as the sole statement of the current `0.9.0` contract.
+
 ## Purpose
 
 This note defines the **minimum summary write/build path** for the current

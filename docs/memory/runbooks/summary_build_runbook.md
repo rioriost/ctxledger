@@ -446,7 +446,7 @@ Interpret the result this way:
   - the likely impact is reduced auxiliary graph-backed enrichment or reduced
     graph observability, not summary loss
 
-This keeps the current `0.6.0` boundary explicit:
+This keeps the current `0.9.0` boundary explicit:
 
 - canonical build and retrieval correctness come from relational state
 - graph-backed summary behavior remains additive and degradable
@@ -513,7 +513,7 @@ This usually means one of:
 
 ## Current summary text behavior
 
-The current `0.6.0` builder is intentionally simple and deterministic.
+The current `0.9.0` builder is intentionally simple and deterministic.
 
 It currently derives summary text from:
 
@@ -685,7 +685,7 @@ These are later concerns.
 
 ## Current best practices
 
-For the current `0.6.0` slice, prefer:
+For the current `0.9.0` release, prefer:
 
 - explicit build first
 - JSON output during validation/debugging
@@ -772,7 +772,7 @@ The current explicit summary build path should be treated as:
 - operator-invoked
 - canonical-relational
 - easy to validate
-- suitable for current `0.6.0` summary loop work
+- suitable for current `0.9.0` summary loop work
 
 It should **not** yet be treated as a broad autonomous summary subsystem.
 

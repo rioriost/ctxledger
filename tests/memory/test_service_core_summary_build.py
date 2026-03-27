@@ -293,7 +293,7 @@ def test_memory_service_build_episode_summary_creates_canonical_summary_and_memb
     assert result.feature == MemoryFeature.GET_CONTEXT
     assert result.implemented is True
     assert result.status == "built"
-    assert result.available_in_version == "0.6.0"
+    assert result.available_in_version == "0.9.0"
     assert result.summary_built is True
     assert result.skipped_reason is None
     assert result.replaced_existing_summary is False
@@ -306,7 +306,7 @@ def test_memory_service_build_episode_summary_creates_canonical_summary_and_memb
         "build_scope": "episode",
         "source_episode_id": str(episode.episode_id),
         "source_memory_item_count": 2,
-        "build_version": "0.6.0-first-slice",
+        "build_version": "0.9.0",
         "remember_path_memory_origins": [],
         "remember_path_promotion_fields": [],
         "remember_path_promotion_sources": [],
@@ -627,7 +627,7 @@ def test_memory_service_build_episode_summary_skips_when_episode_has_no_memory_i
     assert result.feature == MemoryFeature.GET_CONTEXT
     assert result.implemented is True
     assert result.status == "skipped"
-    assert result.available_in_version == "0.6.0"
+    assert result.available_in_version == "0.9.0"
     assert result.summary is None
     assert result.memberships == ()
     assert result.summary_built is False
@@ -756,7 +756,7 @@ def test_memory_service_build_episode_summary_preserves_remember_path_explainabi
         "build_scope": "episode",
         "source_episode_id": str(episode.episode_id),
         "source_memory_item_count": 3,
-        "build_version": "0.6.0-first-slice",
+        "build_version": "0.9.0",
         "remember_path_memory_origins": [
             "workflow_checkpoint_auto",
             "workflow_complete_auto",
@@ -1231,7 +1231,7 @@ def test_memory_service_built_episode_summary_is_used_by_summary_first_retrieval
         "build_scope": "episode",
         "source_episode_id": str(episode.episode_id),
         "source_memory_item_count": 2,
-        "build_version": "0.6.0-first-slice",
+        "build_version": "0.9.0",
         "remember_path_memory_origins": [],
         "remember_path_promotion_fields": [],
         "remember_path_promotion_sources": [],

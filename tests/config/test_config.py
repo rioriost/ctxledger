@@ -372,7 +372,7 @@ def test_load_settings_reads_age_database_settings(clean_ctxledger_env: None) ->
 def test_app_settings_validate_rejects_empty_host() -> None:
     settings = AppSettings(
         app_name="ctxledger",
-        app_version="0.1.0",
+        app_version="0.9.0",
         environment="test",
         database=DatabaseSettings(
             url="postgresql://ctxledger:test@localhost:5432/ctxledger",
@@ -405,7 +405,7 @@ def test_app_settings_validate_rejects_empty_host() -> None:
 def test_app_settings_validate_rejects_empty_http_path() -> None:
     settings = AppSettings(
         app_name="ctxledger",
-        app_version="0.1.0",
+        app_version="0.9.0",
         environment="test",
         database=DatabaseSettings(
             url="postgresql://ctxledger:test@localhost:5432/ctxledger",
@@ -438,7 +438,7 @@ def test_app_settings_validate_rejects_empty_http_path() -> None:
 def test_app_settings_validate_requires_embedding_model_when_enabled() -> None:
     settings = AppSettings(
         app_name="ctxledger",
-        app_version="0.1.0",
+        app_version="0.9.0",
         environment="test",
         database=DatabaseSettings(
             url="postgresql://ctxledger:test@localhost:5432/ctxledger",
@@ -474,7 +474,7 @@ def test_app_settings_validate_requires_embedding_model_when_enabled() -> None:
 def test_app_settings_validate_requires_api_key_for_external_embedding_provider() -> None:
     settings = AppSettings(
         app_name="ctxledger",
-        app_version="0.1.0",
+        app_version="0.9.0",
         environment="test",
         database=DatabaseSettings(
             url="postgresql://ctxledger:test@localhost:5432/ctxledger",
@@ -510,7 +510,7 @@ def test_app_settings_validate_requires_api_key_for_external_embedding_provider(
 def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provider() -> None:
     settings = AppSettings(
         app_name="ctxledger",
-        app_version="0.1.0",
+        app_version="0.9.0",
         environment="test",
         database=DatabaseSettings(
             url="postgresql://ctxledger:test@localhost:5432/ctxledger",
@@ -546,7 +546,7 @@ def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provi
 def test_app_settings_validate_rejects_non_positive_embedding_dimensions() -> None:
     settings = AppSettings(
         app_name="ctxledger",
-        app_version="0.1.0",
+        app_version="0.9.0",
         environment="test",
         database=DatabaseSettings(
             url="postgresql://ctxledger:test@localhost:5432/ctxledger",

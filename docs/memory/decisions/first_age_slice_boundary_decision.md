@@ -1,5 +1,10 @@
 # First AGE-Backed Graph Slice Boundary Decision
 
+> Historical design record: this document captures the first `0.6.0` AGE slice
+> boundary decision. It remains useful as a record of the initial canonical /
+> derived posture, but the current release-state reading should be taken from the
+> `0.9.0` release and product/runbook documents.
+
 ## Purpose
 
 This note is the **canonical Phase A decision record** for the first Apache

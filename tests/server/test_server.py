@@ -707,7 +707,7 @@ def test_print_runtime_summary_includes_http_runtime_introspection(
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "ctxledger 0.1.0 started" in captured.err
+    assert "ctxledger 0.9.0 started" in captured.err
     assert "health=ok" in captured.err
     assert "readiness=ready" in captured.err
     assert "runtime=[{'transport': 'http'" in captured.err

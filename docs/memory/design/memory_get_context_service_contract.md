@@ -372,7 +372,7 @@ This is an interpretation and contract-direction clarification, not an immediate
 
 ## Current narrowed contract checkpoints worth preserving
 
-The current `0.6.0` summary-first contract is intentionally narrow and should be
+The current `0.9.0` summary-first contract is intentionally narrow and should be
 read with the following checkpoints in mind:
 
 ### 1. Canonical summary-first remains the first compressed primary path
@@ -433,7 +433,7 @@ It may enrich grouped output and route metadata through
 - the fallback requirement to remain behavior-preserving when graph support is
   absent, degraded, or unready
 
-These checkpoints are closeout-oriented guardrails for the current `0.6.0`
+These checkpoints are closeout-oriented guardrails for the current `0.9.0`
 contract, not a claim that the response shape is permanently frozen.
 
 ### 1. Summary-scoped output
@@ -451,7 +451,7 @@ When summaries are enabled and returned, the response may include a grouped summ
 
 This is a grouped summary-oriented surface, not a replacement for raw memory items.
 
-At the current `0.6.0` stage, the primary summary/episode-chain explainability
+At the current `0.9.0` stage, the primary summary/episode-chain explainability
 surface should be treated as explicit enough for the current contract slice.
 
 That means consumers can now read the current summary-first primary chain
@@ -625,7 +625,7 @@ reason explicit for grouped consumers.
 
 Taken together, the current summary-scoped grouped metadata and the closely
 related top-level summary-first details metadata should be treated as sufficient
-primary-chain explainability for the current `0.6.0` slice.
+primary-chain explainability for the current `0.9.0` slice.
 
 In practical terms, the next work should not default to adding yet another small
 summary-group explanation field unless a clearer behavior gap appears.
@@ -758,7 +758,7 @@ Taken together, these fields mean the current contract distinguishes between:
 - auxiliary workspace-context visibility that may remain even when the primary
   episode path is empty
 
-That distinction is intentional for the current `0.6.0` slice.
+That distinction is intentional for the current `0.9.0` slice.
 
 When low-limit shaping also applies, this current reading is still based on the
 actually emitted auxiliary route:
@@ -794,7 +794,7 @@ When constrained relation-derived support context is available, the response may
 
 This is currently the primary grouped structured surface for relation-derived supporting context.
 
-At the current `0.6.0` stage, the constrained relation auxiliary grouped reading
+At the current `0.9.0` stage, the constrained relation auxiliary grouped reading
 should now also be treated as explicit enough for the current contract slice.
 
 Grouped consumers should currently read this relation-scoped auxiliary surface
@@ -967,7 +967,7 @@ and grouped outputs that are actually emitted.
 
 ## Current related-context semantics
 
-The current `0.6.0` slice distinguishes several related-context surfaces.
+The current `0.9.0` slice distinguishes several related-context surfaces.
 
 ### Primary structured output
 
@@ -1015,7 +1015,7 @@ aggregation.
 
 Taken together, the current relation-scoped grouped metadata and the existing
 episode-group provenance/linkage fields should be treated as sufficient
-relation-auxiliary explainability for the current `0.6.0` slice.
+relation-auxiliary explainability for the current `0.9.0` slice.
 
 That current explainability surface should also be read as sufficient to explain
 the present constrained aggregation behavior:

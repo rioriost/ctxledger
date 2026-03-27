@@ -1,5 +1,14 @@
 # Repository-Scoped Implementation Plan for the Constrained AGE `supports` Prototype
 
+> Historical record note:
+> This document should be read as a first-slice implementation plan and design
+> record for the constrained AGE `supports` prototype.
+> It remains useful for understanding the bounded prototype boundary and earlier
+> implementation intent, but it is not the canonical source for the current
+> `0.9.0` release posture.
+> For the current release-facing reading, prefer the `0.9.0` acceptance,
+> closeout, changelog, and product/runbook documents.
+
 ## Status
 
 This implementation plan now describes a prototype path that is **partially

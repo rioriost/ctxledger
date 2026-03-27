@@ -121,7 +121,7 @@ Start with:
 - `decisions/first_memory_get_context_hierarchical_improvement_decision.md`
 - `design/minimal_hierarchy_schema_repository_design.md`
 
-### If you want the current bounded `0.6.0` milestone reading
+### If you want the current bounded `0.9.0` milestone reading
 Start with:
 
 - `decisions/summary_hierarchy_0_6_0_milestone_slice_closeout.md`

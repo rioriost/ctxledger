@@ -157,7 +157,7 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert search_response.feature == MemoryFeature.SEARCH
     assert search_response.implemented is True
     assert search_response.status == "ok"
-    assert search_response.available_in_version == "0.4.0"
+    assert search_response.available_in_version == "0.9.0"
     assert search_response.details["limit"] == 5
     assert search_response.details["filters"] == {"kind": "episode"}
     assert search_response.details["search_mode"] == "memory_item_lexical"

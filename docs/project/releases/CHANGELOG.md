@@ -8,6 +8,10 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ## [Unreleased]
 
+- no unreleased changes yet
+
+## [0.9.0]
+
 ### Added
 
 - validated default `small` Docker deployment path with:

@@ -175,7 +175,7 @@ def test_http_handlers_build_runtime_debug_handlers_accept_query_string() -> Non
 
 
 def test_http_handlers_build_mcp_http_handler_adapts_streamable_http_endpoint() -> None:
-    runtime = SimpleNamespace(settings=SimpleNamespace(app_name="ctxledger", app_version="0.1.0"))
+    runtime = SimpleNamespace(settings=SimpleNamespace(app_name="ctxledger", app_version="0.9.0"))
     server = make_server(settings=make_settings(path="/mcp"))
     handler = build_mcp_http_handler(runtime, server)
 

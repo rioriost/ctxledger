@@ -1,5 +1,10 @@
 # Episode-Less Summary-First Behavior Choice Decision
 
+> Historical design record: this document captures a bounded `0.6.0` decision state.
+> Read it as first-slice decision history, not as the authoritative current
+> `0.9.0` release contract. For current release-facing behavior, prefer the
+> product, runbook, and release acceptance/closeout docs.
+
 ## Context
 
 Recent `0.6.0` work around `memory_get_context` has already clarified the current grouped retrieval model substantially.

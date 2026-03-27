@@ -1,5 +1,9 @@
 # Minimum AGE Setup Approach for the First `0.6.0` Graph Slice
 
+> Historical design record:
+> this document captures the first-slice `0.6.0` AGE setup posture.
+> For the current release-facing posture, read the `0.9.0` release and product docs first.
+
 ## Purpose
 
 This note defines the **minimum setup and operational approach** for the first
@@ -40,9 +44,9 @@ This note does **not** cover:
 
 ---
 
-## Relationship to the Current `0.6.0` Retrieval Contract
+## Relationship to the First-Slice `0.6.0` Retrieval Contract
 
-The current `0.6.0` memory retrieval contract remains:
+The first-slice `0.6.0` memory retrieval contract remains:
 
 - relational first
 - behavior-preserving outside the active target area

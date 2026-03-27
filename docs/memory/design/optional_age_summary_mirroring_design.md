@@ -1,5 +1,10 @@
 # Optional Derived AGE Summary Mirroring Design for `0.6.0`
 
+> Historical design record.
+> This document captures the first `0.6.0` mirroring design direction and should
+> be read as a bounded first-slice design note, not as the canonical statement
+> of the current `0.9.0` release posture.
+
 ## Purpose
 
 This note defines the **minimum design direction** for optional derived Apache

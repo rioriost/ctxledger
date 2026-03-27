@@ -29,7 +29,7 @@ def test_main_serve_renders_startup_summary_from_run_server(
 
     def fake_run_server(**kwargs: object) -> int:
         received_kwargs.update(kwargs)
-        print("ctxledger 0.1.0 started", file=sys.stderr)
+        print("ctxledger 0.9.0 started", file=sys.stderr)
         print("health=ok", file=sys.stderr)
         print("readiness=ready", file=sys.stderr)
         print(
@@ -49,7 +49,7 @@ def test_main_serve_renders_startup_summary_from_run_server(
     assert exit_code == 0
     assert received_kwargs == {}
     assert captured.out == ""
-    assert "ctxledger 0.1.0 started" in captured.err
+    assert "ctxledger 0.9.0 started" in captured.err
     assert "health=ok" in captured.err
     assert "readiness=ready" in captured.err
     assert "runtime=[{'transport': 'http'" in captured.err
@@ -64,7 +64,7 @@ def test_main_serve_passes_transport_and_network_overrides(
 
     def fake_run_server(**kwargs: object) -> int:
         received_kwargs.update(kwargs)
-        print("ctxledger 0.1.0 started", file=sys.stderr)
+        print("ctxledger 0.9.0 started", file=sys.stderr)
         print("health=ok", file=sys.stderr)
         print("readiness=ready", file=sys.stderr)
         print(

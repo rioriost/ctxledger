@@ -682,7 +682,7 @@ def test_print_runtime_summary_writes_expected_lines(
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "ctxledger 0.1.0 started" in captured.err
+    assert "ctxledger 0.9.0 started" in captured.err
     assert "health=ok" in captured.err
     assert "readiness=ready" in captured.err
     assert "runtime=[]" in captured.err
@@ -708,7 +708,7 @@ def test_build_health_status_reports_workflow_service_and_runtime() -> None:
     assert status.status == "ok"
     assert status.details == {
         "service": "ctxledger",
-        "version": "0.1.0",
+        "version": "0.9.0",
         "started": True,
         "workflow_service_initialized": True,
         "runtime": [
@@ -1508,7 +1508,7 @@ def test_run_server_returns_zero_on_success(
 
     assert exit_code == 0
     assert fake_server.startup_calls == 1
-    assert "ctxledger 0.1.0 started" in captured.err
+    assert "ctxledger 0.9.0 started" in captured.err
 
 
 def test_run_server_returns_one_for_bootstrap_error(

@@ -39,7 +39,7 @@ Do **not** start by blaming the graph layer.
 
 ## 3. Current remember-path model
 
-The current `0.8.0` remember-path should be read as two bounded automatic paths.
+The current `0.9.0` remember-path should be read as two bounded automatic paths.
 
 ### 3.1 Checkpoint-origin path
 
@@ -775,7 +775,7 @@ Use this short checklist first.
 
 ## 15. Current expected outcome
 
-A healthy current `0.8.0` deployment should be able to show:
+A healthy current `0.9.0` deployment should be able to show:
 
 - checkpoint-origin canonical memory before completion
 - completion-origin canonical memory at closeout

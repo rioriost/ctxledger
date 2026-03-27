@@ -504,7 +504,7 @@ The central goals of that milestone are:
 - improve observability so operators can tell where memory creation is succeeding, skipping, or failing
 - strengthen agent-facing operational guidance so MCP-capable agents following repository rules are more likely to record memory correctly and automatically
 
-The current `0.8.0` reading should now also include:
+The current `0.9.0` reading should now also include:
 
 - checkpoint-origin and completion-origin memory should remain explainable rather than collapsing into a single opaque memory stream
 - promoted fields such as `current_objective`, `next_intended_action`, `root_cause`, `recovery_pattern`, and `what_remains` should remain visible as structured remember-path evidence
@@ -519,9 +519,9 @@ The current `0.8.0` reading should now also include:
 This work is intentionally earlier than any broader Mnemis-style architectural evaluation.
 The repository should first become better at **remembering**, then later decide whether it also needs a broader graph-memory redesign.
 
-## 6.8 Current `0.8.0` operational notes
+## 6.8 Current `0.9.0` operational notes
 
-The current `0.8.0` remember-path reading should now be:
+The current `0.9.0` remember-path reading should now be:
 
 - meaningful checkpoints may create canonical remember artifacts before workflow completion
 - workflow completion remains the default closeout path for normal end-of-loop memory capture
@@ -589,7 +589,7 @@ Representative planned behavior includes:
   - `recovery_pattern_supports_root_cause`
   - other future bounded relation reasons
 
-In the current `0.8.0` context, this means summary and graph layers should ideally help answer not only **what** related memories exist, but also:
+In the current `0.9.0` context, this means summary and graph layers should ideally help answer not only **what** related memories exist, but also:
 
 - **how** those memories entered the canonical remember path
 - **which promoted fields** produced them

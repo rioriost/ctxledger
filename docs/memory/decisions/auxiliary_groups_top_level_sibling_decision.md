@@ -1,5 +1,11 @@
 # Auxiliary Groups as Top-Level Sibling Groups Decision
 
+> Historical design record:
+> this note captures a bounded `0.6.0` decision state.
+> The current release posture is `0.9.0`, but this document remains useful as
+> a first-slice rationale and should not be read by itself as the full current
+> product contract.
+
 ## Context
 
 Recent `0.6.0` work around `memory_get_context` has already clarified several important parts of the current hierarchy-aware retrieval shape.

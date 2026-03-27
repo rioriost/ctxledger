@@ -55,7 +55,7 @@ def make_settings(
 ) -> AppSettings:
     return AppSettings(
         app_name="ctxledger",
-        app_version="0.1.0",
+        app_version="0.9.0",
         environment="test",
         database=DatabaseSettings(
             url=database_url,

@@ -50,7 +50,7 @@ def _extract_bearer_token(authorization: str | None) -> str | None:
 
 
 settings = load_settings()
-app = FastAPI(title="ctxledger-auth-small", version="0.4.0")
+app = FastAPI(title="ctxledger-auth-small", version="0.9.0")
 
 
 @app.get("/healthz")

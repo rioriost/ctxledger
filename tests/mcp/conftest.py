@@ -147,7 +147,7 @@ def make_stub_response() -> StubResponse:
         implemented=False,
         message="ok",
         status="not_implemented",
-        available_in_version="0.1.0",
+        available_in_version="0.9.0",
         details={"value": 1, "source": "test"},
     )
 
