@@ -64,7 +64,7 @@ def minimum_valid_env(**overrides: str | None) -> dict[str, str | None]:
         "CTXLEDGER_LOG_STRUCTURED": "true",
         "CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS": "5",
         "CTXLEDGER_EMBEDDING_ENABLED": "false",
-        "CTXLEDGER_EMBEDDING_PROVIDER": "openai",
+        "CTXLEDGER_EMBEDDING_PROVIDER": "local_stub",
         "CTXLEDGER_EMBEDDING_MODEL": "text-embedding-3-small",
     }
     env.update(overrides)
@@ -99,11 +99,11 @@ def test_load_settings_with_minimum_valid_env(clean_ctxledger_env: None) -> None
     assert settings.database.age_enabled is False
     assert settings.database.age_graph_name == "ctxledger_memory"
     assert settings.embedding.enabled is False
-    assert settings.embedding.provider is EmbeddingProvider.OPENAI
+    assert settings.embedding.provider is EmbeddingProvider.LOCAL_STUB
     assert settings.embedding.model == "text-embedding-3-small"
     assert settings.embedding.api_key is None
     assert settings.embedding.base_url is None
-    assert settings.embedding.dimensions is None
+    assert settings.embedding.dimensions == 16
 
 
 def test_get_settings_returns_validated_settings(clean_ctxledger_env: None) -> None:
@@ -602,8 +602,8 @@ def test_load_settings_uses_defaults_for_optional_values(
     assert settings.database.connect_timeout_seconds == 5
     assert settings.database.statement_timeout_ms is None
     assert settings.embedding.enabled is False
-    assert settings.embedding.provider is EmbeddingProvider.OPENAI
+    assert settings.embedding.provider is EmbeddingProvider.LOCAL_STUB
     assert settings.embedding.model == "text-embedding-3-small"
     assert settings.embedding.api_key is None
     assert settings.embedding.base_url is None
-    assert settings.embedding.dimensions is None
+    assert settings.embedding.dimensions == 16

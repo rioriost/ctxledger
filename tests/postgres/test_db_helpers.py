@@ -311,6 +311,97 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
     finally:
         postgres_common_module._connect = original_connect
 
+    class GraphStaleCursor(FakeCursor):
+        def __init__(self, rows: list[object] | None = None) -> None:
+            super().__init__(rows)
+            self._extension_query_count = 0
+            self._graph_query_count = 0
+            self._membership_query_count = 0
+            self._edge_count_query_count = 0
+
+        def fetchone(self) -> dict[str, object] | None:
+            latest_query = self.executed[-1][0] if self.executed else ""
+
+            if "FROM pg_extension" in latest_query:
+                self._extension_query_count += 1
+                return {"ok": 1}
+
+            if "FROM ag_catalog.ag_graph" in latest_query:
+                self._graph_query_count += 1
+                return {"ok": 1}
+
+            if "FROM memory_summary_memberships" in latest_query:
+                self._membership_query_count += 1
+                return {"membership_count": 3}
+
+            if "MATCH (:memory_summary)-[r:summarizes]->(:memory_item)" in latest_query:
+                self._edge_count_query_count += 1
+                return {"graph_edge_count": '"1"'}
+
+            return None
+
+    class GraphStaleConnection(FakeConnection):
+        def cursor(self) -> GraphStaleCursor:
+            cursor = GraphStaleCursor(self._rows)
+            self.cursors.append(cursor)
+            return cursor
+
+    class GraphStaleConnector(FakeConnector):
+        def __call__(self, database_url: str) -> GraphStaleConnection:
+            self.calls.append(database_url)
+            connection = GraphStaleConnection(self.rows)
+            self.connections.append(connection)
+            return connection
+
+    graph_stale_connector = GraphStaleConnector()
+    postgres_common_module._connect = graph_stale_connector
+    try:
+        checker = postgres.PostgresDatabaseHealthChecker(config)
+        assert checker.age_graph_available("ctxledger_memory") is True
+        assert checker.age_graph_status("ctxledger_memory").value == "graph_stale"
+    finally:
+        postgres_common_module._connect = original_connect
+
+    class GraphReadFailingCursor(FakeCursor):
+        def fetchone(self) -> dict[str, object] | None:
+            latest_query = self.executed[-1][0] if self.executed else ""
+
+            if "FROM pg_extension" in latest_query:
+                return {"ok": 1}
+
+            if "FROM ag_catalog.ag_graph" in latest_query:
+                return {"ok": 1}
+
+            if "FROM memory_summary_memberships" in latest_query:
+                raise RuntimeError("graph read failed")
+
+            if "MATCH (:memory_summary)-[r:summarizes]->(:memory_item)" in latest_query:
+                return {"graph_edge_count": '"1"'}
+
+            return None
+
+    class GraphReadFailingConnection(FakeConnection):
+        def cursor(self) -> GraphReadFailingCursor:
+            cursor = GraphReadFailingCursor(self._rows)
+            self.cursors.append(cursor)
+            return cursor
+
+    class GraphReadFailingConnector(FakeConnector):
+        def __call__(self, database_url: str) -> GraphReadFailingConnection:
+            self.calls.append(database_url)
+            connection = GraphReadFailingConnection(self.rows)
+            self.connections.append(connection)
+            return connection
+
+    graph_read_failing_connector = GraphReadFailingConnector()
+    postgres_common_module._connect = graph_read_failing_connector
+    try:
+        checker = postgres.PostgresDatabaseHealthChecker(config)
+        assert checker.age_graph_available("ctxledger_memory") is True
+        assert checker.age_graph_status("ctxledger_memory").value == "graph_read_failed"
+    finally:
+        postgres_common_module._connect = original_connect
+
 
 def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guards() -> None:
     postgres = importlib.import_module("ctxledger.db.postgres")

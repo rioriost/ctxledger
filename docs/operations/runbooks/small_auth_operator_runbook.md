@@ -73,6 +73,10 @@ Before starting the small pattern, ensure:
    - `docker/traefik/certs/localhost.key`
 5. you have chosen a bearer token value for:
    - `CTXLEDGER_SMALL_AUTH_TOKEN`
+6. you understand the current local embedding posture for this stack:
+   - the small stack now defaults to `CTXLEDGER_EMBEDDING_PROVIDER=local_stub`
+   - this default is intended to keep local startup safe even when `OPENAI_API_KEY` is not set
+   - you only need `OPENAI_API_KEY` when you intentionally override the embedding provider to an external API-backed mode such as `openai`
 
 Representative token shape:
 
@@ -82,6 +86,20 @@ replace-me-with-a-strong-secret
 
 For real shared or long-lived environments, use a strong random secret rather than a memorable placeholder.
 
+Representative local embedding defaults for the small stack:
+
+```/dev/null/dotenv#L1-3
+CTXLEDGER_EMBEDDING_ENABLED=true
+CTXLEDGER_EMBEDDING_PROVIDER=local_stub
+CTXLEDGER_EMBEDDING_DIMENSIONS=16
+```
+
+Operational reading:
+
+- this local default keeps semantic-memory-related startup paths enabled without requiring an external embedding API key
+- if you intentionally switch to `CTXLEDGER_EMBEDDING_PROVIDER=openai`, you must also provide `OPENAI_API_KEY`
+- for ordinary local development, prefer keeping the small stack on `local_stub`
+
 ---
 
 ## 5. Start Procedure
@@ -90,23 +108,39 @@ Start the small-pattern stack with the base compose file plus the auth overlay.
 
 For a **first start** or an intentional clean rebuild of the stack, use:
 
-```/dev/null/sh#L1-1
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
+```/dev/null/sh#L1-3
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret \
+CTXLEDGER_EMBEDDING_PROVIDER=local_stub \
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build --force-recreate
 ```
+
+This is the safer default local startup shape because it keeps the stack independent from `OPENAI_API_KEY`.
 
 For a **normal restart** after the stack has already been created, you usually do **not** need `--force-recreate`:
 
-```/dev/null/sh#L1-1
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
+```/dev/null/sh#L1-3
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret \
+CTXLEDGER_EMBEDDING_PROVIDER=local_stub \
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d
 ```
 
 If you changed code or image inputs and want a normal rebuild without forcibly replacing every container, use:
 
-```/dev/null/sh#L1-1
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
+```/dev/null/sh#L1-3
+CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret \
+CTXLEDGER_EMBEDDING_PROVIDER=local_stub \
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
 ```
 
 Use `--force-recreate` only when you intentionally want to replace existing containers, such as after a major compose/config change or when you want a known-fresh container set.
+
+Prefer this escalation order:
+
+1. `up -d`
+2. `up -d --build`
+3. `up -d --build --force-recreate`
+
+This keeps ordinary local restarts smaller and makes operator intent clearer.
 
 Expected high-level outcome:
 
@@ -174,6 +208,13 @@ Expected result:
 
 - authenticated request passes through Traefik and `auth-small`
 - MCP workflow and resource smoke succeeds
+
+If startup fails before the private backend becomes healthy, inspect whether the stack was accidentally started with an external embedding provider but without its required API key.
+For local development, the preferred correction is to return to:
+
+- `CTXLEDGER_EMBEDDING_PROVIDER=local_stub`
+
+rather than immediately wiring an external API dependency into the small stack.
 
 ---
 
@@ -258,6 +299,30 @@ Likely causes:
 Check:
 
 - the startup command token value
+
+## 11.2 Private backend restart loop or unhealthy startup
+
+One current local failure mode is:
+
+- the private backend fails during schema/bootstrap startup because embedding configuration selects an external provider without its required API key
+
+Representative symptom:
+
+- the private `ctxledger` backend repeatedly restarts
+- compose reports the private backend as unhealthy
+- logs mention missing embedding API configuration such as `OPENAI_API_KEY`
+
+Preferred local fix:
+
+- restart with:
+  - `CTXLEDGER_EMBEDDING_PROVIDER=local_stub`
+
+Use an external provider only when you explicitly want that mode and have supplied its required credentials.
+
+Operational interpretation:
+
+- for the small local stack, `local_stub` is the safe default posture
+- external embedding providers are opt-in, not required for ordinary local startup
 - the client header value
 - that the header format is exactly `Authorization: Bearer <token>`
 

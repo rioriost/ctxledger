@@ -125,6 +125,9 @@ def _pgvector_literal(values: tuple[float, ...]) -> str:
 class AgeGraphStatus(StrEnum):
     AGE_UNAVAILABLE = "age_unavailable"
     GRAPH_UNAVAILABLE = "graph_unavailable"
+    GRAPH_STALE = "graph_stale"
+    GRAPH_DEGRADED = "graph_degraded"
+    GRAPH_READ_FAILED = "graph_read_failed"
     GRAPH_READY = "graph_ready"
 
 
@@ -302,9 +305,51 @@ class PostgresDatabaseHealthChecker:
     def age_graph_status(self, graph_name: str) -> AgeGraphStatus:
         if not self.age_available():
             return AgeGraphStatus.AGE_UNAVAILABLE
-        if not self.age_graph_available(graph_name):
-            return AgeGraphStatus.GRAPH_UNAVAILABLE
-        return AgeGraphStatus.GRAPH_READY
+        try:
+            if not self.age_graph_available(graph_name):
+                return AgeGraphStatus.GRAPH_UNAVAILABLE
+
+            with _connect(self._config.database_url) as conn:
+                self._apply_session_settings(conn)
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT COUNT(*)::bigint AS membership_count
+                        FROM memory_summary_memberships
+                        """
+                    )
+                    membership_row = cur.fetchone()
+                    canonical_membership_count = (
+                        int(membership_row["membership_count"])
+                        if membership_row is not None
+                        and membership_row.get("membership_count") is not None
+                        else 0
+                    )
+
+                    cur.execute(
+                        """
+                        SELECT COUNT(*)::bigint AS graph_edge_count
+                        FROM cypher(%s, $$
+                            MATCH (:memory_summary)-[r:summarizes]->(:memory_item)
+                            RETURN count(r) AS graph_edge_count
+                        $$) AS (graph_edge_count agtype)
+                        """,
+                        (graph_name,),
+                    )
+                    graph_row = cur.fetchone()
+                    graph_edge_count = (
+                        int(str(graph_row["graph_edge_count"]).strip('"'))
+                        if graph_row is not None and graph_row.get("graph_edge_count") is not None
+                        else 0
+                    )
+
+            if canonical_membership_count == graph_edge_count:
+                return AgeGraphStatus.GRAPH_READY
+            if canonical_membership_count > 0 and graph_edge_count == 0:
+                return AgeGraphStatus.GRAPH_UNAVAILABLE
+            return AgeGraphStatus.GRAPH_STALE
+        except Exception:
+            return AgeGraphStatus.GRAPH_READ_FAILED
 
     def _apply_session_settings(self, conn: Connection) -> None:
         with conn.cursor() as cur:

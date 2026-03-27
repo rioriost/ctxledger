@@ -260,6 +260,66 @@ Other flat or compatibility-oriented fields remain supported, but they should be
 - compatibility output
 - convenience output
 
+At the current stage, this same reading should also be applied to explainability fields.
+
+The current primary explainability surface is:
+
+- grouped route- and scope-aware explanation inside `memory_context_groups`
+- top-level route and selection metadata in `details`
+- top-level retrieval-route aggregation fields in `details`
+
+Those primary explainability fields are the ones consumers should prefer first when they need to understand:
+
+- which retrieval route produced visible grouped output
+- which grouped scopes are present
+- whether the current response is summary-first, episode-direct, inherited-workspace auxiliary, relation-supports auxiliary, or graph-summary auxiliary
+- whether the current shape should be read as primary-path, auxiliary-path, or mixed-path output
+
+At the current stage, representative primary explainability fields include:
+
+- `memory_context_groups`
+- `retrieval_routes_present`
+- `primary_retrieval_routes_present`
+- `auxiliary_retrieval_routes_present`
+- `retrieval_route_presence`
+- `retrieval_route_group_counts`
+- `retrieval_route_item_counts`
+- `retrieval_route_scope_counts`
+- `retrieval_route_scope_item_counts`
+- `retrieval_route_scopes_present`
+- `summary_selection_applied`
+- `summary_selection_kind`
+- `summary_first_has_episode_groups`
+- `summary_first_is_summary_only`
+- `summary_first_child_episode_count`
+- `summary_first_child_episode_ids`
+- `primary_episode_groups_present_after_query_filter`
+- `auxiliary_only_after_query_filter`
+
+By contrast, flatter fields that restate grouped or route-aware explainability in a less structured way should be read as compatibility or convenience surfaces rather than as the primary contract shape.
+
+Representative compatibility-oriented explainability fields currently include:
+
+- `related_memory_items`
+- `related_memory_items_by_episode`
+- `readiness_explainability`
+- `remember_path_explainability_by_episode`
+- `remember_path_relation_reasons`
+- `remember_path_relation_reason_primary`
+
+Representative convenience-oriented explainability fields currently include:
+
+- episode-group-local `related_memory_items`
+- summary-local `remember_path_explainability`
+- additive booleans such as:
+  - `flat_related_memory_items_is_compatibility_field`
+  - `related_memory_items_by_episode_are_compatibility_output`
+  - `relation_memory_context_groups_are_primary_output`
+  - `group_related_memory_items_are_convenience_output`
+
+These compatibility and convenience surfaces remain useful.
+However, they should not be treated as a stronger source of truth than the grouped and route-aware primary explainability fields listed above.
+
 rather than the canonical grouped hierarchy model.
 
 This is an interpretation and contract-direction clarification, not an immediate breaking change.

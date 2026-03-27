@@ -202,11 +202,11 @@ class AppSettings:
     )
     embedding: EmbeddingSettings = field(
         default_factory=lambda: EmbeddingSettings(
-            provider=EmbeddingProvider.OPENAI,
+            provider=EmbeddingProvider.LOCAL_STUB,
             model="text-embedding-3-small",
             api_key=None,
             base_url=None,
-            dimensions=None,
+            dimensions=16,
             enabled=False,
         )
     )
@@ -309,13 +309,13 @@ def load_settings() -> AppSettings:
         embedding=EmbeddingSettings(
             provider=_parse_embedding_provider(
                 "CTXLEDGER_EMBEDDING_PROVIDER",
-                EmbeddingProvider.OPENAI,
+                EmbeddingProvider.LOCAL_STUB,
             ),
             model=_get_env("CTXLEDGER_EMBEDDING_MODEL", "text-embedding-3-small")
             or "text-embedding-3-small",
             api_key=_get_env("OPENAI_API_KEY"),
             base_url=_get_env("CTXLEDGER_EMBEDDING_BASE_URL"),
-            dimensions=_parse_optional_int("CTXLEDGER_EMBEDDING_DIMENSIONS"),
+            dimensions=_parse_optional_int("CTXLEDGER_EMBEDDING_DIMENSIONS") or 16,
             enabled=_parse_bool("CTXLEDGER_EMBEDDING_ENABLED", False),
         ),
     )

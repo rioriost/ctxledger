@@ -347,6 +347,13 @@ def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values
         "task_recall_ranking_details_present": False,
         "task_recall_ranking_details": [],
         "task_recall_selected_workflow_terminal": False,
+        "memory_context_groups_are_primary_output": True,
+        "memory_context_groups_are_primary_explainability_surface": True,
+        "top_level_explainability_prefers_grouped_routes": True,
+        "readiness_explainability_is_compatibility_output": False,
+        "remember_path_explainability_by_episode_is_compatibility_output": False,
+        "remember_path_relation_reasons_is_compatibility_output": False,
+        "remember_path_relation_reason_primary_is_compatibility_output": False,
     }
     assert result["episodes"] == []
 

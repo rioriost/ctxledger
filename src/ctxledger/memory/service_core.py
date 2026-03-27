@@ -1327,12 +1327,19 @@ class MemoryService(
                     "related_context_relation_types": [],
                     "related_context_returned_without_episode_matches": False,
                     "all_episodes_filtered_out_by_query": False,
+                    "memory_context_groups_are_primary_output": True,
+                    "memory_context_groups_are_primary_explainability_surface": True,
+                    "top_level_explainability_prefers_grouped_routes": True,
                     "flat_related_memory_items_is_compatibility_field": False,
                     "flat_related_memory_items_matches_grouped_episode_related_items": False,
                     "related_memory_items_by_episode_is_primary_structured_output": False,
                     "related_memory_items_by_episode_are_compatibility_output": False,
                     "relation_memory_context_groups_are_primary_output": False,
                     "group_related_memory_items_are_convenience_output": False,
+                    "readiness_explainability_is_compatibility_output": False,
+                    "remember_path_explainability_by_episode_is_compatibility_output": False,
+                    "remember_path_relation_reasons_is_compatibility_output": False,
+                    "remember_path_relation_reason_primary_is_compatibility_output": False,
                     "retrieval_routes_present": (
                         ["workspace_inherited_auxiliary"]
                         if inherited_workspace_items and resolved_workspace_id is not None
@@ -1741,6 +1748,9 @@ class MemoryService(
                 ),
                 "related_context_returned_without_episode_matches": False,
                 "all_episodes_filtered_out_by_query": (all_episodes_filtered_out_by_query),
+                "memory_context_groups_are_primary_output": True,
+                "memory_context_groups_are_primary_explainability_surface": True,
+                "top_level_explainability_prefers_grouped_routes": True,
                 "flat_related_memory_items_is_compatibility_field": bool(
                     related_memory_items or graph_summary_related_memory_items
                 ),
@@ -1757,6 +1767,10 @@ class MemoryService(
                 "group_related_memory_items_are_convenience_output": bool(
                     related_memory_items or graph_summary_related_memory_items
                 ),
+                "readiness_explainability_is_compatibility_output": True,
+                "remember_path_explainability_by_episode_is_compatibility_output": True,
+                "remember_path_relation_reasons_is_compatibility_output": True,
+                "remember_path_relation_reason_primary_is_compatibility_output": True,
                 "readiness_explainability": {
                     "graph_summary_auxiliary": next(
                         (
@@ -1766,41 +1780,13 @@ class MemoryService(
                         ),
                         {},
                     ),
-                    "summary_graph_mirroring": (
-                        {
-                            "selection_route": "graph_summary_auxiliary",
-                            "relation_type": "summarizes",
-                            "source_episode_count": len(
-                                {
-                                    detail["episode_id"]
-                                    for detail in memory_item_details
-                                    if isinstance(detail.get("episode_id"), str)
-                                }
-                            ),
-                            "source_memory_count": len(
-                                {
-                                    str(memory_item.memory_id)
-                                    for detail in memory_item_details
-                                    for memory_item in detail.get("memory_items", [])
-                                    if getattr(memory_item, "memory_id", None) is not None
-                                }
-                            ),
-                            "derived_memory_count": len(graph_summary_related_memory_items),
-                            "derived_graph_labels": [
-                                "memory_summary",
-                                "memory_item",
-                                "summarizes",
-                            ],
-                            "canonical_source": [
-                                "memory_summaries",
-                                "memory_summary_memberships",
-                            ],
-                            "refresh_command": "ctxledger refresh-age-summary-graph",
-                            "read_path_scope": "narrow_auxiliary_summary_member_traversal",
-                            "ready": bool(graph_summary_related_memory_items),
-                        }
-                        if graph_summary_related_memory_items
-                        else {}
+                    "summary_graph_mirroring": next(
+                        (
+                            group.get("readiness_explainability", {})
+                            for group in memory_context_groups
+                            if group.get("selection_route") == "graph_summary_auxiliary"
+                        ),
+                        {},
                     ),
                 },
                 "memory_context_groups": memory_context_groups,

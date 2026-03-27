@@ -2,8 +2,8 @@
 
 ## Purpose
 
-This runbook explains how to use the current explicit summary build path for
-`ctxledger` hierarchical memory work in `0.6.0`.
+This runbook explains the current operator flow for canonical summary building
+and derived AGE summary graph refresh in `ctxledger`.
 
 It is intended for operators and developers who need to:
 
@@ -11,47 +11,67 @@ It is intended for operators and developers who need to:
 - rebuild an existing summary after the source memory items changed
 - verify what the summary builder wrote
 - verify what retrieval now returns after a rebuild
-- understand what current success, skip, replacement, and graph-refresh
-  behavior means
+- refresh derived AGE summary graph state after canonical summary changes
+- interpret graph-ready, graph-stale, degraded, and unknown readiness states
+- understand how explicit build, gated auto build, and graph refresh relate
 
-This runbook covers the current explicit command:
+This runbook covers:
 
 - `ctxledger build-episode-summary`
-
-It also explains how that explicit build path relates to:
-
-- `memory_get_context`
+- workflow-completion-gated summary build behavior
 - `ctxledger refresh-age-summary-graph`
 - `ctxledger age-graph-readiness`
 
-It does **not** describe broad automatic workflow-driven summary generation.
-The current `0.6.0` path remains explicit and operator-invoked, while the
-current workflow-oriented automation follow-up remains narrow, gated, and
-non-fatal.
+It also explains how those paths relate to:
+
+- `memory_get_context`
+- canonical relational summary state
+- derived graph-backed auxiliary summary-member traversal
+
+The current operator posture is:
+
+- canonical summary build remains relationally authoritative
+- graph refresh remains derived and rebuildable
+- explicit build is the primary operator path
+- workflow-completion summary build remains narrow, gated, and non-fatal
 
 ---
 
 ## Current behavior at a glance
 
-The current explicit summary build path is:
+The current operator flow is:
 
 - canonical-relational first
-- episode-scoped
-- deterministic
+- episode-scoped on the explicit build path
+- deterministic on the explicit build path
 - replace-or-rebuild by default
 - independent from ordinary retrieval execution
-- independent from broad graph requirements
-- compatible with later derived graph refresh, but not dependent on graph state
-  for correctness
+- compatible with derived AGE summary graph refresh
+- explicit about canonical vs derived ownership
 
-In practical terms, the command currently:
+There are now three closely related but distinct operator-visible paths:
 
-1. reads one canonical episode
-2. reads that episode's canonical memory items
-3. builds one summary text
-4. writes one canonical `memory_summaries` row
-5. writes canonical `memory_summary_memberships` rows
-6. replaces existing summaries of the same `summary_kind` by default
+1. explicit canonical build
+   - `ctxledger build-episode-summary`
+2. workflow-completion-gated canonical auto build
+   - only when the latest checkpoint requests summary build
+3. derived graph refresh
+   - `ctxledger refresh-age-summary-graph`
+
+In practical terms, explicit or gated canonical build currently:
+
+1. reads canonical episode and memory state
+2. builds one canonical summary text
+3. writes one canonical `memory_summaries` row
+4. writes canonical `memory_summary_memberships` rows
+5. replaces existing summaries of the same `summary_kind` by default
+
+Derived graph refresh currently:
+
+1. reads canonical summary and membership state
+2. mirrors that state into the constrained AGE summary-member graph
+3. updates derived graph-backed auxiliary traversal readiness
+4. does not redefine canonical truth
 
 The current default summary kind is:
 
@@ -59,7 +79,7 @@ The current default summary kind is:
 
 ### Canonical vs derived reading
 
-For the current `0.6.0` slice, read the write path as:
+For the current slice, read the operator flow as:
 
 - canonical relational summary state is the source of truth
 - derived AGE summary graph state is supplementary and rebuildable
@@ -162,9 +182,15 @@ ctxledger build-episode-summary --episode-id <episode-uuid> --format json
 
 ## Recommended operator workflow
 
-## Step 1 — Identify the target episode
+## Step 1 — Identify the target episode and intent
 
-You need the canonical `episode_id`.
+You need to know which of these operator intents you are following:
+
+- explicit canonical build for one episode
+- verification of a gated workflow-completion auto build
+- derived graph refresh after canonical summary changes
+
+For the explicit path, you need the canonical `episode_id`.
 
 Typical sources include:
 
@@ -175,19 +201,36 @@ Typical sources include:
 If you do not know the episode id yet, find it first through your normal
 workflow/memory inspection path.
 
-## Step 2 — Run the builder
+## Step 2 — Build or verify canonical summary state
 
-Recommended first invocation:
+For the explicit operator path, run:
 
 ```/dev/null/sh#L1-1
 ctxledger build-episode-summary --episode-id <episode-uuid> --format json
 ```
 
-JSON output is easier to inspect and easier to compare across repeated rebuilds.
+For the workflow-completion-gated path, the operator action is different:
 
-## Step 3 — Inspect the result
+- verify that the latest checkpoint requested summary build
+- verify the workflow completion result fields
+- verify the resulting canonical summary rows and memberships if a build was attempted
 
-Focus on these output fields:
+The current gated auto-build path should be read as:
+
+- narrow
+- checkpoint-gated
+- non-fatal
+- canonical-relational first
+
+Recommended operator reading:
+
+- explicit build remains the normal direct operator tool
+- gated auto build remains a workflow-completion convenience path
+- graph refresh still remains a separate derived-state action
+
+## Step 3 — Inspect canonical build outcome
+
+For an explicit build result, focus on these output fields:
 
 - `summary_built`
 - `status`
@@ -197,15 +240,26 @@ Focus on these output fields:
 - `memberships`
 - `details.member_memory_count`
 
+For a workflow-completion-gated build result, focus on summary-build-related
+completion details such as:
+
+- whether summary build was requested
+- whether summary build was attempted
+- whether summary build succeeded
+- whether a prior summary was replaced
+- which canonical summary id was built
+- how many memberships were written
+
 ## Step 4 — Inspect the written canonical summary state
 
-After a successful build, inspect the returned payload and confirm:
+After a successful explicit or gated build, inspect the resulting canonical
+summary state and confirm:
 
 - `summary.memory_summary_id` is present
 - `summary.episode_id` matches the target episode
-- `summary.summary_kind` matches the requested kind
+- `summary.summary_kind` matches the requested or expected kind
 - `memberships` is not empty when a real summary was built
-- `details.member_memory_count` matches the intended child memory set
+- the member count matches the intended child memory set
 
 For repeat runs, also confirm:
 
@@ -214,10 +268,10 @@ For repeat runs, also confirm:
 - `replaced_existing_summary = false` when the run created a first summary or
   when non-replacement behavior was requested
 
-## Step 5 — Verify retrieval sees the canonical summary
+## Step 5 — Verify retrieval sees canonical summary state first
 
-After a successful build, the current expectation is that the canonical summary
-may be preferred by `memory_get_context` when summaries are enabled.
+After a successful build, the current expectation is that canonical summary
+state may be preferred by `memory_get_context` when summaries are enabled.
 
 Use your normal retrieval path and confirm that the response reflects:
 
@@ -230,9 +284,14 @@ Also confirm, where relevant:
 
 - the returned `summaries` payload references the expected canonical
   `memory_summary_id`
-- the grouped summary output remains present in `memory_context_groups`
+- grouped summary output remains present in `memory_context_groups`
 - rebuilt summary content is now visible instead of older matching summary state
 - direct summary-member memory-item expansion reflects the expected member set
+
+The important operator rule is:
+
+- verify canonical summary visibility before treating graph-backed auxiliary
+  behavior as the main concern
 
 ## Step 6 — Refresh derived AGE summary graph state when needed
 
@@ -250,14 +309,66 @@ Use this when:
 - you recently rebuilt canonical summaries and want derived graph state to catch
   up
 - you are debugging summary-related readiness or observability behavior
+- a gated workflow-completion build succeeded and you now want derived graph
+  state to mirror that canonical change
 
 Do **not** read this as a requirement for canonical summary correctness.
 The canonical relational summary build is already valid even before derived graph
 state is refreshed.
 
-## Step 7 — Check graph-readiness and degraded-state interpretation when relevant
+## Step 7 — Check AGE summary graph readiness and operational interpretation
 
-If you are validating graph-backed auxiliary behavior or derived summary
+After refresh, or when debugging graph-backed auxiliary behavior, inspect
+readiness:
+
+```/dev/null/sh#L1-1
+ctxledger age-graph-readiness
+```
+
+At the current stage, the readiness payload should be read using:
+
+- `graph_status`
+- `readiness_state`
+- `ready`
+- `stale`
+- `degraded`
+- `operator_action`
+
+Recommended operator interpretation:
+
+- `readiness_state = "ready"`
+  - graph-backed auxiliary summary-member traversal is available as expected
+  - no graph corrective action is currently required
+
+- `readiness_state = "stale"`
+  - canonical summary state exists, but derived graph state is behind canonical
+    membership state
+  - preferred corrective action is:
+    - `ctxledger refresh-age-summary-graph`
+
+- `readiness_state = "degraded"`
+  - graph-backed auxiliary behavior should be treated as degraded
+  - ordinary canonical summary correctness should still be interpreted from
+    relational state first
+  - use `operator_action` to decide whether to:
+    - verify AGE availability
+    - bootstrap the graph
+    - refresh the graph
+    - inspect graph-read failure behavior
+
+- `readiness_state = "unknown"`
+  - do not assume graph-backed auxiliary support is ready
+  - continue to read relational summary state as canonical
+  - inspect readiness conditions before treating graph-backed behavior as absent
+    by design
+
+This runbook flow is intentionally ordered:
+
+1. build or verify canonical summary state
+2. verify canonical retrieval behavior
+3. refresh derived graph state if needed
+4. interpret readiness outcome
+5. only then diagnose graph-backed auxiliary behavior
 observability, check current graph readiness:
 
 ```/dev/null/sh#L1-1

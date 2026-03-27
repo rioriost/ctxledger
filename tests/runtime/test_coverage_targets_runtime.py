@@ -850,6 +850,10 @@ def test_runtime_introspection_response_uses_runtime_collection() -> None:
                 "explainability_scope": "readiness",
                 "refresh_command": "ctxledger refresh-age-summary-graph",
                 "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+                "readiness_state": "unknown",
+                "stale": False,
+                "degraded": False,
+                "operator_action": "inspect_age_graph_readiness",
                 "graph_status": "unknown",
                 "ready": False,
             },
@@ -1034,10 +1038,11 @@ def test_cli_age_graph_readiness_prints_status_json(
         '"memory_summary_memberships"], "derived_graph_labels": ["memory_summary", "memory_item", '
         '"summarizes"], "relation_type": "summarizes", "selection_route": "graph_summary_auxiliary", '
         '"explainability_scope": "readiness", "refresh_command": "ctxledger refresh-age-summary-graph", '
-        '"read_path_scope": "narrow_auxiliary_summary_member_traversal", "age_available": true, '
-        '"graph_status": "graph_ready", "ready": true}, "workflow_summary_automation": '
-        '{"orchestration_point": "workflow_completion_auto_memory", "default_requested": false, '
-        '"request_field": "latest_checkpoint.checkpoint_json.build_episode_summary", '
+        '"read_path_scope": "narrow_auxiliary_summary_member_traversal", "readiness_state": "ready", '
+        '"stale": false, "degraded": false, "operator_action": "no_action_required", '
+        '"age_available": true, "graph_status": "graph_ready", "ready": true}, '
+        '"workflow_summary_automation": {"orchestration_point": "workflow_completion_auto_memory", '
+        '"default_requested": false, "request_field": "latest_checkpoint.checkpoint_json.build_episode_summary", '
         '"trigger": "latest_checkpoint.build_episode_summary_true", "target_scope": '
         '"workflow_completion_auto_memory_episode", "summary_kind": "episode_summary", '
         '"replace_existing": true, "non_fatal": true}}'
@@ -1120,6 +1125,10 @@ def test_age_prototype_runtime_details_records_age_available_error() -> None:
             "explainability_scope": "readiness",
             "refresh_command": "ctxledger refresh-age-summary-graph",
             "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+            "readiness_state": "unknown",
+            "stale": False,
+            "degraded": False,
+            "operator_action": "inspect_age_graph_readiness",
             "age_available_error": "age unavailable check failed",
             "graph_status": "unknown",
             "ready": False,
@@ -1180,6 +1189,10 @@ def test_age_prototype_runtime_details_records_age_graph_status_error() -> None:
             "explainability_scope": "readiness",
             "refresh_command": "ctxledger refresh-age-summary-graph",
             "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+            "readiness_state": "unknown",
+            "stale": False,
+            "degraded": False,
+            "operator_action": "inspect_age_graph_readiness",
             "age_available": True,
             "graph_status_error": "graph status failed",
             "graph_status": "unknown",
@@ -1242,6 +1255,10 @@ def test_age_prototype_runtime_details_records_age_graph_available_error() -> No
             "explainability_scope": "readiness",
             "refresh_command": "ctxledger refresh-age-summary-graph",
             "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+            "readiness_state": "unknown",
+            "stale": False,
+            "degraded": False,
+            "operator_action": "inspect_age_graph_readiness",
             "age_available": True,
             "graph_available_error": "graph availability failed",
             "graph_status": "unknown",

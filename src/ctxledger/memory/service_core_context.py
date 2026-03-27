@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+from ..runtime.age_explainability import build_age_summary_graph_mirroring_details
 from .helpers import metadata_query_strings, text_matches_query
 from .types import (
     EpisodeRecord,
@@ -1000,6 +1001,11 @@ class ContextShapingMixin:
                         for memory_item in graph_summary_related_memory_items
                     ],
                     "readiness_explainability": {
+                        **build_age_summary_graph_mirroring_details(
+                            age_enabled=True,
+                            graph_status="graph_ready",
+                            ready=True,
+                        ),
                         "selection_route": "graph_summary_auxiliary",
                         "relation_type": "summarizes",
                         "source_episode_count": len(
@@ -1018,17 +1024,6 @@ class ContextShapingMixin:
                             }
                         ),
                         "derived_memory_count": len(graph_summary_related_memory_items),
-                        "derived_graph_labels": [
-                            "memory_summary",
-                            "memory_item",
-                            "summarizes",
-                        ],
-                        "canonical_source": [
-                            "memory_summaries",
-                            "memory_summary_memberships",
-                        ],
-                        "refresh_command": "ctxledger refresh-age-summary-graph",
-                        "read_path_scope": "narrow_auxiliary_summary_member_traversal",
                     },
                 }
             )
