@@ -26,13 +26,18 @@ PREFER explicit_operational_trail_over_ambiguous_minimalism
 SECTION workflow
 RULE track_workspace
 DO workspace_register_before_work_if_untracked
+DO begin_or_resume_ctxledger_workflow_for_every_session
+DO treat_user_request_handling_as_work_requiring_canonical_tracking
 
 RULE resume_safely
 PREFER resume_existing_workflow_before_starting_new
+DO attempt_canonical_session_recovery_at_session_start_when_workspace_known
 NEVER pass workspace_id_to workflow_resume
 NEVER guess workflow_instance_id
 IF only_workspace_id_known
 THEN recover_workflow_from_canonical_context_else_start_new
+IF canonical_session_recovery_fails_and_work_will_proceed
+THEN start_new_canonical_workflow_instead_of_working_untracked
 
 RULE workflow_ids
 READ literally:
@@ -44,6 +49,8 @@ READ literally:
 
 RULE checkpoint_discipline
 DO workflow_checkpoint_for_meaningful_progress
+DO checkpoint_session_intake_when_user_request_sets_or_changes_objective
+DO checkpoint_before_final_response_when_meaningful_work_occurred_without_later_checkpoint
 AFTER:
 - planning_or_narrowing
 - root_cause_or_key_decision
@@ -51,6 +58,8 @@ AFTER:
 - test_add_or_update
 - validation_or_debug_completion
 - blocker_or_handoff
+- user_request_interpretation_or_scope_lock
+- documentation_slice_completion
 
 RULE checkpoint_content
 INCLUDE in_checkpoint_when_possible:
@@ -81,6 +90,7 @@ DO:
 - workflow_complete
 - commit_descriptive_git_changes_if_any
 - leave_resumption_context_for_next_session
+- ensure_user_visible_outcome_is_reflected_in_canonical_workflow_state
 
 SECTION memory
 RULE use_memory_tools_when_material
@@ -233,6 +243,12 @@ PREFER short_topic_focused_doc_sections
 SECTION agent_behavior
 RULE prefer_explicit_state_transitions
 PREFER explicit_state_transitions_over_implicit_assumptions
+
+RULE session_tracking_visibility
+NEVER treat_rules_file_detection_as_equivalent_to_canonical_tracking
+DO ensure_every_session_has_explicit_ctxledger_state_transition_when_work_is_performed
+DO reflect_session_start_progress_and_session_end_progress_in_canonical_workflow_records
+DO treat_investigation_documentation_planning_and_explanation_work_as_trackable_work_not_exceptions
 
 RULE prefer_structure_over_prose
 WHEN structured_tool_fields_and_prose_both_exist
