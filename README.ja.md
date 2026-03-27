@@ -198,20 +198,6 @@ http://localhost:3000
 
 ## オプション
 
-### `.env` の代わりに `envrcctl` を使う
-
-`envrcctl` を使う場合、まず local ctxledger 用 secret を helper script で登録します。
-
-```/dev/null/sh#L1-1
-sh scripts/bootstrap_envrcctl_secrets.sh
-```
-
-そのあとで、自分の実際の `OPENAI_API_KEY` を登録し、次で起動します。
-
-```/dev/null/sh#L1-1
-envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
-```
-
 ### スタックの状態を確認する
 
 ```/dev/null/sh#L1-1

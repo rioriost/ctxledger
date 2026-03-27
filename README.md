@@ -187,20 +187,6 @@ Useful CLI commands:
 
 ## Options
 
-### Use secret injection instead of `.env`
-
-If you use `envrcctl`, first store the local ctxledger secrets with the helper script:
-
-```/dev/null/sh#L1-1
-sh scripts/bootstrap_envrcctl_secrets.sh
-```
-
-Then store your real `OPENAI_API_KEY` in `envrcctl`, and start the stack with:
-
-```/dev/null/sh#L1-1
-envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
-```
-
 ### Check stack health
 
 ```/dev/null/sh#L1-1
