@@ -1,5 +1,7 @@
 # ctxledger
 
+![Grafana overview](images/grafana.png)
+
 Durable workflow runtime and memory system for AI agents.
 
 `ctxledger` is a remote MCP server for teams that want agent work to be:

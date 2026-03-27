@@ -1,5 +1,7 @@
 # ctxledger 日本語README
 
+![Grafana overview](images/grafana.png)
+
 `ctxledger` は、AIエージェント向けの durable workflow runtime / memory system です。
 
 `ctxledger` は、次のような agent work を求めるチーム向けの remote MCP server です。
