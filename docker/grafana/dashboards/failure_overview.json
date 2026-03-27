@@ -1,0 +1,894 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT failures_created_last_24h AS \"Failures (24h)\" FROM observability.failure_recent_summary;",
+          "refId": "A"
+        }
+      ],
+      "title": "Failures (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT failures_created_last_7d AS \"Failures (7d)\" FROM observability.failure_recent_summary;",
+          "refId": "A"
+        }
+      ],
+      "title": "Failures (7d)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT repeated_failure_groups_last_7d AS \"Repeated Failure Groups (7d)\" FROM observability.failure_recent_summary;",
+          "refId": "A"
+        }
+      ],
+      "title": "Repeated Failure Groups (7d)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          },
+          "unit": "dateTimeAsIso"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT latest_failure_created_at AS \"Latest Failure\" FROM observability.failure_recent_summary;",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Failure",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 18,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failures"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failures"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, \"Failures\"\nFROM (\n  SELECT date_trunc('hour', occurred_at) AS time, COUNT(*)::bigint AS \"Failures\"\n  FROM failures\n  WHERE occurred_at IS NOT NULL\n  GROUP BY 1\n  UNION ALL\n  SELECT now() AS time, 0::bigint AS \"Failures\"\n  WHERE NOT EXISTS (\n    SELECT 1\n    FROM failures\n    WHERE occurred_at IS NOT NULL\n  )\n) AS failure_timeline\nORDER BY 1;",
+          "refId": "A"
+        }
+      ],
+      "title": "Failure Activity Timeline",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 6,
+      "options": {
+        "displayLabels": ["name", "value", "percent"],
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT \"Status\", \"Failures\"\nFROM (\n  SELECT initcap(status) AS \"Status\", COUNT(*)::bigint AS \"Failures\"\n  FROM failures\n  GROUP BY status\n  UNION ALL\n  SELECT 'No failures'::text AS \"Status\", 0::bigint AS \"Failures\"\n  WHERE NOT EXISTS (\n    SELECT 1\n    FROM failures\n  )\n) AS failure_status_distribution\nORDER BY \"Status\" ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Failure Status Distribution",
+      "type": "piechart",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Failures": 1,
+              "status": 0
+            },
+            "renameByName": {
+              "Failures": "Failures",
+              "status": "Status"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "id": 7,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  failures_created_last_24h,\n  failures_created_last_7d,\n  repeated_failure_groups_last_7d,\n  CASE\n    WHEN failures_created_last_24h = 0 AND failures_created_last_7d = 0 THEN 'no recent failure activity'\n    WHEN repeated_failure_groups_last_7d >= 3 THEN 'failure pressure needs review'\n    WHEN failures_created_last_24h > 0 THEN 'recent failure activity present'\n    ELSE 'historical failure activity present'\n  END AS failure_reading\nFROM observability.failure_recent_summary;",
+          "refId": "A"
+        }
+      ],
+      "title": "Failure Pressure Reading",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failure_scope"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Scope"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failure_type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failure type"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failure_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Count (7d)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_occurred_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest occurrence"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "id": 8,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "failure_count"
+          }
+        ]
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  failure_scope,\n  failure_type,\n  failure_count,\n  latest_occurred_at\nFROM (\n  SELECT\n    failure_scope,\n    failure_type,\n    COUNT(*)::bigint AS failure_count,\n    MAX(occurred_at) AS latest_occurred_at\n  FROM failures\n  WHERE occurred_at >= now() - interval '7 days'\n  GROUP BY failure_scope, failure_type\n  UNION ALL\n  SELECT\n    'none'::text AS failure_scope,\n    'no recent repeated failures'::text AS failure_type,\n    0::bigint AS failure_count,\n    NULL::timestamptz AS latest_occurred_at\n  WHERE NOT EXISTS (\n    SELECT 1\n    FROM failures\n    WHERE occurred_at >= now() - interval '7 days'\n  )\n) AS repeated_failure_signals\nORDER BY failure_count DESC, latest_occurred_at DESC NULLS LAST\nLIMIT 20;",
+          "refId": "A"
+        }
+      ],
+      "title": "Repeated Failure Signals (7d)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failure_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failure ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failure_scope"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Scope"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failure_type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failure type"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "summary"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Summary"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Status"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "workflow_instance_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Workflow ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempt_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Attempt ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "occurred_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Occurred"
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 9,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "occurred_at"
+          }
+        ]
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  failure_id,\n  failure_scope,\n  failure_type,\n  summary,\n  status,\n  workflow_instance_id,\n  attempt_id,\n  occurred_at\nFROM (\n  SELECT\n    failure_id::text AS failure_id,\n    failure_scope,\n    failure_type,\n    summary,\n    status,\n    COALESCE(workflow_instance_id::text, '') AS workflow_instance_id,\n    COALESCE(attempt_id::text, '') AS attempt_id,\n    occurred_at\n  FROM failures\n  UNION ALL\n  SELECT\n    ''::text AS failure_id,\n    'none'::text AS failure_scope,\n    'no recent failures'::text AS failure_type,\n    'No failure rows recorded yet'::text AS summary,\n    'clear'::text AS status,\n    ''::text AS workflow_instance_id,\n    ''::text AS attempt_id,\n    NULL::timestamptz AS occurred_at\n  WHERE NOT EXISTS (\n    SELECT 1\n    FROM failures\n  )\n) AS recent_failure_triage\nORDER BY occurred_at DESC NULLS LAST\nLIMIT 25;",
+          "refId": "A"
+        }
+      ],
+      "title": "Recent Failure Triage",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 10,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  latest_failure_created_at,\n  failures_created_last_24h,\n  failures_created_last_7d,\n  repeated_failure_groups_last_7d\nFROM observability.failure_recent_summary;",
+          "refId": "A"
+        }
+      ],
+      "title": "Failure Summary Snapshot",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 11,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  vrs.verify_reports_created_last_24h,\n  frs.failures_created_last_24h,\n  CASE\n    WHEN vrs.verify_reports_created_last_24h = 0 AND frs.failures_created_last_24h = 0 THEN 'no recent verify or failure activity'\n    WHEN frs.failures_created_last_24h > 0 AND vrs.verify_reports_created_last_24h = 0 THEN 'failure activity without recent verify reports'\n    WHEN frs.failures_created_last_24h > 0 THEN 'recent failures present alongside verify activity'\n    ELSE 'verify activity present without recent failure spike'\n  END AS verify_failure_reading\nFROM observability.failure_recent_summary AS frs\nCROSS JOIN observability.runtime_recent_activity_summary AS vrs;",
+          "refId": "A"
+        }
+      ],
+      "title": "Verify / Failure Correlation Reading",
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["ctxledger", "observability", "failure"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "ctxledger Failure Overview",
+  "uid": "ctxledger-failure-overview",
+  "version": 1,
+  "weekStart": ""
+}

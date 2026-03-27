@@ -88,7 +88,9 @@ SELECT
   (SELECT MAX(created_at) FROM workflow_checkpoints) AS latest_checkpoint_created_at,
   (SELECT MAX(created_at) FROM verify_reports) AS latest_verify_report_created_at;
 
-CREATE OR REPLACE VIEW observability.memory_overview AS
+DROP VIEW IF EXISTS observability.memory_overview;
+
+CREATE VIEW observability.memory_overview AS
 SELECT
   (SELECT COUNT(*)::bigint FROM episodes) AS episode_count,
   (SELECT COUNT(*)::bigint FROM memory_items) AS memory_item_count,
@@ -97,7 +99,36 @@ SELECT
   (SELECT MAX(created_at) FROM episodes) AS latest_episode_created_at,
   (SELECT MAX(created_at) FROM memory_items) AS latest_memory_item_created_at,
   (SELECT MAX(created_at) FROM memory_embeddings) AS latest_memory_embedding_created_at,
-  (SELECT MAX(created_at) FROM memory_relations) AS latest_memory_relation_created_at;
+  (SELECT MAX(created_at) FROM memory_relations) AS latest_memory_relation_created_at,
+  (SELECT COUNT(*)::bigint FROM memory_summaries) AS memory_summary_count,
+  (SELECT COUNT(*)::bigint FROM memory_summary_memberships) AS memory_summary_membership_count,
+  (
+    SELECT COUNT(*)::bigint
+    FROM memory_items
+    WHERE provenance = 'interaction'
+  ) AS interaction_memory_item_count,
+  (
+    SELECT COUNT(*)::bigint
+    FROM memory_items
+    WHERE COALESCE(metadata_json ->> 'file_path', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_paths', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_work_count', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_work_paths', '') <> ''
+  ) AS file_work_memory_item_count,
+  (SELECT MAX(created_at) FROM memory_summaries) AS latest_memory_summary_created_at,
+  (
+    SELECT MAX(created_at)
+    FROM memory_items
+    WHERE provenance = 'interaction'
+  ) AS latest_interaction_memory_item_created_at,
+  (
+    SELECT MAX(created_at)
+    FROM memory_items
+    WHERE COALESCE(metadata_json ->> 'file_path', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_paths', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_work_count', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_work_paths', '') <> ''
+  ) AS latest_file_work_memory_item_created_at;
 
 CREATE OR REPLACE VIEW observability.memory_item_provenance_counts AS
 SELECT
@@ -105,6 +136,88 @@ SELECT
   COUNT(*)::bigint AS memory_item_count
 FROM memory_items
 GROUP BY provenance;
+
+CREATE OR REPLACE VIEW observability.runtime_recent_activity_summary AS
+SELECT
+  (
+    SELECT COUNT(*)::bigint
+    FROM workflow_instances
+    WHERE updated_at >= now() - interval '24 hours'
+  ) AS workflows_updated_last_24h,
+  (
+    SELECT COUNT(*)::bigint
+    FROM workflow_instances
+    WHERE status = 'running'
+  ) AS running_workflow_count,
+  (
+    SELECT COUNT(*)::bigint
+    FROM workflow_instances
+    WHERE status NOT IN ('completed', 'failed', 'cancelled')
+  ) AS non_terminal_workflow_count,
+  (
+    SELECT COUNT(*)::bigint
+    FROM workflow_checkpoints
+    WHERE created_at >= now() - interval '24 hours'
+  ) AS checkpoints_created_last_24h,
+  (
+    SELECT COUNT(*)::bigint
+    FROM verify_reports
+    WHERE created_at >= now() - interval '24 hours'
+  ) AS verify_reports_created_last_24h,
+  (
+    SELECT COUNT(*)::bigint
+    FROM episodes
+    WHERE created_at >= now() - interval '24 hours'
+  ) AS episodes_created_last_24h,
+  (
+    SELECT COUNT(*)::bigint
+    FROM memory_items
+    WHERE created_at >= now() - interval '24 hours'
+  ) AS memory_items_created_last_24h,
+  (
+    SELECT COUNT(*)::bigint
+    FROM memory_items
+    WHERE provenance = 'interaction'
+      AND created_at >= now() - interval '24 hours'
+  ) AS interaction_memory_items_created_last_24h,
+  (
+    SELECT COUNT(*)::bigint
+    FROM memory_items
+    WHERE (
+      COALESCE(metadata_json ->> 'file_path', '') <> ''
+      OR COALESCE(metadata_json ->> 'file_paths', '') <> ''
+      OR COALESCE(metadata_json ->> 'file_work_count', '') <> ''
+      OR COALESCE(metadata_json ->> 'file_work_paths', '') <> ''
+    )
+      AND created_at >= now() - interval '24 hours'
+  ) AS file_work_memory_items_created_last_24h;
+
+CREATE OR REPLACE VIEW observability.failure_recent_summary AS
+SELECT
+  (
+    SELECT COUNT(*)::bigint
+    FROM failures
+    WHERE occurred_at >= now() - interval '24 hours'
+  ) AS failures_created_last_24h,
+  (
+    SELECT COUNT(*)::bigint
+    FROM failures
+    WHERE occurred_at >= now() - interval '7 days'
+  ) AS failures_created_last_7d,
+  (
+    SELECT COUNT(*)::bigint
+    FROM (
+      SELECT failure_type
+      FROM failures
+      WHERE occurred_at >= now() - interval '7 days'
+      GROUP BY failure_type
+      HAVING COUNT(*) >= 2
+    ) AS repeated_failure_groups
+  ) AS repeated_failure_groups_last_7d,
+  (
+    SELECT MAX(occurred_at)
+    FROM failures
+  ) AS latest_failure_created_at;
 
 CREATE OR REPLACE VIEW observability.runtime_activity_timeline AS
 SELECT

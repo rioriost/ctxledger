@@ -197,6 +197,128 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
+          "rawSql": "SELECT interaction_memory_item_count AS \"Interaction Memory Items\" FROM observability.memory_overview;",
+          "refId": "A"
+        }
+      ],
+      "title": "Interaction Memory Items",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT file_work_memory_item_count AS \"File-Work Memory Items\" FROM observability.memory_overview;",
+          "refId": "A"
+        }
+      ],
+      "title": "File-Work Memory Items",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 5
+      },
+      "id": 15,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
           "rawSql": "SELECT memory_embedding_count AS \"Memory Embeddings\" FROM observability.memory_overview;",
           "refId": "A"
         }
@@ -330,7 +452,7 @@
         "h": 9,
         "w": 10,
         "x": 0,
-        "y": 5
+        "y": 10
       },
       "id": 5,
       "options": {
@@ -468,7 +590,7 @@
         "h": 9,
         "w": 14,
         "x": 10,
-        "y": 5
+        "y": 10
       },
       "id": 6,
       "options": {
@@ -507,6 +629,126 @@
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 18,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "interaction_memory_items"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Interaction memory items"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "file_work_memory_items"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "File-work memory items"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "memory_items"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Memory items"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH capture_trends AS (\n  SELECT date_trunc('hour', created_at) AS time, 'interaction_memory_items'::text AS metric, COUNT(*)::bigint AS value\n  FROM memory_items\n  WHERE provenance = 'interaction'\n  GROUP BY 1\n  UNION ALL\n  SELECT date_trunc('hour', created_at) AS time, 'file_work_memory_items'::text AS metric, COUNT(*)::bigint AS value\n  FROM memory_items\n  WHERE COALESCE(metadata_json ->> 'file_path', '') <> ''\n     OR COALESCE(metadata_json ->> 'file_paths', '') <> ''\n     OR COALESCE(metadata_json ->> 'file_work_count', '') <> ''\n     OR COALESCE(metadata_json ->> 'file_work_paths', '') <> ''\n  GROUP BY 1\n  UNION ALL\n  SELECT date_trunc('hour', created_at) AS time, 'memory_items'::text AS metric, COUNT(*)::bigint AS value\n  FROM memory_items\n  GROUP BY 1\n)\nSELECT time, metric, value\nFROM capture_trends\nUNION ALL\nSELECT now() AS time, 'interaction_memory_items'::text AS metric, 0::bigint AS value\nWHERE NOT EXISTS (\n  SELECT 1 FROM capture_trends WHERE metric = 'interaction_memory_items'\n)\nUNION ALL\nSELECT now() AS time, 'file_work_memory_items'::text AS metric, 0::bigint AS value\nWHERE NOT EXISTS (\n  SELECT 1 FROM capture_trends WHERE metric = 'file_work_memory_items'\n)\nUNION ALL\nSELECT now() AS time, 'memory_items'::text AS metric, 0::bigint AS value\nWHERE NOT EXISTS (\n  SELECT 1 FROM capture_trends WHERE metric = 'memory_items'\n)\nORDER BY 1, 2;",
+          "refId": "A"
+        }
+      ],
+      "title": "0.9.0 Capture Trends",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -522,24 +764,48 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "provenance"
+              "options": "latest_episode_created_at"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Provenance"
+                "value": "Latest episode"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "memory_item_count"
+              "options": "latest_memory_item_created_at"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Memory items"
+                "value": "Latest memory item"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_interaction_memory_item_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest interaction memory item"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_file_work_memory_item_created_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latest file-work memory item"
               }
             ]
           }
@@ -549,7 +815,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 28
       },
       "id": 7,
       "options": {
@@ -571,11 +837,11 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  COALESCE(to_char(latest_episode_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_episode_created_at,\n  COALESCE(to_char(latest_memory_item_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_memory_item_created_at,\n  COALESCE(to_char(latest_memory_embedding_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_memory_embedding_created_at,\n  COALESCE(to_char(latest_memory_relation_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_memory_relation_created_at\nFROM observability.memory_overview;",
+          "rawSql": "SELECT\n  COALESCE(to_char(latest_episode_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_episode_created_at,\n  COALESCE(to_char(latest_memory_item_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_memory_item_created_at,\n  COALESCE(to_char(latest_interaction_memory_item_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_interaction_memory_item_created_at,\n  COALESCE(to_char(latest_file_work_memory_item_created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS latest_file_work_memory_item_created_at\nFROM observability.memory_overview;",
           "refId": "A"
         }
       ],
-      "title": "Latest Memory Activity",
+      "title": "Capture Freshness",
       "type": "table"
     },
     {
@@ -603,7 +869,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 28
       },
       "id": 8,
       "options": {
@@ -639,6 +905,59 @@
       },
       "fieldConfig": {
         "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "id": 17,
+      "options": {
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "ctxledger-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  interaction_memory_item_count,\n  file_work_memory_item_count,\n  CASE\n    WHEN interaction_memory_item_count > 0 AND file_work_memory_item_count > 0 THEN 'interaction and file-work capture visible'\n    WHEN interaction_memory_item_count > 0 AND file_work_memory_item_count = 0 THEN 'interaction capture visible, file-work capture absent'\n    WHEN interaction_memory_item_count = 0 AND file_work_memory_item_count > 0 THEN 'file-work capture visible, interaction capture absent'\n    WHEN memory_item_count > 0 THEN 'memory capture active but 0.9.0-specific capture absent'\n    ELSE 'no memory capture visible yet'\n  END AS capture_reading\nFROM observability.memory_overview;",
+          "refId": "A"
+        }
+      ],
+      "title": "0.9.0 Capture Reading",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "ctxledger-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
           "color": {
             "mode": "thresholds"
           },
@@ -661,7 +980,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 22
+        "y": 36
       },
       "id": 9,
       "options": {
@@ -722,7 +1041,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 22
+        "y": 36
       },
       "id": 10,
       "options": {
@@ -783,7 +1102,7 @@
         "h": 5,
         "w": 8,
         "x": 16,
-        "y": 22
+        "y": 36
       },
       "id": 11,
       "options": {
@@ -844,7 +1163,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 27
+        "y": 41
       },
       "id": 12,
       "options": {
@@ -905,7 +1224,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 27
+        "y": 41
       },
       "id": 13,
       "options": {
@@ -961,7 +1280,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 41
       },
       "id": 14,
       "options": {

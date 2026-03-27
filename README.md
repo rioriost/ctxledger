@@ -39,7 +39,14 @@ The default local setup gives you:
 
 ### Quick start
 
-#### 1. Create local TLS certificates
+#### 1. Clone the repository and move into it
+
+```/dev/null/sh#L1-2
+git clone https://github.com/rioriost/ctxledger.git
+cd ctxledger
+```
+
+#### 2. Create local TLS certificates
 
 `ctxledger` expects local certificates for `localhost`.
 
@@ -51,40 +58,78 @@ mkcert -install
 mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/certs/localhost.key localhost 127.0.0.1 ::1
 ```
 
-#### 2. Provide required environment variables
-
-Create a `.env` file in the repository root.
-
-Typical setup:
-
-- clone the `ctxledger` repository
-- run `cp .env.example .env`
-- edit `.env`
-- run `docker compose ...` from the `ctxledger` repository
-
-If you use `envrcctl`, set the required secrets first and then run `docker compose ...`.
-
-The repository `.rules` file serves a different purpose:
-copy it into the project directory where you use your AI agent for development, and use it there as-is.
-It is not a server-startup file for the `ctxledger` container stack.
-
-Create the `.env` file in the repository root:
-
-```/dev/null/dotenv#L1-5
-CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret
-CTXLEDGER_GRAFANA_ADMIN_USER=admin
-CTXLEDGER_GRAFANA_ADMIN_PASSWORD=replace-with-a-strong-admin-password
-CTXLEDGER_GRAFANA_POSTGRES_USER=ctxledger_grafana
-CTXLEDGER_GRAFANA_POSTGRES_PASSWORD=replace-with-a-strong-secret
-```
-
-#### 3. Start the stack
+#### 3. Create `.env` from the example
 
 ```/dev/null/sh#L1-1
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
+cp .env.example .env
 ```
 
-#### 4. Verify the endpoint
+#### 4. Populate the generated-secret placeholders in `.env`
+
+The fastest way to get a usable local setup is:
+
+- copy `.env.example` to `.env`
+- populate these placeholders:
+  - `CTXLEDGER_SMALL_AUTH_TOKEN`
+  - `CTXLEDGER_GRAFANA_ADMIN_PASSWORD`
+  - `CTXLEDGER_GRAFANA_POSTGRES_PASSWORD`
+- then add `OPENAI_API_KEY` in your editor
+
+Run the helper script once:
+
+```/dev/null/sh#L1-1
+python scripts/populate_env_placeholders.py .env --mode local
+```
+
+The generated Grafana admin password is intentional:
+it reliably includes upper-case, lower-case, digits, and punctuation so it satisfies Grafana password policy.
+
+If you use `envrcctl`, use the shell helper script to store the local ctxledger secrets first:
+
+```/dev/null/sh#L1-1
+sh scripts/bootstrap_envrcctl_secrets.sh
+```
+
+#### 5. Add `OPENAI_API_KEY` to `.env`
+
+`OPENAI_API_KEY` is required for the default local stack because embeddings are enabled.
+
+Open `.env` and add your key:
+
+```/dev/null/dotenv#L1-6
+OPENAI_API_KEY=replace-with-your-openai-api-key
+CTXLEDGER_SMALL_AUTH_TOKEN=generated-value
+CTXLEDGER_GRAFANA_ADMIN_USER=admin
+CTXLEDGER_GRAFANA_ADMIN_PASSWORD=generated-value
+CTXLEDGER_GRAFANA_POSTGRES_USER=ctxledger_grafana
+CTXLEDGER_GRAFANA_POSTGRES_PASSWORD=generated-value
+```
+
+If you use [`envrcctl`](https://github.com/rioriost/envrcctl), store your real `OPENAI_API_KEY` in `envrcctl` too.
+
+```sh
+envrcctl secret set --account 'ctxledger_openai_api_key' OPENAI_API_KEY
+```
+
+#### 6. `.rules` file
+
+The `.rules` file is required to use `ctxledger` effectively.
+
+Copy it into the project directory where you use your AI agent for development, and use it there as-is.
+
+#### 7. Start the stack
+
+```/dev/null/sh#L1-1
+docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
+```
+
+If you use `envrcctl`, run:
+
+```/dev/null/sh#L1-1
+envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
+```
+
+#### 8. Verify the endpoint
 
 Without auth, the endpoint should reject the request:
 
@@ -100,7 +145,7 @@ python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-toke
 
 Replace `YOUR_TOKEN_HERE` with the value of `CTXLEDGER_SMALL_AUTH_TOKEN`.
 
-#### 5. Connect your MCP client
+#### 9. Connect your MCP client
 
 Example client configuration:
 
@@ -142,7 +187,13 @@ Useful CLI commands:
 
 ### Use secret injection instead of `.env`
 
-If you use `envrcctl`, you can inject the same values at runtime:
+If you use `envrcctl`, first store the local ctxledger secrets with the helper script:
+
+```/dev/null/sh#L1-1
+sh scripts/bootstrap_envrcctl_secrets.sh
+```
+
+Then store your real `OPENAI_API_KEY` in `envrcctl`, and start the stack with:
 
 ```/dev/null/sh#L1-1
 envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
