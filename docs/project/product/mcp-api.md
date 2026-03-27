@@ -8,7 +8,7 @@ The MCP API is the public interface of the system, but it is not the canonical s
 Canonical state lives in PostgreSQL.  
 MCP tools and resources expose mutation and read access to that canonical state.
 
-For `v0.1.0`, the currently evidenced primary MCP surface is a **minimal HTTP MCP path** at:
+For `0.9.0`, the currently evidenced primary MCP surface is an authenticated HTTP MCP path at:
 
 - `/mcp`
 
@@ -20,12 +20,25 @@ The repository now evidences the following HTTP MCP operations on that path:
 - `resources/list`
 - `resources/read`
 
-In `v0.1.0`, the primary implemented surface is still the workflow control subsystem.  
-Memory-related operations are no longer purely architectural, but they remain uneven in maturity:
+In `0.9.0`, the workflow and memory surfaces are both materially implemented for the bounded repository scope.
 
-- `memory_remember_episode` is implemented, including canonical persistence of `attempt_id` when provided
-- `memory_get_context` is partially implemented in an episode-oriented form, including initial query-aware filtering and richer context details about lookup scope, resolved workflows, and returned episode counts
-- `memory_search` remains stubbed
+The current repository evidences these MCP tools:
+
+- `workspace_register`
+- `workflow_start`
+- `workflow_checkpoint`
+- `workflow_resume`
+- `workflow_complete`
+- `memory_remember_episode`
+- `memory_get_context`
+- `memory_search`
+
+The current repository also evidences bounded memory capabilities beyond pure workflow control, including:
+
+- canonical persistence of episodes, memory items, embeddings, and memory relations
+- grouped `memory_get_context` output with route-aware and summary-selection details
+- bounded `memory_search` over canonical memory with interaction-aware, file-work-aware, and failure-reuse-aware explanation shaping
+- automatic bounded interaction-memory capture for MCP and HTTP request/response paths
 
 The currently evidenced remote serving shape is:
 
@@ -34,7 +47,7 @@ The currently evidenced remote serving shape is:
 - Docker-based local runtime
 - MCP HTTP access through `/mcp`
 
-Broader compatibility wording beyond this currently evidenced HTTP MCP path should be treated as a closeout decision, not as a stronger claim already proven by the current repository evidence.
+Broader compatibility wording beyond this currently evidenced authenticated HTTP MCP path should still be treated carefully, but the repository now has live bounded `0.9.0` evidence for workflow operations, resource reads, and bounded memory behavior over the documented local deployment surface.
 
 ---
 
@@ -142,8 +155,9 @@ Typical resource responsibilities:
 - expose exact workflow detail
 - expose episode records
 - expose memory-derived context views
-- later expose hierarchical summaries once the post-`0.4.0` retrieval layers are implemented
-- near-term dashboard observability may use an optional Grafana-based surface in the `0.4.0` workstream
+- expose current workflow state
+- expose exact workflow detail
+- later expose additional dedicated memory resources if they provide clearer bounded client value
 
 Examples:
 
@@ -151,7 +165,7 @@ Examples:
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
-- future operator-observability resources or Grafana-backed dashboard views introduced alongside the `0.4.0` observability workstream
+- future operator-observability resources if a dedicated MCP read surface becomes useful beyond the current CLI and Grafana deployment surfaces
 
 Implemented in the current repository runtime surface as supporting MCP resources:
 
@@ -160,7 +174,7 @@ Implemented in the current repository runtime surface as supporting MCP resource
 
 These resources are currently implemented as workflow-oriented read surfaces alongside the primary HTTP MCP path, and the repository now includes live remote evidence for both `resources/list` and `resources/read` over `/mcp`.
 
-Not yet implemented and still future-facing/stubbed as resources:
+Not yet implemented and still future-facing as dedicated MCP resources:
 
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
@@ -169,10 +183,10 @@ This distinction matters because the current memory progress is tool-oriented fi
 episodic recording and initial episode-oriented context retrieval are available
 through MCP tools, while dedicated memory resources remain future work.
 
-It also matters for roadmap alignment:
-the near-term `0.4.0` emphasis is shifting toward operator observability surfaces,
-including CLI inspection and optionally deployable Grafana-based dashboard support,
-while broader hierarchical retrieval and summary-layer resource expansion move later.
+It also matters for current product alignment:
+the bounded `0.9.0` surface is tool-oriented first for memory behavior,
+while broader dedicated memory-resource expansion remains a later design choice
+rather than a prerequisite for the current accepted slice.
 
 The current episode-oriented retrieval path is also intentionally conservative:
 it is still driven by canonical workflow linkage first, with only a light initial
@@ -223,16 +237,19 @@ Its current intended behavior is:
 - perform case-insensitive matching
 - remain bounded to workflow-linked episode retrieval rather than semantic search
 
-These fields are meant to explain the current episode-oriented assembly behavior.
+These fields are meant to explain the current episode-oriented and grouped
+context assembly behavior.
 At the current implementation stage, `matched_episode_count` and
 `episodes_returned` may be the same value, but they are kept separate so the
-details surface can remain useful if later `0.2.x` behavior adds post-match
+details surface can remain useful if later behavior adds post-match
 truncation, ranking, or other assembly steps.
-They should not yet be interpreted as a stable semantic-retrieval contract, since
-broader ranking, relevance, and relation-aware retrieval remain future work, and
-hierarchical summary assembly is now intended for a later milestone than `0.4.0`
-while `0.4.0` focuses on observability-oriented operator surfaces, with Grafana
-as the named near-term optional dashboard deployment path.
+They should not be interpreted as unconstrained historical QA or broad
+graph-first retrieval. In the bounded `0.9.0` slice, the intended reading is:
+
+- canonical workflow, episode, memory-item, and summary state remains primary
+- grouped context output and retrieval-route details are explainability surfaces
+- semantic and relation-aware retrieval exists in bounded form, but remains
+  subordinate to canonical truth and bounded product scope
 
 For clients that only need the current primary grouped hierarchy path, the
 current recommendation is to prefer `primary_only = true` together with
@@ -414,7 +431,7 @@ They do not replace Tools or Resources and are not canonical inputs to the API.
 
 ## 5. Primary HTTP MCP Path
 
-The primary deployment and acceptance path for `v0.1.0` remains an HTTP MCP server exposed at `/mcp`, but the documented operator-facing public path is now the HTTPS-terminated proxy entrypoint rather than a direct host-exposed backend port.
+The primary deployment and acceptance path for `0.9.0` is an authenticated HTTP MCP server exposed at `/mcp`, with the documented operator-facing public path provided through the HTTPS-terminated proxy entrypoint rather than a direct host-exposed backend port.
 
 The currently evidenced runtime shape is:
 
@@ -472,7 +489,7 @@ memory behavior boundary:
 - `memory_get_context` is real but still partial
 - `memory_get_context` currently exposes episode-oriented assembly details rather
   than a mature relevance-ranked retrieval contract
-- `memory_search` remains stubbed
+- `memory_search` is available for bounded canonical memory retrieval and explanation shaping
 
 ### 5.3 Confirmed Workflow Tool Validation Over Remote HTTP MCP
 
@@ -497,7 +514,7 @@ This matters because it proves that resource-oriented workflow reads are not onl
 
 ## 6. Error Model and Boundary Behavior
 
-For `v0.1.0`, the currently evidenced primary HTTP MCP path is:
+For `0.9.0`, the currently evidenced primary HTTP MCP path is:
 
 - `/mcp`
 
@@ -517,7 +534,7 @@ This means a remote MCP client can, at minimum:
 4. inspect tool input schemas through `tools/list`
 5. invoke tools through `tools/call`
 
-This is the main acceptance surface for `v0.1.0`.
+This is the main acceptance surface for the bounded `0.9.0` MCP deployment.
 
 ### Acceptance boundary note
 
@@ -527,7 +544,7 @@ At the current repository-evidence level, the confirmed HTTP MCP surface should 
 - `tools/list`
 - `tools/call`
 
-This should be treated as the strongest current `v0.1.0` HTTP acceptance evidence.
+This should be treated as the strongest current bounded `0.9.0` HTTP acceptance evidence.
 
 Broader HTTP MCP proof, such as explicit closeout evidence for:
 
@@ -1181,7 +1198,7 @@ Persist an episode summary into the episodic memory subsystem.
 ### Category
 Tool
 
-### Status in `v0.1.0`
+### Status in `0.9.0`
 Implemented in the current repository state.
 
 ### Current Behavior
@@ -1253,8 +1270,8 @@ Search reusable memory using retrieval mechanisms such as embeddings, relations,
 ### Category
 Tool
 
-### Status in `v0.1.0`
-Defined architecturally, but may be stubbed or unavailable.
+### Status in `0.9.0`
+Implemented in bounded form in the current repository state.
 
 ### Intended Future Behavior
 - semantic retrieval
@@ -1280,8 +1297,8 @@ For the current service-layer retrieval-contract snapshot, see:
 ### Category
 Tool with read semantics
 
-### Status in `v0.1.0`
-Partially implemented in the current repository state.
+### Status in `0.9.0`
+Implemented in bounded hierarchical and grouped form in the current repository state.
 
 ### Current Behavior
 The current implementation is still primarily episode-oriented, but it now includes
@@ -1954,7 +1971,7 @@ For invalid debug endpoint paths, the HTTP handler returns a normalized `404` pa
 Return the workspace-scoped current operational resume view.
 
 ### Implementation Status
-Implemented as a workflow-oriented read surface in the current `v0.1.0` repository state.
+Implemented as a workflow-oriented read surface in the current `0.9.0` repository state.
 
 ### Category
 Resource
@@ -2010,7 +2027,7 @@ Typical content:
 Return read-only detail for an exact workflow instance.
 
 ### Implementation Status
-Implemented as a workflow-oriented read surface in the current `v0.1.0` repository state.
+Implemented as a workflow-oriented read surface in the current `0.9.0` repository state.
 
 ### Category
 Resource
@@ -2047,8 +2064,8 @@ Return a read-only episodic memory record.
 ### Category
 Resource
 
-### Status in `v0.1.0`
-Future-facing or stubbed.
+### Status in `0.9.0`
+Future-facing and not currently implemented as a dedicated MCP resource.
 
 ### Intended Future Content
 - episode summary
@@ -2067,8 +2084,8 @@ Return a hierarchical summary for a memory scope.
 ### Category
 Resource
 
-### Status in `v0.1.0`
-Future-facing or stubbed.
+### Status in `0.9.0`
+Future-facing and not currently implemented as a dedicated MCP resource.
 
 ### Intended Future Content
 - compressed summary view
@@ -2278,7 +2295,7 @@ Detailed diagnostics should instead live in:
 
 ## 10. Authentication Model
 
-In `v0.1.0`, authentication is the primary enforced security boundary.
+In `0.9.0`, authentication is the primary enforced security boundary.
 
 ### Supported Approach
 - bearer token authentication
@@ -2293,7 +2310,7 @@ The implementation may propagate caller context for:
 - future audit trails
 - future authorization models
 
-Fine-grained authorization is out of scope for `v0.1.0`.
+Fine-grained authorization remains out of scope for the bounded `0.9.0` slice.
 
 ---
 
@@ -2322,7 +2339,7 @@ The architectural target is:
 
 - `MCP 2025-03-26`
 
-`v0.1.0` prioritizes:
+`0.9.0` prioritizes:
 
 - stable workflow control semantics
 - durable persistence
@@ -2330,17 +2347,18 @@ The architectural target is:
 - future-safe extension points
 
 The initial release does not attempt to provide complete memory retrieval behavior.  
-Memory APIs now span a mixed maturity level:
+Memory APIs now span a bounded but materially implemented `0.9.0` surface:
 
-- some are implemented (`memory_remember_episode`)
-- some are partially implemented (`memory_get_context`)
-- some remain stubbed (`memory_search`)
+- `memory_remember_episode` is implemented
+- `memory_get_context` is implemented in bounded grouped and hierarchy-aware form
+- `memory_search` is implemented in bounded canonical-memory form
+- dedicated memory resources remain future-facing
 
-This should be described explicitly rather than collapsed into a single “memory is stubbed” statement.
+This should be described as a bounded implemented memory surface rather than as an early mostly-stubbed interface.
 
 ---
 
-## 13. Initial `v0.1.0` Contract Summary
+## 13. Bounded `0.9.0` Contract Summary
 
 ### Required Practical Surface
 
@@ -2349,8 +2367,9 @@ This should be described explicitly rather than collapsed into a single “memor
 - `workflow_checkpoint`
 - `workflow_resume`
 - `workflow_complete`
-- `health()`
-- `readiness()`
+- `memory_remember_episode`
+- `memory_get_context`
+- `memory_search`
 - `/debug/runtime`
 - `/debug/routes`
 - `/debug/tools`
@@ -2363,17 +2382,23 @@ This should be described explicitly rather than collapsed into a single “memor
 - `projection_failures_resolve`
 - HTTP route surface for `projection_failures_ignore`
 - HTTP route surface for `projection_failures_resolve`
+- `build-episode-summary`
+- AGE readiness and refresh operator commands
+- local Grafana deployment support in the documented authenticated stack
 
-### Allowed Stub / Partial Surface
+### Future-Facing Dedicated MCP Resource Surface
 
-- `memory_search`
 - `memory://episode/{episode_id}`
 - `memory://summary/{scope}`
 
-### Implemented / Partially Implemented Memory Surface
+### Implemented Bounded Memory Surface
 
 - `memory_remember_episode`
 - `memory_get_context`
+- `memory_search`
+- grouped interaction-memory output
+- bounded interaction-aware and file-work-aware retrieval shaping
+- bounded summary-selection and retrieval-route explainability
 
 ### Acceptance Evidence Note for Tool Schema Discoverability
 
@@ -2394,13 +2419,13 @@ Representative evidence includes:
   - `workflow_checkpoint`
   - `workflow_resume`
   - `workflow_complete`
+  - implemented memory tools
   - projection failure tools
-  - implemented and partial memory tools
 
-This means `workspace_register` argument discovery is no longer dependent on runtime validation errors alone and should be counted as visible acceptance evidence for MCP server/client compatibility on the confirmed HTTP MCP path.
+This means `workspace_register` argument discovery is no longer dependent on runtime validation errors alone and should be counted as visible acceptance evidence for MCP server/client compatibility on the confirmed authenticated HTTP MCP path.
 
 ### Core Expectations
-A compliant `v0.1.0` implementation should ensure:
+A compliant bounded `0.9.0` implementation should ensure:
 
 - durable PostgreSQL-backed workflow state
 - one active workflow per workspace
@@ -2409,7 +2434,11 @@ A compliant `v0.1.0` implementation should ensure:
 - normalized MCP-visible errors
 - projection-aware but projection-independent reads
 - machine-readable HTTP MCP tool argument discovery through `tools/list`
-- a minimally confirmed HTTP MCP path consisting of:
+- bounded automatic interaction-memory capture on MCP and HTTP request/response paths
+- bounded canonical memory persistence for episodes, memory items, embeddings, and relations
+- a confirmed authenticated HTTP MCP path consisting of:
   - `initialize`
   - `tools/list`
   - `tools/call`
+  - `resources/list`
+  - `resources/read`

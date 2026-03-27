@@ -86,13 +86,6 @@ SECTION memory
 RULE use_memory_tools_when_material
 USE memory_tools_only_when_they_improve_recall_continuity_or_decision_quality
 
-RULE early_context_retrieval
-EARLY_IN_SESSION_OR_BEFORE important_decision
-CONSIDER memory_get_context_for:
-- current_workflow
-- current_workspace
-- current_ticket_or_task
-
 RULE memory_get_context_reading
 TREAT memory_get_context_as hierarchy_aware_not_flat
 READ structured_fields_first:
@@ -111,10 +104,6 @@ READ structured_fields_first:
 - summary_first_child_episode_ids
 - primary_episode_groups_present_after_query_filter
 - auxiliary_only_after_query_filter
-
-RULE grouped_output_priority
-WHEN context_structure_matters
-USE memory_context_groups_as_primary_output
 
 RULE route_meanings
 INTERPRET:
@@ -156,6 +145,7 @@ USE memory_search_for:
 - similar_prior_work
 - prior_failures_or_tradeoffs
 - reusable_patterns_or_recovery
+- interaction_or_file_work_signals_when_debugging_or_repeating_work
 
 RULE remember_episode_usage
 USE memory_remember_episode_for_high_signal_knowledge:
@@ -172,6 +162,7 @@ FOR:
 - normal_failure_closeout
 - normal_cancellation_closeout
 WHEN completion_fields_are_available
+READ as gated_not_guaranteed
 
 RULE explicit_episode_vs_auto_memory
 USE memory_remember_episode_in_addition_to_workflow_completion_auto_memory
@@ -200,6 +191,27 @@ DO include_structured_checkpoint_fields_when_known:
 RULE prefer_high_signal_episodes
 PREFER fewer_higher_signal_memory_episodes_over_repetition
 
+RULE summary_build_requesting
+WHEN explicit_closeout_summary_is_needed
+DO set latest_checkpoint.checkpoint_json.build_episode_summary = true
+BEFORE workflow_complete
+
+RULE closeout_memory_fallback
+IF workflow_completion_auto_memory_is_skipped_or_insufficient
+THEN use memory_remember_episode_only_for_new_high_signal_knowledge
+
+RULE observability_validation
+AFTER deployment_or_runtime_behavior_change
+CHECK when_relevant:
+- stats
+- memory-stats
+- age-graph-readiness
+
+RULE observability_signal_reading
+READ as operator_signals_not_canonical_truth:
+- interaction_memory_item_count
+- file_work_memory_item_count
+
 RULE memory_episode_content
 WHEN recording_episode
 INCLUDE:
@@ -221,9 +233,6 @@ PREFER short_topic_focused_doc_sections
 SECTION agent_behavior
 RULE prefer_explicit_state_transitions
 PREFER explicit_state_transitions_over_implicit_assumptions
-
-RULE prefer_recoverability_over_brevity
-PREFER recoverability_over_brevity
 
 RULE prefer_structure_over_prose
 WHEN structured_tool_fields_and_prose_both_exist
@@ -266,10 +275,6 @@ KEEP_SEPARATE:
 - auto_memory_recorded
 - summary_build_attempted
 - summary_build_succeeded
-
-RULE leave_resumption_context
-WHEN in_doubt
-LEAVE enough_context_for_future_capable_agent
 
 SECTION response_style
 

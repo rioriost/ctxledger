@@ -198,7 +198,7 @@ class WorkflowMemoryBridge:
         if self.embedding_generator is None:
             try:
                 settings = get_settings().embedding
-                if settings.enabled and settings.provider is not EmbeddingProvider.LOCAL_STUB:
+                if settings.enabled:
                     self.embedding_generator = build_embedding_generator(settings)
                 else:
                     self.embedding_generator = None

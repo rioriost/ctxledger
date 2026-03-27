@@ -12,8 +12,15 @@ The system is designed to provide:
 - repository projections as derived artifacts
 - future multi-layer memory and retrieval capabilities
 
-In `v0.1.0`, the primary implementation target is the workflow control subsystem.  
-The memory subsystem is architecturally defined from the beginning, but only partially implemented in the initial release.
+In `0.9.0`, the workflow control subsystem remains the canonical operational core, but the bounded memory and retrieval layers are also materially implemented.
+
+The current repository state now includes:
+
+- workflow lifecycle control over PostgreSQL-backed canonical state
+- bounded memory persistence for episodes, memory items, embeddings, and relations
+- bounded historical and grouped context retrieval
+- automatic bounded interaction-memory capture on MCP and HTTP request/response paths
+- operator-facing observability through CLI surfaces and the supported local Grafana deployment
 
 ---
 
@@ -114,13 +121,15 @@ Shared core responsibilities:
 Transport-specific code must remain thin.  
 HTTP transport concerns must not alter business semantics.
 
-For `v0.1.0`, the primary acceptance surface is the minimal HTTP MCP path at `/mcp`, where the repository now evidences:
+For `0.9.0`, the primary acceptance surface is the authenticated HTTP MCP path at `/mcp`, where the repository now evidences:
 
 - `initialize`
 - `tools/list`
 - `tools/call`
+- `resources/list`
+- `resources/read`
 
-Broader protocol-scope claims should be treated separately from this currently evidenced minimal path.
+Broader protocol-scope claims should still be treated carefully, but the current repository now has bounded live evidence for both workflow and memory-related MCP behavior over this HTTP path.
 
 ### 4.3 Process Model
 
@@ -422,7 +431,7 @@ This separation is necessary for retry-capable design.
 
 ### 8.2 Active Workflow Concurrency Policy
 
-In `v0.1.0`, at most one `running` workflow instance may exist per workspace.
+In `0.9.0`, at most one `running` workflow instance may exist per workspace.
 
 This rule is enforced primarily by the database, with application-side checks used to improve error clarity.
 
@@ -434,7 +443,7 @@ This choice keeps:
 
 ### 8.3 Retry Model
 
-The architecture is retry-capable, but retry remains minimal in `v0.1.0`.
+The architecture is retry-capable, but retry remains intentionally minimal in the bounded `0.9.0` slice.
 
 Rules:
 
@@ -635,7 +644,7 @@ Raw exceptions are not exposed directly.
 
 Verification is a lightweight but official canonical component.
 
-`verify_reports` are stored durably and may appear in resume views, but verification is not yet a hard completion gate in `v0.1.0`.
+`verify_reports` are stored durably and may appear in resume views, but verification is not yet a hard completion gate in `0.9.0`.
 
 Typical statuses may include:
 
@@ -699,9 +708,15 @@ The two subsystems may reference each other, but they must not be collapsed into
 
 ### 13.2 Episodic Memory Formation
 
-An `episode` is formed primarily when a workflow instance reaches completion.
+An `episode` may be formed through both explicit and automatic bounded memory paths.
 
-An episode represents a summarized execution record, not a checkpoint.
+Episodes in the current repository can arise from:
+
+- explicit `memory_remember_episode`
+- workflow checkpoint auto-memory
+- workflow completion auto-memory when the current gating rules allow recording
+
+An episode represents a retained unit of reusable work memory rather than a raw checkpoint row.
 
 Episodes may incorporate:
 
@@ -711,6 +726,7 @@ Episodes may incorporate:
 - verification evidence
 - failures and resolutions
 - produced artifacts
+- grouped interaction and file-work-adjacent context when captured through bounded memory paths
 
 ### 13.3 Semantic and Procedural Memory Ingestion
 
@@ -787,16 +803,17 @@ Embedding staleness or generation failure affects retrieval quality, not canonic
 
 ### 13.8 Asynchronous Embedding Pipeline
 
-Embedding generation is designed as an asynchronous or deferrable process.
+Embedding generation is a derived indexing concern and may be synchronous, deferred, or skipped depending on the active bounded path.
 
-Canonical memory persistence must not depend on synchronous embedding success.
+Canonical memory persistence must not depend on embedding success.
 
 This allows:
 
-- lower write latency
+- lower write latency when embedding persistence is deferred
 - retryable indexing
 - model version migration
 - index rebuilds
+- bounded local deployment with deterministic stub embeddings for development validation
 
 ---
 
@@ -857,7 +874,7 @@ Not every runtime error becomes a canonical failure record.
 
 ### 15.1 Authentication Boundary
 
-In `v0.1.0`, authentication is the primary formal security control.
+In `0.9.0`, authentication is the primary formal security control.
 
 Bearer token authentication is handled at the transport boundary.
 
@@ -869,7 +886,7 @@ Authenticated caller context may be propagated inward for:
 
 ### 15.2 Authorization Deferral
 
-Fine-grained authorization is deferred beyond `v0.1.0`.
+Fine-grained authorization remains deferred beyond the bounded `0.9.0` slice.
 
 This includes:
 
@@ -894,7 +911,7 @@ Production deployments should use:
 
 ### 16.1 Structured Logging
 
-Structured logging is the standard observability mechanism in `v0.1.0`.
+Structured logging is a standard observability mechanism in `0.9.0`, alongside bounded CLI inspection and the supported local Grafana deployment surface.
 
 Important log events include:
 
@@ -920,7 +937,7 @@ They belong in:
 - tracing contexts
 - future audit/event systems
 
-They are not mandatory canonical workflow fields in `v0.1.0`.
+They are not mandatory canonical workflow fields in `0.9.0`.
 
 ### 16.3 Metrics and Tracing as Extensions
 

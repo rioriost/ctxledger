@@ -53,7 +53,22 @@ mkcert -cert-file docker/traefik/certs/localhost.crt -key-file docker/traefik/ce
 
 #### 2. Provide required environment variables
 
-Create a `.env` file in the repository root:
+Create a `.env` file in the repository root.
+
+Typical setup:
+
+- clone the `ctxledger` repository
+- run `cp .env.example .env`
+- edit `.env`
+- run `docker compose ...` from the `ctxledger` repository
+
+If you use `envrcctl`, set the required secrets first and then run `docker compose ...`.
+
+The repository `.rules` file serves a different purpose:
+copy it into the project directory where you use your AI agent for development, and use it there as-is.
+It is not a server-startup file for the `ctxledger` container stack.
+
+Create the `.env` file in the repository root:
 
 ```/dev/null/dotenv#L1-5
 CTXLEDGER_SMALL_AUTH_TOKEN=replace-me-with-a-strong-secret
@@ -106,11 +121,12 @@ An MCP client or agent can:
 
 - register a workspace
 - start a workflow
-- checkpoint progress
+- checkpoint progress with bounded auto-memory capture
 - resume work from durable state
 - complete a workflow with verification status
 - record explicit high-signal episodes
-- search memory
+- search memory with bounded canonical retrieval
+- read grouped context optimized for hierarchy-aware clients
 - inspect workflow, memory, and failure state
 
 Useful CLI commands:
