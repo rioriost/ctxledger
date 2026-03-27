@@ -7,7 +7,12 @@ from uuid import uuid4
 
 import pytest
 
-from ctxledger.memory.service import MemoryFeature, MemoryItemRecord, SearchMemoryResponse
+from ctxledger.memory.service import (
+    MemoryFeature,
+    MemoryItemRecord,
+    MemoryServiceError,
+    SearchMemoryResponse,
+)
 from ctxledger.runtime.introspection import RuntimeIntrospection
 
 from ..support.coverage_targets_support import make_server, make_settings
@@ -250,6 +255,346 @@ def test_build_mcp_interaction_response_event_returns_resource_result_payload() 
         "resource_uri": "workspace://abc/resume",
         "result": result,
     }
+
+
+def test_build_mcp_interaction_request_event_returns_none_for_blank_tool_name() -> None:
+    from ctxledger.mcp.rpc import build_mcp_interaction_request_event
+
+    event = build_mcp_interaction_request_event(
+        method="tools/call",
+        params={"name": "   ", "arguments": {}},
+    )
+
+    assert event is None
+
+
+def test_build_mcp_interaction_request_event_normalizes_non_object_arguments() -> None:
+    from ctxledger.mcp.rpc import build_mcp_interaction_request_event
+
+    event = build_mcp_interaction_request_event(
+        method="tools/call",
+        params={"name": "memory_search", "arguments": "not-an-object"},
+    )
+
+    assert event == {
+        "interaction_role": "user",
+        "interaction_direction": "inbound",
+        "transport": "mcp",
+        "interaction_kind": "tool_call",
+        "method": "tools/call",
+        "tool_name": "memory_search",
+        "arguments": {},
+    }
+
+
+def test_build_mcp_interaction_request_event_returns_none_for_blank_resource_uri() -> None:
+    from ctxledger.mcp.rpc import build_mcp_interaction_request_event
+
+    event = build_mcp_interaction_request_event(
+        method="resources/read",
+        params={"uri": "   "},
+    )
+
+    assert event is None
+
+
+def test_build_mcp_interaction_response_event_returns_none_for_blank_tool_name() -> None:
+    from ctxledger.mcp.rpc import build_mcp_interaction_response_event
+
+    event = build_mcp_interaction_response_event(
+        method="tools/call",
+        params={"name": "   ", "arguments": {}},
+        result={"content": []},
+    )
+
+    assert event is None
+
+
+def test_build_mcp_interaction_response_event_normalizes_non_object_arguments() -> None:
+    from ctxledger.mcp.rpc import build_mcp_interaction_response_event
+
+    result = {"content": [{"type": "text", "text": "{}"}]}
+
+    event = build_mcp_interaction_response_event(
+        method="tools/call",
+        params={"name": "memory_search", "arguments": "not-an-object"},
+        result=result,
+    )
+
+    assert event == {
+        "interaction_role": "agent",
+        "interaction_direction": "outbound",
+        "transport": "mcp",
+        "interaction_kind": "tool_result",
+        "method": "tools/call",
+        "tool_name": "memory_search",
+        "arguments": {},
+        "result": result,
+    }
+
+
+def test_build_mcp_interaction_response_event_returns_none_for_blank_resource_uri() -> None:
+    from ctxledger.mcp.rpc import build_mcp_interaction_response_event
+
+    event = build_mcp_interaction_response_event(
+        method="resources/read",
+        params={"uri": "   "},
+        result={"contents": []},
+    )
+
+    assert event is None
+
+
+def test_extract_interaction_scope_ids_prefers_request_arguments_and_parses_response_fallbacks() -> (
+    None
+):
+    from ctxledger.mcp.rpc import _extract_interaction_scope_ids
+
+    workspace_id, workflow_instance_id = _extract_interaction_scope_ids(
+        request_event={
+            "arguments": {
+                "workspace_id": "workspace-from-arguments",
+                "workflow_instance_id": "workflow-from-arguments",
+            }
+        },
+        response_event={
+            "result": {
+                "contents": [
+                    {
+                        "text": json.dumps(
+                            {
+                                "resource": {
+                                    "workspace_id": "workspace-from-resource",
+                                    "workflow_instance_id": "workflow-from-resource",
+                                },
+                                "selection": {
+                                    "selected_workflow_instance_id": "workflow-from-selection"
+                                },
+                                "workspace": {"workspace_id": "workspace-from-workspace"},
+                                "workflow": {
+                                    "workspace_id": "workspace-from-workflow",
+                                    "workflow_instance_id": "workflow-from-workflow",
+                                },
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                ]
+            }
+        },
+    )
+
+    assert workspace_id == "workspace-from-arguments"
+    assert workflow_instance_id == "workflow-from-arguments"
+
+
+def test_extract_interaction_scope_ids_reads_nested_response_payload_when_request_missing() -> None:
+    from ctxledger.mcp.rpc import _extract_interaction_scope_ids
+
+    workspace_id, workflow_instance_id = _extract_interaction_scope_ids(
+        request_event=None,
+        response_event={
+            "result": {
+                "contents": [
+                    {
+                        "text": json.dumps(
+                            {
+                                "resource": {
+                                    "workspace": {"workspace_id": "workspace-from-nested-resource"},
+                                    "workflow": {
+                                        "workflow_instance_id": "workflow-from-nested-resource"
+                                    },
+                                }
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                ]
+            }
+        },
+    )
+
+    assert workspace_id == "workspace-from-nested-resource"
+    assert workflow_instance_id == "workflow-from-nested-resource"
+
+
+def test_extract_interaction_scope_ids_ignores_invalid_json_payload() -> None:
+    from ctxledger.mcp.rpc import _extract_interaction_scope_ids
+
+    workspace_id, workflow_instance_id = _extract_interaction_scope_ids(
+        request_event=None,
+        response_event={
+            "result": {
+                "contents": [
+                    {
+                        "text": "{not-json",
+                    }
+                ]
+            }
+        },
+    )
+
+    assert workspace_id is None
+    assert workflow_instance_id is None
+
+
+def test_persist_interaction_event_pair_returns_early_when_events_missing() -> None:
+    from ctxledger.mcp.rpc import _persist_interaction_event_pair
+
+    runtime = SimpleNamespace()
+
+    _persist_interaction_event_pair(runtime, request_event=None, response_event={})
+    _persist_interaction_event_pair(runtime, request_event={}, response_event=None)
+
+
+def test_persist_interaction_event_pair_returns_early_without_server_or_workflow_service() -> None:
+    from ctxledger.mcp.rpc import _persist_interaction_event_pair
+
+    runtime = SimpleNamespace(_server=None)
+
+    _persist_interaction_event_pair(
+        runtime,
+        request_event={"interaction_role": "user"},
+        response_event={"interaction_role": "agent"},
+    )
+
+    runtime = SimpleNamespace(_server=SimpleNamespace(workflow_service=None))
+
+    _persist_interaction_event_pair(
+        runtime,
+        request_event={"interaction_role": "user"},
+        response_event={"interaction_role": "agent"},
+    )
+
+
+def test_persist_interaction_event_pair_returns_early_when_memory_builder_missing_or_disabled() -> (
+    None
+):
+    from ctxledger.mcp.rpc import _persist_interaction_event_pair
+
+    server = SimpleNamespace(workflow_service=object())
+
+    runtime_without_builder = SimpleNamespace(
+        _server=server,
+        _persisted_interaction_events=True,
+    )
+    _persist_interaction_event_pair(
+        runtime_without_builder,
+        request_event={"interaction_role": "user"},
+        response_event={"interaction_role": "agent"},
+    )
+
+    runtime_without_flag = SimpleNamespace(
+        _server=server,
+        _build_workflow_backed_memory_service=lambda _server: SimpleNamespace(),
+    )
+    _persist_interaction_event_pair(
+        runtime_without_flag,
+        request_event={"interaction_role": "user"},
+        response_event={"interaction_role": "agent"},
+    )
+
+
+def test_persist_interaction_event_pair_returns_early_when_persist_method_missing() -> None:
+    from ctxledger.mcp.rpc import _persist_interaction_event_pair
+
+    runtime = SimpleNamespace(
+        _server=SimpleNamespace(workflow_service=object()),
+        _persisted_interaction_events=True,
+        _build_workflow_backed_memory_service=lambda _server: SimpleNamespace(),
+    )
+
+    _persist_interaction_event_pair(
+        runtime,
+        request_event={"interaction_role": "user"},
+        response_event={"interaction_role": "agent"},
+    )
+
+
+def test_persist_interaction_event_pair_persists_request_and_response_events() -> None:
+    from ctxledger.mcp.rpc import _persist_interaction_event_pair
+
+    calls: list[dict[str, object | None]] = []
+
+    def persist_interaction_memory(**kwargs: object) -> None:
+        calls.append(dict(kwargs))
+
+    runtime = SimpleNamespace(
+        _server=SimpleNamespace(workflow_service=object()),
+        _persisted_interaction_events=True,
+        _build_workflow_backed_memory_service=lambda _server: SimpleNamespace(
+            persist_interaction_memory=persist_interaction_memory
+        ),
+    )
+
+    request_event = {
+        "interaction_role": "user",
+        "arguments": {
+            "workspace_id": "workspace-1",
+            "workflow_instance_id": "workflow-1",
+        },
+        "tool_name": "memory_search",
+    }
+    response_event = {
+        "interaction_role": "agent",
+        "result": {
+            "contents": [
+                {
+                    "text": json.dumps(
+                        {"workspace": {"workspace_id": "workspace-2"}},
+                        ensure_ascii=False,
+                    )
+                }
+            ]
+        },
+    }
+
+    _persist_interaction_event_pair(
+        runtime,
+        request_event=request_event,
+        response_event=response_event,
+    )
+
+    assert len(calls) == 2
+    assert calls[0]["interaction_role"] == "user"
+    assert calls[0]["interaction_kind"] == "interaction_request"
+    assert calls[0]["workspace_id"] == "workspace-1"
+    assert calls[0]["workflow_instance_id"] == "workflow-1"
+    assert calls[0]["metadata"] == request_event
+    assert calls[0]["content"] == json.dumps(request_event, ensure_ascii=False, sort_keys=True)
+
+    assert calls[1]["interaction_role"] == "agent"
+    assert calls[1]["interaction_kind"] == "interaction_response"
+    assert calls[1]["workspace_id"] == "workspace-1"
+    assert calls[1]["workflow_instance_id"] == "workflow-1"
+    assert calls[1]["metadata"] == response_event
+    assert calls[1]["content"] == json.dumps(response_event, ensure_ascii=False, sort_keys=True)
+
+
+def test_persist_interaction_event_pair_swallows_memory_service_error() -> None:
+    from ctxledger.mcp.rpc import _persist_interaction_event_pair
+
+    def persist_interaction_memory(**kwargs: object) -> None:
+        raise MemoryServiceError(
+            code="memory_invalid_request",
+            message="persist failed",
+            feature="memory_remember_episode",
+            details={},
+        )
+
+    runtime = SimpleNamespace(
+        _server=SimpleNamespace(workflow_service=object()),
+        _persisted_interaction_events=True,
+        _build_workflow_backed_memory_service=lambda _server: SimpleNamespace(
+            persist_interaction_memory=persist_interaction_memory
+        ),
+    )
+
+    _persist_interaction_event_pair(
+        runtime,
+        request_event={"interaction_role": "user"},
+        response_event={"interaction_role": "agent"},
+    )
 
 
 def test_mcp_ensure_lifecycle_state_reuses_existing_state() -> None:

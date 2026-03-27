@@ -12,12 +12,14 @@ from uuid import uuid4
 import pytest
 
 import ctxledger.__init__ as cli_module
+from ctxledger.memory.service import MemoryServiceError
 from ctxledger.runtime.database_health import (
     DefaultDatabaseHealthChecker,
     PostgresDatabaseHealthChecker,
     ServerBootstrapError,
     build_database_health_checker,
 )
+from ctxledger.runtime.http_runtime import HttpRuntimeAdapter, register_http_runtime_handlers
 from ctxledger.runtime.introspection import (
     RuntimeIntrospection,
     collect_runtime_introspection,
@@ -38,7 +40,11 @@ from ctxledger.runtime.server_responses import (
     build_runtime_tools_response,
 )
 from ctxledger.runtime.status import build_health_status, build_readiness_status
-from ctxledger.runtime.types import RuntimeIntrospectionResponse
+from ctxledger.runtime.types import (
+    McpResourceResponse,
+    McpToolResponse,
+    RuntimeIntrospectionResponse,
+)
 from ctxledger.server import CtxLedgerServer, create_server
 from ctxledger.version import get_app_name, get_app_version
 from ctxledger.workflow.service import WorkflowError
@@ -801,6 +807,213 @@ def test_build_runtime_routes_and_tools_responses_filter_empty_entries() -> None
     assert tools_response.payload == {
         "tools": [{"transport": "http", "tools": ["workflow_resume"]}]
     }
+
+
+def test_http_runtime_extract_interaction_scope_ids_reads_nested_payloads() -> None:
+    runtime = HttpRuntimeAdapter(make_settings())
+
+    workspace_id, workflow_instance_id = runtime._extract_interaction_scope_ids(
+        arguments={},
+        response_payload={
+            "resource": {
+                "workspace": {"workspace_id": "workspace-nested"},
+                "workflow": {"workflow_instance_id": "workflow-nested"},
+            }
+        },
+    )
+
+    assert workspace_id == "workspace-nested"
+    assert workflow_instance_id == "workflow-nested"
+
+
+def test_http_runtime_extract_interaction_scope_ids_prefers_arguments_and_selection() -> None:
+    runtime = HttpRuntimeAdapter(make_settings())
+
+    workspace_id, workflow_instance_id = runtime._extract_interaction_scope_ids(
+        arguments={"workspace_id": "workspace-arg"},
+        response_payload={
+            "selection": {"selected_workflow_instance_id": "workflow-selected"},
+            "workspace": {"workspace_id": "workspace-response"},
+        },
+    )
+
+    assert workspace_id == "workspace-arg"
+    assert workflow_instance_id == "workflow-selected"
+
+
+def test_http_runtime_persist_interaction_event_pair_returns_without_server() -> None:
+    runtime = HttpRuntimeAdapter(make_settings(), server=None)
+
+    runtime._persist_interaction_event_pair(
+        request_content="request",
+        request_metadata={"kind": "request"},
+        response_content="response",
+        response_metadata={"kind": "response"},
+    )
+
+
+def test_http_runtime_persist_interaction_event_pair_returns_when_persist_not_callable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = make_server(runtime=None)
+    runtime = HttpRuntimeAdapter(make_settings(), server=server)
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.http_runtime.build_workflow_backed_memory_service",
+        lambda _server: SimpleNamespace(persist_interaction_memory=None),
+    )
+
+    runtime._persist_interaction_event_pair(
+        request_content="request",
+        request_metadata={"kind": "request"},
+        response_content="response",
+        response_metadata={"kind": "response"},
+    )
+
+
+def test_http_runtime_persist_interaction_event_pair_swallows_memory_service_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = make_server(runtime=None)
+    runtime = HttpRuntimeAdapter(make_settings(), server=server)
+
+    def persist_interaction_memory(**_: object) -> None:
+        raise MemoryServiceError(
+            code="memory_invalid_request",
+            message="persist failed",
+            feature="memory_remember_episode",
+            details={},
+        )
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.http_runtime.build_workflow_backed_memory_service",
+        lambda _server: SimpleNamespace(persist_interaction_memory=persist_interaction_memory),
+    )
+
+    runtime._persist_interaction_event_pair(
+        request_content="request",
+        request_metadata={"kind": "request"},
+        response_content="response",
+        response_metadata={"kind": "response"},
+        workspace_id="workspace-1",
+        workflow_instance_id="workflow-1",
+    )
+
+
+def test_http_runtime_dispatch_resource_returns_not_found_for_unknown_uri() -> None:
+    runtime = HttpRuntimeAdapter(make_settings(), server=make_server(runtime=None))
+
+    response = runtime.dispatch_resource("workspace://missing/resource")
+
+    assert isinstance(response, McpResourceResponse)
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "resource_not_found",
+            "message": "unknown MCP resource 'workspace://missing/resource'",
+        }
+    }
+
+
+def test_http_runtime_dispatch_tool_returns_not_found_for_unknown_tool() -> None:
+    runtime = HttpRuntimeAdapter(make_settings(), server=make_server(runtime=None))
+
+    response = runtime.dispatch_tool("missing_tool", {})
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "tool_not_found",
+            "message": "unknown MCP tool 'missing_tool'",
+            "details": {},
+        },
+    }
+
+
+def test_http_runtime_dispatch_uses_mcp_handler_for_rpc_route() -> None:
+    runtime = HttpRuntimeAdapter(make_settings())
+    expected = SimpleNamespace(status_code=200, payload={"ok": True}, headers={})
+
+    runtime.register_handler("mcp_rpc", lambda path, body: (path, body, expected)[2])
+
+    response = runtime.dispatch("mcp_rpc", "/mcp", body='{"jsonrpc":"2.0"}')
+
+    assert response is expected
+
+
+def test_http_runtime_dispatch_uses_simple_handler_for_non_rpc_route() -> None:
+    runtime = HttpRuntimeAdapter(make_settings())
+    expected = SimpleNamespace(status_code=200, payload={"ok": True}, headers={})
+
+    runtime.register_handler("workflow_resume", lambda path: (path, expected)[1])
+
+    response = runtime.dispatch("workflow_resume", "/resume")
+
+    assert response is expected
+
+
+def test_http_runtime_dispatch_returns_not_found_when_route_missing() -> None:
+    runtime = HttpRuntimeAdapter(make_settings())
+
+    response = runtime.dispatch("missing_route", "/missing")
+
+    assert response.status_code == 404
+    assert response.payload == {
+        "error": {
+            "code": "route_not_found",
+            "message": "no HTTP handler is registered for route 'missing_route'",
+        }
+    }
+
+
+def test_http_runtime_stop_returns_early_when_not_started(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    runtime = HttpRuntimeAdapter(make_settings())
+
+    with caplog.at_level("INFO"):
+        runtime.stop()
+
+    assert "HTTP runtime adapter stopping" not in caplog.text
+
+
+def test_register_http_runtime_handlers_skips_debug_routes_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = HttpRuntimeAdapter(make_settings())
+    server = make_server(runtime=None)
+    server.settings = types.SimpleNamespace(debug=types.SimpleNamespace(enabled=False))
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.http_runtime.build_mcp_http_handler",
+        lambda _runtime, _server: "mcp-handler",
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.http_runtime.build_runtime_introspection_http_handler",
+        lambda _server: "introspection-handler",
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.http_runtime.build_runtime_routes_http_handler",
+        lambda _server: "routes-handler",
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.http_runtime.build_runtime_tools_http_handler",
+        lambda _server: "tools-handler",
+    )
+    monkeypatch.setattr(
+        "ctxledger.runtime.http_runtime.build_workflow_resume_http_handler",
+        lambda _server: "resume-handler",
+    )
+
+    registered = register_http_runtime_handlers(runtime, server)
+
+    assert registered is runtime
+    assert runtime.handler("mcp_rpc") == "mcp-handler"
+    assert runtime.handler("workflow_resume") == "resume-handler"
+    assert runtime.handler("runtime_introspection") is None
+    assert runtime.handler("runtime_routes") is None
+    assert runtime.handler("runtime_tools") is None
 
 
 def test_runtime_introspection_response_uses_runtime_collection() -> None:
