@@ -174,6 +174,13 @@ def test_memory_service_summary_first_selection_prefers_canonical_memory_summari
                     "episode_id": str(episode.episode_id),
                     "type": "episode_note",
                     "provenance": "episode",
+                    "provenance_kind": "episode_memory",
+                    "interaction_role": None,
+                    "interaction_kind": None,
+                    "file_name": None,
+                    "file_path": None,
+                    "file_operation": None,
+                    "purpose": None,
                     "content": "Second child memory item for canonical summary expansion",
                     "metadata": {"rank": 2},
                     "created_at": second_memory_item.created_at.isoformat(),
@@ -185,6 +192,13 @@ def test_memory_service_summary_first_selection_prefers_canonical_memory_summari
                     "episode_id": str(episode.episode_id),
                     "type": "episode_note",
                     "provenance": "episode",
+                    "provenance_kind": "episode_memory",
+                    "interaction_role": None,
+                    "interaction_kind": None,
+                    "file_name": None,
+                    "file_path": None,
+                    "file_operation": None,
+                    "purpose": None,
                     "content": "First child memory item for canonical summary expansion",
                     "metadata": {"rank": 1},
                     "created_at": first_memory_item.created_at.isoformat(),
@@ -516,6 +530,13 @@ def test_memory_service_summary_first_selection_includes_remember_path_explainab
                     "episode_id": str(episode.episode_id),
                     "type": "workflow_completion_note",
                     "provenance": "workflow_complete_auto",
+                    "provenance_kind": "workflow_memory",
+                    "interaction_role": None,
+                    "interaction_kind": None,
+                    "file_name": None,
+                    "file_path": None,
+                    "file_operation": None,
+                    "purpose": None,
                     "content": "Completion-origin member included in summary-first response",
                     "metadata": {
                         "memory_origin": "workflow_complete_auto",
@@ -532,6 +553,13 @@ def test_memory_service_summary_first_selection_includes_remember_path_explainab
                     "episode_id": str(episode.episode_id),
                     "type": "workflow_objective",
                     "provenance": "workflow_checkpoint_auto",
+                    "provenance_kind": "workflow_memory",
+                    "interaction_role": None,
+                    "interaction_kind": None,
+                    "file_name": None,
+                    "file_path": None,
+                    "file_operation": None,
+                    "purpose": None,
                     "content": "Checkpoint-origin member included in summary-first response",
                     "metadata": {
                         "memory_origin": "workflow_checkpoint_auto",
@@ -1189,57 +1217,67 @@ def test_memory_service_built_episode_summary_is_used_by_summary_first_retrieval
     assert response.episodes == (episode,)
     assert response.details["summary_selection_applied"] is True
     assert response.details["summary_selection_kind"] == "memory_summary_first"
-    assert response.details["summaries"] == [
+    assert len(response.details["summaries"]) == 1
+    summary_details = response.details["summaries"][0]
+    assert summary_details["memory_summary_id"] == str(build_result.summary.memory_summary_id)
+    assert summary_details["episode_id"] == str(episode.episode_id)
+    assert summary_details["workflow_instance_id"] == str(workflow_id)
+    assert summary_details["summary_text"].startswith(
+        "Episode source summary for builder-driven retrieval"
+    )
+    assert summary_details["summary_kind"] == "episode_summary"
+    assert summary_details["metadata"] == {
+        "builder": "minimal_episode_summary_builder",
+        "build_scope": "episode",
+        "source_episode_id": str(episode.episode_id),
+        "source_memory_item_count": 2,
+        "build_version": "0.6.0-first-slice",
+        "remember_path_memory_origins": [],
+        "remember_path_promotion_fields": [],
+        "remember_path_promotion_sources": [],
+    }
+    assert summary_details["member_memory_count"] == 2
+    assert summary_details["member_memory_ids"] == [
+        str(second_memory_item.memory_id),
+        str(first_memory_item.memory_id),
+    ]
+    assert summary_details["member_memory_items"] == [
         {
-            "memory_summary_id": str(build_result.summary.memory_summary_id),
+            "memory_id": str(second_memory_item.memory_id),
+            "workspace_id": str(workspace_id),
             "episode_id": str(episode.episode_id),
-            "workflow_instance_id": str(workflow_id),
-            "summary_text": (
-                "Episode source summary for builder-driven retrieval\n\n"
-                "Included memory items:\n- "
-                "Second builder-driven child item\n- First builder-driven child item"
-            ),
-            "summary_kind": "episode_summary",
-            "metadata": {
-                "builder": "minimal_episode_summary_builder",
-                "build_scope": "episode",
-                "source_episode_id": str(episode.episode_id),
-                "source_memory_item_count": 2,
-                "build_version": "0.6.0-first-slice",
-                "remember_path_memory_origins": [],
-                "remember_path_promotion_fields": [],
-                "remember_path_promotion_sources": [],
-            },
-            "member_memory_count": 2,
-            "member_memory_ids": [
-                str(second_memory_item.memory_id),
-                str(first_memory_item.memory_id),
-            ],
-            "member_memory_items": [
-                {
-                    "memory_id": str(second_memory_item.memory_id),
-                    "workspace_id": str(workspace_id),
-                    "episode_id": str(episode.episode_id),
-                    "type": "episode_note",
-                    "provenance": "episode",
-                    "content": "Second builder-driven child item",
-                    "metadata": {"rank": 2},
-                    "created_at": second_memory_item.created_at.isoformat(),
-                    "updated_at": second_memory_item.updated_at.isoformat(),
-                },
-                {
-                    "memory_id": str(first_memory_item.memory_id),
-                    "workspace_id": str(workspace_id),
-                    "episode_id": str(episode.episode_id),
-                    "type": "episode_note",
-                    "provenance": "episode",
-                    "content": "First builder-driven child item",
-                    "metadata": {"rank": 1},
-                    "created_at": first_memory_item.created_at.isoformat(),
-                    "updated_at": first_memory_item.updated_at.isoformat(),
-                },
-            ],
-        }
+            "type": "episode_note",
+            "provenance": "episode",
+            "provenance_kind": "episode_memory",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
+            "content": second_memory_item.content,
+            "metadata": {"rank": 2},
+            "created_at": second_memory_item.created_at.isoformat(),
+            "updated_at": second_memory_item.updated_at.isoformat(),
+        },
+        {
+            "memory_id": str(first_memory_item.memory_id),
+            "workspace_id": str(workspace_id),
+            "episode_id": str(episode.episode_id),
+            "type": "episode_note",
+            "provenance": "episode",
+            "provenance_kind": "episode_memory",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
+            "content": first_memory_item.content,
+            "metadata": {"rank": 1},
+            "created_at": first_memory_item.created_at.isoformat(),
+            "updated_at": first_memory_item.updated_at.isoformat(),
+        },
     ]
     assert response.details["memory_context_groups"][0]["selection_kind"] == "memory_summary_first"
     assert response.details["memory_context_groups"][0]["selection_route"] == "summary_first"

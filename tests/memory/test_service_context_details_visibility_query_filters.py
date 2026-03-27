@@ -172,6 +172,13 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "episode_id": str(episode.episode_id),
             "type": "episode_note",
             "provenance": "episode",
+            "provenance_kind": "episode_memory",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Direct context note",
             "metadata": {"kind": "direct"},
             "created_at": direct_memory_item.created_at.isoformat(),
@@ -186,6 +193,13 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "memory_id": str(direct_memory_item.memory_id),
             "memory_type": "episode_note",
             "provenance": "episode",
+            "provenance_kind": "episode_memory",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "memory_origin": None,
             "promotion_field": None,
             "promotion_source": None,
@@ -223,16 +237,19 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "episode_id": None,
             "type": "workspace_note",
             "provenance": "workspace",
+            "provenance_kind": "other",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Inherited workspace context",
             "metadata": {"kind": "inherited"},
             "created_at": inherited_workspace_item.created_at.isoformat(),
             "updated_at": inherited_workspace_item.updated_at.isoformat(),
         }
     ]
-    assert workspace_group.get("remember_path_memory_items", []) == []
-    assert workspace_group.get("remember_path_memory_summary", {}) == {}
-    assert workspace_group.get("remember_path_relation_explanations", []) == []
-    assert workspace_group.get("remember_path_relation_summary", {}) == {}
     assert response.details["inherited_memory_items"] == [
         {
             "memory_id": str(inherited_workspace_item.memory_id),
@@ -240,6 +257,13 @@ def test_memory_get_context_keeps_inherited_workspace_items_when_query_matches_e
             "episode_id": None,
             "type": "workspace_note",
             "provenance": "workspace",
+            "provenance_kind": "other",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Inherited workspace context",
             "metadata": {"kind": "inherited"},
             "created_at": inherited_workspace_item.created_at.isoformat(),
@@ -383,6 +407,13 @@ def test_memory_get_context_summary_first_query_filter_uses_surviving_child_set(
     assert summary_group["summaries"][0]["memory_item_count"] == 1
     assert summary_group["summaries"][0]["memory_item_types"] == ["episode_note"]
     assert summary_group["summaries"][0]["memory_item_provenance"] == ["episode"]
+    assert summary_group["summaries"][0]["memory_item_provenance_counts"] == {
+        "episode": 1,
+    }
+    assert summary_group["summaries"][0]["interaction_memory_count"] == 0
+    assert summary_group["summaries"][0]["interaction_memory_present"] is False
+    assert summary_group["summaries"][0]["interaction_roles_present"] == []
+    assert summary_group["summaries"][0]["interaction_kinds_present"] == []
     assert "remember_path_explainability" in summary_group["summaries"][0]
 
     episode_group = response.details["memory_context_groups"][1]
@@ -402,6 +433,13 @@ def test_memory_get_context_summary_first_query_filter_uses_surviving_child_set(
             "episode_id": str(matching_episode.episode_id),
             "type": "episode_note",
             "provenance": "episode",
+            "provenance_kind": "episode_memory",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Matching episode memory item",
             "metadata": {"kind": "matching-note"},
             "created_at": matching_memory_item.created_at.isoformat(),
@@ -411,7 +449,27 @@ def test_memory_get_context_summary_first_query_filter_uses_surviving_child_set(
     assert episode_group["related_memory_items"] == []
     assert episode_group["related_memory_item_provenance"] == []
     assert episode_group["related_memory_relation_edges"] == []
-    assert "remember_path_memory_items" in episode_group
+    assert episode_group["remember_path_memory_items"] == [
+        {
+            "memory_id": str(matching_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "provenance_kind": "episode_memory",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
     assert "remember_path_memory_summary" in episode_group
     assert "remember_path_relation_explanations" in episode_group
     assert "remember_path_relation_summary" in episode_group
@@ -892,6 +950,13 @@ def test_memory_get_context_workspace_only_query_filter_summary_first_uses_survi
             "episode_id": str(matching_episode.episode_id),
             "type": "episode_note",
             "provenance": "episode",
+            "provenance_kind": "episode_memory",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Matching workspace-only memory item",
             "metadata": {"kind": "matching-note"},
             "created_at": matching_memory_item.created_at.isoformat(),
@@ -901,7 +966,27 @@ def test_memory_get_context_workspace_only_query_filter_summary_first_uses_survi
     assert episode_group["related_memory_items"] == []
     assert episode_group["related_memory_item_provenance"] == []
     assert episode_group["related_memory_relation_edges"] == []
-    assert "remember_path_memory_items" in episode_group
+    assert episode_group["remember_path_memory_items"] == [
+        {
+            "memory_id": str(matching_memory_item.memory_id),
+            "memory_type": "episode_note",
+            "provenance": "episode",
+            "provenance_kind": "episode_memory",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
+            "memory_origin": None,
+            "promotion_field": None,
+            "promotion_source": None,
+            "checkpoint_id": None,
+            "step_name": None,
+            "workflow_status": None,
+            "attempt_status": None,
+        }
+    ]
     assert "remember_path_memory_summary" in episode_group
     assert "remember_path_relation_explanations" in episode_group
     assert "remember_path_relation_summary" in episode_group
@@ -1406,6 +1491,13 @@ def test_memory_get_context_ticket_only_query_filter_summary_first_uses_survivin
             "episode_id": str(matching_episode.episode_id),
             "type": "episode_note",
             "provenance": "episode",
+            "provenance_kind": "episode_memory",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Matching ticket-only memory item",
             "metadata": {"kind": "matching-note"},
             "created_at": matching_memory_item.created_at.isoformat(),
@@ -1661,6 +1753,13 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
             "episode_id": None,
             "type": "workspace_note",
             "provenance": "workspace",
+            "provenance_kind": "other",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Inherited-only match token",
             "metadata": {"kind": "inherited-only"},
             "created_at": inherited_workspace_item.created_at.isoformat(),
@@ -1678,6 +1777,13 @@ def test_memory_get_context_keeps_inherited_workspace_items_as_auxiliary_context
             "episode_id": None,
             "type": "workspace_note",
             "provenance": "workspace",
+            "provenance_kind": "other",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Inherited-only match token",
             "metadata": {"kind": "inherited-only"},
             "created_at": inherited_workspace_item.created_at.isoformat(),
@@ -1836,6 +1942,13 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
             "episode_id": None,
             "type": "workspace_note",
             "provenance": "workspace",
+            "provenance_kind": "other",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Newer inherited workspace item survives low-limit no-match shaping",
             "metadata": {"kind": "newer-workspace-item"},
             "created_at": newer_inherited_workspace_item.created_at.isoformat(),
@@ -1853,6 +1966,13 @@ def test_memory_get_context_limit_truncates_workspace_inherited_auxiliary_output
             "episode_id": None,
             "type": "workspace_note",
             "provenance": "workspace",
+            "provenance_kind": "other",
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
             "content": "Newer inherited workspace item survives low-limit no-match shaping",
             "metadata": {"kind": "newer-workspace-item"},
             "created_at": newer_inherited_workspace_item.created_at.isoformat(),

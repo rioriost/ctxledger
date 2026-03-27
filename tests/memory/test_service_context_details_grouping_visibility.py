@@ -20,6 +20,39 @@ from ctxledger.memory.service import (
 )
 
 
+def _normalize_memory_item(memory_item: dict[str, object]) -> dict[str, object]:
+    provenance = memory_item["provenance"]
+    return {
+        "memory_id": memory_item["memory_id"],
+        "workspace_id": memory_item["workspace_id"],
+        "episode_id": memory_item["episode_id"],
+        "type": memory_item["type"],
+        "provenance": provenance,
+        "provenance_kind": memory_item.get(
+            "provenance_kind",
+            (
+                "interaction"
+                if provenance == "interaction"
+                else "workflow_memory"
+                if provenance in {"workflow_checkpoint_auto", "workflow_complete_auto"}
+                else "episode_memory"
+                if provenance == "episode"
+                else "other"
+            ),
+        ),
+        "interaction_role": memory_item.get("interaction_role"),
+        "interaction_kind": memory_item.get("interaction_kind"),
+        "file_name": memory_item.get("file_name"),
+        "file_path": memory_item.get("file_path"),
+        "file_operation": memory_item.get("file_operation"),
+        "purpose": memory_item.get("purpose"),
+        "content": memory_item["content"],
+        "metadata": memory_item["metadata"],
+        "created_at": memory_item["created_at"],
+        "updated_at": memory_item["updated_at"],
+    }
+
+
 def _assert_episode_group(
     group: dict[str, object],
     *,
@@ -31,6 +64,8 @@ def _assert_episode_group(
     parent_group_scope: str | None = None,
     parent_group_id: str | None = None,
 ) -> None:
+    normalized_memory_item = _normalize_memory_item(memory_item)
+
     assert group["scope"] == "episode"
     assert group["scope_id"] == episode_id
     assert group["parent_scope"] == "workflow_instance"
@@ -40,15 +75,22 @@ def _assert_episode_group(
     assert group["selection_kind"] == "direct_episode"
     assert group["selection_route"] == selection_route
     assert group["selected_via_summary_first"] is selected_via_summary_first
-    assert group["memory_items"] == [memory_item]
+    assert group["memory_items"] == [normalized_memory_item]
     assert group["related_memory_items"] == []
     assert group["related_memory_item_provenance"] == []
     assert group["related_memory_relation_edges"] == []
     assert group["remember_path_memory_items"] == [
         {
-            "memory_id": memory_item["memory_id"],
-            "memory_type": memory_item["type"],
-            "provenance": memory_item["provenance"],
+            "memory_id": normalized_memory_item["memory_id"],
+            "memory_type": normalized_memory_item["type"],
+            "provenance": normalized_memory_item["provenance"],
+            "provenance_kind": normalized_memory_item["provenance_kind"],
+            "interaction_role": normalized_memory_item["interaction_role"],
+            "interaction_kind": normalized_memory_item["interaction_kind"],
+            "file_name": normalized_memory_item["file_name"],
+            "file_path": normalized_memory_item["file_path"],
+            "file_operation": normalized_memory_item["file_operation"],
+            "purpose": normalized_memory_item["purpose"],
             "memory_origin": None,
             "promotion_field": None,
             "promotion_source": None,
@@ -86,7 +128,9 @@ def _assert_workspace_group(
     assert group.get("parent_group_id") is None
     assert group["selection_kind"] == "inherited_workspace"
     assert group["selection_route"] == "workspace_inherited_auxiliary"
-    assert group["memory_items"] == memory_items
+    assert group["memory_items"] == [
+        _normalize_memory_item(memory_item) for memory_item in memory_items
+    ]
     assert group.get("remember_path_memory_items", []) == []
     assert group.get("remember_path_memory_summary", {}) == {}
     assert group.get("remember_path_relation_explanations", []) == []
@@ -133,6 +177,8 @@ def _assert_episode_group(
     selected_via_summary_first: bool,
     memory_item: dict[str, object],
 ) -> None:
+    normalized_memory_item = _normalize_memory_item(memory_item)
+
     assert group["scope"] == "episode"
     assert group["scope_id"] == episode_id
     assert group["parent_scope"] == "workflow_instance"
@@ -144,15 +190,22 @@ def _assert_episode_group(
     assert group["selection_kind"] == "direct_episode"
     assert group["selection_route"] == selection_route
     assert group["selected_via_summary_first"] is selected_via_summary_first
-    assert group["memory_items"] == [memory_item]
+    assert group["memory_items"] == [normalized_memory_item]
     assert group["related_memory_items"] == []
     assert group["related_memory_item_provenance"] == []
     assert group["related_memory_relation_edges"] == []
     assert group["remember_path_memory_items"] == [
         {
-            "memory_id": memory_item["memory_id"],
-            "memory_type": memory_item["type"],
-            "provenance": memory_item["provenance"],
+            "memory_id": normalized_memory_item["memory_id"],
+            "memory_type": normalized_memory_item["type"],
+            "provenance": normalized_memory_item["provenance"],
+            "provenance_kind": normalized_memory_item["provenance_kind"],
+            "interaction_role": normalized_memory_item["interaction_role"],
+            "interaction_kind": normalized_memory_item["interaction_kind"],
+            "file_name": normalized_memory_item["file_name"],
+            "file_path": normalized_memory_item["file_path"],
+            "file_operation": normalized_memory_item["file_operation"],
+            "purpose": normalized_memory_item["purpose"],
             "memory_origin": None,
             "promotion_field": None,
             "promotion_source": None,
@@ -190,7 +243,9 @@ def _assert_workspace_group(
     assert group.get("parent_group_id") is None
     assert group["selection_kind"] == "inherited_workspace"
     assert group["selection_route"] == "workspace_inherited_auxiliary"
-    assert group["memory_items"] == memory_items
+    assert group["memory_items"] == [
+        _normalize_memory_item(memory_item) for memory_item in memory_items
+    ]
     assert group.get("remember_path_memory_items", []) == []
     assert group.get("remember_path_memory_summary", {}) == {}
     assert group.get("remember_path_relation_explanations", []) == []

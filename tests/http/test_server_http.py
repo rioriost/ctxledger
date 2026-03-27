@@ -1402,12 +1402,17 @@ def test_http_mcp_route_supports_tools_call_over_http() -> None:
         ),
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
     assert response.headers == {"content-type": "application/json"}
     assert response.payload["jsonrpc"] == "2.0"
     assert response.payload["id"] == 3
-    assert response.payload["error"]["code"] == -32000
-    assert "has no attribute '_uow_factory'" in response.payload["error"]["message"]
+    result = response.payload["result"]
+    assert result["content"][0]["type"] == "text"
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["ok"] is True
+    assert payload["result"]["workflow"]["workflow_instance_id"] == str(
+        resume.workflow_instance.workflow_instance_id
+    )
 
 
 def test_http_mcp_route_requires_json_rpc_body() -> None:
@@ -2211,12 +2216,25 @@ def test_http_mcp_rpc_tools_call_returns_workspace_register_success_payload() ->
     )
 
     assert isinstance(response, McpHttpResponse)
-    assert response.status_code == 400
+    assert response.status_code == 200
     assert response.headers == {"content-type": "application/json"}
     assert response.payload["jsonrpc"] == "2.0"
     assert response.payload["id"] == 3
-    assert response.payload["error"]["code"] == -32000
-    assert "has no attribute '_uow_factory'" in response.payload["error"]["message"]
+
+    result = response.payload["result"]
+    assert result["content"][0]["type"] == "text"
+    payload = json.loads(result["content"][0]["text"])
+
+    assert payload["ok"] is True
+    assert payload["result"] == {
+        "workspace_id": str(registered_workspace.workspace_id),
+        "repo_url": registered_workspace.repo_url,
+        "canonical_path": registered_workspace.canonical_path,
+        "default_branch": registered_workspace.default_branch,
+        "metadata": {"team": "platform"},
+        "created_at": registered_workspace.created_at.isoformat(),
+        "updated_at": registered_workspace.updated_at.isoformat(),
+    }
 
 
 def test_http_mcp_rpc_resources_list_returns_registered_resources() -> None:

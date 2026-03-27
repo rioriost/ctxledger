@@ -197,6 +197,34 @@ class PostgresMemoryItemRepository(MemoryItemRepository):
             rows = cur.fetchall()
         return {str(row["provenance"]): int(row["count"]) for row in rows}
 
+    def count_with_any_file_work_metadata(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM memory_items
+                WHERE
+                    (
+                        metadata_json ? 'file_name'
+                        AND btrim(COALESCE(metadata_json->>'file_name', '')) <> ''
+                    )
+                    OR (
+                        metadata_json ? 'file_path'
+                        AND btrim(COALESCE(metadata_json->>'file_path', '')) <> ''
+                    )
+                    OR (
+                        metadata_json ? 'file_operation'
+                        AND btrim(COALESCE(metadata_json->>'file_operation', '')) <> ''
+                    )
+                    OR (
+                        metadata_json ? 'purpose'
+                        AND btrim(COALESCE(metadata_json->>'purpose', '')) <> ''
+                    )
+                """
+            )
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
     def max_datetime(self, field_name: str) -> datetime | None:
         if field_name not in {"created_at", "updated_at"}:
             raise PersistenceError(f"Unsupported datetime field '{field_name}' for memory_items")

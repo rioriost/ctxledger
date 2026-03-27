@@ -346,6 +346,161 @@ def test_build_workspace_resume_selection_prefers_non_terminal_candidate_over_la
     ]
 
 
+def test_0_9_0_minimal_prompt_resume_scaffold_preserves_workspace_selection_contract() -> None:
+    latest_workflow = SimpleNamespace(
+        workflow_instance_id=uuid4(),
+        status="running",
+        ticket_id="TASK-PRIMARY-0-9-0",
+        latest_attempt=SimpleNamespace(status="running"),
+    )
+    latest_checkpoint = SimpleNamespace(
+        summary="Continue bounded work after prompt: resume",
+        step_name="continue_mainline",
+        checkpoint_json={
+            "next_intended_action": "continue mainline implementation",
+            "prompt_text": "resume",
+        },
+    )
+
+    (
+        selected_workflow,
+        selected_reason,
+        selection_signals,
+        explanations,
+        ranking_details,
+    ) = build_workspace_resume_selection(
+        running_workflow=None,
+        latest_workflow=latest_workflow,
+        workflow_candidates=(latest_workflow,),
+        latest_checkpoint=latest_checkpoint,
+        candidate_checkpoints_by_workflow_id={
+            str(latest_workflow.workflow_instance_id): latest_checkpoint,
+        },
+    )
+
+    payload = build_workspace_resume_selection_payload(
+        strategy="running_or_latest",
+        candidate_count=1,
+        selected_workflow=selected_workflow,
+        running_workflow=None,
+        latest_workflow=latest_workflow,
+        selected_reason=selected_reason,
+        selection_signals=selection_signals,
+        explanations=explanations,
+        ranking_details=ranking_details,
+    )
+
+    assert payload["strategy"] == "running_or_latest"
+    assert payload["candidate_count"] == 1
+    assert payload["selected_workflow_instance_id"] == str(latest_workflow.workflow_instance_id)
+    assert payload["latest_workflow_instance_id"] == str(latest_workflow.workflow_instance_id)
+    assert payload["latest_deprioritized"] is False
+    assert payload["signals"]["selected_equals_latest"] is True
+    assert payload["signals"]["selected_equals_running"] is False
+    assert payload["signals"]["running_workflow_available"] is False
+    assert payload["signals"]["ranking_details_present"] is True
+    assert payload["signals"]["explanations_present"] is True
+    assert payload["explanations"] == [
+        {
+            "code": "latest_attempt_present",
+            "message": "candidate has a latest attempt signal that improves resumability confidence",
+        },
+        {
+            "code": "latest_checkpoint_present",
+            "message": "candidate has checkpoint history that improves resumability confidence",
+        },
+    ]
+    assert payload["ranking_details"][0]["selected"] is True
+    assert payload["ranking_details"][0]["reason_list"][-1] == {
+        "code": "selected_candidate",
+        "message": "candidate was selected after applying workspace resume heuristics",
+    }
+
+
+def test_0_9_0_resume_scaffold_keeps_selected_vs_latest_and_detour_signals_explicit() -> None:
+    latest_detour_workflow = SimpleNamespace(
+        workflow_instance_id=uuid4(),
+        status="running",
+        ticket_id="DOCS-FOLLOWUP-0-9-0",
+        latest_attempt=SimpleNamespace(status="running"),
+    )
+    mainline_workflow = SimpleNamespace(
+        workflow_instance_id=uuid4(),
+        status="running",
+        ticket_id="TASK-PRIMARY-0-9-0",
+        latest_attempt=SimpleNamespace(status="running"),
+    )
+    latest_detour_checkpoint = SimpleNamespace(
+        summary="Docs follow-up for resume behavior",
+        step_name="docs_followup",
+        checkpoint_json={"next_intended_action": "write docs follow-up"},
+    )
+    mainline_checkpoint = SimpleNamespace(
+        summary="Continue mainline implementation",
+        step_name="implement_mainline",
+        checkpoint_json={"next_intended_action": "finish 0.9.0 mainline work"},
+    )
+
+    (
+        selected_workflow,
+        selected_reason,
+        selection_signals,
+        explanations,
+        ranking_details,
+    ) = build_workspace_resume_selection(
+        running_workflow=None,
+        latest_workflow=latest_detour_workflow,
+        workflow_candidates=(latest_detour_workflow, mainline_workflow),
+        latest_checkpoint=latest_detour_checkpoint,
+        candidate_checkpoints_by_workflow_id={
+            str(latest_detour_workflow.workflow_instance_id): latest_detour_checkpoint,
+            str(mainline_workflow.workflow_instance_id): mainline_checkpoint,
+        },
+    )
+
+    payload = build_workspace_resume_selection_payload(
+        strategy="running_or_latest",
+        candidate_count=2,
+        selected_workflow=selected_workflow,
+        running_workflow=None,
+        latest_workflow=latest_detour_workflow,
+        selected_reason=selected_reason,
+        selection_signals=selection_signals,
+        explanations=explanations,
+        ranking_details=ranking_details,
+    )
+
+    assert payload["selected_workflow_instance_id"] == str(mainline_workflow.workflow_instance_id)
+    assert payload["latest_workflow_instance_id"] == str(
+        latest_detour_workflow.workflow_instance_id
+    )
+    assert payload["latest_deprioritized"] is True
+    assert payload["signals"]["selected_equals_latest"] is False
+    assert payload["signals"]["latest_ticket_detour_like"] is True
+    assert payload["signals"]["latest_checkpoint_detour_like"] is True
+    assert payload["signals"]["selected_ticket_detour_like"] is False
+    assert payload["signals"]["selected_checkpoint_detour_like"] is False
+    assert payload["signals"]["detour_override_applied"] is True
+    assert payload["signals"]["ranking_details_present"] is True
+    assert payload["signals"]["explanations_present"] is True
+    assert payload["ranking_details"][0]["workflow_instance_id"] == str(
+        latest_detour_workflow.workflow_instance_id
+    )
+    assert payload["ranking_details"][0]["selected"] is False
+    assert payload["ranking_details"][1]["workflow_instance_id"] == str(
+        mainline_workflow.workflow_instance_id
+    )
+    assert payload["ranking_details"][1]["selected"] is True
+    assert any(
+        explanation["code"] == "latest_ticket_detour_like"
+        for explanation in payload["explanations"]
+    )
+    assert any(
+        explanation["code"] == "selected_non_detour_candidate"
+        for explanation in payload["explanations"]
+    )
+
+
 def test_build_workspace_resume_selection_prefers_non_detour_like_candidate_over_latest_detour_like() -> (
     None
 ):

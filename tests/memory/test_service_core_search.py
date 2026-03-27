@@ -427,6 +427,26 @@ def test_memory_search_ranking_details_include_remember_path_explainability_for_
         "attempt_status": "running",
         "supports_relation_present": True,
         "supports_relation_reasons": ["next_action_supports_objective"],
+        "provenance": "workflow_checkpoint_auto",
+        "provenance_kind": "workflow_memory",
+        "interaction_role": None,
+        "interaction_kind": None,
+        "file_name": None,
+        "file_path": None,
+        "file_operation": None,
+        "purpose": None,
+        "failure_reuse_detail": {
+            "failure_reuse_candidate": False,
+            "failure_reuse_reason": None,
+            "interaction_present": False,
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_work_present": False,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
+        },
     }
 
 
@@ -482,6 +502,26 @@ def test_memory_search_ranking_details_include_completion_origin_explainability(
         "attempt_status": "succeeded",
         "supports_relation_present": False,
         "supports_relation_reasons": [],
+        "provenance": "workflow_complete_auto",
+        "provenance_kind": "workflow_memory",
+        "interaction_role": None,
+        "interaction_kind": None,
+        "file_name": None,
+        "file_path": None,
+        "file_operation": None,
+        "purpose": None,
+        "failure_reuse_detail": {
+            "failure_reuse_candidate": False,
+            "failure_reuse_reason": None,
+            "interaction_present": False,
+            "interaction_role": None,
+            "interaction_kind": None,
+            "file_work_present": False,
+            "file_name": None,
+            "file_path": None,
+            "file_operation": None,
+            "purpose": None,
+        },
     }
 
 

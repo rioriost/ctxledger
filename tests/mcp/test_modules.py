@@ -771,12 +771,16 @@ class FakeRpcRuntime:
     resource_response: McpResourceResponse | None = None
     tool_calls: list[tuple[str, dict[str, object]]] | None = None
     resource_calls: list[str] | None = None
+    _server: object | None = None
+    _persisted_interaction_events: list[dict[str, object]] | None = None
 
     def __post_init__(self) -> None:
         if self.tool_calls is None:
             self.tool_calls = []
         if self.resource_calls is None:
             self.resource_calls = []
+        if self._persisted_interaction_events is None:
+            self._persisted_interaction_events = []
         if self.tool_response is None:
             self.tool_response = McpToolResponse(payload={"ok": True, "result": {"echo": "tool"}})
         if self.resource_response is None:
@@ -785,6 +789,11 @@ class FakeRpcRuntime:
                 payload={"ok": True, "result": {"echo": "resource"}},
                 headers={"content-type": "application/json"},
             )
+        if self._server is None:
+            self._server = SimpleNamespace(
+                workflow_service=SimpleNamespace(),
+            )
+            self._build_workflow_backed_memory_service = None
 
     def registered_tools(self) -> tuple[str, ...]:
         return ("demo_tool",)
@@ -896,6 +905,42 @@ def test_handle_mcp_rpc_request_returns_tools_call_payload() -> None:
         settings=settings,
         tool_response=McpToolResponse(payload={"ok": True, "result": {"message": "hello"}}),
     )
+    runtime_with_persistence = runtime
+
+    class FakePersistenceService:
+        def persist_interaction_memory(
+            self,
+            *,
+            content: str,
+            interaction_role: str,
+            interaction_kind: str,
+            workspace_id: str | None = None,
+            workflow_instance_id: str | None = None,
+            metadata: dict[str, object] | None = None,
+        ) -> SimpleNamespace:
+            assert runtime_with_persistence._persisted_interaction_events is not None
+            if interaction_kind == "interaction_request":
+                runtime_with_persistence._persisted_interaction_events.append(
+                    {
+                        "request": dict(metadata or {}),
+                    }
+                )
+            else:
+                if not runtime_with_persistence._persisted_interaction_events:
+                    runtime_with_persistence._persisted_interaction_events.append({})
+                runtime_with_persistence._persisted_interaction_events[-1]["response"] = dict(
+                    metadata or {}
+                )
+            return SimpleNamespace(
+                content=content,
+                interaction_role=interaction_role,
+                interaction_kind=interaction_kind,
+                workspace_id=workspace_id,
+                workflow_instance_id=workflow_instance_id,
+                metadata=dict(metadata or {}),
+            )
+
+    runtime._build_workflow_backed_memory_service = lambda server: FakePersistenceService()
 
     response = handle_mcp_rpc_request(
         runtime,
@@ -926,6 +971,68 @@ def test_handle_mcp_rpc_request_returns_tools_call_payload() -> None:
         },
     }
     assert runtime.tool_calls == [("demo_tool", {"value": "x"})]
+    assert runtime._last_mcp_interaction_request_event == {
+        "interaction_role": "user",
+        "interaction_direction": "inbound",
+        "transport": "mcp",
+        "interaction_kind": "tool_call",
+        "method": "tools/call",
+        "tool_name": "demo_tool",
+        "arguments": {"value": "x"},
+    }
+    assert runtime._last_mcp_interaction_response_event == {
+        "interaction_role": "agent",
+        "interaction_direction": "outbound",
+        "transport": "mcp",
+        "interaction_kind": "tool_result",
+        "method": "tools/call",
+        "tool_name": "demo_tool",
+        "arguments": {"value": "x"},
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {"ok": True, "result": {"message": "hello"}},
+                        ensure_ascii=False,
+                    ),
+                }
+            ]
+        },
+    }
+    assert getattr(runtime, "_persisted_interaction_events", []) == [
+        {
+            "request": {
+                "interaction_role": "user",
+                "interaction_direction": "inbound",
+                "transport": "mcp",
+                "interaction_kind": "tool_call",
+                "method": "tools/call",
+                "tool_name": "demo_tool",
+                "arguments": {"value": "x"},
+            },
+            "response": {
+                "interaction_role": "agent",
+                "interaction_direction": "outbound",
+                "transport": "mcp",
+                "interaction_kind": "tool_result",
+                "method": "tools/call",
+                "tool_name": "demo_tool",
+                "arguments": {"value": "x"},
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                {"ok": True, "result": {"message": "hello"}},
+                                ensure_ascii=False,
+                            ),
+                        }
+                    ]
+                },
+            },
+        }
+    ]
 
 
 def test_handle_mcp_rpc_request_returns_resources_list_payload() -> None:
@@ -965,6 +1072,42 @@ def test_handle_mcp_rpc_request_returns_resources_read_payload() -> None:
             headers={"content-type": "application/json"},
         ),
     )
+    runtime_with_persistence = runtime
+
+    class FakePersistenceService:
+        def persist_interaction_memory(
+            self,
+            *,
+            content: str,
+            interaction_role: str,
+            interaction_kind: str,
+            workspace_id: str | None = None,
+            workflow_instance_id: str | None = None,
+            metadata: dict[str, object] | None = None,
+        ) -> SimpleNamespace:
+            assert runtime_with_persistence._persisted_interaction_events is not None
+            if interaction_kind == "interaction_request":
+                runtime_with_persistence._persisted_interaction_events.append(
+                    {
+                        "request": dict(metadata or {}),
+                    }
+                )
+            else:
+                if not runtime_with_persistence._persisted_interaction_events:
+                    runtime_with_persistence._persisted_interaction_events.append({})
+                runtime_with_persistence._persisted_interaction_events[-1]["response"] = dict(
+                    metadata or {}
+                )
+            return SimpleNamespace(
+                content=content,
+                interaction_role=interaction_role,
+                interaction_kind=interaction_kind,
+                workspace_id=workspace_id,
+                workflow_instance_id=workflow_instance_id,
+                metadata=dict(metadata or {}),
+            )
+
+    runtime._build_workflow_backed_memory_service = lambda server: FakePersistenceService()
 
     response = handle_mcp_rpc_request(
         runtime,
@@ -993,3 +1136,63 @@ def test_handle_mcp_rpc_request_returns_resources_read_payload() -> None:
         },
     }
     assert runtime.resource_calls == ["workspace://abc/resume"]
+    assert runtime._last_mcp_interaction_request_event == {
+        "interaction_role": "user",
+        "interaction_direction": "inbound",
+        "transport": "mcp",
+        "interaction_kind": "resource_read",
+        "method": "resources/read",
+        "resource_uri": "workspace://abc/resume",
+    }
+    assert runtime._last_mcp_interaction_response_event == {
+        "interaction_role": "agent",
+        "interaction_direction": "outbound",
+        "transport": "mcp",
+        "interaction_kind": "resource_result",
+        "method": "resources/read",
+        "resource_uri": "workspace://abc/resume",
+        "result": {
+            "contents": [
+                {
+                    "uri": "workspace://abc/resume",
+                    "mimeType": "application/json",
+                    "text": json.dumps(
+                        {"resource": {"status": "ok"}},
+                        ensure_ascii=False,
+                    ),
+                }
+            ]
+        },
+    }
+    assert getattr(runtime, "_persisted_interaction_events", []) == [
+        {
+            "request": {
+                "interaction_role": "user",
+                "interaction_direction": "inbound",
+                "transport": "mcp",
+                "interaction_kind": "resource_read",
+                "method": "resources/read",
+                "resource_uri": "workspace://abc/resume",
+            },
+            "response": {
+                "interaction_role": "agent",
+                "interaction_direction": "outbound",
+                "transport": "mcp",
+                "interaction_kind": "resource_result",
+                "method": "resources/read",
+                "resource_uri": "workspace://abc/resume",
+                "result": {
+                    "contents": [
+                        {
+                            "uri": "workspace://abc/resume",
+                            "mimeType": "application/json",
+                            "text": json.dumps(
+                                {"resource": {"status": "ok"}},
+                                ensure_ascii=False,
+                            ),
+                        }
+                    ]
+                },
+            },
+        }
+    ]

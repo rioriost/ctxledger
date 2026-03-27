@@ -34,6 +34,12 @@ Current files include:
 - `decisions/age_image_candidate_decision_record_template.md`
 - `decisions/summary_hierarchy_0_6_0_milestone_slice_closeout.md`
 - `decisions/phase_e_summary_hierarchy_refinement_checklist.md`
+- `design/minimal_prompt_resume_contract.md`
+- `design/historical_progress_query_contract.md`
+- `design/interaction_memory_contract.md`
+- `design/interaction_capture_boundary_design.md`
+- `design/file_work_metadata_contract.md`
+- `design/failure_reuse_contract.md`
 - `decisions/workflow_summary_targeting_policy.md`
 
 ### `design/`
@@ -120,6 +126,12 @@ Start with:
 
 - `decisions/summary_hierarchy_0_6_0_milestone_slice_closeout.md`
 - `decisions/phase_e_summary_hierarchy_refinement_checklist.md`
+- `design/minimal_prompt_resume_contract.md`
+- `design/historical_progress_query_contract.md`
+- `design/interaction_memory_contract.md`
+- `design/interaction_capture_boundary_design.md`
+- `design/file_work_metadata_contract.md`
+- `design/failure_reuse_contract.md`
 - `decisions/workflow_summary_targeting_policy.md`
 
 ### If you want operator guidance

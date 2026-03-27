@@ -6,6 +6,14 @@ For `0.8.0`, read the current release-facing assessment together with:
 - `docs/project/releases/0.8.0_acceptance_review.md`
 - `docs/project/releases/0.8.0_closeout.md`
 
+For `0.9.0`, the bounded contract and acceptance reading should be anchored by:
+
+- `docs/project/releases/plans/versioned/0.9.0_acceptance_checklist.md`
+- `docs/project/releases/plans/versioned/0.9.0_ctxledger_rules_strengthening_plan.md`
+- `docs/memory/design/historical_progress_query_contract.md`
+- `docs/memory/design/interaction_memory_contract.md`
+- `docs/memory/design/failure_reuse_contract.md`
+
 ## 0.1
 
 Primary delivery focus:
@@ -218,6 +226,95 @@ Current `0.5.1` positioning:
 - the original `workflow_resume` timeout that motivated this milestone is not currently reproduced in the latest local checks
 - the latest investigation suggests at least one earlier failure mode was bootstrap/runtime wiring related rather than purely query complexity
 - connection pooling and runtime hardening still remain valid `0.5.1` work because they improve ownership clarity, reduce hidden pool churn, and provide a better base for future timeout diagnosis
+
+## 0.9
+
+Planned focus:
+
+- minimal-prompt resumability from workspace context
+- bounded historical progress recall
+- automatic interaction-memory capture
+- failure-pattern reuse and avoidance
+- file-work metadata capture without file-content indexing
+- tighter alignment between `ctxledger` behavior and repository `.rules`
+
+Current planning posture:
+
+- `0.9.0` is a strengthening milestone, not a broad graph-memory redesign milestone
+- canonical workflow, checkpoint, and failure state remain PostgreSQL-first
+- summaries, embeddings, ranking signals, interaction memory, and graph-linked structures remain derived support layers unless explicitly stated otherwise
+- `.rules` is part of the operational acceptance surface when it materially shapes:
+  - resumability
+  - bounded historical recall
+  - failure avoidance
+  - interaction-memory discipline
+  - file-work metadata discipline
+
+Bounded `0.9.0` contract docs now exist for the intended implementation slice:
+
+- `docs/project/releases/plans/versioned/0.9.0_acceptance_checklist.md`
+- `docs/project/releases/plans/versioned/0.9.0_ctxledger_rules_strengthening_plan.md`
+- `docs/memory/design/historical_progress_query_contract.md`
+- `docs/memory/design/interaction_memory_contract.md`
+- `docs/memory/design/failure_reuse_contract.md`
+
+Implementation priorities for the opening `0.9.0` wave:
+
+1. formalize the minimal-prompt `resume` contract around workspace-context selection
+   - keep `workflow_resume` as the workflow-id-specific path
+   - strengthen the workspace-context entry point for selecting what should be resumed
+   - keep `selected vs latest` and `mainline vs detour` explanation surfaces explicit
+
+2. define the supported bounded historical-question class in docs and contracts
+   - examples include:
+     - what was completed yesterday?
+     - what happened for this keyword?
+     - where did we stop?
+     - what remains?
+   - preserve explicit scope boundaries so the repository does not imply broad unconstrained historical QA
+
+3. fix the automatic interaction-memory capture posture before broadening retrieval claims
+   - user requests and agent responses should be treated as durable interaction memory
+   - capture should be designed at the MCP/HTTP boundary first
+   - interaction memory must remain retrieval-ready but not become a competing workflow-truth system
+
+4. define the minimum file-work metadata schema
+   - include:
+     - file name
+     - file path
+     - create/modify intent
+     - purpose
+     - related workflow/checkpoint context
+   - keep Git-managed file-content indexing explicitly out of scope for `0.9.0`
+
+5. establish focused validation scaffolds early
+   - resume
+   - historical recall
+   - interaction memory
+   - failure reuse
+   - file-work metadata
+   - use these as the minimum acceptance-oriented validation frame for the milestone
+
+Expected `0.9.0` validation posture:
+
+- focused tests should exist for:
+  - minimal-prompt resume behavior
+  - historical progress lookup behavior
+  - interaction-memory capture and retrieval
+  - failure-pattern retrieval or explanation behavior
+  - file-work metadata capture and retrieval
+- serializer and response-shaping coverage should be added where contract details matter
+- HTTP / MCP / service-layer validation should be added where the bounded milestone changes behavior
+- full repository validation should remain green
+
+Expected `0.9.0` product reading:
+
+- a user can say `resume` or `continue` and the system can recover the intended continuation target more reliably from durable state
+- bounded historical progress questions can be answered from durable canonical and derived state
+- user requests and agent responses are automatically remembered in a retrieval-ready form
+- file-work metadata is durably queryable without indexing Git-managed file contents
+- prior failure patterns and recoveries are easier to surface and reuse
+- `ctxledger` and repository `.rules` behave more like one coordinated operating model
 
 Remaining work to close out `0.5.1` more confidently:
 

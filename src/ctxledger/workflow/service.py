@@ -277,6 +277,8 @@ class WorkflowStats:
     checkpoint_auto_memory_skipped_count: int = 0
     workflow_completion_auto_memory_recorded_count: int = 0
     workflow_completion_auto_memory_skipped_count: int = 0
+    interaction_memory_item_count: int = 0
+    file_work_memory_item_count: int = 0
     memory_summary_count: int = 0
     memory_summary_membership_count: int = 0
     age_summary_graph_ready_count: int = 0
@@ -302,6 +304,8 @@ class MemoryStats:
     checkpoint_auto_memory_skipped_count: int = 0
     workflow_completion_auto_memory_recorded_count: int = 0
     workflow_completion_auto_memory_skipped_count: int = 0
+    interaction_memory_item_count: int = 0
+    file_work_memory_item_count: int = 0
     memory_summary_count: int = 0
     memory_summary_membership_count: int = 0
     age_summary_graph_ready_count: int = 0
@@ -619,6 +623,8 @@ class WorkflowService:
             age_summary_graph_stale_count = 0
             age_summary_graph_degraded_count = 0
             age_summary_graph_unknown_count = 1 if memory_summary_membership_count == 0 else 0
+            interaction_memory_item_count = memory_item_provenance_counts.get("interaction", 0)
+            file_work_memory_item_count = self._count_memory_items_with_file_work_metadata(uow)
 
             workflow_status_counts = self._count_grouped_statuses(
                 uow,
@@ -709,6 +715,8 @@ class WorkflowService:
                     - memory_item_provenance_counts.get("workflow_complete_auto", 0),
                     0,
                 ),
+                interaction_memory_item_count=interaction_memory_item_count,
+                file_work_memory_item_count=file_work_memory_item_count,
                 memory_summary_count=memory_summary_count,
                 memory_summary_membership_count=memory_summary_membership_count,
                 age_summary_graph_ready_count=age_summary_graph_ready_count,
@@ -764,6 +772,8 @@ class WorkflowService:
             age_summary_graph_stale_count = 0
             age_summary_graph_degraded_count = 0
             age_summary_graph_unknown_count = 1 if memory_summary_membership_count == 0 else 0
+            interaction_memory_item_count = memory_item_provenance_counts.get("interaction", 0)
+            file_work_memory_item_count = self._count_memory_items_with_file_work_metadata(uow)
 
             return MemoryStats(
                 episode_count=episode_count,
@@ -788,6 +798,8 @@ class WorkflowService:
                     workflow_count - memory_item_provenance_counts.get("workflow_complete_auto", 0),
                     0,
                 ),
+                interaction_memory_item_count=interaction_memory_item_count,
+                file_work_memory_item_count=file_work_memory_item_count,
                 memory_summary_count=memory_summary_count,
                 memory_summary_membership_count=memory_summary_membership_count,
                 age_summary_graph_ready_count=age_summary_graph_ready_count,
@@ -1820,6 +1832,56 @@ class WorkflowService:
         raise PersistenceError(
             "memory stats provenance aggregation is not supported for memory items"
         )
+
+    def _count_memory_items_with_file_work_metadata(self, uow: Any) -> int:
+        memory_items = getattr(uow, "memory_items", None)
+        if memory_items is None:
+            return 0
+
+        count_all_with_metadata = getattr(
+            memory_items,
+            "count_with_any_file_work_metadata",
+            None,
+        )
+        if callable(count_all_with_metadata):
+            return int(count_all_with_metadata())
+
+        list_by_workspace_id = getattr(memory_items, "list_by_workspace_id", None)
+        workflow_instances = getattr(uow, "workflow_instances", None)
+        if callable(list_by_workspace_id) and workflow_instances is not None:
+            count = 0
+            seen_memory_ids: set[UUID] = set()
+            workspaces = getattr(uow, "workspaces", None)
+            list_workspaces = (
+                getattr(workspaces, "list_all", None) if workspaces is not None else None
+            )
+            if callable(list_workspaces):
+                workspace_records = list_workspaces(limit=1000)
+                for workspace in workspace_records:
+                    workspace_id = getattr(workspace, "workspace_id", None)
+                    if workspace_id is None:
+                        continue
+                    memory_items_for_workspace = list_by_workspace_id(workspace_id, limit=10000)
+                    for memory_item in memory_items_for_workspace:
+                        memory_id = getattr(memory_item, "memory_id", None)
+                        if memory_id in seen_memory_ids:
+                            continue
+                        metadata = getattr(memory_item, "metadata", {}) or {}
+                        if any(
+                            isinstance(metadata.get(field_name), str)
+                            and metadata.get(field_name, "").strip()
+                            for field_name in (
+                                "file_name",
+                                "file_path",
+                                "file_operation",
+                                "purpose",
+                            )
+                        ):
+                            seen_memory_ids.add(memory_id)
+                            count += 1
+                return count
+
+        return 0
 
     def _map_workflow_status_to_attempt_status(
         self,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -192,6 +193,68 @@ def test_build_memory_search_tool_handler_maps_memory_error() -> None:
     }
 
 
+def test_build_memory_search_tool_handler_preserves_interaction_and_file_work_filters() -> None:
+    service = FakeMemoryService(search_result=make_search_memory_response())
+    handler = build_memory_search_tool_handler(service)
+
+    response = handler(
+        {
+            "query": "resume",
+            "filters": {
+                "memory_types": ["interaction_request", "interaction_response"],
+                "provenance": ["interaction"],
+                "interaction_roles": ["user", "agent"],
+                "file_paths": ["ctxledger/docs/memory/design/interaction_memory_contract.md"],
+                "file_operation": "modify",
+                "purpose": "capture interaction-memory contract updates",
+            },
+        }
+    )
+
+    assert response.payload["ok"] is True
+
+    assert service.search_calls is not None
+    call = service.search_calls[0]
+    assert call.query == "resume"
+    assert call.filters == {
+        "memory_types": ["interaction_request", "interaction_response"],
+        "provenance": ["interaction"],
+        "interaction_roles": ["user", "agent"],
+        "file_paths": ["ctxledger/docs/memory/design/interaction_memory_contract.md"],
+        "file_operation": "modify",
+        "purpose": "capture interaction-memory contract updates",
+    }
+
+
+def test_build_memory_search_tool_handler_preserves_create_file_work_filters() -> None:
+    service = FakeMemoryService(search_result=make_search_memory_response())
+    handler = build_memory_search_tool_handler(service)
+
+    response = handler(
+        {
+            "query": "new file",
+            "filters": {
+                "file_name": "0.9.0_focused_validation_plan.md",
+                "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+                "file_operation": "create",
+                "purpose": "add focused validation plan",
+            },
+        }
+    )
+
+    assert response.payload["ok"] is True
+
+    assert service.search_calls is not None
+    call = service.search_calls[0]
+    assert call.query == "new file"
+    assert call.filters == {
+        "file_name": "0.9.0_focused_validation_plan.md",
+        "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+        "file_operation": "create",
+        "purpose": "add focused validation plan",
+    }
+
+
 def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values() -> None:
     workflow_instance_id = uuid4()
     service = FakeMemoryService(context_result=make_get_context_response())
@@ -364,12 +427,106 @@ def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values
     call = service.context_calls[0]
     assert call.query == "123"
     assert isinstance(call.workspace_id, str)
-    assert isinstance(call.workflow_instance_id, str)
+    assert call.workflow_instance_id == str(workflow_instance_id)
     assert call.ticket_id == "999"
     assert call.limit == 10
     assert call.include_episodes is True
     assert call.include_memory_items is True
     assert call.include_summaries is True
+
+
+def test_build_memory_get_context_tool_handler_preserves_interaction_and_file_work_details() -> (
+    None
+):
+    response_model = make_get_context_response()
+    response_details = deepcopy(response_model.details)
+    response_details["memory_items"] = [
+        {
+            "memory_id": str(uuid4()),
+            "memory_type": "interaction_request",
+            "provenance": "interaction",
+            "summary": "resume the 0.9.0 implementation work",
+            "metadata": {
+                "interaction_role": "user",
+                "file_name": "interaction_memory_contract.md",
+                "file_path": "ctxledger/docs/memory/design/interaction_memory_contract.md",
+                "file_operation": "modify",
+                "purpose": "tighten interaction-memory contract wording",
+            },
+        },
+        {
+            "memory_id": str(uuid4()),
+            "memory_type": "interaction_response",
+            "provenance": "interaction",
+            "summary": "I will update the focused validation plan",
+            "metadata": {
+                "interaction_role": "agent",
+                "file_name": "0.9.0_focused_validation_plan.md",
+                "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+                "file_operation": "create",
+                "purpose": "add focused validation plan",
+            },
+        },
+    ]
+    response_details["memory_item_counts_by_episode"] = {}
+    response_model = GetContextResponse(
+        feature=response_model.feature,
+        implemented=response_model.implemented,
+        message=response_model.message,
+        status=response_model.status,
+        available_in_version=response_model.available_in_version,
+        timestamp=response_model.timestamp,
+        episodes=response_model.episodes,
+        details=response_details,
+    )
+
+    service = FakeMemoryService(context_result=response_model)
+    handler = build_memory_get_context_tool_handler(service)
+
+    response = handler(
+        {
+            "query": "interaction memory",
+            "include_memory_items": True,
+        }
+    )
+
+    payload = response.payload
+    result = payload["result"]
+
+    assert payload["ok"] is True
+    assert result["details"]["memory_items"] == [
+        {
+            "memory_id": response_details["memory_items"][0]["memory_id"],
+            "memory_type": "interaction_request",
+            "provenance": "interaction",
+            "summary": "resume the 0.9.0 implementation work",
+            "metadata": {
+                "interaction_role": "user",
+                "file_name": "interaction_memory_contract.md",
+                "file_path": "ctxledger/docs/memory/design/interaction_memory_contract.md",
+                "file_operation": "modify",
+                "purpose": "tighten interaction-memory contract wording",
+            },
+        },
+        {
+            "memory_id": response_details["memory_items"][1]["memory_id"],
+            "memory_type": "interaction_response",
+            "provenance": "interaction",
+            "summary": "I will update the focused validation plan",
+            "metadata": {
+                "interaction_role": "agent",
+                "file_name": "0.9.0_focused_validation_plan.md",
+                "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+                "file_operation": "create",
+                "purpose": "add focused validation plan",
+            },
+        },
+    ]
+
+    assert service.context_calls is not None
+    call = service.context_calls[0]
+    assert call.query == "interaction memory"
+    assert call.include_memory_items is True
 
 
 def test_build_memory_get_context_tool_handler_maps_memory_error() -> None:

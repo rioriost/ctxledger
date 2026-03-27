@@ -232,6 +232,224 @@ def test_serialize_get_context_response_serializes_episode_payloads() -> None:
     ]
 
 
+def test_serialize_get_context_response_preserves_interaction_provenance_and_file_work_metadata() -> (
+    None
+):
+    workflow_id = uuid4()
+    created_at = datetime(2024, 3, 6, 7, 8, 9, tzinfo=UTC)
+    interaction_request_memory_id = str(uuid4())
+    interaction_response_memory_id = str(uuid4())
+    response = GetContextResponse(
+        feature=MemoryFeature.GET_CONTEXT,
+        implemented=True,
+        message="Episode-oriented memory context retrieved successfully.",
+        status="ok",
+        available_in_version="0.2.0",
+        timestamp=created_at,
+        episodes=(),
+        details={
+            "query": "interaction memory",
+            "normalized_query": "interaction memory",
+            "lookup_scope": "workflow_instance",
+            "workflow_instance_id": str(workflow_id),
+            "resolved_workflow_count": 1,
+            "resolved_workflow_ids": [str(workflow_id)],
+            "query_filter_applied": True,
+            "episodes_before_query_filter": 0,
+            "matched_episode_count": 0,
+            "episodes_returned": 0,
+            "episode_explanations": [],
+            "memory_items": [
+                {
+                    "memory_id": interaction_request_memory_id,
+                    "memory_type": "interaction_request",
+                    "provenance": "interaction",
+                    "provenance_kind": "interaction",
+                    "summary": "resume the 0.9.0 implementation work",
+                    "metadata": {
+                        "interaction_role": "user",
+                        "interaction_kind": "interaction_request",
+                        "file_name": "interaction_memory_contract.md",
+                        "file_path": "ctxledger/docs/memory/design/interaction_memory_contract.md",
+                        "file_operation": "modify",
+                        "purpose": "capture interaction-memory contract updates",
+                    },
+                },
+                {
+                    "memory_id": interaction_response_memory_id,
+                    "memory_type": "interaction_response",
+                    "provenance": "interaction",
+                    "provenance_kind": "interaction",
+                    "summary": "I will update the focused validation plan",
+                    "metadata": {
+                        "interaction_role": "agent",
+                        "interaction_kind": "interaction_response",
+                        "file_name": "0.9.0_focused_validation_plan.md",
+                        "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+                        "file_operation": "create",
+                        "purpose": "add focused validation plan",
+                    },
+                },
+            ],
+            "memory_item_counts_by_episode": {},
+            "summaries": [],
+            "memory_context_groups": [
+                {
+                    "scope": "interaction",
+                    "scope_id": "episode-interaction-group",
+                    "parent_scope": "episode",
+                    "parent_scope_id": "episode-1",
+                    "parent_group_scope": "workflow_instance",
+                    "parent_group_id": str(workflow_id),
+                    "selection_kind": "episode_interaction_memory",
+                    "selection_route": "episode_interaction_direct",
+                    "selected_via_summary_first": False,
+                    "memory_items": [
+                        {
+                            "memory_id": interaction_request_memory_id,
+                            "memory_type": "interaction_request",
+                            "provenance": "interaction",
+                            "provenance_kind": "interaction",
+                            "summary": "resume the 0.9.0 implementation work",
+                            "metadata": {
+                                "interaction_role": "user",
+                                "interaction_kind": "interaction_request",
+                                "file_name": "interaction_memory_contract.md",
+                                "file_path": "ctxledger/docs/memory/design/interaction_memory_contract.md",
+                                "file_operation": "modify",
+                                "purpose": "capture interaction-memory contract updates",
+                            },
+                        },
+                        {
+                            "memory_id": interaction_response_memory_id,
+                            "memory_type": "interaction_response",
+                            "provenance": "interaction",
+                            "provenance_kind": "interaction",
+                            "summary": "I will update the focused validation plan",
+                            "metadata": {
+                                "interaction_role": "agent",
+                                "interaction_kind": "interaction_response",
+                                "file_name": "0.9.0_focused_validation_plan.md",
+                                "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+                                "file_operation": "create",
+                                "purpose": "add focused validation plan",
+                            },
+                        },
+                    ],
+                    "interaction_memory_present": True,
+                    "interaction_memory_count": 2,
+                    "interaction_roles_present": ["agent", "user"],
+                    "interaction_kinds_present": [
+                        "interaction_request",
+                        "interaction_response",
+                    ],
+                    "file_work_memory_present": True,
+                    "file_work_memory_count": 2,
+                }
+            ],
+        },
+    )
+
+    payload = serialize_get_context_response(response)
+
+    assert payload["feature"] == "memory_get_context"
+    assert payload["details"]["memory_items"] == [
+        {
+            "memory_id": interaction_request_memory_id,
+            "memory_type": "interaction_request",
+            "provenance": "interaction",
+            "provenance_kind": "interaction",
+            "summary": "resume the 0.9.0 implementation work",
+            "metadata": {
+                "interaction_role": "user",
+                "interaction_kind": "interaction_request",
+                "file_name": "interaction_memory_contract.md",
+                "file_path": "ctxledger/docs/memory/design/interaction_memory_contract.md",
+                "file_operation": "modify",
+                "purpose": "capture interaction-memory contract updates",
+            },
+        },
+        {
+            "memory_id": interaction_response_memory_id,
+            "memory_type": "interaction_response",
+            "provenance": "interaction",
+            "provenance_kind": "interaction",
+            "summary": "I will update the focused validation plan",
+            "metadata": {
+                "interaction_role": "agent",
+                "interaction_kind": "interaction_response",
+                "file_name": "0.9.0_focused_validation_plan.md",
+                "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+                "file_operation": "create",
+                "purpose": "add focused validation plan",
+            },
+        },
+    ]
+    assert payload["details"]["memory_items"][0]["provenance"] == "interaction"
+    assert payload["details"]["memory_items"][0]["provenance_kind"] == "interaction"
+    assert payload["details"]["memory_items"][0]["metadata"]["interaction_role"] == "user"
+    assert (
+        payload["details"]["memory_items"][0]["metadata"]["file_path"]
+        == "ctxledger/docs/memory/design/interaction_memory_contract.md"
+    )
+    assert payload["details"]["memory_items"][1]["metadata"]["interaction_role"] == "agent"
+    assert payload["details"]["memory_items"][1]["metadata"]["file_operation"] == "create"
+    assert payload["details"]["memory_context_groups"] == [
+        {
+            "scope": "interaction",
+            "scope_id": "episode-interaction-group",
+            "parent_scope": "episode",
+            "parent_scope_id": "episode-1",
+            "parent_group_scope": "workflow_instance",
+            "parent_group_id": str(workflow_id),
+            "selection_kind": "episode_interaction_memory",
+            "selection_route": "episode_interaction_direct",
+            "selected_via_summary_first": False,
+            "memory_items": [
+                {
+                    "memory_id": interaction_request_memory_id,
+                    "memory_type": "interaction_request",
+                    "provenance": "interaction",
+                    "provenance_kind": "interaction",
+                    "summary": "resume the 0.9.0 implementation work",
+                    "metadata": {
+                        "interaction_role": "user",
+                        "interaction_kind": "interaction_request",
+                        "file_name": "interaction_memory_contract.md",
+                        "file_path": "ctxledger/docs/memory/design/interaction_memory_contract.md",
+                        "file_operation": "modify",
+                        "purpose": "capture interaction-memory contract updates",
+                    },
+                },
+                {
+                    "memory_id": interaction_response_memory_id,
+                    "memory_type": "interaction_response",
+                    "provenance": "interaction",
+                    "provenance_kind": "interaction",
+                    "summary": "I will update the focused validation plan",
+                    "metadata": {
+                        "interaction_role": "agent",
+                        "interaction_kind": "interaction_response",
+                        "file_name": "0.9.0_focused_validation_plan.md",
+                        "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+                        "file_operation": "create",
+                        "purpose": "add focused validation plan",
+                    },
+                },
+            ],
+            "interaction_memory_present": True,
+            "interaction_memory_count": 2,
+            "interaction_roles_present": ["agent", "user"],
+            "interaction_kinds_present": [
+                "interaction_request",
+                "interaction_response",
+            ],
+            "file_work_memory_present": True,
+            "file_work_memory_count": 2,
+        }
+    ]
+
+
 def test_serialize_get_context_response_preserves_primary_only_omissions() -> None:
     workflow_id = uuid4()
     created_at = datetime(2024, 3, 5, 6, 7, 8, tzinfo=UTC)

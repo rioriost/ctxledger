@@ -56,6 +56,8 @@ def test_main_stats_renders_text_output(
         checkpoint_auto_memory_skipped_count=45,
         workflow_completion_auto_memory_recorded_count=4,
         workflow_completion_auto_memory_skipped_count=54,
+        interaction_memory_item_count=7,
+        file_work_memory_item_count=9,
         memory_summary_count=9,
         memory_summary_membership_count=21,
         age_summary_graph_ready_count=1,
@@ -110,6 +112,8 @@ def test_main_stats_renders_text_output(
     assert "- episodes: 34" in captured.out
     assert "- memory_items: 24" in captured.out
     assert "- memory_embeddings: 3" in captured.out
+    assert "- interaction_memory_items: 7" in captured.out
+    assert "- file_work_memory_items: 9" in captured.out
     assert "Remember-path observability:" in captured.out
     assert "- checkpoint_auto_memory_recorded: 12" in captured.out
     assert "- checkpoint_auto_memory_skipped: 45" in captured.out
@@ -174,6 +178,8 @@ def test_main_stats_renders_json_output(
         checkpoint_auto_memory_skipped_count=0,
         workflow_completion_auto_memory_recorded_count=0,
         workflow_completion_auto_memory_skipped_count=0,
+        interaction_memory_item_count=2,
+        file_work_memory_item_count=3,
         memory_summary_count=2,
         memory_summary_membership_count=5,
         age_summary_graph_ready_count=1,
@@ -213,6 +219,8 @@ def test_main_stats_renders_json_output(
         "checkpoint_auto_memory_skipped_count": 0,
         "checkpoint_count": 5,
         "episode_count": 3,
+        "file_work_memory_item_count": 3,
+        "interaction_memory_item_count": 2,
         "latest_checkpoint_created_at": None,
         "latest_episode_created_at": None,
         "latest_memory_embedding_created_at": None,
@@ -274,12 +282,15 @@ def test_main_memory_stats_renders_text_output(
             "derived": 2,
             "episode": 17,
             "explicit": 1,
+            "interaction": 7,
             "workflow_complete_auto": 4,
         },
         checkpoint_auto_memory_recorded_count=12,
         checkpoint_auto_memory_skipped_count=45,
         workflow_completion_auto_memory_recorded_count=4,
         workflow_completion_auto_memory_skipped_count=54,
+        interaction_memory_item_count=7,
+        file_work_memory_item_count=9,
         memory_summary_count=9,
         memory_summary_membership_count=21,
         age_summary_graph_ready_count=1,
@@ -321,6 +332,8 @@ def test_main_memory_stats_renders_text_output(
     assert "- memory_items: 24" in captured.out
     assert "- memory_embeddings: 3" in captured.out
     assert "- memory_relations: 7" in captured.out
+    assert "- interaction_memory_items: 7" in captured.out
+    assert "- file_work_memory_items: 9" in captured.out
     assert "Remember-path observability:" in captured.out
     assert "- checkpoint_auto_memory_recorded: 12" in captured.out
     assert "- checkpoint_auto_memory_skipped: 45" in captured.out
@@ -337,6 +350,7 @@ def test_main_memory_stats_renders_text_output(
     assert "- derived: 2" in captured.out
     assert "- episode: 17" in captured.out
     assert "- explicit: 1" in captured.out
+    assert "- interaction: 7" in captured.out
     assert "- workflow_complete_auto: 4" in captured.out
     assert "Latest activity:" in captured.out
     assert "2026-03-15 09:03:00+00:00" in captured.out
@@ -359,6 +373,8 @@ def test_format_stats_text_uses_zero_defaults_for_missing_fields() -> None:
     assert "- episodes: 0" in rendered
     assert "- memory_items: 0" in rendered
     assert "- memory_embeddings: 0" in rendered
+    assert "- interaction_memory_items: 0" in rendered
+    assert "- file_work_memory_items: 0" in rendered
     assert "- checkpoints: 0" in rendered
     assert "- workflow_updated_at: None" in rendered
     assert "- checkpoint_created_at: None" in rendered
@@ -436,6 +452,8 @@ def test_format_memory_stats_text_renders_none_when_no_provenance() -> None:
     assert "- memory_items: 2" in rendered
     assert "- memory_embeddings: 3" in rendered
     assert "- memory_relations: 4" in rendered
+    assert "- interaction_memory_items: 0" in rendered
+    assert "- file_work_memory_items: 0" in rendered
     assert "Memory item provenance:" in rendered
     assert "- none" in rendered
 
@@ -451,8 +469,11 @@ def test_main_memory_stats_renders_json_output(
         memory_relation_count=0,
         memory_item_provenance_counts={
             "episode": 2,
-            "workflow_complete_auto": 2,
+            "interaction": 1,
+            "workflow_complete_auto": 1,
         },
+        interaction_memory_item_count=1,
+        file_work_memory_item_count=2,
         latest_episode_created_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_memory_item_created_at=None,
         latest_memory_embedding_created_at=None,
@@ -487,6 +508,8 @@ def test_main_memory_stats_renders_json_output(
         "checkpoint_auto_memory_recorded_count": 0,
         "checkpoint_auto_memory_skipped_count": 0,
         "episode_count": 3,
+        "file_work_memory_item_count": 2,
+        "interaction_memory_item_count": 1,
         "latest_episode_created_at": "2026-03-15T09:00:00+00:00",
         "latest_memory_embedding_created_at": None,
         "latest_memory_item_created_at": None,
@@ -495,7 +518,8 @@ def test_main_memory_stats_renders_json_output(
         "memory_item_count": 4,
         "memory_item_provenance_counts": {
             "episode": 2,
-            "workflow_complete_auto": 2,
+            "interaction": 1,
+            "workflow_complete_auto": 1,
         },
         "memory_relation_count": 0,
         "memory_summary_count": 0,

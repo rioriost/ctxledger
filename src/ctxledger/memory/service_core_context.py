@@ -181,6 +181,25 @@ class ContextShapingMixin:
                         "memory_id": str(memory_item.memory_id),
                         "memory_type": memory_item.type,
                         "provenance": memory_item.provenance,
+                        "provenance_kind": (
+                            "interaction"
+                            if memory_item.provenance == "interaction"
+                            else "workflow_memory"
+                            if memory_item.provenance
+                            in {
+                                "workflow_checkpoint_auto",
+                                "workflow_complete_auto",
+                            }
+                            else "episode_memory"
+                            if memory_item.provenance == "episode"
+                            else "other"
+                        ),
+                        "interaction_role": memory_item.metadata.get("interaction_role"),
+                        "interaction_kind": memory_item.metadata.get("interaction_kind"),
+                        "file_name": memory_item.metadata.get("file_name"),
+                        "file_path": memory_item.metadata.get("file_path"),
+                        "file_operation": memory_item.metadata.get("file_operation"),
+                        "purpose": memory_item.metadata.get("purpose"),
                         "memory_origin": memory_item.metadata.get("memory_origin"),
                         "promotion_field": memory_item.metadata.get("promotion_field"),
                         "promotion_source": memory_item.metadata.get("promotion_source"),
@@ -238,6 +257,26 @@ class ContextShapingMixin:
                             "episode" if memory_item.episode_id is not None else "workspace"
                         ),
                         "target_group_selection_kind": "supports_related_auxiliary",
+                        "target_provenance": memory_item.provenance,
+                        "target_provenance_kind": (
+                            "interaction"
+                            if memory_item.provenance == "interaction"
+                            else "workflow_memory"
+                            if memory_item.provenance
+                            in {
+                                "workflow_checkpoint_auto",
+                                "workflow_complete_auto",
+                            }
+                            else "episode_memory"
+                            if memory_item.provenance == "episode"
+                            else "other"
+                        ),
+                        "target_interaction_role": memory_item.metadata.get("interaction_role"),
+                        "target_interaction_kind": memory_item.metadata.get("interaction_kind"),
+                        "target_file_name": memory_item.metadata.get("file_name"),
+                        "target_file_path": memory_item.metadata.get("file_path"),
+                        "target_file_operation": memory_item.metadata.get("file_operation"),
+                        "target_purpose": memory_item.metadata.get("purpose"),
                         "source_memory_origin": relation.metadata.get("memory_origin"),
                         "relation_reason": relation.metadata.get("relation_reason"),
                         "source_memory_type": relation.metadata.get("source_memory_type"),
@@ -372,6 +411,40 @@ class ContextShapingMixin:
                     "memory_item_provenance": [
                         memory_item.provenance for memory_item in memory_items
                     ],
+                    "memory_item_provenance_counts": {
+                        provenance: sum(
+                            1
+                            for memory_item in memory_items
+                            if memory_item.provenance == provenance
+                        )
+                        for provenance in sorted(
+                            {memory_item.provenance for memory_item in memory_items}
+                        )
+                    },
+                    "interaction_memory_count": sum(
+                        1 for memory_item in memory_items if memory_item.provenance == "interaction"
+                    ),
+                    "interaction_memory_present": any(
+                        memory_item.provenance == "interaction" for memory_item in memory_items
+                    ),
+                    "interaction_roles_present": sorted(
+                        {
+                            str(memory_item.metadata.get("interaction_role"))
+                            for memory_item in memory_items
+                            if memory_item.provenance == "interaction"
+                            and isinstance(memory_item.metadata.get("interaction_role"), str)
+                            and str(memory_item.metadata.get("interaction_role")).strip()
+                        }
+                    ),
+                    "interaction_kinds_present": sorted(
+                        {
+                            str(memory_item.metadata.get("interaction_kind"))
+                            for memory_item in memory_items
+                            if memory_item.provenance == "interaction"
+                            and isinstance(memory_item.metadata.get("interaction_kind"), str)
+                            and str(memory_item.metadata.get("interaction_kind")).strip()
+                        }
+                    ),
                     "remember_path_explainability": remember_path_summary_explainability,
                 }
 
@@ -768,6 +841,38 @@ class ContextShapingMixin:
 
         if include_memory_items:
             for episode, detail in zip(episodes, memory_item_details, strict=False):
+                memory_items = detail.get("memory_items", [])
+                interaction_memory_items = [
+                    memory_item
+                    for memory_item in memory_items
+                    if isinstance(memory_item, dict)
+                    and memory_item.get("provenance") == "interaction"
+                ]
+                non_interaction_memory_items = [
+                    memory_item
+                    for memory_item in memory_items
+                    if not (
+                        isinstance(memory_item, dict)
+                        and memory_item.get("provenance") == "interaction"
+                    )
+                ]
+                interaction_roles_present = sorted(
+                    {
+                        str(memory_item.get("interaction_role"))
+                        for memory_item in interaction_memory_items
+                        if isinstance(memory_item.get("interaction_role"), str)
+                        and str(memory_item.get("interaction_role")).strip()
+                    }
+                )
+                interaction_kinds_present = sorted(
+                    {
+                        str(memory_item.get("interaction_kind"))
+                        for memory_item in interaction_memory_items
+                        if isinstance(memory_item.get("interaction_kind"), str)
+                        and str(memory_item.get("interaction_kind")).strip()
+                    }
+                )
+
                 memory_context_groups.append(
                     {
                         "scope": "episode",
@@ -783,7 +888,7 @@ class ContextShapingMixin:
                             "summary_first" if summary_selection_applied else "episode_direct"
                         ),
                         "selected_via_summary_first": summary_selection_applied,
-                        "memory_items": detail.get("memory_items", []),
+                        "memory_items": non_interaction_memory_items,
                         "related_memory_items": detail.get("related_memory_items", []),
                         "related_memory_item_provenance": detail.get(
                             "related_memory_item_provenance", []
@@ -807,8 +912,47 @@ class ContextShapingMixin:
                             "remember_path_relation_summary",
                             {},
                         ),
+                        "interaction_memory_present": bool(interaction_memory_items),
+                        "interaction_memory_count": len(interaction_memory_items),
                     }
                 )
+
+                if interaction_memory_items:
+                    memory_context_groups.append(
+                        {
+                            "scope": "interaction",
+                            "scope_id": str(episode.episode_id),
+                            "parent_scope": "episode",
+                            "parent_scope_id": str(episode.episode_id),
+                            "parent_group_scope": "workflow_instance",
+                            "parent_group_id": str(episode.workflow_instance_id),
+                            "selection_kind": "episode_interaction_memory",
+                            "selection_route": (
+                                "summary_first_interaction"
+                                if summary_selection_applied
+                                else "episode_interaction_direct"
+                            ),
+                            "selected_via_summary_first": summary_selection_applied,
+                            "memory_items": interaction_memory_items,
+                            "interaction_memory_present": True,
+                            "interaction_memory_count": len(interaction_memory_items),
+                            "interaction_roles_present": interaction_roles_present,
+                            "interaction_kinds_present": interaction_kinds_present,
+                            "file_work_memory_present": any(
+                                isinstance(memory_item.get("file_path"), str)
+                                and memory_item.get("file_path", "").strip()
+                                for memory_item in interaction_memory_items
+                                if isinstance(memory_item, dict)
+                            ),
+                            "file_work_memory_count": sum(
+                                1
+                                for memory_item in interaction_memory_items
+                                if isinstance(memory_item, dict)
+                                and isinstance(memory_item.get("file_path"), str)
+                                and memory_item.get("file_path", "").strip()
+                            ),
+                        }
+                    )
 
             if inherited_memory_items and resolved_workspace_id is not None:
                 memory_context_groups.append(
@@ -1041,6 +1185,21 @@ class ContextShapingMixin:
             ),
             "type": memory_item.type,
             "provenance": memory_item.provenance,
+            "provenance_kind": (
+                "interaction"
+                if memory_item.provenance == "interaction"
+                else "workflow_memory"
+                if memory_item.provenance in {"workflow_checkpoint_auto", "workflow_complete_auto"}
+                else "episode_memory"
+                if memory_item.provenance == "episode"
+                else "other"
+            ),
+            "interaction_role": memory_item.metadata.get("interaction_role"),
+            "interaction_kind": memory_item.metadata.get("interaction_kind"),
+            "file_name": memory_item.metadata.get("file_name"),
+            "file_path": memory_item.metadata.get("file_path"),
+            "file_operation": memory_item.metadata.get("file_operation"),
+            "purpose": memory_item.metadata.get("purpose"),
             "content": memory_item.content,
             "metadata": dict(memory_item.metadata),
             "created_at": memory_item.created_at.isoformat(),

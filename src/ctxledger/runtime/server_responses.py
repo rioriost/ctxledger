@@ -265,6 +265,7 @@ def build_workspace_resume_resource_response(
     server: CtxLedgerServer,
     workspace_id: UUID,
 ) -> McpResourceResponse:
+    from .serializers import serialize_workflow_resume
     from .types import McpResourceResponse
 
     if server.workflow_service is None:
@@ -284,8 +285,10 @@ def build_workspace_resume_resource_response(
     selection_explanations: list[dict[str, str]] = []
     selection_ranking_details: list[dict[str, Any]] = []
 
-    if hasattr(server.workflow_service, "_uow_factory"):
-        with server.workflow_service._uow_factory() as uow:
+    workflow_uow_factory = getattr(server.workflow_service, "_uow_factory", None)
+
+    if callable(workflow_uow_factory):
+        with workflow_uow_factory() as uow:
             workspace = uow.workspaces.get_by_id(workspace_id)
             if workspace is None:
                 return McpResourceResponse(
@@ -362,41 +365,43 @@ def build_workspace_resume_resource_response(
             selected_workflow.workflow_instance_id,
         )
     else:
-        selected_workflow_instance_id = getattr(
-            server.workflow_service.resume_result.workflow_instance,
-            "workflow_instance_id",
-        )
+        resume_result = server.workflow_service.resume_result
+        response_workspace_id = str(resume_result.workspace.workspace_id)
+        if response_workspace_id != str(workspace_id):
+            return McpResourceResponse(
+                status_code=404,
+                payload={
+                    "error": {
+                        "code": "not_found",
+                        "message": f"workspace '{workspace_id}' was not found",
+                    }
+                },
+                headers={"content-type": "application/json"},
+            )
+
         workflow_response = build_workflow_resume_response(
             server,
-            selected_workflow_instance_id,
+            resume_result.workflow_instance.workflow_instance_id,
         )
-        if workflow_response.status_code == 200:
-            response_workspace_id = workflow_response.payload.get("workspace", {}).get(
-                "workspace_id"
+        if workflow_response.status_code != 200:
+            return McpResourceResponse(
+                status_code=workflow_response.status_code,
+                payload=workflow_response.payload,
+                headers=workflow_response.headers,
             )
-            if response_workspace_id != str(workspace_id):
-                return McpResourceResponse(
-                    status_code=404,
-                    payload={
-                        "error": {
-                            "code": "not_found",
-                            "message": f"workspace '{workspace_id}' was not found",
-                        }
-                    },
-                    headers={"content-type": "application/json"},
-                )
-            selection_signals["selected_equals_latest"] = True
-            selection = build_workspace_resume_selection_payload(
-                strategy="resume_result",
-                candidate_count=1,
-                selected_workflow=server.workflow_service.resume_result.workflow_instance,
-                running_workflow=None,
-                latest_workflow=server.workflow_service.resume_result.workflow_instance,
-                selected_reason="used workflow returned by resume result branch",
-                selection_signals=selection_signals,
-                explanations=selection_explanations,
-                ranking_details=selection_ranking_details,
-            )
+
+        selection_signals["selected_equals_latest"] = True
+        selection = build_workspace_resume_selection_payload(
+            strategy="resume_result",
+            candidate_count=1,
+            selected_workflow=resume_result.workflow_instance,
+            running_workflow=None,
+            latest_workflow=resume_result.workflow_instance,
+            selected_reason="used workflow returned by resume result branch",
+            selection_signals=selection_signals,
+            explanations=selection_explanations,
+            ranking_details=selection_ranking_details,
+        )
 
     if workflow_response.status_code != 200:
         return McpResourceResponse(
@@ -435,8 +440,10 @@ def build_workflow_detail_resource_response(
             headers={"content-type": "application/json"},
         )
 
-    if hasattr(server.workflow_service, "_uow_factory"):
-        with server.workflow_service._uow_factory() as uow:
+    workflow_uow_factory = getattr(server.workflow_service, "_uow_factory", None)
+
+    if callable(workflow_uow_factory):
+        with workflow_uow_factory() as uow:
             workflow = uow.workflow_instances.get_by_id(workflow_instance_id)
             if workflow is None:
                 return McpResourceResponse(

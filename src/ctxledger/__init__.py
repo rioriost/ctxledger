@@ -904,6 +904,8 @@ def _format_stats_text(stats: object) -> str:
         f"- episodes: {getattr(stats, 'episode_count', 0)}",
         f"- memory_items: {getattr(stats, 'memory_item_count', 0)}",
         f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
+        f"- interaction_memory_items: {getattr(stats, 'interaction_memory_item_count', 0)}",
+        f"- file_work_memory_items: {getattr(stats, 'file_work_memory_item_count', 0)}",
         "",
         "Remember-path observability:",
         f"- checkpoint_auto_memory_recorded: {getattr(stats, 'checkpoint_auto_memory_recorded_count', 0)}",
@@ -958,6 +960,16 @@ def _stats(args: argparse.Namespace) -> int:
                     "episode_count": stats.episode_count,
                     "memory_item_count": stats.memory_item_count,
                     "memory_embedding_count": stats.memory_embedding_count,
+                    "interaction_memory_item_count": getattr(
+                        stats,
+                        "interaction_memory_item_count",
+                        0,
+                    ),
+                    "file_work_memory_item_count": getattr(
+                        stats,
+                        "file_work_memory_item_count",
+                        0,
+                    ),
                     "checkpoint_auto_memory_recorded_count": (
                         stats.checkpoint_auto_memory_recorded_count
                     ),
@@ -1089,6 +1101,8 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- memory_items: {getattr(stats, 'memory_item_count', 0)}",
         f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
         f"- memory_relations: {getattr(stats, 'memory_relation_count', 0)}",
+        f"- interaction_memory_items: {getattr(stats, 'interaction_memory_item_count', 0)}",
+        f"- file_work_memory_items: {getattr(stats, 'file_work_memory_item_count', 0)}",
         "",
         "Remember-path observability:",
         f"- checkpoint_auto_memory_recorded: {getattr(stats, 'checkpoint_auto_memory_recorded_count', 0)}",
@@ -1225,6 +1239,16 @@ def _memory_stats(args: argparse.Namespace) -> int:
                     "memory_embedding_count": stats.memory_embedding_count,
                     "memory_relation_count": stats.memory_relation_count,
                     "memory_item_provenance_counts": (stats.memory_item_provenance_counts),
+                    "interaction_memory_item_count": getattr(
+                        stats,
+                        "interaction_memory_item_count",
+                        0,
+                    ),
+                    "file_work_memory_item_count": getattr(
+                        stats,
+                        "file_work_memory_item_count",
+                        0,
+                    ),
                     "checkpoint_auto_memory_recorded_count": (
                         stats.checkpoint_auto_memory_recorded_count
                     ),

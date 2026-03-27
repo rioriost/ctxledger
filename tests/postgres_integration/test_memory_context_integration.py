@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from ctxledger.memory.service import (
     BuildEpisodeSummaryRequest,
     GetMemoryContextRequest,
     MemoryFeature,
+    MemoryItemRecord,
     MemoryService,
     RememberEpisodeRequest,
     UnitOfWorkEpisodeRepository,
@@ -374,10 +377,188 @@ def test_postgres_memory_get_context_applies_initial_query_filtering(
     assert context.details["matched_episode_count"] == 1
     assert context.details["episodes_returned"] == 1
 
+
+def test_postgres_memory_get_context_emits_interaction_groups_for_workspace_context(
+    postgres_pooled_uow_factory,
+) -> None:
+    uow_factory = postgres_pooled_uow_factory
+    workflow_service = WorkflowService(uow_factory)
+    memory_service = MemoryService(
+        episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
+        memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
+        memory_summary_repository=UnitOfWorkMemorySummaryRepository(uow_factory),
+        memory_summary_membership_repository=UnitOfWorkMemorySummaryMembershipRepository(
+            uow_factory
+        ),
+        workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
+        workspace_lookup=UnitOfWorkWorkspaceLookupRepository(uow_factory),
+    )
+
+    workspace = workflow_service.register_workspace(
+        RegisterWorkspaceInput(
+            repo_url="https://example.com/org/repo-memory-context-interaction.git",
+            canonical_path="/tmp/integration-repo-memory-context-interaction",
+            default_branch="main",
+        )
+    )
+    started = workflow_service.start_workflow(
+        StartWorkflowInput(
+            workspace_id=workspace.workspace_id,
+            ticket_id="INTEG-MEMCTX-INTERACTION-001",
+        )
+    )
+
+    recorded_episode = memory_service.remember_episode(
+        RememberEpisodeRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            summary="Tracked interaction-aware work for historical recall",
+            attempt_id=str(started.attempt.attempt_id),
+            metadata={"kind": "interaction_capture"},
+        )
+    )
+    assert recorded_episode.episode is not None
+
+    interaction_created_at = datetime(2024, 3, 9, 10, 11, 12, tzinfo=UTC)
+    request_memory = MemoryItemRecord(
+        memory_id=__import__("uuid").uuid4(),
+        workspace_id=workspace.workspace_id,
+        episode_id=recorded_episode.episode.episode_id,
+        type="interaction_request",
+        provenance="interaction",
+        content="resume the interaction capture work",
+        metadata={
+            "interaction_role": "user",
+            "interaction_kind": "interaction_request",
+            "file_name": "interaction_memory_contract.md",
+            "file_path": "ctxledger/docs/memory/design/interaction_memory_contract.md",
+            "file_operation": "modify",
+            "purpose": "capture interaction-memory contract updates",
+        },
+        created_at=interaction_created_at,
+        updated_at=interaction_created_at,
+    )
+    response_memory = MemoryItemRecord(
+        memory_id=__import__("uuid").uuid4(),
+        workspace_id=workspace.workspace_id,
+        episode_id=recorded_episode.episode.episode_id,
+        type="interaction_response",
+        provenance="interaction",
+        content="I will update the focused validation plan next",
+        metadata={
+            "interaction_role": "agent",
+            "interaction_kind": "interaction_response",
+            "file_name": "0.9.0_focused_validation_plan.md",
+            "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+            "file_operation": "create",
+            "purpose": "add focused validation plan",
+        },
+        created_at=interaction_created_at,
+        updated_at=interaction_created_at,
+    )
+
+    with uow_factory() as uow:
+        uow.memory_items.create(request_memory)
+        uow.memory_items.create(response_memory)
+        uow.commit()
+
+    context = memory_service.get_context(
+        GetMemoryContextRequest(
+            workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
+            limit=10,
+            include_episodes=True,
+            include_memory_items=True,
+            include_summaries=False,
+        )
+    )
+
+    assert context.feature == MemoryFeature.GET_CONTEXT
+    assert context.implemented is True
+    assert len(context.episodes) == 1
+    assert context.details["workflow_instance_id"] == str(
+        started.workflow_instance.workflow_instance_id
+    )
+    assert context.details["episodes_returned"] == 1
+
+    interaction_groups = [
+        group
+        for group in context.details["memory_context_groups"]
+        if group.get("scope") == "interaction"
+    ]
+    assert len(interaction_groups) == 1
+
+    interaction_group = interaction_groups[0]
+    assert interaction_group["selection_kind"] == "episode_interaction_memory"
+    assert interaction_group["interaction_memory_present"] is True
+    assert interaction_group["interaction_memory_count"] == 2
+    assert interaction_group["interaction_roles_present"] == ["agent", "user"]
+    assert interaction_group["interaction_kinds_present"] == [
+        "interaction_request",
+        "interaction_response",
+    ]
+    assert interaction_group["file_work_memory_present"] is True
+    assert interaction_group["file_work_memory_count"] == 2
+    assert sorted(
+        interaction_group["memory_items"],
+        key=lambda item: (item["type"], item["content"]),
+    ) == sorted(
+        [
+            {
+                "memory_id": str(request_memory.memory_id),
+                "workspace_id": str(workspace.workspace_id),
+                "episode_id": str(recorded_episode.episode.episode_id),
+                "type": "interaction_request",
+                "provenance": "interaction",
+                "provenance_kind": "interaction",
+                "interaction_role": "user",
+                "interaction_kind": "interaction_request",
+                "file_name": "interaction_memory_contract.md",
+                "file_path": "ctxledger/docs/memory/design/interaction_memory_contract.md",
+                "file_operation": "modify",
+                "purpose": "capture interaction-memory contract updates",
+                "content": "resume the interaction capture work",
+                "metadata": {
+                    "interaction_role": "user",
+                    "interaction_kind": "interaction_request",
+                    "file_name": "interaction_memory_contract.md",
+                    "file_path": "ctxledger/docs/memory/design/interaction_memory_contract.md",
+                    "file_operation": "modify",
+                    "purpose": "capture interaction-memory contract updates",
+                },
+                "created_at": interaction_created_at.isoformat(),
+                "updated_at": interaction_created_at.isoformat(),
+            },
+            {
+                "memory_id": str(response_memory.memory_id),
+                "workspace_id": str(workspace.workspace_id),
+                "episode_id": str(recorded_episode.episode.episode_id),
+                "type": "interaction_response",
+                "provenance": "interaction",
+                "provenance_kind": "interaction",
+                "interaction_role": "agent",
+                "interaction_kind": "interaction_response",
+                "file_name": "0.9.0_focused_validation_plan.md",
+                "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+                "file_operation": "create",
+                "purpose": "add focused validation plan",
+                "content": "I will update the focused validation plan next",
+                "metadata": {
+                    "interaction_role": "agent",
+                    "interaction_kind": "interaction_response",
+                    "file_name": "0.9.0_focused_validation_plan.md",
+                    "file_path": "ctxledger/docs/project/releases/plans/versioned/0.9.0_focused_validation_plan.md",
+                    "file_operation": "create",
+                    "purpose": "add focused validation plan",
+                },
+                "created_at": interaction_created_at.isoformat(),
+                "updated_at": interaction_created_at.isoformat(),
+            },
+        ],
+        key=lambda item: (item["type"], item["content"]),
+    )
+
     metadata_context = memory_service.get_context(
         GetMemoryContextRequest(
             workflow_instance_id=str(started.workflow_instance.workflow_instance_id),
-            query="metadata-filter",
             limit=10,
             include_episodes=True,
             include_memory_items=False,
@@ -388,10 +569,10 @@ def test_postgres_memory_get_context_applies_initial_query_filtering(
     assert metadata_context.feature == MemoryFeature.GET_CONTEXT
     assert metadata_context.implemented is True
     assert [episode.summary for episode in metadata_context.episodes] == [
-        "Track filtering semantics decision",
+        "Tracked interaction-aware work for historical recall",
     ]
-    assert metadata_context.details["query"] == "metadata-filter"
-    assert metadata_context.details["normalized_query"] == "metadata-filter"
+    assert metadata_context.details["query"] is None
+    assert metadata_context.details["normalized_query"] is None
     assert metadata_context.details["lookup_scope"] == "workflow_instance"
     assert metadata_context.details["workflow_instance_id"] == str(
         started.workflow_instance.workflow_instance_id
@@ -400,8 +581,8 @@ def test_postgres_memory_get_context_applies_initial_query_filtering(
         str(started.workflow_instance.workflow_instance_id)
     ]
     assert metadata_context.details["resolved_workflow_count"] == 1
-    assert metadata_context.details["query_filter_applied"] is True
-    assert metadata_context.details["episodes_before_query_filter"] == 3
+    assert metadata_context.details["query_filter_applied"] is False
+    assert metadata_context.details["episodes_before_query_filter"] == 1
     assert metadata_context.details["matched_episode_count"] == 1
     assert metadata_context.details["episodes_returned"] == 1
 

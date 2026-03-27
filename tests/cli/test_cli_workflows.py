@@ -673,6 +673,8 @@ def test_main_memory_stats_renders_json_output(
         "checkpoint_auto_memory_recorded_count": 0,
         "checkpoint_auto_memory_skipped_count": 0,
         "episode_count": 3,
+        "file_work_memory_item_count": 0,
+        "interaction_memory_item_count": 0,
         "latest_episode_created_at": "2026-03-15T09:00:00+00:00",
         "latest_memory_embedding_created_at": None,
         "latest_memory_item_created_at": None,

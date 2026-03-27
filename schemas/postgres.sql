@@ -404,7 +404,8 @@ CREATE TABLE IF NOT EXISTS memory_items (
         'derived',
         'imported',
         'workflow_checkpoint_auto',
-        'workflow_complete_auto'
+        'workflow_complete_auto',
+        'interaction'
       )
     ),
   CONSTRAINT memory_items_content_not_empty

@@ -775,7 +775,10 @@ def build_workflow_backed_memory_service(
     if server is None or server.workflow_service is None:
         return MemoryService()
 
-    uow_factory = server.workflow_service._uow_factory
+    uow_factory = getattr(server.workflow_service, "_uow_factory", None)
+    if uow_factory is None:
+        return MemoryService()
+
     return MemoryService(
         episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
         memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),

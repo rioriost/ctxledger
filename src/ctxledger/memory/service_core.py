@@ -194,6 +194,319 @@ class MemoryService(
         self._workflow_lookup = workflow_lookup
         self._workspace_lookup = workspace_lookup
 
+    def _coerce_interaction_metadata(
+        self,
+        metadata: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not isinstance(metadata, dict):
+            return {}
+
+        normalized = dict(metadata)
+
+        file_name = normalized.get("file_name")
+        if isinstance(file_name, str) and file_name.strip():
+            normalized["file_name"] = file_name.strip()
+
+        file_path = normalized.get("file_path")
+        if isinstance(file_path, str) and file_path.strip():
+            normalized["file_path"] = file_path.strip()
+
+        file_operation = normalized.get("file_operation")
+        if isinstance(file_operation, str) and file_operation.strip():
+            normalized["file_operation"] = file_operation.strip()
+
+        purpose = normalized.get("purpose")
+        if isinstance(purpose, str) and purpose.strip():
+            normalized["purpose"] = purpose.strip()
+
+        interaction_role = normalized.get("interaction_role")
+        if isinstance(interaction_role, str) and interaction_role.strip():
+            normalized["interaction_role"] = interaction_role.strip()
+
+        interaction_kind = normalized.get("interaction_kind")
+        if isinstance(interaction_kind, str) and interaction_kind.strip():
+            normalized["interaction_kind"] = interaction_kind.strip()
+
+        return normalized
+
+    def _metadata_matches_search_filters(
+        self,
+        *,
+        memory_item: MemoryItemRecord,
+        filters: dict[str, Any],
+    ) -> bool:
+        if not filters:
+            return True
+
+        normalized_filters = dict(filters)
+
+        provenance_filter = normalized_filters.get("provenance")
+        if isinstance(provenance_filter, list) and provenance_filter:
+            if memory_item.provenance not in {str(value) for value in provenance_filter}:
+                return False
+        elif isinstance(provenance_filter, str) and provenance_filter.strip():
+            if memory_item.provenance != provenance_filter.strip():
+                return False
+
+        provenance_kind_filter = normalized_filters.get("provenance_kind")
+        provenance_kind = (
+            "interaction"
+            if memory_item.provenance == "interaction"
+            else "workflow_memory"
+            if memory_item.provenance in {"workflow_checkpoint_auto", "workflow_complete_auto"}
+            else "episode_memory"
+            if memory_item.provenance == "episode"
+            else "other"
+        )
+        if isinstance(provenance_kind_filter, list) and provenance_kind_filter:
+            if provenance_kind not in {str(value) for value in provenance_kind_filter}:
+                return False
+        elif isinstance(provenance_kind_filter, str) and provenance_kind_filter.strip():
+            if provenance_kind != provenance_kind_filter.strip():
+                return False
+
+        memory_types_filter = normalized_filters.get("memory_types")
+        if isinstance(memory_types_filter, list) and memory_types_filter:
+            if memory_item.type not in {str(value) for value in memory_types_filter}:
+                return False
+        elif isinstance(memory_types_filter, str) and memory_types_filter.strip():
+            if memory_item.type != memory_types_filter.strip():
+                return False
+
+        interaction_roles_filter = normalized_filters.get("interaction_roles")
+        interaction_role = memory_item.metadata.get("interaction_role")
+        if isinstance(interaction_roles_filter, list) and interaction_roles_filter:
+            if str(interaction_role) not in {str(value) for value in interaction_roles_filter}:
+                return False
+        elif isinstance(interaction_roles_filter, str) and interaction_roles_filter.strip():
+            if str(interaction_role) != interaction_roles_filter.strip():
+                return False
+
+        interaction_kind_filter = normalized_filters.get("interaction_kind")
+        stored_interaction_kind = memory_item.metadata.get("interaction_kind")
+        if isinstance(interaction_kind_filter, list) and interaction_kind_filter:
+            if str(stored_interaction_kind) not in {
+                str(value) for value in interaction_kind_filter
+            }:
+                return False
+        elif isinstance(interaction_kind_filter, str) and interaction_kind_filter.strip():
+            if str(stored_interaction_kind) != interaction_kind_filter.strip():
+                return False
+
+        file_name_filter = normalized_filters.get("file_name")
+        stored_file_name = memory_item.metadata.get("file_name")
+        if isinstance(file_name_filter, str) and file_name_filter.strip():
+            if str(stored_file_name) != file_name_filter.strip():
+                return False
+
+        file_names_filter = normalized_filters.get("file_names")
+        if isinstance(file_names_filter, list) and file_names_filter:
+            if str(stored_file_name) not in {str(value) for value in file_names_filter}:
+                return False
+
+        file_path_filter = normalized_filters.get("file_path")
+        stored_file_path = memory_item.metadata.get("file_path")
+        if isinstance(file_path_filter, str) and file_path_filter.strip():
+            if str(stored_file_path) != file_path_filter.strip():
+                return False
+
+        file_paths_filter = normalized_filters.get("file_paths")
+        if isinstance(file_paths_filter, list) and file_paths_filter:
+            if str(stored_file_path) not in {str(value) for value in file_paths_filter}:
+                return False
+
+        file_operation_filter = normalized_filters.get("file_operation")
+        stored_file_operation = memory_item.metadata.get("file_operation")
+        if isinstance(file_operation_filter, str) and file_operation_filter.strip():
+            if str(stored_file_operation) != file_operation_filter.strip():
+                return False
+
+        purpose_filter = normalized_filters.get("purpose")
+        stored_purpose = memory_item.metadata.get("purpose")
+        if isinstance(purpose_filter, str) and purpose_filter.strip():
+            normalized_purpose_filter = normalize_query_text(purpose_filter)
+            normalized_stored_purpose = (
+                normalize_query_text(str(stored_purpose))
+                if isinstance(stored_purpose, str) and stored_purpose.strip()
+                else None
+            )
+            if (
+                normalized_purpose_filter is None
+                or normalized_stored_purpose is None
+                or normalized_purpose_filter not in normalized_stored_purpose
+            ):
+                return False
+
+        return True
+
+    def _interaction_priority_bonus(
+        self,
+        *,
+        memory_item: MemoryItemRecord,
+        filters: dict[str, Any],
+    ) -> tuple[float, bool]:
+        provenance_kind_filter = filters.get("provenance_kind")
+        provenance_filter = filters.get("provenance")
+        interaction_roles_filter = filters.get("interaction_roles")
+        interaction_kind_filter = filters.get("interaction_kind")
+        file_name_filter = filters.get("file_name")
+        file_names_filter = filters.get("file_names")
+        file_path_filter = filters.get("file_path")
+        file_paths_filter = filters.get("file_paths")
+        file_operation_filter = filters.get("file_operation")
+        purpose_filter = filters.get("purpose")
+
+        interaction_context_requested = any(
+            (
+                provenance_kind_filter is not None,
+                provenance_filter is not None,
+                interaction_roles_filter is not None,
+                interaction_kind_filter is not None,
+                file_name_filter is not None,
+                file_names_filter is not None,
+                file_path_filter is not None,
+                file_paths_filter is not None,
+                file_operation_filter is not None,
+                purpose_filter is not None,
+            )
+        )
+
+        if memory_item.provenance != "interaction":
+            return 0.0, interaction_context_requested
+
+        if interaction_context_requested:
+            return 1.5, True
+
+        if memory_item.type in {"interaction_request", "interaction_response"}:
+            return 0.5, False
+
+        return 0.0, False
+
+    def _failure_reuse_detail(
+        self,
+        *,
+        memory_item: MemoryItemRecord,
+        filters: dict[str, Any],
+    ) -> dict[str, Any]:
+        interaction_role = memory_item.metadata.get("interaction_role")
+        interaction_kind = memory_item.metadata.get("interaction_kind")
+        file_name = memory_item.metadata.get("file_name")
+        file_path = memory_item.metadata.get("file_path")
+        file_operation = memory_item.metadata.get("file_operation")
+        purpose = memory_item.metadata.get("purpose")
+
+        failure_related_filter_requested = any(
+            (
+                filters.get("file_name") is not None,
+                filters.get("file_names") is not None,
+                filters.get("file_path") is not None,
+                filters.get("file_paths") is not None,
+                filters.get("file_operation") is not None,
+                filters.get("purpose") is not None,
+                filters.get("interaction_roles") is not None,
+                filters.get("interaction_kind") is not None,
+                filters.get("provenance") is not None,
+                filters.get("provenance_kind") is not None,
+            )
+        )
+        file_work_present = any(
+            (
+                isinstance(file_name, str) and file_name.strip(),
+                isinstance(file_path, str) and file_path.strip(),
+                isinstance(file_operation, str) and file_operation.strip(),
+                isinstance(purpose, str) and purpose.strip(),
+            )
+        )
+        interaction_present = memory_item.provenance == "interaction"
+        likely_failure_reuse_signal = failure_related_filter_requested and (
+            file_work_present or interaction_present
+        )
+
+        return {
+            "failure_reuse_candidate": likely_failure_reuse_signal,
+            "failure_reuse_reason": (
+                "interaction and file-work metadata can support bounded failure reuse lookup"
+                if likely_failure_reuse_signal
+                else None
+            ),
+            "interaction_present": interaction_present,
+            "interaction_role": interaction_role,
+            "interaction_kind": interaction_kind,
+            "file_work_present": file_work_present,
+            "file_name": file_name,
+            "file_path": file_path,
+            "file_operation": file_operation,
+            "purpose": purpose,
+        }
+
+    def persist_interaction_memory(
+        self,
+        *,
+        content: str,
+        interaction_role: str,
+        interaction_kind: str,
+        workspace_id: str | None = None,
+        workflow_instance_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> MemoryItemRecord:
+        self._require_non_empty(
+            content,
+            field_name="content",
+            feature=MemoryFeature.REMEMBER_EPISODE,
+        )
+        self._require_non_empty(
+            interaction_role,
+            field_name="interaction_role",
+            feature=MemoryFeature.REMEMBER_EPISODE,
+        )
+        self._require_non_empty(
+            interaction_kind,
+            field_name="interaction_kind",
+            feature=MemoryFeature.REMEMBER_EPISODE,
+        )
+
+        resolved_workspace_id: UUID | None = None
+        if self._has_text(workspace_id):
+            resolved_workspace_id = self._parse_uuid(
+                workspace_id or "",
+                field_name="workspace_id",
+                feature=MemoryFeature.REMEMBER_EPISODE,
+            )
+
+        resolved_workflow_instance_id: UUID | None = None
+        if self._has_text(workflow_instance_id):
+            resolved_workflow_instance_id = self._parse_uuid(
+                workflow_instance_id or "",
+                field_name="workflow_instance_id",
+                feature=MemoryFeature.REMEMBER_EPISODE,
+            )
+
+        if resolved_workspace_id is None and resolved_workflow_instance_id is not None:
+            resolved_workspace_id = self._resolve_workspace_id(resolved_workflow_instance_id)
+
+        created_at = datetime.now(timezone.utc)
+        memory_item = self._memory_item_repository.create(
+            MemoryItemRecord(
+                memory_id=uuid4(),
+                workspace_id=resolved_workspace_id,
+                episode_id=None,
+                type=interaction_kind.strip(),
+                provenance="interaction",
+                content=content.strip(),
+                metadata=self._coerce_interaction_metadata(
+                    {
+                        "interaction_role": interaction_role.strip(),
+                        "interaction_kind": interaction_kind.strip(),
+                        **dict(metadata or {}),
+                    }
+                ),
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+        self._maybe_store_embedding(memory_item)
+        return memory_item
+
     def remember_episode(self, request: RememberEpisodeRequest) -> RememberEpisodeResponse:
         """Persist a new episode associated with a workflow."""
         self._require_non_empty(
@@ -309,10 +622,24 @@ class MemoryService(
 
         memory_items: tuple[MemoryItemRecord, ...] = ()
         if workspace_id is not None:
-            memory_items = self._memory_item_repository.list_by_workspace_id(
+            workspace_memory_items = self._memory_item_repository.list_by_workspace_id(
                 workspace_id,
                 limit=request.limit,
             )
+            filtered_workspace_items = tuple(
+                memory_item
+                for memory_item in workspace_memory_items
+                if self._metadata_matches_search_filters(
+                    memory_item=memory_item,
+                    filters=request.filters,
+                )
+            )
+            if filtered_workspace_items:
+                memory_items = filtered_workspace_items
+            elif request.filters:
+                memory_items = ()
+            else:
+                memory_items = workspace_memory_items
 
         (
             latest_task_recall_workflow_id,
@@ -395,6 +722,16 @@ class MemoryService(
                 hybrid_score += selected_task_recall_memory_bonus
                 selected_continuation_target_bonus_applied = True
 
+            interaction_priority_bonus, interaction_context_requested = (
+                self._interaction_priority_bonus(
+                    memory_item=memory_item,
+                    filters=request.filters,
+                )
+            )
+            interaction_priority_bonus_applied = interaction_priority_bonus > 0
+            if interaction_priority_bonus_applied:
+                hybrid_score += interaction_priority_bonus
+
             if hybrid_score <= 0:
                 continue
 
@@ -410,6 +747,36 @@ class MemoryService(
                 selected_task_recall_memory_bonus=selected_task_recall_memory_bonus,
                 completion_tiebreak_applied=completion_tiebreak_priority > 0,
             )
+            if interaction_priority_bonus_applied:
+                ranking_reasons.append(
+                    {
+                        "code": (
+                            "interaction_context_priority_bonus"
+                            if interaction_context_requested
+                            else "interaction_priority_bonus"
+                        ),
+                        "message": (
+                            "interaction memory was prioritized because the bounded search filters requested interaction or file-work context"
+                            if interaction_context_requested
+                            else "interaction memory received a bounded ranking preference"
+                        ),
+                        "value": interaction_priority_bonus,
+                    }
+                )
+
+            failure_reuse_detail = self._failure_reuse_detail(
+                memory_item=memory_item,
+                filters=request.filters,
+            )
+            if failure_reuse_detail["failure_reuse_candidate"]:
+                ranking_reasons.append(
+                    {
+                        "code": "failure_reuse_file_work_signal",
+                        "message": (
+                            "file-work and interaction metadata made this result a stronger bounded failure-reuse candidate"
+                        ),
+                    }
+                )
 
             latest_task_recall_ticket_detour_like, latest_task_recall_checkpoint_detour_like, _ = (
                 self._task_recall_search_detour_details(latest_task_recall_signals)
@@ -493,6 +860,27 @@ class MemoryService(
                                 if self._memory_relation_repository is not None
                                 else []
                             ),
+                            "provenance": memory_item.provenance,
+                            "provenance_kind": (
+                                "interaction"
+                                if memory_item.provenance == "interaction"
+                                else "workflow_memory"
+                                if memory_item.provenance
+                                in {
+                                    "workflow_checkpoint_auto",
+                                    "workflow_complete_auto",
+                                }
+                                else "episode_memory"
+                                if memory_item.provenance == "episode"
+                                else "other"
+                            ),
+                            "interaction_role": memory_item.metadata.get("interaction_role"),
+                            "interaction_kind": memory_item.metadata.get("interaction_kind"),
+                            "file_name": memory_item.metadata.get("file_name"),
+                            "file_path": memory_item.metadata.get("file_path"),
+                            "file_operation": memory_item.metadata.get("file_operation"),
+                            "purpose": memory_item.metadata.get("purpose"),
+                            "failure_reuse_detail": failure_reuse_detail,
                         },
                     },
                     created_at=memory_item.created_at,
