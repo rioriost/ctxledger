@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from ctxledger.config import (
@@ -273,19 +274,28 @@ def make_settings(
     )
 
 
+_MISSING = object()
+_EXPLICIT_NONE = object()
+
+
 def make_server(
     *,
     settings: AppSettings | None = None,
-    db_health_checker: FakeDatabaseHealthChecker | None = None,
+    db_health_checker: FakeDatabaseHealthChecker | None | object = _MISSING,
     runtime: FakeRuntime | HttpRuntimeAdapter | None = None,
     workflow_service_factory: object | None = None,
 ) -> CtxLedgerServer:
-    kwargs: dict[str, object] = {
+    kwargs: dict[str, Any] = {
         "settings": settings or make_settings(),
-        "db_health_checker": db_health_checker or FakeDatabaseHealthChecker(),
         "runtime": runtime or FakeRuntime(),
         "connection_pool": object(),
     }
+    if db_health_checker is _MISSING:
+        kwargs["db_health_checker"] = FakeDatabaseHealthChecker()
+    elif db_health_checker is _EXPLICIT_NONE:
+        kwargs["db_health_checker"] = None
+    else:
+        kwargs["db_health_checker"] = db_health_checker
     if workflow_service_factory is not None:
         kwargs["workflow_service_factory"] = workflow_service_factory
     return CtxLedgerServer(**kwargs)
@@ -294,7 +304,7 @@ def make_server(
 def make_ready_server(
     *,
     settings: AppSettings | None = None,
-    db_health_checker: FakeDatabaseHealthChecker | None = None,
+    db_health_checker: FakeDatabaseHealthChecker | None | object = _MISSING,
     runtime: FakeRuntime | HttpRuntimeAdapter | None = None,
     workflow_service_factory: object | None = None,
 ) -> CtxLedgerServer:

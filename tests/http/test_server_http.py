@@ -32,6 +32,7 @@ from ctxledger.runtime.server_responses import (
 )
 from ctxledger.runtime.types import McpHttpResponse, WorkflowResumeResponse
 from tests.support.server_test_support import (
+    _EXPLICIT_NONE,
     FakeDatabaseHealthChecker,
     FakeRuntime,
     FakeWorkflowService,
@@ -354,6 +355,108 @@ def test_age_prototype_runtime_details_readiness_payload_surfaces_explainability
         "graph_status": "graph_ready",
         "ready": True,
     }
+
+
+def test_age_prototype_runtime_details_uses_shared_age_readiness_helper_shape_without_health_checker() -> (
+    None
+):
+    settings = make_settings()
+    server = make_server(
+        settings=settings,
+        db_health_checker=_EXPLICIT_NONE,
+        runtime=FakeRuntime(),
+    )
+
+    details = _age_prototype_runtime_details(server)
+
+    assert details["summary_graph_mirroring"] == {
+        "enabled": False,
+        "canonical_source": [
+            "memory_summaries",
+            "memory_summary_memberships",
+        ],
+        "derived_graph_labels": [
+            "memory_summary",
+            "memory_item",
+            "summarizes",
+        ],
+        "relation_type": "summarizes",
+        "selection_route": "graph_summary_auxiliary",
+        "explainability_scope": "readiness",
+        "refresh_command": "ctxledger refresh-age-summary-graph",
+        "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+        "graph_status": "unknown",
+        "ready": False,
+    }
+    assert details["age_graph_status"] == "unknown"
+    assert "age_available" not in details["summary_graph_mirroring"]
+
+
+def test_age_prototype_runtime_details_shared_helper_shape_matches_ready_and_unknown_paths() -> (
+    None
+):
+    ready_settings = make_settings()
+    ready_server = make_server(
+        settings=ready_settings,
+        db_health_checker=FakeDatabaseHealthChecker(
+            age_available_value=True,
+            age_graph_available_value=True,
+        ),
+        runtime=FakeRuntime(),
+    )
+
+    ready_details = _age_prototype_runtime_details(ready_server)
+
+    assert ready_details["summary_graph_mirroring"] == {
+        "enabled": False,
+        "canonical_source": [
+            "memory_summaries",
+            "memory_summary_memberships",
+        ],
+        "derived_graph_labels": [
+            "memory_summary",
+            "memory_item",
+            "summarizes",
+        ],
+        "relation_type": "summarizes",
+        "selection_route": "graph_summary_auxiliary",
+        "explainability_scope": "readiness",
+        "refresh_command": "ctxledger refresh-age-summary-graph",
+        "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+        "age_available": True,
+        "graph_status": "graph_ready",
+        "ready": True,
+    }
+
+    unknown_settings = make_settings()
+    unknown_server = make_server(
+        settings=unknown_settings,
+        db_health_checker=_EXPLICIT_NONE,
+        runtime=FakeRuntime(),
+    )
+
+    unknown_details = _age_prototype_runtime_details(unknown_server)
+
+    assert unknown_details["summary_graph_mirroring"] == {
+        "enabled": False,
+        "canonical_source": [
+            "memory_summaries",
+            "memory_summary_memberships",
+        ],
+        "derived_graph_labels": [
+            "memory_summary",
+            "memory_item",
+            "summarizes",
+        ],
+        "relation_type": "summarizes",
+        "selection_route": "graph_summary_auxiliary",
+        "explainability_scope": "readiness",
+        "refresh_command": "ctxledger refresh-age-summary-graph",
+        "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+        "graph_status": "unknown",
+        "ready": False,
+    }
+    assert "age_available" not in unknown_details["summary_graph_mirroring"]
 
 
 def test_http_runtime_adapter_dispatches_registered_workflow_resume_handler() -> None:

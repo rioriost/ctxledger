@@ -223,6 +223,12 @@ def test_build_memory_get_context_tool_handler_uses_defaults_for_optional_values
         "episodes_returned": 0,
         "memory_items": [],
         "memory_item_counts_by_episode": {},
+        "remember_path_relation_reasons": [],
+        "remember_path_relation_reason_primary": None,
+        "readiness_explainability": {
+            "graph_summary_auxiliary": {},
+            "summary_graph_mirroring": {},
+        },
         "summaries": [],
         "task_recall_selection_present": False,
         "task_recall_selected_workflow_instance_id": None,

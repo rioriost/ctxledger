@@ -6,6 +6,10 @@ import sys
 from pathlib import Path
 from uuid import UUID
 
+from ctxledger.runtime.age_explainability import (
+    build_age_summary_graph_mirroring_details,
+)
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -483,25 +487,12 @@ def _age_graph_readiness(args: argparse.Namespace) -> int:
                     "age_graph_name": graph_name,
                     "age_available": age_available,
                     "age_graph_status": status_value,
-                    "summary_graph_mirroring": {
-                        "enabled": settings.database.age_enabled,
-                        "canonical_source": [
-                            "memory_summaries",
-                            "memory_summary_memberships",
-                        ],
-                        "derived_graph_labels": [
-                            "memory_summary",
-                            "memory_item",
-                            "summarizes",
-                        ],
-                        "relation_type": "summarizes",
-                        "selection_route": "graph_summary_auxiliary",
-                        "explainability_scope": "readiness",
-                        "refresh_command": "ctxledger refresh-age-summary-graph",
-                        "read_path_scope": "narrow_auxiliary_summary_member_traversal",
-                        "graph_status": status_value,
-                        "ready": status_value == "graph_ready",
-                    },
+                    "summary_graph_mirroring": build_age_summary_graph_mirroring_details(
+                        age_enabled=settings.database.age_enabled,
+                        age_available=age_available,
+                        graph_status=status_value,
+                        ready=status_value == "graph_ready",
+                    ),
                     "workflow_summary_automation": {
                         "orchestration_point": "workflow_completion_auto_memory",
                         "default_requested": False,

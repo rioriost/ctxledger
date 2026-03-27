@@ -1,5 +1,78 @@
 # AGE Prototype Validation Note — Local Docker Validation Pass
 
+## Operator Evidence Snippets
+
+### CLI readiness snapshot
+
+```/dev/null/json#L1-16
+{
+  "age_enabled": true,
+  "age_graph_name": "ctxledger_memory",
+  "age_available": true,
+  "age_graph_status": "graph_ready",
+  "summary_graph_mirroring": {
+    "enabled": true,
+    "relation_type": "summarizes",
+    "selection_route": "graph_summary_auxiliary",
+    "explainability_scope": "readiness",
+    "refresh_command": "ctxledger refresh-age-summary-graph",
+    "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+    "graph_status": "graph_ready",
+    "ready": true
+  }
+}
+```
+
+### Runtime debug snapshot
+
+```/dev/null/json#L1-18
+{
+  "age_prototype": {
+    "age_enabled": true,
+    "age_graph_name": "ctxledger_memory",
+    "summary_graph_mirroring": {
+      "enabled": true,
+      "relation_type": "summarizes",
+      "selection_route": "graph_summary_auxiliary",
+      "explainability_scope": "readiness",
+      "refresh_command": "ctxledger refresh-age-summary-graph",
+      "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+      "age_available": true,
+      "graph_status": "graph_ready",
+      "ready": true
+    },
+    "age_graph_status": "graph_ready"
+  }
+}
+```
+
+### `memory_get_context` explainability snapshot
+
+```/dev/null/json#L1-17
+{
+  "details": {
+    "remember_path_relation_reasons": [
+      "next_action_supports_objective"
+    ],
+    "remember_path_relation_reason_primary": "next_action_supports_objective",
+    "readiness_explainability": {
+      "summary_graph_mirroring": {
+        "selection_route": "graph_summary_auxiliary",
+        "relation_type": "summarizes",
+        "refresh_command": "ctxledger refresh-age-summary-graph",
+        "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+        "ready": true
+      }
+    }
+  }
+}
+```
+
+These snippets are representative operator evidence for the validation pass below.
+They are intended to make it easier to compare CLI readiness, runtime debug
+state, and memory-context explainability without reconstructing the expected
+shape from prose alone.
+
 Date: 2026-03-26  
 Environment: local Docker `small` stack  
 Repository version target: `0.8.0` follow-up slice  

@@ -307,6 +307,37 @@ The current readiness output is intended to help you verify:
 - which explicit refresh command is expected for summary graph rebuilding
 - whether the current summary graph state should be read as ready, unavailable,
   or degraded-but-non-canonical
+- which explainability-aligned relation surface the readiness payload represents
+
+Representative output:
+
+```/dev/null/json#L1-19
+{
+  "age_enabled": true,
+  "age_graph_name": "ctxledger_memory",
+  "age_available": true,
+  "age_graph_status": "graph_ready",
+  "summary_graph_mirroring": {
+    "enabled": true,
+    "canonical_source": [
+      "memory_summaries",
+      "memory_summary_memberships"
+    ],
+    "derived_graph_labels": [
+      "memory_summary",
+      "memory_item",
+      "summarizes"
+    ],
+    "relation_type": "summarizes",
+    "selection_route": "graph_summary_auxiliary",
+    "explainability_scope": "readiness",
+    "refresh_command": "ctxledger refresh-age-summary-graph",
+    "read_path_scope": "narrow_auxiliary_summary_member_traversal",
+    "graph_status": "graph_ready",
+    "ready": true
+  }
+}
+```
 
 If the summary graph is absent, stale, or otherwise degraded, current summary
 retrieval should still be read as relationally correct for the supported

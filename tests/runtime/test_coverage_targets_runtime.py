@@ -845,6 +845,9 @@ def test_runtime_introspection_response_uses_runtime_collection() -> None:
                     "memory_item",
                     "summarizes",
                 ],
+                "relation_type": "summarizes",
+                "selection_route": "graph_summary_auxiliary",
+                "explainability_scope": "readiness",
                 "refresh_command": "ctxledger refresh-age-summary-graph",
                 "read_path_scope": "narrow_auxiliary_summary_member_traversal",
                 "graph_status": "unknown",
@@ -1029,10 +1032,11 @@ def test_cli_age_graph_readiness_prints_status_json(
         '"age_available": true, "age_graph_status": "graph_ready", '
         '"summary_graph_mirroring": {"enabled": false, "canonical_source": ["memory_summaries", '
         '"memory_summary_memberships"], "derived_graph_labels": ["memory_summary", "memory_item", '
-        '"summarizes"], "refresh_command": "ctxledger refresh-age-summary-graph", '
-        '"read_path_scope": "narrow_auxiliary_summary_member_traversal", "graph_status": "graph_ready", '
-        '"ready": true}, "workflow_summary_automation": {"orchestration_point": '
-        '"workflow_completion_auto_memory", "default_requested": false, '
+        '"summarizes"], "relation_type": "summarizes", "selection_route": "graph_summary_auxiliary", '
+        '"explainability_scope": "readiness", "refresh_command": "ctxledger refresh-age-summary-graph", '
+        '"read_path_scope": "narrow_auxiliary_summary_member_traversal", "age_available": true, '
+        '"graph_status": "graph_ready", "ready": true}, "workflow_summary_automation": '
+        '{"orchestration_point": "workflow_completion_auto_memory", "default_requested": false, '
         '"request_field": "latest_checkpoint.checkpoint_json.build_episode_summary", '
         '"trigger": "latest_checkpoint.build_episode_summary_true", "target_scope": '
         '"workflow_completion_auto_memory_episode", "summary_kind": "episode_summary", '
@@ -1111,6 +1115,9 @@ def test_age_prototype_runtime_details_records_age_available_error() -> None:
                 "memory_item",
                 "summarizes",
             ],
+            "relation_type": "summarizes",
+            "selection_route": "graph_summary_auxiliary",
+            "explainability_scope": "readiness",
             "refresh_command": "ctxledger refresh-age-summary-graph",
             "read_path_scope": "narrow_auxiliary_summary_member_traversal",
             "age_available_error": "age unavailable check failed",
@@ -1168,6 +1175,9 @@ def test_age_prototype_runtime_details_records_age_graph_status_error() -> None:
                 "memory_item",
                 "summarizes",
             ],
+            "relation_type": "summarizes",
+            "selection_route": "graph_summary_auxiliary",
+            "explainability_scope": "readiness",
             "refresh_command": "ctxledger refresh-age-summary-graph",
             "read_path_scope": "narrow_auxiliary_summary_member_traversal",
             "age_available": True,
@@ -1227,6 +1237,9 @@ def test_age_prototype_runtime_details_records_age_graph_available_error() -> No
                 "memory_item",
                 "summarizes",
             ],
+            "relation_type": "summarizes",
+            "selection_route": "graph_summary_auxiliary",
+            "explainability_scope": "readiness",
             "refresh_command": "ctxledger refresh-age-summary-graph",
             "read_path_scope": "narrow_auxiliary_summary_member_traversal",
             "age_available": True,

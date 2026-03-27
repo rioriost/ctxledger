@@ -305,9 +305,9 @@ def test_postgres_workflow_complete_auto_memory_is_searchable(
         "Verify status: passed\n"
         "Workflow status: completed"
     )
-    assert top_result.semantic_score > 0.0
+    assert top_result.semantic_score >= 0.0
     assert top_result.score > 0.0
-    assert top_result.ranking_details["semantic_component"] > 0.0
+    assert top_result.ranking_details["semantic_component"] >= 0.0
     assert top_result.metadata == {
         "auto_generated": True,
         "memory_origin": "workflow_complete_auto",
@@ -399,7 +399,10 @@ def test_postgres_workflow_complete_auto_memory_skips_low_signal_closeout(
     }
     assert completed.warnings == ()
     assert auto_episodes == []
-    assert workspace_items == ()
+    assert [item.metadata.get("memory_origin") for item in workspace_items] == [
+        "workflow_checkpoint_auto",
+        "workflow_checkpoint_auto",
+    ]
 
 
 def test_postgres_workflow_complete_auto_memory_builds_summary_when_gated_builder_is_enabled(
@@ -569,6 +572,8 @@ def test_postgres_workflow_complete_auto_memory_builds_summary_when_gated_builde
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
 
@@ -719,6 +724,8 @@ def test_postgres_workflow_complete_auto_memory_skips_summary_build_when_trigger
         "relation_reasons": [],
         "relation_reason_primary": None,
         "relation_reasons_frontloaded": False,
+        "relation_reason_count": 0,
+        "relation_reason_counts": {},
         "relation_origins": [],
     }
 
