@@ -183,7 +183,7 @@ The project currently follows a lightweight, human-maintained changelog style.
     - `0.7.0` Mnemis-oriented evaluation remains explicitly deferred
 - roadmap/planning direction has now been updated so that:
   - `0.8.0` is the remember-path strengthening milestone
-  - `0.9.0` is the earliest planned Mnemis-style architectural evaluation milestone
+  - `0.9.0` is the ctxledger-and-`.rules` strengthening milestone for resumability, bounded historical progress recall, and failure-pattern avoidance
 - objective-aware task-recall continuation validation passed across:
   - memory context details
   - memory query/scope behavior
@@ -269,7 +269,10 @@ The project currently follows a lightweight, human-maintained changelog style.
     - embeddings
     - memory relations
     - graph/summarization inputs
-  - `0.9.0` deferring broader Mnemis-style graph-memory alignment questions until after the remember path is materially stronger
+  - `0.9.0` focusing on strengthening `ctxledger` and repository `.rules` together so:
+    - interrupted work can be resumed from minimal user prompts such as `resume`
+    - bounded historical progress questions can be answered from durable workflow/memory state
+    - previously observed failure patterns are easier for agents to surface and avoid repeating
 - the remember-path problem statement for the new `0.8.0` planning slice is:
   - the system can store workflow progress correctly while still failing to accumulate enough linked memory structure
   - `memory_relations` can remain empty in otherwise healthy deployments

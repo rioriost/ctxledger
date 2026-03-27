@@ -1,6 +1,11 @@
 
 # ctxledger: Durable Workflow Runtime with Multi-Layer Memory (MCP 2025-03-26)
 
+Current bounded release-facing `0.8.0` review artifacts:
+
+- `docs/project/releases/0.8.0_acceptance_review.md`
+- `docs/project/releases/0.8.0_closeout.md`
+
 ## Current Operator Metrics
 
 The current operator-facing stats surfaces also expose canonical-summary and derived-graph posture metrics.

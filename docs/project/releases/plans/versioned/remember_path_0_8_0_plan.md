@@ -774,7 +774,14 @@ So the intended sequence is:
 
 - `0.7.0`: improve task recall
 - `0.8.0`: strengthen remember-path accumulation
-- `0.9.0`: evaluate broader graph-memory architectural alignment questions
+- `0.9.0`: strengthen `ctxledger` and repository `.rules` together so:
+  - interrupted work can be resumed from minimal user prompts
+  - bounded historical progress questions can be answered from durable workflow
+    and memory state
+  - previously observed failure patterns are easier for agents to surface and
+    avoid repeating
+- defer broader graph-memory architectural alignment questions until after that
+  stronger resumability / recall / failure-avoidance layer exists
 
 ---
 

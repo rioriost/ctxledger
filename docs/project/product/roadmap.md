@@ -1,5 +1,11 @@
 # ctxledger roadmap
 
+Release-facing review artifacts now also exist for the bounded current milestone reading where available.
+For `0.8.0`, read the current release-facing assessment together with:
+
+- `docs/project/releases/0.8.0_acceptance_review.md`
+- `docs/project/releases/0.8.0_closeout.md`
+
 ## 0.1
 
 Primary delivery focus:
@@ -330,6 +336,9 @@ Remaining work to close out `0.6.0` more confidently:
   - direct member expansion
   - derived and degradable graph support
   - optional primary-surface-only client shaping through `primary_only`
+- read the current bounded release-facing milestone acceptance and closeout artifacts together with this roadmap:
+  - `docs/project/releases/0.8.0_acceptance_review.md`
+  - `docs/project/releases/0.8.0_closeout.md`
 - avoid broadening the milestone into recursive hierarchy, graph-owned truth, or Mnemis-alignment work before `0.7.0`
 
 Expected themes:
@@ -530,16 +539,78 @@ Success shape for `0.8`:
 
 Planned focus:
 
-- evaluate whether ctxledger should move closer to a Mnemis-style hierarchical graph memory design
-- compare ctxledger’s `0.6.0`, `0.7.0`, and `0.8.0` implementation against Mnemis-style dual-route retrieval ideas
-- decide whether any architectural alignment is justified after the remember-path and task-recall improvements are working
+- strengthen `ctxledger` and repository `.rules` together so AI-agent and user interaction history becomes more reliably resumable, queryable, and failure-aware
+- make canonical workflow, checkpoint, memory, and guidance surfaces strong enough that a user can say “resume” and the agent can continue from the right point with minimal ambiguity
+- improve question-answering over prior work progress so users can ask bounded historical/project questions such as:
+  - `"昨日"の"some keywords"はどこまで完了してる？`
+- reduce repeated agent failure by making prior failure patterns and recovery guidance easier to surface and harder to ignore
 
 Expected themes:
 
-- review Mnemis as a design input, not a constraint on the current remember-path or task-recall work
-- compare relation modeling, hierarchy construction, remember-path structure, and retrieval strategy
-- evaluate whether dual-route retrieval concepts should influence later ctxledger versions
-- keep any Mnemis-driven redesign scoped to explicit post-`0.8.0` work
+- strengthen the contract between:
+  - canonical `ctxledger` workflow/memory state
+  - repository `.rules`
+  - agent-facing operational behavior
+- make resume/restart flows depend less on discretionary local notes and more on canonical structured state plus stronger repository guidance
+- improve historical work lookup so time-, keyword-, ticket-, workflow-, and objective-oriented questions can be answered from canonical/derived durable state
+- strengthen failure capture and failure-recovery recall so agents can more reliably avoid repeating previously observed bad patterns
+- treat `.rules` as part of the product/runtime behavior surface rather than as passive documentation
+- preserve PostgreSQL as canonical while improving the derived recall and guidance layers built on top of it
+
+Current problem statement for `0.9`:
+
+- `0.8.0` makes the remember path materially stronger, but the end-user product goal is broader:
+  - interrupted work should be resumable from the right point when the user simply says `resume`
+  - prior progress should be queryable in a natural, bounded way
+  - agents should be less likely to repeat previously observed failures
+- the current repository already has:
+  - canonical workflow state
+  - checkpoints
+  - episodic memory
+  - memory items
+  - summaries
+  - bounded task-recall behavior
+  - bounded semantic search
+  - stronger remember-path observability
+- but that does **not** yet fully guarantee:
+  - correct resumption from minimal user prompts
+  - reliable bounded answers about prior completion state across time and keyword anchors
+  - strong failure-avoidance behavior driven by canonical and rules-backed recall rather than agent discretion
+- `.rules` currently improves agent behavior, but the next milestone should treat rule quality, resumability, historical lookup, and failure avoidance as one connected system problem
+
+Implementation direction for `0.9`:
+
+- define the minimum canonical artifacts and `.rules` guidance needed so a plain `resume` request can recover:
+  - the correct workflow or mainline objective
+  - the latest meaningful checkpoint
+  - the next intended action
+  - the relevant prior-mainline or detour context when applicable
+- strengthen the bounded historical lookup path so users can ask:
+  - what was completed yesterday
+  - what happened for a ticket or keyword
+  - what remains
+  using canonical workflow state plus derived recall layers
+- improve failure-pattern capture so failures, skips, and recoveries become more reusable inputs for later agent decision-making
+- tighten the link between:
+  - failure records
+  - memory episodes/items
+  - remember-path summaries
+  - `.rules` guidance
+- make `.rules` more explicit about:
+  - when to resume versus start new work
+  - how to select the right workflow/task thread
+  - how to checkpoint enough context for future natural-language recovery
+  - how to avoid previously observed failure patterns
+- preserve the bounded `primary_only` client path and grouped-primary memory reading while strengthening the client-facing “resume from the right place” product behavior
+- keep this as a ctxledger-and-rules strengthening milestone, not a broad graph-memory architecture redesign
+
+Success shape for `0.9`:
+
+- a user can say `resume` and an agent can more reliably recover the intended continuation target from canonical state plus bounded derived recall
+- a user can ask bounded historical progress questions and receive useful answers grounded in canonical workflow/memory records
+- prior failure patterns are easier for agents to surface, interpret, and avoid repeating
+- `.rules` and `ctxledger` work together as an integrated resumability and durable-memory operating model rather than as loosely related layers
+- the repository is better positioned for later architectural experiments because resumability, historical recall, and failure-avoidance behavior are stronger at the current product layer
 
 ## 0.0
 
