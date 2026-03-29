@@ -181,7 +181,7 @@ VS Code設定例:
 			"url": "https://localhost:8443/mcp",
 			"type": "http",
 			"headers": {
-        "Authorization": "Bearer nOcAjj5dhBMxhjr0nuhpUfrsgz8rIT7e"
+        "Authorization": "Bearer YOUR_TOKEN_HERE"
       }
 		}
 	},
