@@ -4,6 +4,14 @@ This document is based on current repository documentation, but implementation-f
 
 When documentation and implementation diverge, the code and `schemas/postgres.sql` take precedence.
 
+For adjacent repository-wide reference material, see also:
+
+- `docs/project/product/architecture.md`
+- `docs/project/product/workflow-model.md`
+- `docs/project/product/memory-model.md`
+- `docs/project/product/mcp-api.md`
+- `docs/project/product/specification.md`
+
 ## 1. Purpose
 
 `ctxledger` is a durable workflow runtime and multi-layer memory system for AI agents.
@@ -451,6 +459,8 @@ The resume path also includes timing-aware instrumentation for stage-by-stage di
 
 That is an implementation detail, but it matters because resume is treated as a real operational path, not just a convenience lookup.
 
+For the broader workflow semantics and identity model, see `docs/project/product/workflow-model.md`.
+
 ---
 
 ## 7. Multi-Layer Memory Architecture
@@ -627,6 +637,9 @@ The current system can be read as a flow across layers:
 
 That layered model is one of the defining technical features of `ctxledger`.
 
+For the memory-focused conceptual model, see `docs/project/product/memory-model.md`.
+For current grouped retrieval and summary-aware service-contract details, see `docs/memory/design/memory_get_context_service_contract.md`.
+
 ### 7.6 Multi-layer memory diagram
 
 ```/dev/null/technical-overview-memory-layers.mmd#L1-14
@@ -769,6 +782,9 @@ The current implementation includes:
 This means `memory_search` is not just a thin vector-search wrapper.  
 It is a bounded retrieval service over canonical memory with explicit explanation surfaces.
 
+For MCP-facing tool and resource behavior, see `docs/project/product/mcp-api.md`.
+For the current service-contract reading of grouped context retrieval, see `docs/memory/design/memory_get_context_service_contract.md`.
+
 ### 8.7 Retrieval architecture diagram
 
 ```/dev/null/technical-overview-retrieval-flow.mmd#L1-18
@@ -884,6 +900,9 @@ The current implementation direction includes:
 - bootstrap paths aligned around explicit pool ownership
 
 This is an important technical characteristic because `ctxledger` is designed as a real durable runtime, not just a stateless facade.
+
+For the canonical summary and hierarchy schema posture, see `docs/memory/design/minimal_hierarchy_schema_repository_design.md`.
+For the bounded derived graph-support posture, see `docs/memory/design/optional_age_summary_mirroring_design.md`.
 
 ---
 
@@ -1061,6 +1080,8 @@ This posture keeps `ctxledger` PostgreSQL-first.
 
 It avoids the common mistake of treating graph capability as equivalent to graph-owned truth.
 
+For the design-direction note behind this posture, see `docs/memory/design/optional_age_summary_mirroring_design.md`.
+
 ### 11.5 Graph posture diagram
 
 ```/dev/null/technical-overview-graph-posture.mmd#L1-13
@@ -1126,6 +1147,12 @@ These additions make the memory model more useful for:
 - repeated-work reduction
 
 without turning memory into a competing workflow-truth system.
+
+Related bounded contracts:
+- `docs/memory/design/minimal_prompt_resume_contract.md`
+- `docs/memory/design/interaction_memory_contract.md`
+- `docs/memory/design/file_work_metadata_contract.md`
+- `docs/memory/design/failure_reuse_contract.md`
 
 ---
 
