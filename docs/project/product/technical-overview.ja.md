@@ -20,6 +20,24 @@
 - `docs/project/product/mcp-api.md`
 - `docs/project/product/specification.md`
 
+## 目次
+
+- [1. 目的](#1-目的)
+- [2. 設計原則](#2-設計原則)
+- [3. システム全体像](#3-システム全体像)
+- [4. 内部のレイヤードアーキテクチャ](#4-内部のレイヤードアーキテクチャ)
+- [5. Canonical / Derived / Auxiliary の境界](#5-canonical--derived--auxiliary-の境界)
+- [6. Workflow Architecture](#6-workflow-architecture)
+- [7. Multi-Layer Memory Architecture](#7-multi-layer-memory-architecture)
+- [8. Retrieval Architecture](#8-retrieval-architecture)
+- [9. PostgreSQL Technology Map](#9-postgresql-technology-map)
+- [10. Relational Data Model Summary](#10-relational-data-model-summary)
+- [11. Graph Posture と AGE-Backed Support](#11-graph-posture-と-age-backed-support)
+- [12. Interaction / File-Work / Failure-Reuse Memory](#12-interaction--file-work--failure-reuse-memory)
+- [13. Operational Characteristics と Observability](#13-operational-characteristics-と-observability)
+- [14. Boundaries と Non-Goals](#14-boundaries-と-non-goals)
+- [15. まとめ](#15-まとめ)
+
 ## 1. 目的
 
 `ctxledger` は、AI agent のための durable workflow runtime であり、同時に multi-layer memory system です。

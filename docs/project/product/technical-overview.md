@@ -16,6 +16,24 @@ Related repository-wide reference material:
 - `docs/project/product/mcp-api.md`
 - `docs/project/product/specification.md`
 
+## Table of Contents
+
+- [1. Purpose](#1-purpose)
+- [2. Design Principles](#2-design-principles)
+- [3. System Context](#3-system-context)
+- [4. Layered Internal Architecture](#4-layered-internal-architecture)
+- [5. Canonical, Derived, and Auxiliary Boundaries](#5-canonical-derived-and-auxiliary-boundaries)
+- [6. Workflow Architecture](#6-workflow-architecture)
+- [7. Multi-Layer Memory Architecture](#7-multi-layer-memory-architecture)
+- [8. Retrieval Architecture](#8-retrieval-architecture)
+- [9. PostgreSQL Technology Map](#9-postgresql-technology-map)
+- [10. Relational Data Model Summary](#10-relational-data-model-summary)
+- [11. Graph Posture and AGE-Backed Support](#11-graph-posture-and-age-backed-support)
+- [12. Interaction, File-Work, and Failure-Reuse Memory](#12-interaction-file-work-and-failure-reuse-memory)
+- [13. Operational Characteristics and Observability](#13-operational-characteristics-and-observability)
+- [14. Boundaries and Non-Goals](#14-boundaries-and-non-goals)
+- [15. Summary](#15-summary)
+
 ## 1. Purpose
 
 `ctxledger` is a durable workflow runtime and multi-layer memory system for AI agents.
