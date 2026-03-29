@@ -1,6 +1,6 @@
 # ctxledger Technical Overview
 
-This document is written from current repository documentation, but implementation-facing claims must remain aligned with the code and schema.
+This document is based on current repository documentation, but implementation-facing claims must remain aligned with the code and schema.
 
 When documentation and implementation diverge, the code and `schemas/postgres.sql` take precedence.
 
@@ -8,15 +8,13 @@ When documentation and implementation diverge, the code and `schemas/postgres.sq
 
 `ctxledger` is a durable workflow runtime and multi-layer memory system for AI agents.
 
-It is designed to give agents and operators a system that can:
+It is designed to:
 
 - persist exact workflow state across sessions and process restarts
 - recover resumable operational state safely
 - accumulate reusable memory from prior work
 - retrieve bounded historical and contextual knowledge
 - expose those capabilities through an MCP-compatible HTTP interface
-
-A core architectural rule is that `ctxledger` does not treat all persisted information as the same kind of truth.
 
 The system separates:
 
@@ -25,13 +23,11 @@ The system separates:
 - derived retrieval structures
 - auxiliary retrieval outputs
 
-That separation is central to understanding both the schema and the runtime behavior.
+That boundary is central to understanding both the schema and the runtime behavior.
 
 ---
 
 ## 2. Design Principles
-
-The current repository posture is guided by a small set of architectural principles.
 
 ### 2.1 Canonical state lives in PostgreSQL
 
@@ -102,7 +98,7 @@ That interface exposes workflow and memory capabilities without making the trans
 
 At a high level, `ctxledger` sits between MCP-capable clients and a PostgreSQL-backed durable state layer.
 
-The current implemented system context is:
+The current system context is:
 
 - MCP-compatible client or AI agent
 - authenticated HTTP MCP endpoint at `/mcp`
@@ -112,7 +108,7 @@ The current implemented system context is:
 - bounded vector and graph-backed retrieval support
 - operator-facing CLI and observability surfaces
 
-Conceptually, the system looks like this:
+In practice:
 
 - clients send MCP requests to the HTTP runtime
 - the runtime delegates to application services
@@ -120,7 +116,7 @@ Conceptually, the system looks like this:
 - memory retrieval may use relational lookup, vector similarity, and bounded derived graph support
 - operators inspect runtime and memory posture through CLI stats and supported observability surfaces
 
-The primary external serving shape is:
+The primary serving shape is:
 
 - FastAPI application wrapper
 - `uvicorn` process
@@ -160,7 +156,7 @@ flowchart TD
 
 ## 4. Layered Internal Architecture
 
-The internal design follows a layered architecture.
+The internal design follows a layered architecture:
 
 ### 4.1 Transport layer
 
