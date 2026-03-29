@@ -759,7 +759,7 @@ These route names matter because `ctxledger` does not treat all returned context
 
 They should be read as current bounded response-shaping and explainability routes, not as a claim that every route has identical maturity, runtime coverage, or deployment posture.
 
-The current code path does explicitly construct route-presence, route-count, grouped-scope, summary-first, auxiliary-only, and `primary_only`-shaping details as part of `get_context(...)`, so the route-aware and grouped response posture is implementation-backed even though some graph-related and deployment-specific paths remain less fully audited here.
+The current implementation does explicitly construct route-presence, route-count, grouped-scope, summary-first, auxiliary-only, and `primary_only`-shaping details as part of `get_context(...)`. That means the route-aware and grouped response posture is implementation-backed, even though some graph-related and deployment-specific paths remain less fully audited here.
 
 The grouped output is intended to help readers understand:
 
@@ -770,20 +770,20 @@ The grouped output is intended to help readers understand:
 
 ## 8.5 Summary-first retrieval
 
-The current hierarchy-aware retrieval posture is summary-first where summaries are available and enabled.
+The current hierarchy-aware retrieval posture is summary-first when summaries are available and enabled.
 
 At a high level, the current bounded path is:
 
 1. resolve candidate workflows
 2. collect workflow-linked episodes
 3. apply lightweight query filtering when requested
-4. choose the primary visible path
-5. include direct episode memory where appropriate
+4. build the primary visible path
+5. include direct episode memory when requested and available
 6. optionally add inherited workspace memory
 7. optionally add bounded relation-supported memory
 8. expose grouped and route-aware details
 
-This gives `ctxledger` a retrieval model that is more structured than flat episode listing, while still preserving boundedness and explainability.
+This gives `ctxledger` a retrieval model that is more structured than flat episode listing while still preserving boundedness and explainability.
 
 ## 8.6 `memory_search`
 
@@ -798,9 +798,9 @@ The current implementation includes:
 - workspace-scoped retrieval
 - bounded task-recall integration
 - interaction-aware and file-work-aware filtering behavior
+- ranking details that distinguish lexical, semantic, and hybrid result composition
 
-This means `memory_search` is not just a thin vector-search wrapper.  
-It is a bounded retrieval service over canonical memory with explicit explanation surfaces.
+This means `memory_search` is not just a thin vector-search wrapper. It is a bounded retrieval service over canonical memory with explicit explanation surfaces and implementation-backed ranking detail.
 
 For MCP-facing tool and resource behavior, see `docs/project/product/mcp-api.md`.
 
