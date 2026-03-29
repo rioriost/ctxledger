@@ -160,7 +160,7 @@ http://localhost:3000
 
 #### 10. MCP クライアントを接続する
 
-設定例:
+Zed設定例:
 
 ```/dev/null/json#L1-7
 {
@@ -171,6 +171,20 @@ http://localhost:3000
     }
   }
 }
+```
+
+VS Code設定例:
+
+```
+"servers": {
+		"ctxledger": {
+			"url": "https://localhost:8443/mcp",
+			"type": "http",
+			"headers": {
+        "Authorization": "Bearer nOcAjj5dhBMxhjr0nuhpUfrsgz8rIT7e"
+      }
+		}
+	},
 ```
 
 ### できること

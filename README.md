@@ -149,7 +149,7 @@ Replace `YOUR_TOKEN_HERE` with the value of `CTXLEDGER_SMALL_AUTH_TOKEN`.
 
 #### 9. Connect your MCP client
 
-Example client configuration:
+Example Zed configuration:
 
 ```/dev/null/json#L1-7
 {
@@ -160,6 +160,20 @@ Example client configuration:
     }
   }
 }
+```
+
+Example VS Code configuration:
+
+```
+"servers": {
+		"ctxledger": {
+			"url": "https://localhost:8443/mcp",
+			"type": "http",
+			"headers": {
+        "Authorization": "Bearer nOcAjj5dhBMxhjr0nuhpUfrsgz8rIT7e"
+      }
+		}
+	},
 ```
 
 ### What you can do with it
