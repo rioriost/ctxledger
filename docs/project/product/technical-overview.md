@@ -134,6 +134,28 @@ Recommended deployment posture includes:
 - `ctxledger` runtime
 - PostgreSQL
 
+### 3.1 System context diagram
+
+```/dev/null/technical-overview-system-context.mmd#L1-18
+flowchart TD
+    Client["MCP client / AI agent"]
+    Proxy["Reverse proxy / auth / TLS"]
+    MCP["ctxledger HTTP MCP runtime (/mcp)"]
+    App["Application services"]
+    DB["PostgreSQL canonical store"]
+    Vec["pgvector embedding support"]
+    AGE["Apache AGE derived graph support"]
+    Embed["Optional embedding providers"]
+    Ops["CLI / Grafana / operator surfaces"]
+
+    Client --> Proxy --> MCP --> App --> DB
+    App --> Vec
+    App --> AGE
+    App --> Embed
+    Ops --> MCP
+    Ops --> DB
+```
+
 ---
 
 ## 4. Layered Internal Architecture
@@ -609,6 +631,24 @@ The current system can be read as a flow across layers:
 
 That layered model is one of the defining technical features of `ctxledger`.
 
+### 7.6 Multi-layer memory diagram
+
+```/dev/null/technical-overview-memory-layers.mmd#L1-14
+flowchart TD
+    L1["Layer 1: Workflow state"]
+    L2["Layer 2: Episodic memory"]
+    L3["Layer 3: Semantic / procedural memory"]
+    L4["Layer 4: Hierarchical memory"]
+
+    W["workflow / checkpoint activity"]
+    E["episodes"]
+    M["memory_items / memory_relations / memory_embeddings"]
+    S["memory_summaries / memory_summary_memberships"]
+    R["grouped retrieval surfaces"]
+
+    W --> L1 --> E --> L2 --> M --> L3 --> S --> L4 --> R
+```
+
 ---
 
 ## 8. Retrieval Architecture
@@ -732,6 +772,25 @@ The current implementation includes:
 
 This means `memory_search` is not just a thin vector-search wrapper.  
 It is a bounded retrieval service over canonical memory with explicit explanation surfaces.
+
+### 8.7 Retrieval architecture diagram
+
+```/dev/null/technical-overview-retrieval-flow.mmd#L1-18
+flowchart TD
+    Input["Client request"]
+    Resume["workflow_resume"]
+    Context["memory_get_context"]
+    Search["memory_search"]
+
+    Canonical["Canonical workflow + memory state"]
+    Grouped["Grouped primary / auxiliary context"]
+    Hybrid["Hybrid lexical + embedding ranking"]
+    Output["Client-visible response"]
+
+    Input --> Resume --> Canonical --> Output
+    Input --> Context --> Canonical --> Grouped --> Output
+    Input --> Search --> Canonical --> Hybrid --> Output
+```
 
 ---
 
@@ -924,6 +983,40 @@ as separate concepts.
 
 That separation is one of the cleanest architectural choices in the memory model.
 
+### 10.6 Relational structure diagrams
+
+#### Workflow ER view
+
+```/dev/null/technical-overview-workflow-er.mmd#L1-13
+erDiagram
+    workspaces ||--o{ workflow_instances : owns
+    workflow_instances ||--o{ workflow_attempts : has
+    workflow_instances ||--o{ workflow_checkpoints : has
+    workflow_attempts ||--o{ workflow_checkpoints : owns
+    workflow_attempts ||--o{ verify_reports : has
+```
+
+#### Memory ER view
+
+```/dev/null/technical-overview-memory-er.mmd#L1-20
+erDiagram
+    workflow_instances ||--o{ episodes : owns
+    workflow_attempts o|--o{ episodes : may_link
+    episodes ||--o{ episode_events : has
+    episodes ||--o{ episode_summaries : has
+    episodes ||--o{ episode_failures : has
+    episodes ||--o{ episode_artifacts : has
+    workspaces ||--o{ memory_items : owns
+    episodes o|--o{ memory_items : may_link
+    memory_items ||--o{ memory_embeddings : has
+    memory_items ||--o{ memory_relations : source
+    memory_items ||--o{ memory_relations : target
+    workspaces ||--o{ memory_summaries : owns
+    episodes o|--o{ memory_summaries : may_link
+    memory_summaries ||--o{ memory_summary_memberships : has
+    memory_items ||--o{ memory_summary_memberships : member
+```
+
 ---
 
 ## 11. Graph Posture and AGE-Backed Support
@@ -971,6 +1064,24 @@ In conceptual terms:
 This posture keeps `ctxledger` PostgreSQL-first.
 
 It avoids the common mistake of treating graph capability as equivalent to graph-owned truth.
+
+### 11.5 Graph posture diagram
+
+```/dev/null/technical-overview-graph-posture.mmd#L1-13
+flowchart LR
+    Canonical["Canonical relational state"]
+    Summary["memory_summaries"]
+    Membership["memory_summary_memberships"]
+    Memory["memory_items"]
+    Graph["Derived AGE graph support"]
+
+    Canonical --> Summary
+    Canonical --> Membership
+    Canonical --> Memory
+    Summary --> Graph
+    Membership --> Graph
+    Memory --> Graph
+```
 
 ---
 
