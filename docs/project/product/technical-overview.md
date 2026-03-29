@@ -4,7 +4,7 @@ This document is based on current repository documentation, but implementation-f
 
 When documentation and implementation diverge, the code and `schemas/postgres.sql` take precedence.
 
-For adjacent repository-wide reference material, see also:
+Related repository-wide reference material:
 
 - `docs/project/product/architecture.md`
 - `docs/project/product/workflow-model.md`
@@ -106,7 +106,7 @@ That interface exposes workflow and memory capabilities without making the trans
 
 At a high level, `ctxledger` sits between MCP-capable clients and a PostgreSQL-backed durable state layer.
 
-The current system context is:
+The current system context includes:
 
 - MCP-compatible client or AI agent
 - authenticated HTTP MCP endpoint at `/mcp`
@@ -130,7 +130,7 @@ The primary serving shape is:
 - `uvicorn` process
 - authenticated HTTP MCP path at `/mcp`
 
-Recommended deployment posture includes:
+The recommended deployment posture includes:
 
 - reverse proxy
 - bearer token authentication
@@ -638,6 +638,7 @@ The current system can be read as a flow across layers:
 That layered model is one of the defining technical features of `ctxledger`.
 
 For the memory-focused conceptual model, see `docs/project/product/memory-model.md`.
+
 For current grouped retrieval and summary-aware service-contract details, see `docs/memory/design/memory_get_context_service_contract.md`.
 
 ### 7.6 Multi-layer memory diagram
@@ -783,6 +784,7 @@ This means `memory_search` is not just a thin vector-search wrapper.
 It is a bounded retrieval service over canonical memory with explicit explanation surfaces.
 
 For MCP-facing tool and resource behavior, see `docs/project/product/mcp-api.md`.
+
 For the current service-contract reading of grouped context retrieval, see `docs/memory/design/memory_get_context_service_contract.md`.
 
 ### 8.7 Retrieval architecture diagram
@@ -902,6 +904,7 @@ The current implementation direction includes:
 This is an important technical characteristic because `ctxledger` is designed as a real durable runtime, not just a stateless facade.
 
 For the canonical summary and hierarchy schema posture, see `docs/memory/design/minimal_hierarchy_schema_repository_design.md`.
+
 For the bounded derived graph-support posture, see `docs/memory/design/optional_age_summary_mirroring_design.md`.
 
 ---
@@ -1149,6 +1152,7 @@ These additions make the memory model more useful for:
 without turning memory into a competing workflow-truth system.
 
 Related bounded contracts:
+
 - `docs/memory/design/minimal_prompt_resume_contract.md`
 - `docs/memory/design/interaction_memory_contract.md`
 - `docs/memory/design/file_work_metadata_contract.md`
@@ -1215,8 +1219,8 @@ Notable memory and hierarchy-related metrics include:
 
 These should be interpreted in this order:
 
-1. canonical summary volume first
-2. derived graph posture second
+- canonical summary volume first
+- derived graph posture second
 
 A degraded graph posture should not be read as canonical summary loss if relational summary metrics remain healthy.
 
