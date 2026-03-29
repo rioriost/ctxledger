@@ -1,8 +1,12 @@
 # ctxledger Technical Overview
 
-This document is based on current repository documentation, but implementation-facing claims must remain aligned with the code and schema.
+This document is based on current repository documentation and partial implementation review.
 
-When documentation and implementation diverge, the code and `schemas/postgres.sql` take precedence.
+Implementation-facing claims are intended to remain aligned with the code and schema, and when documentation and implementation diverge, the code and `schemas/postgres.sql` take precedence.
+
+Because this overview has not yet completed a full line-by-line implementation audit across every runtime, service, and transport path, some retrieval- and graph-related descriptions should be read as bounded current posture rather than exhaustive code-verified claims.
+
+The current alignment pass does confirm the primary HTTP MCP runtime shape, the visible MCP tool and workflow-resource surface, and the automatic interaction-memory capture posture on the HTTP request and response path.
 
 Related repository-wide reference material:
 
@@ -272,7 +276,7 @@ It includes:
 - ranked retrieval views
 - grouped read models
 - vector similarity support
-- optional graph-backed support
+- graph-backed auxiliary support where implemented
 - summary-first retrieval shaping
 - compatibility-oriented flattened response surfaces
 
@@ -635,6 +639,8 @@ The current system can be read as a flow across layers:
 - memory items may be grouped under summaries
 - retrieval can surface grouped context through summary-first or episode-oriented assembly
 
+This flow should be read as the current architectural posture, not as a guarantee that every path is exercised uniformly in every runtime or deployment configuration.
+
 That layered model is one of the defining technical features of `ctxledger`.
 
 For the memory-focused conceptual model, see `docs/project/product/memory-model.md`.
@@ -741,6 +747,10 @@ The current retrieval model distinguishes routes including:
 - `graph_summary_auxiliary`
 
 These route names matter because `ctxledger` does not treat all returned context as equivalent.
+
+They should be read as current bounded response-shaping and explainability routes, not as a claim that every route has identical maturity, runtime coverage, or deployment posture.
+
+The current code path does explicitly construct route-presence, route-count, grouped-scope, summary-first, auxiliary-only, and `primary_only`-shaping details as part of `get_context(...)`, so the route-aware and grouped response posture is implementation-backed even though some graph-related and deployment-specific paths remain less fully audited here.
 
 The grouped output is intended to help readers understand:
 
@@ -884,11 +894,11 @@ The repository design documents treat Apache AGE as:
 - rebuildable
 - non-canonical
 
-That posture matches the intended architecture.
+That posture matches the intended architecture direction.
 
-AGE-backed support should be understood as graph-oriented retrieval assistance layered over canonical relational records, especially summaries and memory relations.
+In this overview, AGE-backed support should be understood as graph-oriented retrieval assistance layered over canonical relational records, especially summaries and memory relations.
 
-It should not be described as the canonical owner of hierarchy.
+It should not be described as the canonical owner of hierarchy, and it should be read as a bounded current posture rather than a fully audited end-to-end implementation claim.
 
 ## 9.6 Shared pool and unit-of-work posture
 
@@ -1051,6 +1061,8 @@ In particular, graph support is relevant to:
 - bounded hierarchy traversal
 - auxiliary graph-backed retrieval signals
 
+This section describes the repository's current graph-support posture and terminology, but not a completed proof that every graph-related path has been audited in equal detail.
+
 ## 11.2 What graph support is not
 
 Graph support is not:
@@ -1114,6 +1126,16 @@ It broadens what counts as useful retrieval-ready memory.
 
 The memory layer supports interaction-oriented memory through `memory_items` with interaction-oriented metadata.
 
+The current service implementation includes `persist_interaction_memory(...)`, which creates `memory_items` with:
+
+- `provenance = "interaction"`
+- interaction-role metadata
+- interaction-kind metadata
+- optional workspace and workflow linkage
+- normalized file-work metadata when present
+
+On the primary HTTP runtime path, tool calls and resource reads also trigger paired persistence of inbound user-side interaction events and outbound agent-side interaction events when the workflow-backed memory service is available.
+
 This allows user requests and agent responses to become retrieval-ready memory without competing with workflow truth.
 
 ## 12.2 File-work metadata
@@ -1124,6 +1146,8 @@ The service layer normalizes and filters metadata such as:
 - `file_path`
 - `file_operation`
 - `purpose`
+
+In the current implementation, these fields participate both in interaction-memory normalization and in bounded search filtering and ranking behavior. This is part of why file-work signals can contribute to bounded failure-reuse and repeated-work recall without introducing Git-managed file-content indexing into the canonical model.
 
 This is important because `ctxledger` is not only tracking abstract lessons.  
 It is also capturing bounded file-work context useful for later recall.
@@ -1186,9 +1210,27 @@ The repository evidences bounded support for:
 - `resources/list`
 - `resources/read`
 
+This should be read as the primary confirmed serving posture for the current overview, not as an exhaustive statement about every possible adapter or transport variation.
+
+The current HTTP runtime adapter explicitly registers these visible MCP tools:
+
+- `memory_get_context`
+- `memory_remember_episode`
+- `memory_search`
+- `workflow_checkpoint`
+- `workflow_complete`
+- `workflow_resume`
+- `workflow_start`
+- `workspace_register`
+
+It also registers these workflow resources:
+
+- `workspace://{workspace_id}/resume`
+- `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
 ## 13.3 Tool and resource posture
 
-Implemented tools include:
+The visible current MCP tool surface includes:
 
 - `workspace_register`
 - `workflow_start`
@@ -1199,10 +1241,12 @@ Implemented tools include:
 - `memory_get_context`
 - `memory_search`
 
-Implemented workflow resources include:
+The visible current workflow-resource surface includes:
 
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+The current HTTP runtime adapter also exposes interaction capture around both tool dispatch and resource dispatch, which is important to the `0.9.0` interaction-memory posture.
 
 ## 13.4 Observability posture
 
