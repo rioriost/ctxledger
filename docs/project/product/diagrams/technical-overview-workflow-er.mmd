@@ -1,0 +1,6 @@
+erDiagram
+    workspaces ||--o{ workflow_instances : owns
+    workflow_instances ||--o{ workflow_attempts : has
+    workflow_instances ||--o{ workflow_checkpoints : has
+    workflow_attempts ||--o{ workflow_checkpoints : owns
+    workflow_attempts ||--o{ verify_reports : has

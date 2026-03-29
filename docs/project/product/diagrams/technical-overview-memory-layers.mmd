@@ -1,0 +1,13 @@
+flowchart TD
+    L1["Layer 1: Workflow state"]
+    L2["Layer 2: Episodic memory"]
+    L3["Layer 3: Semantic / procedural memory"]
+    L4["Layer 4: Hierarchical memory"]
+
+    W["workflow / checkpoint activity"]
+    E["episodes"]
+    M["memory_items / memory_relations / memory_embeddings"]
+    S["memory_summaries / memory_summary_memberships"]
+    R["grouped retrieval surfaces"]
+
+    W --> L1 --> E --> L2 --> M --> L3 --> S --> L4 --> R

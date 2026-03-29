@@ -1,0 +1,14 @@
+flowchart TD
+    Input["Client request"]
+    Resume["workflow_resume"]
+    Context["memory_get_context"]
+    Search["memory_search"]
+
+    Canonical["Canonical workflow + memory state"]
+    Grouped["Grouped primary / auxiliary context"]
+    Hybrid["Hybrid lexical + embedding ranking"]
+    Output["Client-visible response"]
+
+    Input --> Resume --> Canonical --> Output
+    Input --> Context --> Canonical --> Grouped --> Output
+    Input --> Search --> Canonical --> Hybrid --> Output

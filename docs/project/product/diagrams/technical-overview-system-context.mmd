@@ -1,0 +1,17 @@
+flowchart TD
+    Client["MCP client / AI agent"]
+    Proxy["Reverse proxy / auth / TLS"]
+    MCP["ctxledger HTTP MCP runtime (/mcp)"]
+    App["Application services"]
+    DB["PostgreSQL canonical store"]
+    Vec["pgvector embedding support"]
+    AGE["Apache AGE derived graph support"]
+    Embed["Optional embedding providers"]
+    Ops["CLI / Grafana / operator surfaces"]
+
+    Client --> Proxy --> MCP --> App --> DB
+    App --> Vec
+    App --> AGE
+    App --> Embed
+    Ops --> MCP
+    Ops --> DB

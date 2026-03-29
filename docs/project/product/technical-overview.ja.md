@@ -150,25 +150,10 @@ transport layer 自体を truth source にせず、workflow と memory の capab
 
 ### 3.1 システム構成図
 
-```/dev/null/technical-overview-system-context.mmd#L1-18
-flowchart TD
-    Client["MCP client / AI agent"]
-    Proxy["Reverse proxy / auth / TLS"]
-    MCP["ctxledger HTTP MCP runtime (/mcp)"]
-    App["Application services"]
-    DB["PostgreSQL canonical store"]
-    Vec["pgvector embedding support"]
-    AGE["Apache AGE derived graph support"]
-    Embed["Optional embedding providers"]
-    Ops["CLI / Grafana / operator surfaces"]
+![システム構成図](images/technical-overview-system-context.svg)
 
-    Client --> Proxy --> MCP --> App --> DB
-    App --> Vec
-    App --> AGE
-    App --> Embed
-    Ops --> MCP
-    Ops --> DB
-```
+Mermaid source:
+- `docs/project/product/diagrams/technical-overview-system-context.mmd`
 
 ---
 
@@ -664,21 +649,10 @@ grouped retrieval や summary-aware service contract の現在の読みは `docs
 
 ### 7.6 Multi-layer memory 図
 
-```/dev/null/technical-overview-memory-layers.mmd#L1-14
-flowchart TD
-    L1["Layer 1: Workflow state"]
-    L2["Layer 2: Episodic memory"]
-    L3["Layer 3: Semantic / procedural memory"]
-    L4["Layer 4: Hierarchical memory"]
+![Multi-layer memory 図](images/technical-overview-memory-layers.svg)
 
-    W["workflow / checkpoint activity"]
-    E["episodes"]
-    M["memory_items / memory_relations / memory_embeddings"]
-    S["memory_summaries / memory_summary_memberships"]
-    R["grouped retrieval surfaces"]
-
-    W --> L1 --> E --> L2 --> M --> L3 --> S --> L4 --> R
-```
+Mermaid source:
+- `docs/project/product/diagrams/technical-overview-memory-layers.mmd`
 
 ---
 
@@ -824,22 +798,10 @@ grouped context retrieval の service-contract 読みは `docs/memory/design/mem
 
 ### 8.7 Retrieval architecture 図
 
-```/dev/null/technical-overview-retrieval-flow.mmd#L1-18
-flowchart TD
-    Input["Client request"]
-    Resume["workflow_resume"]
-    Context["memory_get_context"]
-    Search["memory_search"]
+![Retrieval architecture 図](images/technical-overview-retrieval-flow.svg)
 
-    Canonical["Canonical workflow + memory state"]
-    Grouped["Grouped primary / auxiliary context"]
-    Hybrid["Hybrid lexical + embedding ranking"]
-    Output["Client-visible response"]
-
-    Input --> Resume --> Canonical --> Output
-    Input --> Context --> Canonical --> Grouped --> Output
-    Input --> Search --> Canonical --> Hybrid --> Output
-```
+Mermaid source:
+- `docs/project/product/diagrams/technical-overview-retrieval-flow.mmd`
 
 ---
 
@@ -1053,35 +1015,17 @@ relationship shape:
 
 #### Workflow ER view
 
-```/dev/null/technical-overview-workflow-er.mmd#L1-13
-erDiagram
-    workspaces ||--o{ workflow_instances : owns
-    workflow_instances ||--o{ workflow_attempts : has
-    workflow_instances ||--o{ workflow_checkpoints : has
-    workflow_attempts ||--o{ workflow_checkpoints : owns
-    workflow_attempts ||--o{ verify_reports : has
-```
+![Workflow ER 図](images/technical-overview-workflow-er.svg)
+
+Mermaid source:
+- `docs/project/product/diagrams/technical-overview-workflow-er.mmd`
 
 #### Memory ER view
 
-```/dev/null/technical-overview-memory-er.mmd#L1-20
-erDiagram
-    workflow_instances ||--o{ episodes : owns
-    workflow_attempts o|--o{ episodes : may_link
-    episodes ||--o{ episode_events : has
-    episodes ||--o{ episode_summaries : has
-    episodes ||--o{ episode_failures : has
-    episodes ||--o{ episode_artifacts : has
-    workspaces ||--o{ memory_items : owns
-    episodes o|--o{ memory_items : may_link
-    memory_items ||--o{ memory_embeddings : has
-    memory_items ||--o{ memory_relations : source
-    memory_items ||--o{ memory_relations : target
-    workspaces ||--o{ memory_summaries : owns
-    episodes o|--o{ memory_summaries : may_link
-    memory_summaries ||--o{ memory_summary_memberships : has
-    memory_items ||--o{ memory_summary_memberships : member
-```
+![Memory ER 図](images/technical-overview-memory-er.svg)
+
+Mermaid source:
+- `docs/project/product/diagrams/technical-overview-memory-er.mmd`
 
 ---
 
@@ -1145,21 +1089,10 @@ graph capability を graph-owned truth と取り違える典型的な誤読を�
 
 ### 11.5 Graph posture 図
 
-```/dev/null/technical-overview-graph-posture.mmd#L1-13
-flowchart LR
-    Canonical["Canonical relational state"]
-    Summary["memory_summaries"]
-    Membership["memory_summary_memberships"]
-    Memory["memory_items"]
-    Graph["Derived AGE graph support"]
+![Graph posture 図](images/technical-overview-graph-posture.svg)
 
-    Canonical --> Summary
-    Canonical --> Membership
-    Canonical --> Memory
-    Summary --> Graph
-    Membership --> Graph
-    Memory --> Graph
-```
+Mermaid source:
+- `docs/project/product/diagrams/technical-overview-graph-posture.mmd`
 
 ---
 

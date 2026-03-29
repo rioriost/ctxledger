@@ -1,0 +1,13 @@
+flowchart LR
+    Canonical["Canonical relational state"]
+    Summary["memory_summaries"]
+    Membership["memory_summary_memberships"]
+    Memory["memory_items"]
+    Graph["Derived AGE graph support"]
+
+    Canonical --> Summary
+    Canonical --> Membership
+    Canonical --> Memory
+    Summary --> Graph
+    Membership --> Graph
+    Memory --> Graph
