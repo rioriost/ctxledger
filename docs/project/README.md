@@ -29,6 +29,8 @@ Current files:
 - `product/memory-model.md`
 - `product/mcp-api.md`
 - `product/roadmap.md`
+- `product/technical-overview.md`
+- `product/technical-overview_plan.md`
 
 ### `releases/`
 
@@ -97,6 +99,8 @@ Start with:
 - `product/memory-model.md`
 - `product/mcp-api.md`
 - `product/roadmap.md`
+- `product/technical-overview.md`
+- `product/technical-overview_plan.md`
 
 ### If you want version-by-version plans or release evidence
 Start with:
