@@ -610,6 +610,13 @@ Key fields include:
 - `summary_kind`
 - `metadata_json`
 
+The current implementation also includes an explicit episode-summary build path through `build_episode_summary(...)`, which:
+
+- loads an episode and its memory items
+- skips cleanly when no episode memory items exist
+- can replace existing summaries of the same `summary_kind`
+- writes summary metadata describing builder, build scope, build version, and remember-path provenance details
+
 ### `memory_summary_memberships`
 Canonical parent-child membership edges from a summary to member memory items.
 
@@ -620,6 +627,8 @@ Key fields include:
 - `memory_id`
 - `membership_order`
 - `metadata_json`
+
+The current builder writes one canonical membership row per selected member memory item and preserves deterministic ordering through `membership_order`.
 
 The minimal implemented hierarchy is best understood as:
 
@@ -898,6 +907,21 @@ That posture matches the intended architecture direction.
 
 In this overview, AGE-backed support should be understood as graph-oriented retrieval assistance layered over canonical relational records, especially summaries and memory relations.
 
+The current implementation also includes explicit graph-readiness explainability metadata with concepts such as:
+
+- `readiness_state`
+- `graph_status`
+- `ready`
+- `stale`
+- `degraded`
+- `operator_action`
+- `refresh_command`
+
+That explainability path describes AGE as a bounded auxiliary summary-member traversal layer with canonical source tables:
+
+- `memory_summaries`
+- `memory_summary_memberships`
+
 It should not be described as the canonical owner of hierarchy, and it should be read as a bounded current posture rather than a fully audited end-to-end implementation claim.
 
 ## 9.6 Shared pool and unit-of-work posture
@@ -1088,6 +1112,14 @@ In conceptual terms:
 - `memory_item` node
 - `summarizes`-like membership edge
 - relation edges such as bounded `supports`-style semantic links where surfaced
+
+The current graph-readiness explainability path also makes the intended derived graph labels explicit:
+
+- `memory_summary`
+- `memory_item`
+- `summarizes`
+
+and ties them to the `graph_summary_auxiliary` selection route rather than a canonical hierarchy owner.
 
 ## 11.4 Why this posture matters
 
