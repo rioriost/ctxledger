@@ -1,12 +1,30 @@
 from __future__ import annotations
 
+"""Workflow-to-memory bridge helpers.
+
+Execution-boundary note:
+- This module is responsible for persistence-oriented memory creation paths.
+- When workflow completion or checkpoint activity should leave behind durable
+  memory state, this module can create:
+  - episodes
+  - memory items
+  - embeddings
+  - relations
+- For large Azure deployments, persistence-oriented embedding generation may be
+  delegated to PostgreSQL-side `azure_ai` execution.
+- This module should not be treated as the home for interactive AI responses
+  whose result is meant to be returned directly to an MCP client without first
+  being materialized into durable storage.
+"""
+
+import hashlib
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID, uuid4
 
-from ..config import EmbeddingProvider, get_settings
+from ..config import EmbeddingExecutionMode, EmbeddingProvider, get_settings
 from ..memory.embeddings import (
     EmbeddingGenerationError,
     EmbeddingGenerator,
@@ -198,7 +216,20 @@ class WorkflowMemoryBridge:
         if self.embedding_generator is None:
             try:
                 settings = get_settings().embedding
-                if settings.enabled:
+                # Execution boundary:
+                # - app_generated:
+                #   build an application-side generator because the process is
+                #   responsible for producing the embedding vector directly.
+                # - postgres_azure_ai:
+                #   do not build an application-side generator here. In that
+                #   mode, this workflow-memory bridge is still persistence-
+                #   oriented, but it delegates the actual embedding generation
+                #   to PostgreSQL so the resulting vector is materialized as
+                #   durable database state.
+                if (
+                    settings.enabled
+                    and settings.execution_mode is not EmbeddingExecutionMode.POSTGRES_AZURE_AI
+                ):
                     self.embedding_generator = build_embedding_generator(settings)
                 else:
                     self.embedding_generator = None
@@ -1931,11 +1962,107 @@ class WorkflowMemoryBridge:
         }
 
     def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
-        if self.embedding_generator is None or self.memory_embedding_repository is None:
+        # This helper is intentionally persistence-oriented.
+        #
+        # It exists to decide whether a durable memory item should also leave
+        # behind a durable embedding record. That makes it a good fit for:
+        # - application-side embedding generation in small/local modes
+        # - PostgreSQL-side `azure_ai` materialization in large Azure modes
+        #
+        # It is not the right abstraction for interactive AI response paths
+        # whose result should be returned directly to an MCP client without first
+        # being stored.
+        if self.memory_embedding_repository is None:
             return {
                 "embedding_persistence_status": "skipped",
                 "embedding_generation_skipped_reason": "embedding_persistence_not_configured",
             }
+
+        try:
+            settings = get_settings().embedding
+        except Exception as exc:
+            return {
+                "embedding_persistence_status": "failed",
+                "embedding_generation_skipped_reason": "embedding_settings_unavailable",
+                "embedding_generation_failure": {
+                    "provider": "config",
+                    "message": str(exc),
+                    "details": {},
+                },
+            }
+
+        if not settings.enabled:
+            return {
+                "embedding_persistence_status": "skipped",
+                "embedding_generation_skipped_reason": "embedding_generation_disabled",
+            }
+
+        if settings.execution_mode is EmbeddingExecutionMode.POSTGRES_AZURE_AI:
+            # Large Azure persistence path:
+            # the workflow bridge still owns the decision to persist an
+            # embedding, but the embedding value itself is produced inside
+            # PostgreSQL through `azure_ai` so it can be stored as part of the
+            # database-oriented materialization path.
+            if not settings.azure_openai_embedding_deployment:
+                return {
+                    "embedding_persistence_status": "failed",
+                    "embedding_generation_skipped_reason": "postgres_azure_ai_deployment_not_configured",
+                    "embedding_generation_failure": {
+                        "provider": "postgres_azure_ai",
+                        "message": (
+                            "CTXLEDGER_AZURE_OPENAI_EMBEDDING_DEPLOYMENT is required when "
+                            "CTXLEDGER_EMBEDDING_EXECUTION_MODE=postgres_azure_ai"
+                        ),
+                        "details": {},
+                    },
+                }
+
+            content_hash = hashlib.sha256(memory_item.content.encode("utf-8")).hexdigest()
+
+            try:
+                stored = self.memory_embedding_repository.create_via_postgres_azure_ai(
+                    memory_id=memory_item.memory_id,
+                    content=memory_item.content,
+                    embedding_model=settings.model,
+                    content_hash=content_hash,
+                    created_at=memory_item.updated_at,
+                    azure_openai_deployment=settings.azure_openai_embedding_deployment,
+                    azure_openai_dimensions=settings.dimensions,
+                )
+            except Exception as exc:
+                return {
+                    "embedding_persistence_status": "failed",
+                    "embedding_generation_skipped_reason": "embedding_generation_failed:postgres_azure_ai",
+                    "embedding_generation_failure": {
+                        "provider": "postgres_azure_ai",
+                        "message": str(exc),
+                        "details": {
+                            "deployment": settings.azure_openai_embedding_deployment,
+                            "auth_mode": settings.azure_openai_auth_mode.value,
+                        },
+                    },
+                }
+
+            return {
+                "embedding_persistence_status": "stored",
+                "embedding_generation_skipped_reason": None,
+                "embedding_provider": "postgres_azure_ai",
+                "embedding_model": stored.embedding_model,
+                "embedding_vector_dimensions": len(stored.embedding),
+                "embedding_content_hash": stored.content_hash,
+            }
+
+        if self.embedding_generator is None:
+            return {
+                "embedding_persistence_status": "skipped",
+                "embedding_generation_skipped_reason": "embedding_generator_not_configured",
+            }
+
+        # Small / app-generated persistence path:
+        # the application process computes the embedding vector first and then
+        # stores it durably. This is still persistence-oriented work because the
+        # output is being materialized into the memory embedding store rather
+        # than returned directly to the client as an interactive AI response.
 
         try:
             result = self.embedding_generator.generate(
@@ -1947,9 +2074,7 @@ class WorkflowMemoryBridge:
         except EmbeddingGenerationError as exc:
             return {
                 "embedding_persistence_status": "failed",
-                "embedding_generation_skipped_reason": (
-                    f"embedding_generation_failed:{exc.provider}"
-                ),
+                "embedding_generation_skipped_reason": f"embedding_generation_failed:{exc.provider}",
                 "embedding_generation_failure": {
                     "provider": exc.provider,
                     "message": str(exc),

@@ -1,6 +1,81 @@
 
 # ctxledger: Durable Workflow Runtime with Multi-Layer Memory (MCP 2025-03-26)
 
+## AI Execution Boundary
+
+`ctxledger` distinguishes between two different AI-execution patterns and does not treat them as interchangeable.
+
+### 1. Persistence-oriented AI work
+
+This pattern is appropriate when AI model output is used to create or update durable stored state.
+
+Representative examples include:
+
+- generating embeddings for records that are already stored
+- deriving summaries or classifications from stored records
+- storing AI-produced output into:
+  - another table
+  - another column
+  - another derived retrieval structure
+
+This is the natural fit for PostgreSQL-side AI integration such as the `azure_ai` extension.
+
+### 2. Interactive client-facing AI work
+
+This pattern is appropriate when AI model output is returned directly to an MCP client as part of an immediate request/response interaction.
+
+Representative examples include:
+
+- generating a response that is returned directly to the caller
+- serving low-latency AI-backed tool output without first materializing it into durable relational state
+- producing transient inference output for immediate client consumption
+
+This is **not** a natural fit for PostgreSQL-side `azure_ai` execution.
+
+## Governing rule
+
+`azure_ai` should be treated as a persistence-oriented / materialization-oriented execution path.
+
+It is well suited for:
+
+- embeddings for stored memory items
+- AI-enriched derived records
+- database-resident AI processing whose outputs are stored durably
+
+It is not the preferred path for:
+
+- direct interactive AI responses returned immediately to MCP clients
+- request/response inference where the database is only an unnecessary hop
+
+In large Azure deployments, both PostgreSQL-side AI and application-side AI may use the same Azure OpenAI deployment, but they serve different purposes:
+
+- PostgreSQL-side AI:
+  - persistence-oriented
+  - derived-state generation
+  - retrieval-support materialization
+- application-side AI:
+  - interactive
+  - client-facing
+  - immediate-response oriented
+
+A further distinction matters inside retrieval behavior itself:
+
+- **query-time semantic search used to retrieve stored memory**
+  - can still be treated as persistence-oriented / retrieval-support work
+  - even when a query embedding is generated at request time
+  - because the purpose is to score against already materialized stored embeddings and return durable memory records more effectively
+- **interactive AI generation returned directly to the client**
+  - is not retrieval-support materialization
+  - and should remain on the application-side interactive path
+
+For large Azure deployments, this means PostgreSQL-side `azure_ai` may still be a reasonable fit for query-time semantic search when:
+
+- the query embedding is generated only to compare against already stored embedding rows
+- the operation is part of durable memory retrieval rather than free-form client-facing inference
+- the response returned to the client is still fundamentally a retrieval result over stored canonical or derived records
+
+By contrast, if the model output itself is the client-facing answer, the application-side path remains the preferred boundary.
+
 Current bounded release-facing `0.8.0` review artifacts:
 
 - `docs/project/releases/0.8.0_acceptance_review.md`
@@ -199,6 +274,28 @@ Purpose:
 - repository-specific insights
 - procedural guidance
 
+Execution boundary for this layer:
+
+- when embeddings or related derived retrieval data are being created from stored records, PostgreSQL-side AI execution is reasonable
+- when AI output is meant to be returned directly to the MCP client without durable storage, application-side execution is the preferred boundary
+
+This layer also includes a bounded query-time semantic-search concern.
+
+That query-time concern should be read carefully:
+
+- if the system generates a query embedding only so it can compare that query against already stored embeddings and rank stored memory records, the operation still belongs to retrieval-support behavior
+- for large Azure deployments, PostgreSQL-side `azure_ai` can therefore still be a reasonable fit for this query-time semantic search path
+- the reason is that the model call is still in service of retrieving durable stored memory, not producing an unconstrained client-facing AI answer
+
+In other words:
+
+- **stored derived memory structures**
+  - good fit for PostgreSQL-side `azure_ai`
+- **query-time semantic ranking over stored embeddings**
+  - can also be a good fit for PostgreSQL-side `azure_ai` in large Azure deployments
+- **direct client-visible AI responses**
+  - better fit for application-side execution
+
 ---
 
 ## Layer 4 — Hierarchical Retrieval (Mnemis-inspired)
@@ -217,6 +314,36 @@ Capabilities:
 - expose a grouped primary retrieval surface that can be consumed directly by clients using `primary_only = true`
 
 Current interpretation rules:
+
+## AI boundary note for future large Azure deployments
+
+Future Azure-hosted large deployments may use Azure OpenAI from two different execution locations:
+
+1. PostgreSQL-side, through `azure_ai`
+2. application-side, through the runtime
+
+Those two locations should be selected by purpose, not treated as interchangeable implementation details.
+
+Use PostgreSQL-side AI when:
+
+- the input is already stored in PostgreSQL
+- the output should be stored durably
+- the work is part of a derived retrieval or enrichment pipeline
+- a query-time semantic-search step exists only to retrieve or rank stored durable memory more effectively
+
+Use application-side AI when:
+
+- the result is intended to be returned directly to the MCP client
+- the interaction is request/response oriented
+- adding a database execution hop would not improve correctness or durability
+- the model output itself is the primary client-visible answer rather than a retrieval-support computation
+
+This preserves the repository’s broader design rule:
+
+- canonical truth remains PostgreSQL-backed
+- derived AI-enriched stored structures can be materialized from PostgreSQL
+- query-time semantic search over stored embeddings can still remain on the PostgreSQL-side retrieval-support path in large Azure deployments
+- interactive client-facing AI behavior should not be forced through the database unless there is a clear architectural reason
 
 - `memory_context_groups` is the primary grouped hierarchy-aware surface
 - route and selection metadata in `details` should be treated as the primary additive explainability surface

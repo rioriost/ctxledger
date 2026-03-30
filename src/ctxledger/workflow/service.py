@@ -528,6 +528,19 @@ class MemoryEmbeddingRepository:
     def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
         raise NotImplementedError
 
+    def create_via_postgres_azure_ai(
+        self,
+        *,
+        memory_id: UUID,
+        content: str,
+        embedding_model: str,
+        content_hash: str | None,
+        created_at: datetime,
+        azure_openai_deployment: str,
+        azure_openai_dimensions: int | None = None,
+    ) -> MemoryEmbeddingRecord:
+        raise NotImplementedError
+
     def list_by_memory_id(
         self,
         memory_id: UUID,

@@ -1,3 +1,5 @@
+name: ctxledger
+
 services:
   postgres:
     image: ctxledger-postgres-age:pg17

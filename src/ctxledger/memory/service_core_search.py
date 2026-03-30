@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 from uuid import UUID, uuid4
 
+from ..config import EmbeddingExecutionMode
 from .embeddings import EmbeddingGenerationError, EmbeddingRequest
 from .helpers import embedding_dot_product, metadata_query_strings
 from .types import (
@@ -18,8 +20,28 @@ class SearchHelperMixin:
     """Search-specific helper methods for ``MemoryService``.
 
     This mixin extracts narrow helpers used by lexical/semantic search without
-    changing the existing ``MemoryService`` state contract. The consuming class
-    is expected to provide:
+    changing the existing ``MemoryService`` state contract.
+
+    Execution-boundary note:
+
+    - persistence-oriented AI work is the path that enriches durable stored
+      records, such as generating embeddings for memory items that are already
+      stored and then persisting those derived vectors
+    - interactive AI work is the path that would return model output directly to
+      an MCP client without first materializing that output into PostgreSQL
+
+    The helpers in this mixin are concerned with the persistence-oriented side
+    of that boundary.
+
+    In particular:
+
+    - when embeddings are generated for stored memory items, PostgreSQL-side
+      `azure_ai` execution is a reasonable fit for large Azure deployments
+    - if a future feature needs to call an AI model only to return an immediate
+      client-facing response, that should remain an application-side interactive
+      path rather than being forced through database-side materialization logic
+
+    The consuming class is expected to provide:
 
     - ``self._embedding_generator``
     - ``self._memory_embedding_repository``
@@ -96,13 +118,117 @@ class SearchHelperMixin:
         dict[UUID, float],
         dict[UUID, tuple[str, ...]],
     ]:
+        # This helper still belongs to the persistence-oriented retrieval path.
+        #
+        # Even when the query embedding is generated on demand, the purpose here
+        # is not to produce a direct model response for the MCP client. Instead,
+        # the goal is to score against already materialized embedding rows and
+        # retrieve durable memory records more effectively.
+        #
+        # Therefore:
+        #
+        # - small / app-generated mode may create the query embedding in the
+        #   application process
+        # - large / postgres_azure_ai mode may create the query embedding inside
+        #   PostgreSQL through azure_ai
+        #
+        # In both cases, this remains retrieval support over stored memory, not a
+        # general interactive AI-response path.
         semantic_matches: tuple[MemoryEmbeddingRecord, ...] = ()
         semantic_query_generated = False
         semantic_generation_skipped_reason: str | None = None
         semantic_score_by_memory_id: dict[UUID, float] = {}
         semantic_matched_fields_by_memory_id: dict[UUID, tuple[str, ...]] = {}
 
-        if self._embedding_generator is None or self._memory_embedding_repository is None:
+        if self._memory_embedding_repository is None:
+            semantic_generation_skipped_reason = "embedding_search_not_configured"
+            return (
+                semantic_matches,
+                semantic_query_generated,
+                semantic_generation_skipped_reason,
+                semantic_score_by_memory_id,
+                semantic_matched_fields_by_memory_id,
+            )
+
+        try:
+            settings = self._load_embedding_settings()
+        except Exception as exc:
+            semantic_generation_skipped_reason = f"embedding_settings_unavailable:{exc}"
+            return (
+                semantic_matches,
+                semantic_query_generated,
+                semantic_generation_skipped_reason,
+                semantic_score_by_memory_id,
+                semantic_matched_fields_by_memory_id,
+            )
+
+        if settings.execution_mode is EmbeddingExecutionMode.POSTGRES_AZURE_AI:
+            # Large Azure posture:
+            #
+            # - the record already exists in canonical storage
+            # - the embedding is a derived retrieval-support artifact
+            # - PostgreSQL-side azure_ai is therefore a reasonable execution
+            #   boundary because the result is immediately persisted
+            #
+            # This is intentionally different from an interactive model call whose
+            # result would be returned directly to the client.
+            if not settings.azure_openai_embedding_deployment:
+                semantic_generation_skipped_reason = "postgres_azure_ai_deployment_not_configured"
+                return (
+                    semantic_matches,
+                    semantic_query_generated,
+                    semantic_generation_skipped_reason,
+                    semantic_score_by_memory_id,
+                    semantic_matched_fields_by_memory_id,
+                )
+
+            semantic_query_generated = True
+            semantic_matches = (
+                self._memory_embedding_repository.find_similar_by_query_via_postgres_azure_ai(
+                    request_query,
+                    azure_openai_deployment=settings.azure_openai_embedding_deployment,
+                    azure_openai_dimensions=settings.dimensions,
+                    limit=limit,
+                    workspace_id=workspace_id,
+                )
+            )
+
+            if not semantic_matches:
+                return (
+                    semantic_matches,
+                    semantic_query_generated,
+                    semantic_generation_skipped_reason,
+                    semantic_score_by_memory_id,
+                    semantic_matched_fields_by_memory_id,
+                )
+
+            semantic_rank_floor = 0.25
+            semantic_rank_denominator = max(len(semantic_matches) - 1, 1)
+
+            for index, embedding_match in enumerate(semantic_matches):
+                semantic_score = semantic_rank_floor + (
+                    (1.0 - semantic_rank_floor)
+                    * (float(semantic_rank_denominator - index) / float(semantic_rank_denominator))
+                )
+                current_best = semantic_score_by_memory_id.get(
+                    embedding_match.memory_id,
+                    0.0,
+                )
+                if semantic_score > current_best:
+                    semantic_score_by_memory_id[embedding_match.memory_id] = semantic_score
+                    semantic_matched_fields_by_memory_id[embedding_match.memory_id] = (
+                        "embedding_similarity",
+                    )
+
+            return (
+                semantic_matches,
+                semantic_query_generated,
+                semantic_generation_skipped_reason,
+                semantic_score_by_memory_id,
+                semantic_matched_fields_by_memory_id,
+            )
+
+        if self._embedding_generator is None:
             semantic_generation_skipped_reason = "embedding_search_not_configured"
             return (
                 semantic_matches,
@@ -237,11 +363,101 @@ class SearchHelperMixin:
         return selected_task_recall_memory_ids, selected_task_recall_episode_id
 
     def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
-        if self._embedding_generator is None or self._memory_embedding_repository is None:
+        # This helper is strictly for persistence-oriented AI work.
+        #
+        # The input is already a stored memory item, and the purpose of the call
+        # is to materialize a derived embedding record into durable storage.
+        #
+        # That makes PostgreSQL-side azure_ai a good fit for the large Azure
+        # deployment path. By contrast, if a future feature needs to invoke an AI
+        # model only to return a direct response to the MCP client, that feature
+        # should use an interactive application-side path instead of this helper.
+        if self._memory_embedding_repository is None:
             return {
                 "embedding_persistence_status": "skipped",
                 "embedding_generation_skipped_reason": "embedding_persistence_not_configured",
             }
+
+        try:
+            settings = self._load_embedding_settings()
+        except Exception as exc:
+            return {
+                "embedding_persistence_status": "failed",
+                "embedding_generation_skipped_reason": "embedding_settings_unavailable",
+                "embedding_generation_failure": {
+                    "provider": "config",
+                    "message": str(exc),
+                    "details": {},
+                },
+            }
+
+        if not settings.enabled:
+            return {
+                "embedding_persistence_status": "skipped",
+                "embedding_generation_skipped_reason": "embedding_generation_disabled",
+            }
+
+        if settings.execution_mode is EmbeddingExecutionMode.POSTGRES_AZURE_AI:
+            if not settings.azure_openai_embedding_deployment:
+                return {
+                    "embedding_persistence_status": "failed",
+                    "embedding_generation_skipped_reason": "postgres_azure_ai_deployment_not_configured",
+                    "embedding_generation_failure": {
+                        "provider": "postgres_azure_ai",
+                        "message": (
+                            "CTXLEDGER_AZURE_OPENAI_EMBEDDING_DEPLOYMENT is required when "
+                            "CTXLEDGER_EMBEDDING_EXECUTION_MODE=postgres_azure_ai"
+                        ),
+                        "details": {},
+                    },
+                }
+
+            content_hash = hashlib.sha256(memory_item.content.encode("utf-8")).hexdigest()
+            try:
+                stored = self._memory_embedding_repository.create_via_postgres_azure_ai(
+                    memory_id=memory_item.memory_id,
+                    content=memory_item.content,
+                    embedding_model=settings.model,
+                    content_hash=content_hash,
+                    created_at=memory_item.updated_at,
+                    azure_openai_deployment=settings.azure_openai_embedding_deployment,
+                    azure_openai_dimensions=settings.dimensions,
+                )
+            except Exception as exc:
+                return {
+                    "embedding_persistence_status": "failed",
+                    "embedding_generation_skipped_reason": "embedding_generation_failed:postgres_azure_ai",
+                    "embedding_generation_failure": {
+                        "provider": "postgres_azure_ai",
+                        "message": str(exc),
+                        "details": {
+                            "deployment": settings.azure_openai_embedding_deployment,
+                            "auth_mode": settings.azure_openai_auth_mode.value,
+                        },
+                    },
+                }
+
+            return {
+                "embedding_persistence_status": "stored",
+                "embedding_generation_skipped_reason": None,
+                "embedding_provider": "postgres_azure_ai",
+                "embedding_model": stored.embedding_model,
+                "embedding_vector_dimensions": len(stored.embedding),
+                "embedding_content_hash": stored.content_hash,
+            }
+
+        if self._embedding_generator is None:
+            return {
+                "embedding_persistence_status": "skipped",
+                "embedding_generation_skipped_reason": "embedding_generator_not_configured",
+            }
+
+        # Small / app-generated posture:
+        #
+        # The application process computes the embedding and then persists the
+        # resulting vector. This remains acceptable for local or smaller
+        # deployment shapes where the persistence and execution boundaries are
+        # intentionally simpler than the large Azure path.
 
         try:
             result = self._embedding_generator.generate(
@@ -280,6 +496,11 @@ class SearchHelperMixin:
             "embedding_vector_dimensions": len(result.vector),
             "embedding_content_hash": result.content_hash,
         }
+
+    def _load_embedding_settings(self):
+        from . import service as service_module
+
+        return service_module.get_settings().embedding
 
 
 __all__ = ["SearchHelperMixin"]

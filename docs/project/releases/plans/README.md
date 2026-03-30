@@ -39,6 +39,8 @@ Current examples include:
 - `versioned/hierarchical_memory_0_6_0_plan.md`
 - `versioned/task_recall_0_7_0_plan.md`
 - `versioned/remember_path_0_8_0_plan.md`
+- `versioned/large_deployment_pattern_1_0_0_plan.md`
+- `versioned/1.0.0_large_deployment_acceptance_checklist.md`
 
 ### `domains/`
 
@@ -65,6 +67,14 @@ For auth and deployment-boundary planning artifacts, such as:
 - large-pattern gateway evaluation memo
 - shortlist examples
 - decision-record templates
+
+Related operator-facing runbooks for concrete deployment procedures should live under:
+
+- `docs/operations/runbooks/`
+
+For the planned Azure large deployment direction, see:
+
+- `docs/operations/runbooks/azure_large_operator_runbook.md`
 
 #### `domains/mcp/`
 For MCP transport/protocol planning artifacts, such as:

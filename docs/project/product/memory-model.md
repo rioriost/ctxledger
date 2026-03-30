@@ -24,6 +24,19 @@ This separation matters because agents need both:
 
 Those are related, but they are not the same problem.
 
+A related boundary is also important for AI-assisted processing:
+
+- **persistence-oriented AI work** is work that reads stored records, invokes a model, and writes the result back into canonical or derived storage
+- **interactive AI work** is work that invokes a model in order to return the result directly to a client without first materializing that result into the database
+
+These should not be treated as the same execution path.
+
+Within `ctxledger`, the memory architecture is primarily concerned with the first category:
+
+- persistence-oriented AI work that strengthens durable memory, embeddings, summaries, relations, or other stored retrieval support data
+
+If a future client-facing feature needs to call an AI model and return the result directly to an MCP client, that should be treated as a separate interactive path rather than as memory-materialization work.
+
 ---
 
 ## 2. Layer Overview
@@ -49,6 +62,7 @@ In the current repository state:
 - Layer 3 is only partially real:
   - canonical `memory_items`, `memory_embeddings`, and `memory_relations` exist
   - but the practical remember path still tends to accumulate episodes and some memory items more reliably than relation-rich semantic/procedural memory
+  - in Azure-oriented large deployments, Layer 3 semantic search may also use PostgreSQL-side query embedding generation so similarity search stays close to the persisted embedding store rather than forcing all query-time embedding work into the application process
 - Layer 4 is still largely planned, but `memory_get_context` now exposes a small hierarchy-aware response shape as an early bridge toward later hierarchical retrieval
 - within that early bridge, `memory_context_groups` should be treated as the primary grouped hierarchy-aware surface, while flatter compatibility-oriented fields remain derived or compatibility views
 
@@ -94,7 +108,48 @@ It also applies to the current AGE-backed graph layer:
 the graph is only as meaningful as the canonical relational memory it mirrors.
 If canonical memory relations are sparse or absent, graph bootstrap and refresh can still succeed mechanically while remaining semantically weak.
 
-## 3.5 Resumability is different from recall
+It also applies to AI-generated derived data:
+when an AI model is used to create embeddings, summaries, classifications, or other stored support artifacts, those outputs should be understood as derived records downstream of canonical workflow and memory truth.
+
+## 3.5 Persistence-oriented AI work is different from interactive AI work
+
+This distinction should remain explicit.
+
+Persistence-oriented AI work is appropriate when the system needs to:
+
+- process already stored records
+- create embeddings for durable retrieval
+- materialize summaries or classifications into stored structures
+- write AI-derived results into canonical or derived tables and columns
+
+Interactive AI work is different.
+It is the class of work where the model result is needed primarily so it can be returned directly to the MCP client.
+
+That interactive class should not be collapsed into the persistence-oriented memory path.
+
+A useful shorthand is:
+
+- **memory materialization path**
+  - AI is called so stored system state becomes richer
+- **interactive response path**
+  - AI is called so the client gets an immediate answer
+
+The memory model described in this document is about the first path.
+
+An important Azure-oriented consequence is that query-time semantic search can still remain within the persistence-oriented side of the boundary when:
+
+- the query embedding is generated only to search against already stored durable embeddings
+- the result is used to rank or retrieve persisted memory records
+- the system is not trying to return raw model output directly to the client as the primary product of the call
+
+In that sense:
+
+- **query-time semantic retrieval over stored memory**
+  - can still be treated as persistence-oriented retrieval support
+- **direct model response returned to the MCP client**
+  - should still be treated as interactive AI work
+
+## 3.6 Resumability is different from recall
 
 A resume view must be exact enough for safe continuation.
 
@@ -230,6 +285,15 @@ This means Layer 2 is no longer only conceptual.
 
 However, the current remember path is still uneven:
 useful workflow and checkpoint knowledge can stop at the episode or single-memory-item stage instead of consistently flowing into richer linked memory structures.
+
+When AI-assisted memory enrichment is used here, the intended reading should be:
+
+- the stored episode or memory record is the durable target
+- AI-generated embeddings or related derived support data are downstream materializations
+- this is still persistence-oriented AI work, not a client-facing direct-response feature
+
+The same reading can apply to semantic retrieval in large Azure deployments when the query path uses PostgreSQL-side AI integration to create a transient query embedding only for similarity search against already stored durable embeddings.
+That still belongs to the retrieval-support side of the memory model, not to a general-purpose interactive inference surface.
 
 ## 5.5 Current behavior
 

@@ -30,6 +30,17 @@ class EmbeddingProvider(StrEnum):
     CUSTOM_HTTP = "custom_http"
 
 
+class EmbeddingExecutionMode(StrEnum):
+    APP_GENERATED = "app_generated"
+    POSTGRES_AZURE_AI = "postgres_azure_ai"
+
+
+class AzureOpenAIAuthMode(StrEnum):
+    AUTO = "auto"
+    SUBSCRIPTION_KEY = "subscription_key"
+    MANAGED_IDENTITY = "managed_identity"
+
+
 _TRUE_VALUES: Final[set[str]] = {"1", "true", "t", "yes", "y", "on"}
 _FALSE_VALUES: Final[set[str]] = {"0", "false", "f", "no", "n", "off"}
 
@@ -81,6 +92,20 @@ def _parse_embedding_provider(
     default: EmbeddingProvider,
 ) -> EmbeddingProvider:
     return _parse_str_enum(name, default, EmbeddingProvider)
+
+
+def _parse_embedding_execution_mode(
+    name: str,
+    default: EmbeddingExecutionMode,
+) -> EmbeddingExecutionMode:
+    return _parse_str_enum(name, default, EmbeddingExecutionMode)
+
+
+def _parse_azure_openai_auth_mode(
+    name: str,
+    default: AzureOpenAIAuthMode,
+) -> AzureOpenAIAuthMode:
+    return _parse_str_enum(name, default, AzureOpenAIAuthMode)
 
 
 def _validate_optional_url(
@@ -170,20 +195,45 @@ class LoggingSettings:
 @dataclass(frozen=True, slots=True)
 class EmbeddingSettings:
     provider: EmbeddingProvider
+    execution_mode: EmbeddingExecutionMode
     model: str
+    # Legacy app-generated external-provider credential hook.
+    # For Azure large deployments, prefer the Azure-specific settings below
+    # instead of relying on this generic field.
     api_key: str | None
+    # Legacy app-generated external-provider base URL hook.
+    # For Azure large deployments, prefer azure_openai_endpoint when using
+    # Azure-specific app-side execution.
     base_url: str | None
     dimensions: int | None
     enabled: bool
+    azure_openai_endpoint: str | None
+    azure_openai_embedding_deployment: str | None
+    azure_openai_auth_mode: AzureOpenAIAuthMode
+    azure_openai_subscription_key: str | None
+    azure_openai_api_version: str | None
 
     @property
     def requires_external_api(self) -> bool:
+        if self.execution_mode is EmbeddingExecutionMode.POSTGRES_AZURE_AI:
+            return False
         return self.provider in {
             EmbeddingProvider.OPENAI,
             EmbeddingProvider.VOYAGEAI,
             EmbeddingProvider.COHERE,
             EmbeddingProvider.CUSTOM_HTTP,
         }
+
+    @property
+    def uses_postgres_azure_ai(self) -> bool:
+        return self.execution_mode is EmbeddingExecutionMode.POSTGRES_AZURE_AI
+
+    @property
+    def requires_azure_openai_subscription_key(self) -> bool:
+        return (
+            self.uses_postgres_azure_ai
+            and self.azure_openai_auth_mode is AzureOpenAIAuthMode.SUBSCRIPTION_KEY
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,11 +253,17 @@ class AppSettings:
     embedding: EmbeddingSettings = field(
         default_factory=lambda: EmbeddingSettings(
             provider=EmbeddingProvider.LOCAL_STUB,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=16,
             enabled=False,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         )
     )
 
@@ -242,36 +298,99 @@ class AppSettings:
 
         if self.database.pool_max_size < self.database.pool_min_size:
             raise ConfigError(
-                "CTXLEDGER_DB_POOL_MAX_SIZE must be greater than or equal to CTXLEDGER_DB_POOL_MIN_SIZE"
+                "CTXLEDGER_DB_POOL_MAX_SIZE must be greater than or equal to "
+                "CTXLEDGER_DB_POOL_MIN_SIZE"
             )
 
         if self.database.pool_timeout_seconds <= 0:
             raise ConfigError("CTXLEDGER_DB_POOL_TIMEOUT_SECONDS must be greater than 0")
 
-        if self.embedding.enabled:
-            if not self.embedding.model:
-                raise ConfigError("CTXLEDGER_EMBEDDING_MODEL must not be empty")
+        if not self.embedding.enabled:
+            return
 
-            if self.embedding.requires_external_api and not self.embedding.api_key:
-                raise ConfigError("OPENAI_API_KEY is required for the selected embedding provider")
-
-            if (
-                self.embedding.provider is EmbeddingProvider.CUSTOM_HTTP
-                and not self.embedding.base_url
-            ):
+        if self.embedding.uses_postgres_azure_ai:
+            if not self.embedding.azure_openai_endpoint:
                 raise ConfigError(
-                    "CTXLEDGER_EMBEDDING_BASE_URL is required when CTXLEDGER_EMBEDDING_PROVIDER=custom_http"
+                    "CTXLEDGER_AZURE_OPENAI_ENDPOINT is required when "
+                    "CTXLEDGER_EMBEDDING_EXECUTION_MODE=postgres_azure_ai"
+                )
+
+            if not self.embedding.azure_openai_embedding_deployment:
+                raise ConfigError(
+                    "CTXLEDGER_AZURE_OPENAI_EMBEDDING_DEPLOYMENT is required when "
+                    "CTXLEDGER_EMBEDDING_EXECUTION_MODE=postgres_azure_ai"
                 )
 
             _validate_optional_url(
-                name="CTXLEDGER_EMBEDDING_BASE_URL",
-                value=self.embedding.base_url,
+                name="CTXLEDGER_AZURE_OPENAI_ENDPOINT",
+                value=self.embedding.azure_openai_endpoint,
             )
+
+            resolved_auth_mode = self.embedding.azure_openai_auth_mode
+            if resolved_auth_mode is AzureOpenAIAuthMode.AUTO:
+                resolved_auth_mode = (
+                    AzureOpenAIAuthMode.SUBSCRIPTION_KEY
+                    if self.embedding.azure_openai_subscription_key
+                    else AzureOpenAIAuthMode.MANAGED_IDENTITY
+                )
+
+            if (
+                resolved_auth_mode is AzureOpenAIAuthMode.SUBSCRIPTION_KEY
+                and not self.embedding.azure_openai_subscription_key
+            ):
+                raise ConfigError(
+                    "CTXLEDGER_AZURE_OPENAI_SUBSCRIPTION_KEY is required when "
+                    "CTXLEDGER_AZURE_OPENAI_AUTH_MODE resolves to subscription_key "
+                    "and CTXLEDGER_EMBEDDING_EXECUTION_MODE=postgres_azure_ai"
+                )
+
+            if (
+                resolved_auth_mode is AzureOpenAIAuthMode.MANAGED_IDENTITY
+                and self.embedding.azure_openai_auth_mode is AzureOpenAIAuthMode.MANAGED_IDENTITY
+                and self.embedding.azure_openai_subscription_key
+            ):
+                raise ConfigError(
+                    "CTXLEDGER_AZURE_OPENAI_SUBSCRIPTION_KEY must not be set when "
+                    "CTXLEDGER_AZURE_OPENAI_AUTH_MODE=managed_identity"
+                )
 
             if self.embedding.dimensions is not None and self.embedding.dimensions <= 0:
                 raise ConfigError(
                     "CTXLEDGER_EMBEDDING_DIMENSIONS must be greater than 0 when provided"
                 )
+
+            return
+
+        if not self.embedding.model:
+            raise ConfigError("CTXLEDGER_EMBEDDING_MODEL must not be empty")
+
+        if self.embedding.requires_external_api and not self.embedding.api_key:
+            raise ConfigError(
+                "OPENAI_API_KEY is required only for legacy app-generated external "
+                "embedding providers when "
+                "CTXLEDGER_EMBEDDING_EXECUTION_MODE=app_generated. "
+                "For Azure-specific app-generated execution, prefer "
+                "CTXLEDGER_AZURE_OPENAI_AUTH_MODE and related Azure OpenAI settings "
+                "instead of treating OPENAI_API_KEY as the large-pattern credential contract."
+            )
+
+        if self.embedding.provider is EmbeddingProvider.CUSTOM_HTTP and not self.embedding.base_url:
+            raise ConfigError(
+                "CTXLEDGER_EMBEDDING_BASE_URL is required when "
+                "CTXLEDGER_EMBEDDING_PROVIDER=custom_http and "
+                "CTXLEDGER_EMBEDDING_EXECUTION_MODE=app_generated. "
+                "For Azure-specific app-generated execution, prefer "
+                "CTXLEDGER_AZURE_OPENAI_ENDPOINT and related Azure OpenAI settings "
+                "rather than treating generic custom_http wiring as the large-pattern default."
+            )
+
+        _validate_optional_url(
+            name="CTXLEDGER_EMBEDDING_BASE_URL",
+            value=self.embedding.base_url,
+        )
+
+        if self.embedding.dimensions is not None and self.embedding.dimensions <= 0:
+            raise ConfigError("CTXLEDGER_EMBEDDING_DIMENSIONS must be greater than 0 when provided")
 
 
 def load_settings() -> AppSettings:
@@ -311,12 +430,26 @@ def load_settings() -> AppSettings:
                 "CTXLEDGER_EMBEDDING_PROVIDER",
                 EmbeddingProvider.LOCAL_STUB,
             ),
+            execution_mode=_parse_embedding_execution_mode(
+                "CTXLEDGER_EMBEDDING_EXECUTION_MODE",
+                EmbeddingExecutionMode.APP_GENERATED,
+            ),
             model=_get_env("CTXLEDGER_EMBEDDING_MODEL", "text-embedding-3-small")
             or "text-embedding-3-small",
             api_key=_get_env("OPENAI_API_KEY"),
             base_url=_get_env("CTXLEDGER_EMBEDDING_BASE_URL"),
             dimensions=_parse_optional_int("CTXLEDGER_EMBEDDING_DIMENSIONS") or 16,
             enabled=_parse_bool("CTXLEDGER_EMBEDDING_ENABLED", False),
+            azure_openai_endpoint=_get_env("CTXLEDGER_AZURE_OPENAI_ENDPOINT"),
+            azure_openai_embedding_deployment=_get_env(
+                "CTXLEDGER_AZURE_OPENAI_EMBEDDING_DEPLOYMENT"
+            ),
+            azure_openai_auth_mode=_parse_azure_openai_auth_mode(
+                "CTXLEDGER_AZURE_OPENAI_AUTH_MODE",
+                AzureOpenAIAuthMode.AUTO,
+            ),
+            azure_openai_subscription_key=_get_env("CTXLEDGER_AZURE_OPENAI_SUBSCRIPTION_KEY"),
+            azure_openai_api_version=_get_env("CTXLEDGER_AZURE_OPENAI_API_VERSION"),
         ),
     )
 

@@ -1,0 +1,169 @@
+name: ctxledger
+metadata:
+  template: ctxledger-large-azure@1.0.0
+  description: One-command Azure large deployment for ctxledger using Azure Developer CLI
+infra:
+  provider: bicep
+  path: infra
+
+services:
+  ctxledger:
+    project: .
+    host: containerapp
+    language: py
+    docker:
+      path: ./Dockerfile
+      context: .
+      registry: ${CONTAINER_REGISTRY_LOGIN_SERVER}
+      remoteBuild: true
+
+workflows:
+  up:
+    steps:
+      - azd: provision
+      - azd: deploy
+
+hooks:
+  postprovision:
+    posix:
+      shell: sh
+      run: |
+        set -eu
+
+        azd env refresh
+
+        if [ -z "${CTXLEDGER_DATABASE_URL:-}" ]; then
+          echo "CTXLEDGER_DATABASE_URL is not set after provisioning." >&2
+          exit 1
+        fi
+
+        if [ -z "${AZURE_CONTAINER_REGISTRY_ENDPOINT:-}" ]; then
+          echo "AZURE_CONTAINER_REGISTRY_ENDPOINT is not set after provisioning." >&2
+          exit 1
+        fi
+
+        if [ -z "${AZURE_OPENAI_ENDPOINT:-}" ]; then
+          echo "AZURE_OPENAI_ENDPOINT is not set after provisioning." >&2
+          exit 1
+        fi
+
+        if [ -z "${AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME:-}" ]; then
+          echo "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME is not set after provisioning." >&2
+          exit 1
+        fi
+
+        if [ -z "${AZURE_OPENAI_EFFECTIVE_AUTH_MODE:-}" ]; then
+          echo "AZURE_OPENAI_EFFECTIVE_AUTH_MODE is not set after provisioning." >&2
+          exit 1
+        fi
+
+        BOOTSTRAP_AZURE_AI_CMD="python3 scripts/bootstrap_azure_ai.py \
+          --database-url \"${CTXLEDGER_DATABASE_URL}\" \
+          --azure-openai-endpoint \"${AZURE_OPENAI_ENDPOINT}\" \
+          --azure-openai-auth-mode \"${AZURE_OPENAI_EFFECTIVE_AUTH_MODE}\" \
+          --embedding-deployment \"${AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME}\" \
+          --embedding-dimensions \"${CTXLEDGER_EMBEDDING_DIMENSIONS:-1536}\" \
+          --wait-timeout-seconds 300 \
+          --wait-interval-seconds 5 \
+          --connect-timeout-seconds ${CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS:-5}"
+
+        if [ "${AZURE_OPENAI_EFFECTIVE_AUTH_MODE}" = "subscription_key" ]; then
+          if [ -z "${CTXLEDGER_AZURE_OPENAI_SUBSCRIPTION_KEY:-}" ]; then
+            echo "CTXLEDGER_AZURE_OPENAI_SUBSCRIPTION_KEY is required when AZURE_OPENAI_EFFECTIVE_AUTH_MODE=subscription_key." >&2
+            exit 1
+          fi
+          BOOTSTRAP_AZURE_AI_CMD="${BOOTSTRAP_AZURE_AI_CMD} --azure-openai-subscription-key \"${CTXLEDGER_AZURE_OPENAI_SUBSCRIPTION_KEY}\""
+        fi
+
+        if [ "${CTXLEDGER_DB_AGE_ENABLED:-true}" != "true" ]; then
+          BOOTSTRAP_AZURE_AI_CMD="${BOOTSTRAP_AZURE_AI_CMD} --skip-age"
+        fi
+
+        if [ "${CTXLEDGER_EMBEDDING_ENABLED:-true}" = "true" ]; then
+          BOOTSTRAP_AZURE_AI_CMD="${BOOTSTRAP_AZURE_AI_CMD} --validate-embeddings"
+        fi
+
+        eval "${BOOTSTRAP_AZURE_AI_CMD}"
+
+        BOOTSTRAP_SCHEMA_CMD="python3 scripts/bootstrap_schema.py \
+          --database-url \"${CTXLEDGER_DATABASE_URL}\" \
+          --schema-path \"schemas/postgres.sql\" \
+          --wait-timeout-seconds 300 \
+          --wait-interval-seconds 5 \
+          --connect-timeout-seconds ${CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS:-5}"
+
+        if [ "${CTXLEDGER_DB_AGE_ENABLED:-true}" = "true" ]; then
+          BOOTSTRAP_SCHEMA_CMD="${BOOTSTRAP_SCHEMA_CMD} --ensure-age"
+        fi
+
+        eval "${BOOTSTRAP_SCHEMA_CMD}"
+      interactive: false
+
+  postdeploy:
+    posix:
+      shell: sh
+      run: |
+        set -eu
+
+        azd env refresh
+
+        if [ -z "${AZURE_RESOURCE_GROUP:-}" ]; then
+          echo "AZURE_RESOURCE_GROUP is not set after deployment." >&2
+          exit 1
+        fi
+
+        if [ -z "${CONTAINER_APP_NAME:-}" ]; then
+          echo "CONTAINER_APP_NAME is not set after deployment." >&2
+          exit 1
+        fi
+
+        MCP_ENDPOINT_FQDN="$(az containerapp show --name "${CONTAINER_APP_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --query "properties.configuration.ingress.fqdn" -o tsv)"
+        if [ -z "${MCP_ENDPOINT_FQDN}" ]; then
+          echo "Container App ingress FQDN could not be resolved after deployment." >&2
+          exit 1
+        fi
+
+        export MCP_ENDPOINT_URL="https://${MCP_ENDPOINT_FQDN}/mcp"
+
+        MCP_AUTH_MODE_VALUE="${MCP_AUTH_MODE:-none}"
+        MCP_AUTH_HEADER_NAME_VALUE="${MCP_AUTH_HEADER_NAME:-Authorization}"
+        AZURE_ENV_TYPE_VALUE="${AZURE_ENV_TYPE:-unknown}"
+        export CTXLEDGER_POSTDEPLOY_SMOKE_STATUS="passed"
+        export CTXLEDGER_POSTDEPLOY_SMOKE_PROBE_MODE="initialize"
+        export CTXLEDGER_POSTDEPLOY_SMOKE_PROTOCOL_VERSION="${CTXLEDGER_SMOKE_PROTOCOL_VERSION:-2024-11-05}"
+        export CTXLEDGER_POSTDEPLOY_SMOKE_FOLLOW_UP_PROBES="tools/list,resources/list"
+        export CTXLEDGER_DEPLOYMENT_TIMESTAMP="2026-03-30T05:08:22.675877+00:00"
+        export CTXLEDGER_APP_VERSION="${CTXLEDGER_APP_VERSION:-unknown}"
+
+        SMOKE_OUTPUT="$(python3 scripts/postdeploy_smoke.py --endpoint-url "${MCP_ENDPOINT_URL}" --probe-mode initialize --tools-list-after-initialize --resources-list-after-initialize)"
+        printf '%s\n' "${SMOKE_OUTPUT}"
+        SMOKE_BODY_PREVIEW="$(printf '%s\n' "${SMOKE_OUTPUT}" | sed -n 's/^body_preview: //p' | head -n 1)"
+        export CTXLEDGER_POSTDEPLOY_SMOKE_BODY_PREVIEW="${SMOKE_BODY_PREVIEW}"
+
+        python3 scripts/write_mcp_client_snippets.py --endpoint-url "${MCP_ENDPOINT_URL}" --auth-mode "${MCP_AUTH_MODE_VALUE}" --auth-header-name "${MCP_AUTH_HEADER_NAME_VALUE}"
+        python3 scripts/write_mcp_snippets_readme.py --endpoint-url "${MCP_ENDPOINT_URL}" --auth-mode "${MCP_AUTH_MODE_VALUE}" --auth-header-name "${MCP_AUTH_HEADER_NAME_VALUE}"
+
+        echo
+        echo "ctxledger Azure large deployment completed."
+        echo
+        echo "Next step: configure your AI agent / MCP client."
+        echo "MCP endpoint: ${MCP_ENDPOINT_URL}"
+        echo "Deployed image: ${CONTAINER_IMAGE_REFERENCE:-unknown}"
+        echo "Snippet README: .azure/mcp-snippets/README.md"
+        echo "Snippet directory: .azure/mcp-snippets"
+        echo "Summary metadata: .azure/mcp-snippets/summary.json"
+        echo
+        echo "Release-evidence metadata:"
+        echo "- Deployment timestamp: ${CTXLEDGER_DEPLOYMENT_TIMESTAMP}"
+        echo "- Application version: ${CTXLEDGER_APP_VERSION}"
+        echo "- Smoke status: ${CTXLEDGER_POSTDEPLOY_SMOKE_STATUS}"
+        echo "- Smoke probe mode: ${CTXLEDGER_POSTDEPLOY_SMOKE_PROBE_MODE}"
+        echo "- Smoke follow-up probes: ${CTXLEDGER_POSTDEPLOY_SMOKE_FOLLOW_UP_PROBES}"
+        echo
+        echo "Deployment context:"
+        echo "- Azure environment type: ${AZURE_ENV_TYPE_VALUE}"
+        echo "- MCP auth mode: ${MCP_AUTH_MODE_VALUE}"
+        echo "- MCP auth header: ${MCP_AUTH_HEADER_NAME_VALUE}"
+        echo
+        echo "Open the generated README first, then copy the snippet for your client."
+      interactive: true

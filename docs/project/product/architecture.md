@@ -34,6 +34,7 @@ The architecture follows these governing principles:
 4. **Workflow control and memory retrieval are separate layers**
 5. **MCP is the public interface**
 6. **Durable execution is prioritized over convenience**
+7. **Persistence-oriented AI work and interactive AI responses are separate concerns**
 
 In addition, the system distinguishes clearly between:
 
@@ -74,6 +75,39 @@ Future optional dependencies may include:
 - background workers
 - indexing pipelines
 - summary generation pipelines
+
+For Azure-oriented large deployments, AI integration should be understood through two distinct execution patterns:
+
+- **persistence-oriented AI work**
+  - AI processing that reads stored records and writes derived results back into PostgreSQL
+  - examples:
+    - generating embeddings for stored memory items
+    - generating AI-derived values that are persisted into tables or columns
+    - database-side materialization flows using PostgreSQL `azure_ai`
+- **interactive AI response work**
+  - AI processing whose result should be returned directly to an MCP client without first being materialized into PostgreSQL
+  - examples:
+    - request/response inference paths
+    - immediate client-facing AI responses
+
+Within that large-deployment reading, query-time semantic search should be treated carefully.
+
+- if the system is using stored embeddings and PostgreSQL-side query embedding generation only to rank or retrieve durable memory records, that still belongs to the persistence-oriented retrieval-support path
+- if a future feature invokes a model mainly to produce a direct client-visible answer, that should remain an interactive application-side path instead of being pushed into PostgreSQL-side AI execution
+
+For Azure-oriented large deployments, AI integration should be understood through two distinct execution patterns:
+
+- **persistence-oriented AI work**
+  - AI processing that reads stored records and writes derived results back into PostgreSQL
+  - examples:
+    - generating embeddings for stored memory items
+    - generating AI-derived values that are persisted into tables or columns
+    - database-side materialization flows using PostgreSQL `azure_ai`
+- **interactive AI response work**
+  - AI processing whose result should be returned directly to an MCP client without first being materialized into PostgreSQL
+  - examples:
+    - request/response inference paths
+    - immediate client-facing AI responses
 
 ---
 
@@ -207,6 +241,30 @@ Responsibilities:
 - future background processing integration
 
 This layer implements technical details but does not define business truth.
+
+For AI-related behavior, the infrastructure layer should respect a clear execution boundary:
+
+- PostgreSQL-side AI integration is appropriate when the result is meant to be persisted as derived state
+- database-integrated AI paths such as PostgreSQL `azure_ai` are therefore a good fit for:
+  - embedding generation for stored records
+  - AI-derived values written into canonical or derived tables
+  - materialization flows over existing stored data
+  - query-time semantic retrieval support where the model call is still serving stored-memory ranking rather than direct client response
+- PostgreSQL-side AI integration is not the preferred path when the result is meant to be returned immediately to an MCP client without first being stored
+
+In other words:
+
+- **persistence-oriented AI work**
+  - naturally belongs near the PostgreSQL / infrastructure boundary
+- **interactive AI response work**
+  - should remain application-owned and transport-facing rather than being forced through database-side AI execution
+
+This distinction preserves architectural clarity:
+
+- PostgreSQL remains the canonical persistence boundary
+- derived AI outputs stored in PostgreSQL remain inspectable and reproducible as durable state
+- retrieval-support AI paths can use PostgreSQL-side execution when they still operate over durable stored records
+- immediate MCP response behavior does not become entangled with database-side materialization concerns
 
 ### 5.5 Cross-Cutting Concerns
 

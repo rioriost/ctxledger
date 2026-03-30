@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from ctxledger.memory.service import (
     MemoryRelationRecord,
@@ -700,6 +701,20 @@ class PostgresMemorySummaryMembershipRepository:
 
 
 class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
+    """PostgreSQL-backed repository for persisted embedding records.
+
+    Execution-boundary note:
+
+    - This repository exists for persistence-oriented embedding work.
+    - Its responsibility is to store and query derived embedding records that
+      support durable retrieval behavior over already stored memory items.
+    - In large Azure deployments, this can include PostgreSQL-side embedding
+      generation through the `azure_ai` / `azure_openai` path.
+    - This repository is not intended to be the execution boundary for
+      interactive AI responses whose result should be returned directly to an
+      MCP client without first being materialized into PostgreSQL.
+    """
+
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
 
@@ -715,14 +730,20 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
                 f"Unsupported datetime field '{field_name}' for memory_embeddings"
             )
         with self._conn.cursor() as cur:
-            cur.execute("SELECT MAX(created_at) AS value FROM memory_embeddings")
+            cur.execute(f"SELECT MAX({field_name}) AS value FROM memory_embeddings")
             row = cur.fetchone()
         return _optional_datetime(None if row is None else row["value"])
 
     def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord:
+        # Small / app-generated persistence path:
+        # the application process has already produced the embedding vector, and
+        # this repository is only responsible for storing that derived value as
+        # durable retrieval-support state.
+        embedding_literal = _pgvector_literal(embedding.embedding)
+
         with self._conn.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 INSERT INTO memory_embeddings (
                     memory_embedding_id,
                     memory_id,
@@ -736,7 +757,7 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
                     memory_embedding_id,
                     memory_id,
                     embedding_model,
-                    embedding,
+                    embedding::text AS embedding,
                     content_hash,
                     created_at
                 """,
@@ -744,7 +765,7 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
                     embedding.memory_embedding_id,
                     embedding.memory_id,
                     embedding.embedding_model,
-                    _pgvector_literal(embedding.embedding),
+                    embedding_literal,
                     embedding.content_hash,
                     embedding.created_at,
                 ),
@@ -753,6 +774,118 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
 
         if row is None:
             raise PersistenceError("Failed to create memory embedding")
+
+        return _memory_embedding_row_to_record(row)
+
+    def create_via_postgres_azure_ai(
+        self,
+        *,
+        memory_id: UUID,
+        content: str,
+        embedding_model: str,
+        content_hash: str | None,
+        created_at: datetime,
+        azure_openai_deployment: str,
+        azure_openai_dimensions: int | None = None,
+    ) -> MemoryEmbeddingRecord:
+        # Large Azure persistence path:
+        # the source record already exists in durable storage, and PostgreSQL is
+        # being asked to materialize a derived embedding record through
+        # `azure_openai.create_embeddings(...)`.
+        #
+        # This remains persistence-oriented work because the output is inserted
+        # into `memory_embeddings` as stored retrieval support state.
+        normalized_content = content.strip()
+        if not normalized_content:
+            raise PersistenceError("Cannot create PostgreSQL azure_ai embedding for empty content")
+
+        resolved_content_hash = (
+            content_hash or hashlib.sha256(normalized_content.encode("utf-8")).hexdigest()
+        )
+        memory_embedding_id = uuid4()
+
+        with self._conn.cursor() as cur:
+            if azure_openai_dimensions is None:
+                cur.execute(
+                    """
+                    INSERT INTO memory_embeddings (
+                        memory_embedding_id,
+                        memory_id,
+                        embedding_model,
+                        embedding,
+                        content_hash,
+                        created_at
+                    )
+                    SELECT
+                        %s,
+                        %s,
+                        %s,
+                        azure_openai.create_embeddings(%s, %s)::vector,
+                        %s,
+                        %s
+                    RETURNING
+                        memory_embedding_id,
+                        memory_id,
+                        embedding_model,
+                        embedding::text AS embedding,
+                        content_hash,
+                        created_at
+                    """,
+                    (
+                        memory_embedding_id,
+                        memory_id,
+                        embedding_model,
+                        azure_openai_deployment,
+                        normalized_content,
+                        resolved_content_hash,
+                        created_at,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO memory_embeddings (
+                        memory_embedding_id,
+                        memory_id,
+                        embedding_model,
+                        embedding,
+                        content_hash,
+                        created_at
+                    )
+                    SELECT
+                        %s,
+                        %s,
+                        %s,
+                        azure_openai.create_embeddings(
+                            %s,
+                            %s,
+                            dimensions => %s
+                        )::vector,
+                        %s,
+                        %s
+                    RETURNING
+                        memory_embedding_id,
+                        memory_id,
+                        embedding_model,
+                        embedding::text AS embedding,
+                        content_hash,
+                        created_at
+                    """,
+                    (
+                        memory_embedding_id,
+                        memory_id,
+                        embedding_model,
+                        azure_openai_deployment,
+                        normalized_content,
+                        azure_openai_dimensions,
+                        resolved_content_hash,
+                        created_at,
+                    ),
+                )
+            row = cur.fetchone()
+
+        if row is None:
+            raise PersistenceError("Failed to create PostgreSQL azure_ai memory embedding")
 
         return _memory_embedding_row_to_record(row)
 
@@ -769,7 +902,7 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
                     memory_embedding_id,
                     memory_id,
                     embedding_model,
-                    embedding,
+                    embedding::text AS embedding,
                     content_hash,
                     created_at
                 FROM memory_embeddings
@@ -790,6 +923,10 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
         limit: int,
         workspace_id: UUID | None = None,
     ) -> tuple[MemoryEmbeddingRecord, ...]:
+        # Stored-embedding retrieval path:
+        # the query embedding is already available to the application, and this
+        # repository uses PostgreSQL to rank against previously materialized
+        # embedding rows.
         workspace_filter_sql = ""
         if workspace_id is None:
             params: tuple[Any, ...] = (
@@ -824,6 +961,120 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
                 """,
                 params,
             )
+            rows = cur.fetchall()
+
+        return tuple(_memory_embedding_row_to_record(row) for row in rows)
+
+    def find_similar_by_query_via_postgres_azure_ai(
+        self,
+        query_text: str,
+        *,
+        azure_openai_deployment: str,
+        limit: int,
+        workspace_id: UUID | None = None,
+        azure_openai_dimensions: int | None = None,
+    ) -> tuple[MemoryEmbeddingRecord, ...]:
+        # PostgreSQL-side query-embedding retrieval path:
+        #
+        # - the user query is transient
+        # - PostgreSQL generates an embedding for ranking purposes through
+        #   `azure_openai.create_embeddings(...)`
+        # - the query embedding itself is not being materialized into durable
+        #   state here
+        #
+        # Even so, this helper still belongs to the persistence-oriented memory
+        # retrieval boundary, not to a direct client-facing interactive AI
+        # response path. Its purpose is to rank over stored embedding records and
+        # return durable memory matches, not to return raw model output to the
+        # client.
+        normalized_query = query_text.strip()
+        if not normalized_query:
+            return ()
+
+        workspace_filter_sql = ""
+        if workspace_id is None:
+            if azure_openai_dimensions is None:
+                params: tuple[Any, ...] = (
+                    azure_openai_deployment,
+                    normalized_query,
+                    limit,
+                )
+            else:
+                params = (
+                    azure_openai_deployment,
+                    normalized_query,
+                    azure_openai_dimensions,
+                    limit,
+                )
+        else:
+            workspace_filter_sql = "AND mi.workspace_id = %s"
+            if azure_openai_dimensions is None:
+                params = (
+                    workspace_id,
+                    azure_openai_deployment,
+                    normalized_query,
+                    limit,
+                )
+            else:
+                params = (
+                    workspace_id,
+                    azure_openai_deployment,
+                    normalized_query,
+                    azure_openai_dimensions,
+                    limit,
+                )
+
+        with self._conn.cursor() as cur:
+            if azure_openai_dimensions is None:
+                cur.execute(
+                    f"""
+                    SELECT
+                        me.memory_embedding_id,
+                        me.memory_id,
+                        me.embedding_model,
+                        me.embedding::text AS embedding,
+                        me.content_hash,
+                        me.created_at
+                    FROM memory_embeddings AS me
+                    INNER JOIN memory_items AS mi
+                        ON mi.memory_id = me.memory_id
+                    WHERE me.embedding IS NOT NULL
+                      {workspace_filter_sql}
+                    ORDER BY
+                        me.embedding <-> azure_openai.create_embeddings(%s, %s)::vector ASC,
+                        me.created_at DESC,
+                        me.memory_embedding_id DESC
+                    LIMIT %s
+                    """,
+                    params,
+                )
+            else:
+                cur.execute(
+                    f"""
+                    SELECT
+                        me.memory_embedding_id,
+                        me.memory_id,
+                        me.embedding_model,
+                        me.embedding::text AS embedding,
+                        me.content_hash,
+                        me.created_at
+                    FROM memory_embeddings AS me
+                    INNER JOIN memory_items AS mi
+                        ON mi.memory_id = me.memory_id
+                    WHERE me.embedding IS NOT NULL
+                      {workspace_filter_sql}
+                    ORDER BY
+                        me.embedding <-> azure_openai.create_embeddings(
+                            %s,
+                            %s,
+                            dimensions => %s
+                        )::vector ASC,
+                        me.created_at DESC,
+                        me.memory_embedding_id DESC
+                    LIMIT %s
+                    """,
+                    params,
+                )
             rows = cur.fetchall()
 
         return tuple(_memory_embedding_row_to_record(row) for row in rows)

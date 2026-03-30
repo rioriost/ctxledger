@@ -120,6 +120,18 @@ class MemoryEmbeddingRepository(Protocol):
 
     def create(self, embedding: MemoryEmbeddingRecord) -> MemoryEmbeddingRecord: ...
 
+    def create_via_postgres_azure_ai(
+        self,
+        *,
+        memory_id: UUID,
+        content: str,
+        embedding_model: str,
+        content_hash: str | None,
+        created_at: datetime,
+        azure_openai_deployment: str,
+        azure_openai_dimensions: int | None = None,
+    ) -> MemoryEmbeddingRecord: ...
+
     def list_by_memory_id(
         self,
         memory_id: UUID,
@@ -133,6 +145,16 @@ class MemoryEmbeddingRepository(Protocol):
         *,
         limit: int,
         workspace_id: UUID | None = None,
+    ) -> tuple[MemoryEmbeddingRecord, ...]: ...
+
+    def find_similar_by_query_via_postgres_azure_ai(
+        self,
+        query_text: str,
+        *,
+        azure_openai_deployment: str,
+        limit: int,
+        workspace_id: UUID | None = None,
+        azure_openai_dimensions: int | None = None,
     ) -> tuple[MemoryEmbeddingRecord, ...]: ...
 
 

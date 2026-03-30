@@ -536,29 +536,33 @@ The payloads returned by `/debug/*` may reveal details such as:
   - `runtime_routes`
   - `runtime_tools`
 
-## 6.4 Local HTTPS paths
+## 6.4 Deployment patterns and HTTPS posture
 
 The repository now has two deployment patterns:
 
 1. **`small` (default)**
-2. **`large` (future plan; not implemented yet)**
+2. **`large` (`1.0.0` Azure planning posture; not implemented yet)**
 
-Both patterns are intended to keep the backend private and terminate TLS at the proxy boundary.
+Both patterns are intended to keep the backend private and terminate TLS at the proxy or gateway boundary rather than inside `ctxledger`.
 
-Shared shape:
+Shared architectural shape:
 
-- Traefik remains the host-exposed MCP entrypoint
-- Traefik terminates TLS
-- the private `ctxledger` backend remains on internal plain HTTP inside the deployment network
-- operators provide certificate material for the HTTPS listener rather than enabling TLS inside `ctxledger` itself
-- proxy-layer authentication remains part of the intended deployment boundary
+- `ctxledger` remains a private backend service
+- client-facing TLS terminates outside the application process
+- authentication belongs at the proxy or gateway boundary
+- the MCP endpoint remains HTTP-based at `/mcp`
+- PostgreSQL remains the canonical state store
 
-Expected local certificate files for the default Docker-based local stack:
+The concrete implementation differs by pattern.
+
+For the default local Docker-based small stack, the current HTTPS path uses repository-managed Traefik certificate files:
 
 - `docker/traefik/certs/localhost.crt`
 - `docker/traefik/certs/localhost.key`
 
-These files are mounted into the Traefik container and used for the HTTPS listener.
+These files are mounted into the Traefik container and used for the local HTTPS listener.
+
+For the future Azure large pattern, the repository should not assume these local Traefik-specific certificate handling details carry forward unchanged.
 
 ### 6.4.1 `small` deployment pattern (default)
 
@@ -609,23 +613,67 @@ python scripts/mcp_http_smoke.py --base-url https://localhost:8443 --bearer-toke
 
 The validated default `small` pattern now performs the AGE and Grafana bootstrap work during startup so operators do not need separate AGE or observability overlays for normal local use.
 
-### 6.4.2 `large` deployment pattern (future plan)
+### 6.4.2 `large` deployment pattern (`1.0.0` Azure plan; future implementation)
 
 This pattern is planned but not implemented yet.
+
+The current planning direction for `1.0.0` is an Azure-hosted deployment shape built around:
+
+- Azure Container Registry
+- Azure Container Apps
+- Azure Database for PostgreSQL Flexible Server
+- Azure OpenAI
 
 Intended characteristics:
 
 - HTTPS enabled
-- proxy-layer authentication enabled
-- Grafana enabled
-- Azure Database for PostgreSQL
-- larger-scale deployment posture than the validated PostgreSQL 17-based default Docker local stack
+- proxy-layer or gateway-layer authentication enabled
+- cloud-hosted runtime suitable for larger scale than the default local stack
+- PostgreSQL remains canonical
+- `pgvector` remains required
+- Azure OpenAI is the intended large-pattern AI provider
+- PostgreSQL `azure_ai` integration should be used as much as practical so Azure Database for PostgreSQL Flexible Server can invoke Azure OpenAI directly for embedding generation
+- Azure OpenAI authentication for the large pattern should be treated explicitly as:
+  - `subscription_key`
+  - `managed_identity`
+- large-pattern Azure OpenAI auth is configured through PostgreSQL `azure_ai` settings, not through the local small-pattern `OPENAI_API_KEY` posture
+- Apache AGE support is intended if validated on the target managed PostgreSQL shape
+- the MCP server is containerized and deployed through Azure-managed runtime services
 
-Current status:
+Current planning posture:
 
 - planned only
 - not yet implemented
 - should be treated as a future deployment direction rather than a current operator workflow
+- should be read together with the `1.0.0` large deployment planning docs under `docs/project/releases/plans/`
+
+Important design note:
+
+- the large pattern should preserve the small pattern’s architectural rule that auth and public exposure stay outside `ctxledger`
+- the large pattern should not blindly copy the exact local Traefik deployment shape into Azure
+
+The expected logical Azure shape is:
+
+```/dev/null/txt#L1-8
+MCP client
+  -> ingress / auth gateway boundary
+  -> Azure Container Apps
+  -> private ctxledger container
+  -> Azure Database for PostgreSQL Flexible Server
+
+Supporting services:
+  -> Azure Container Registry
+  -> Azure OpenAI
+  -> secret / monitoring services
+```
+
+Current concerns that must be resolved before implementation acceptance include:
+
+- whether Apache AGE is fully supported and operationally acceptable in the intended Flexible Server configuration
+- what the final Azure OpenAI and PostgreSQL `azure_ai` operating posture should be in the accepted large pattern
+- what ingress or gateway pattern should replace or supersede the local Traefik posture
+- how concurrent scale and PostgreSQL connection pressure should be managed in Azure
+- whether Grafana remains part of the large pattern or Azure-native observability becomes primary
 
 ### Certificate guidance
 
@@ -649,10 +697,25 @@ Operational expectations:
 
 These deployment patterns improve production-like operator validation, but they do not change the broader deployment model:
 
-- TLS termination still belongs at the proxy boundary
-- authentication still belongs at the proxy boundary
-- the backend application remains private behind the proxy
+- TLS termination still belongs at the proxy or gateway boundary
+- authentication still belongs at the proxy or gateway boundary
+- the backend application remains private behind the ingress layer
 - certificate issuance, trust, rotation, and secret handling remain deployment/operator concerns rather than application concerns
+
+Additional reading for the large Azure direction:
+
+- the local small pattern uses Traefik because it fits Docker Compose and local certificate handling well
+- the future large pattern should reevaluate ingress and gateway choices in Azure rather than assuming Traefik remains the default
+- the local small pattern may use direct `OPENAI_API_KEY`-based OpenAI access, but the future large Azure pattern should use Azure OpenAI instead
+- for the large pattern, `OPENAI_API_KEY` should not be treated as the Azure OpenAI auth mechanism
+- for the large pattern, Azure Database for PostgreSQL Flexible Server should use PostgreSQL `azure_ai` integration as much as practical so Azure OpenAI embedding calls can be made directly from PostgreSQL
+- when PostgreSQL `azure_ai` is used with Azure OpenAI, the auth posture should be documented explicitly as either:
+  - `subscription_key`
+  - `managed_identity`
+- `subscription_key` and `managed_identity` require different `azure_ai` settings and different Azure-side operational setup, so the large-pattern deployment should never describe them as interchangeable implementation details
+- managed cloud ingress, identity-aware gateways, private connectivity, Azure OpenAI integration, and PostgreSQL `azure_ai` posture should be evaluated before finalizing the Azure implementation shape
+- the runtime configuration contract for the planned Azure path is documented in:
+  - `docs/operations/deployment/azure_large_config_spec.md`
 
 These details are useful for diagnostics but increase observability exposure, so they should be treated as operationally sensitive.
 
