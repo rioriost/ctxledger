@@ -18,3 +18,4 @@ docker/traefik/certs/
 .envrc
 .env
 .azure/
+.pytest_cache/
