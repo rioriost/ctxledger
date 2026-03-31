@@ -64,7 +64,7 @@ param azureOpenAiAuthMode string = 'auto'
 param azureOpenAiSubscriptionKey string = ''
 
 @description('Comma-separated PostgreSQL extension allowlist for Flexible Server.')
-param postgresAllowedExtensions string = 'vector,azure_ai,age'
+param postgresAllowedExtensions string = 'vector,azure_ai,age,pgcrypto'
 
 @description('Whether the bootstrap script should ensure the age extension exists.')
 param bootstrapEnsureAge bool = true
@@ -272,15 +272,21 @@ var baseTags = union(tags, {
   'mcp-auth-mode': mcpAuthMode
 })
 
+var containerAppTags = union(baseTags, {
+  'azd-service-name': 'ctxledger'
+})
+
+
 var postgresSkuTier = startsWith(postgresSkuName, 'Standard_') ? 'GeneralPurpose' : 'Burstable'
 var postgresVersionedDatabaseName = '${postgresServerName}/${postgresDatabaseName}'
 var registryLoginServer = '${containerRegistryName}.azurecr.io'
 var containerImageRepository = normalizedAppName
 var placeholderContainerImage = 'mcr.microsoft.com/k8se/quickstart:latest'
+var deployedContainerImage = '${registryLoginServer}/${containerImageRepository}/${normalizedAppName}-${appName}:${imageTag}'
 var containerImage = placeholderContainerImage
 var postgresHost = '${postgresServerName}.postgres.database.azure.com'
 var postgresAdminPrincipal = '${postgresAdminLogin}'
-var postgresConnectionString = 'postgresql://${postgresAdminPrincipal}:${postgresAdminPassword}@${postgresHost}:5432/${postgresDatabaseName}?sslmode=require'
+var postgresConnectionString = 'postgresql://${postgresAdminPrincipal}:${effectivePostgresAdminPassword}@${postgresHost}:5432/${postgresDatabaseName}?sslmode=require'
 var dbStatementTimeoutValue = dbStatementTimeoutMs > 0 ? string(dbStatementTimeoutMs) : ''
 var userAssignedIdentityResourceId = userAssignedIdentity.id
 var userAssignedIdentityMap = enableUserAssignedIdentity
@@ -299,6 +305,150 @@ var effectiveAzureOpenAiAuthMode = azureOpenAiAuthMode == 'auto'
   ? 'managed_identity'
   : azureOpenAiAuthMode
 var postgresManagedIdentityEnabled = effectiveAzureOpenAiAuthMode == 'managed_identity'
+var sharedRuntimeEnv = [
+  {
+    name: 'CTXLEDGER_APP_NAME'
+    value: appName
+  }
+  {
+    name: 'CTXLEDGER_APP_VERSION'
+    value: imageTag
+  }
+  {
+    name: 'CTXLEDGER_ENV'
+    value: environmentName
+  }
+  {
+    name: 'CTXLEDGER_DATABASE_URL'
+    value: postgresConnectionString
+  }
+  {
+    name: 'CTXLEDGER_TRANSPORT'
+    value: 'http'
+  }
+  {
+    name: 'CTXLEDGER_ENABLE_HTTP'
+    value: 'true'
+  }
+  {
+    name: 'CTXLEDGER_HOST'
+    value: '0.0.0.0'
+  }
+  {
+    name: 'CTXLEDGER_PORT'
+    value: string(targetPort)
+  }
+  {
+    name: 'CTXLEDGER_HTTP_PATH'
+    value: mcpHttpPath
+  }
+  {
+    name: 'CTXLEDGER_ENABLE_DEBUG_ENDPOINTS'
+    value: string(enableDebugEndpoints)
+  }
+  {
+    name: 'CTXLEDGER_LOG_LEVEL'
+    value: logLevel
+  }
+  {
+    name: 'CTXLEDGER_LOG_STRUCTURED'
+    value: string(logStructured)
+  }
+  {
+    name: 'CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS'
+    value: string(dbConnectTimeoutSeconds)
+  }
+  {
+    name: 'CTXLEDGER_DB_STATEMENT_TIMEOUT_MS'
+    value: dbStatementTimeoutValue
+  }
+  {
+    name: 'CTXLEDGER_DB_SCHEMA_NAME'
+    value: dbSchemaName
+  }
+  {
+    name: 'CTXLEDGER_DB_POOL_MIN_SIZE'
+    value: string(dbPoolMinSize)
+  }
+  {
+    name: 'CTXLEDGER_DB_POOL_MAX_SIZE'
+    value: string(dbPoolMaxSize)
+  }
+  {
+    name: 'CTXLEDGER_DB_POOL_TIMEOUT_SECONDS'
+    value: string(dbPoolTimeoutSeconds)
+  }
+  {
+    name: 'CTXLEDGER_DB_AGE_ENABLED'
+    value: string(dbAgeEnabled)
+  }
+  {
+    name: 'CTXLEDGER_DB_AGE_GRAPH_NAME'
+    value: dbAgeGraphName
+  }
+  {
+    name: 'CTXLEDGER_EMBEDDING_ENABLED'
+    value: string(embeddingEnabled)
+  }
+  {
+    name: 'CTXLEDGER_EMBEDDING_PROVIDER'
+    value: embeddingProvider
+  }
+  {
+    name: 'CTXLEDGER_EMBEDDING_EXECUTION_MODE'
+    value: embeddingExecutionMode
+  }
+  {
+    name: 'CTXLEDGER_EMBEDDING_MODEL'
+    value: embeddingModel
+  }
+  {
+    name: 'CTXLEDGER_EMBEDDING_DIMENSIONS'
+    value: string(embeddingDimensions)
+  }
+  {
+    name: 'CTXLEDGER_EMBEDDING_BASE_URL'
+    value: effectiveEmbeddingBaseUrl
+  }
+  {
+    name: 'CTXLEDGER_AZURE_OPENAI_ENDPOINT'
+    value: azureOpenAiEndpoint
+  }
+  {
+    name: 'CTXLEDGER_AZURE_OPENAI_EMBEDDING_DEPLOYMENT'
+    value: azureOpenAiEmbeddingDeploymentName
+  }
+  {
+    name: 'CTXLEDGER_AZURE_OPENAI_API_VERSION'
+    value: azureOpenAiApiVersion
+  }
+  {
+    name: 'CTXLEDGER_AZURE_OPENAI_AUTH_MODE'
+    value: effectiveAzureOpenAiAuthMode
+  }
+]
+var bootstrapInitEnv = concat(sharedRuntimeEnv, [
+  {
+    name: 'AZURE_OPENAI_ENDPOINT'
+    value: azureOpenAiEndpoint
+  }
+  {
+    name: 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME'
+    value: azureOpenAiEmbeddingDeploymentName
+  }
+  {
+    name: 'AZURE_OPENAI_EFFECTIVE_AUTH_MODE'
+    value: effectiveAzureOpenAiAuthMode
+  }
+  {
+    name: 'CTXLEDGER_BOOTSTRAP_WAIT_TIMEOUT_SECONDS'
+    value: string(bootstrapWaitTimeoutSeconds)
+  }
+  {
+    name: 'CTXLEDGER_BOOTSTRAP_WAIT_INTERVAL_SECONDS'
+    value: string(bootstrapWaitIntervalSeconds)
+  }
+])
 
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -365,7 +515,94 @@ resource managedEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   properties: {}
 }
 
-
+resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
+  name: containerAppName
+  location: location
+  tags: containerAppTags
+  identity: {
+    type: identityType
+    userAssignedIdentities: userAssignedIdentityMap
+  }
+  properties: {
+    managedEnvironmentId: managedEnvironment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: externalIngressEnabled
+        targetPort: targetPort
+        transport: 'auto'
+        allowInsecure: false
+      }
+      registries: enableUserAssignedIdentity ? [
+        {
+          server: registryLoginServer
+          identity: userAssignedIdentityResourceId
+        }
+      ] : []
+    }
+    template: {
+      volumes: [
+        {
+          name: 'bootstrap-diag'
+          storageType: 'EmptyDir'
+        }
+      ]
+      containers: [
+        {
+          name: normalizedAppName
+          image: containerImage
+          resources: {
+            cpu: json(string(containerCpu))
+            memory: containerMemory
+          }
+          env: concat(sharedRuntimeEnv, [
+            {
+              name: 'AZURE_OPENAI_ENDPOINT'
+              value: azureOpenAiEndpoint
+            }
+            {
+              name: 'AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME'
+              value: azureOpenAiEmbeddingDeploymentName
+            }
+            {
+              name: 'AZURE_OPENAI_EFFECTIVE_AUTH_MODE'
+              value: effectiveAzureOpenAiAuthMode
+            }
+            {
+              name: 'CTXLEDGER_BOOTSTRAP_WAIT_TIMEOUT_SECONDS'
+              value: string(bootstrapWaitTimeoutSeconds)
+            }
+            {
+              name: 'CTXLEDGER_BOOTSTRAP_WAIT_INTERVAL_SECONDS'
+              value: string(bootstrapWaitIntervalSeconds)
+            }
+            {
+              name: 'CTXLEDGER_BOOTSTRAP_LOG_PATH'
+              value: '/mnt/bootstrap-diag/bootstrap.log'
+            }
+          ])
+          volumeMounts: [
+            {
+              volumeName: 'bootstrap-diag'
+              mountPath: '/mnt/bootstrap-diag'
+            }
+          ]
+        }
+      ]
+      scale: {
+        minReplicas: minReplicas
+        maxReplicas: maxReplicas
+      }
+    }
+  }
+  dependsOn: [
+    managedEnvironment
+    containerRegistry
+    postgresDatabase
+    postgresAllowedExtensionsConfig
+    azureOpenAiEmbeddingDeployment
+  ]
+}
 
 resource userAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (enableUserAssignedIdentity) {
   name: userAssignedIdentityName
@@ -515,10 +752,11 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
 
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.properties.loginServer
 output CONTAINER_IMAGE_REPOSITORY string = containerImageRepository
-output CONTAINER_IMAGE_REFERENCE string = containerImage
-output CONTAINER_APP_NAME string = containerAppName
+output CONTAINER_IMAGE_REFERENCE string = deployedContainerImage
+output CONTAINER_APP_NAME string = containerApp.name
 output POSTGRES_SERVER_FQDN string = postgresHost
 output POSTGRES_DATABASE_NAME string = postgresDatabaseName
+output CTXLEDGER_DATABASE_URL string = postgresConnectionString
 output AZURE_OPENAI_ENDPOINT string = azureOpenAiEndpoint
 output AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME string = azureOpenAiEmbeddingDeploymentName
 output AZURE_EMBEDDING_MODE string = azureEmbeddingMode
@@ -527,9 +765,9 @@ output MCP_AUTH_HEADER_NAME string = mcpAuthHeaderName
 output AZURE_OPENAI_EFFECTIVE_AUTH_MODE string = effectiveAzureOpenAiAuthMode
 output LOG_ANALYTICS_WORKSPACE_NAME string = logAnalyticsWorkspace.name
 output notes array = [
-  'This template provisions Azure-side prerequisites for the ctxledger large deployment pattern.'
-  'Container App creation and update are intentionally handled during azd deploy rather than in the Bicep provision phase.'
-  'PostgreSQL extension allowlisting is provisioned here, while azure_ai/bootstrap and schema bootstrap are expected to run from the azd postprovision workflow.'
+  'This template provisions Azure-side prerequisites and the azd deployment target Container App for the ctxledger large deployment pattern.'
+  'Container App configuration is provisioned in Bicep with a placeholder image, while the real image is expected to be updated during azd deploy.'
+  'PostgreSQL extension allowlisting is provisioned here, while azure_ai/bootstrap and schema bootstrap are expected to run from the Container App init container during revision startup.'
   'Validate pgvector availability before accepting the environment.'
   'This template allowlists PostgreSQL extensions through the azure.extensions server parameter and provisions the Azure-side prerequisites for PostgreSQL azure_ai integration.'
   'Generated MCP handoff artifacts can be aligned with the current auth posture through MCP_AUTH_MODE and MCP_AUTH_HEADER_NAME.'

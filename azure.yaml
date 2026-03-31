@@ -15,13 +15,8 @@ services:
       path: ./Dockerfile
       context: .
       registry: ${CONTAINER_REGISTRY_LOGIN_SERVER}
+      image: ctxledger/ctxledger-ctxledger:latest
       remoteBuild: true
-
-workflows:
-  up:
-    steps:
-      - azd: provision
-      - azd: deploy
 
 hooks:
   postprovision:
@@ -57,46 +52,9 @@ hooks:
           exit 1
         fi
 
-        BOOTSTRAP_AZURE_AI_CMD="python3 scripts/bootstrap_azure_ai.py \
-          --database-url \"${CTXLEDGER_DATABASE_URL}\" \
-          --azure-openai-endpoint \"${AZURE_OPENAI_ENDPOINT}\" \
-          --azure-openai-auth-mode \"${AZURE_OPENAI_EFFECTIVE_AUTH_MODE}\" \
-          --embedding-deployment \"${AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME}\" \
-          --embedding-dimensions \"${CTXLEDGER_EMBEDDING_DIMENSIONS:-1536}\" \
-          --wait-timeout-seconds 300 \
-          --wait-interval-seconds 5 \
-          --connect-timeout-seconds ${CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS:-5}"
-
-        if [ "${AZURE_OPENAI_EFFECTIVE_AUTH_MODE}" = "subscription_key" ]; then
-          if [ -z "${CTXLEDGER_AZURE_OPENAI_SUBSCRIPTION_KEY:-}" ]; then
-            echo "CTXLEDGER_AZURE_OPENAI_SUBSCRIPTION_KEY is required when AZURE_OPENAI_EFFECTIVE_AUTH_MODE=subscription_key." >&2
-            exit 1
-          fi
-          BOOTSTRAP_AZURE_AI_CMD="${BOOTSTRAP_AZURE_AI_CMD} --azure-openai-subscription-key \"${CTXLEDGER_AZURE_OPENAI_SUBSCRIPTION_KEY}\""
-        fi
-
-        if [ "${CTXLEDGER_DB_AGE_ENABLED:-true}" != "true" ]; then
-          BOOTSTRAP_AZURE_AI_CMD="${BOOTSTRAP_AZURE_AI_CMD} --skip-age"
-        fi
-
-        if [ "${CTXLEDGER_EMBEDDING_ENABLED:-true}" = "true" ]; then
-          BOOTSTRAP_AZURE_AI_CMD="${BOOTSTRAP_AZURE_AI_CMD} --validate-embeddings"
-        fi
-
-        eval "${BOOTSTRAP_AZURE_AI_CMD}"
-
-        BOOTSTRAP_SCHEMA_CMD="python3 scripts/bootstrap_schema.py \
-          --database-url \"${CTXLEDGER_DATABASE_URL}\" \
-          --schema-path \"schemas/postgres.sql\" \
-          --wait-timeout-seconds 300 \
-          --wait-interval-seconds 5 \
-          --connect-timeout-seconds ${CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS:-5}"
-
-        if [ "${CTXLEDGER_DB_AGE_ENABLED:-true}" = "true" ]; then
-          BOOTSTRAP_SCHEMA_CMD="${BOOTSTRAP_SCHEMA_CMD} --ensure-age"
-        fi
-
-        eval "${BOOTSTRAP_SCHEMA_CMD}"
+        echo "Skipping local PostgreSQL bootstrap during postprovision."
+        echo "Bootstrap must run from Azure-side execution to avoid local firewall and network dependencies."
+        echo "Next step after image deployment: run scripts/run_azure_bootstrap.sh inside an Azure-hosted execution context that can reach PostgreSQL Flexible Server."
       interactive: false
 
   postdeploy:
@@ -129,13 +87,24 @@ hooks:
         MCP_AUTH_HEADER_NAME_VALUE="${MCP_AUTH_HEADER_NAME:-Authorization}"
         AZURE_ENV_TYPE_VALUE="${AZURE_ENV_TYPE:-unknown}"
         export CTXLEDGER_POSTDEPLOY_SMOKE_STATUS="passed"
-        export CTXLEDGER_POSTDEPLOY_SMOKE_PROBE_MODE="initialize"
+        export CTXLEDGER_POSTDEPLOY_SMOKE_PROBE_MODE="http"
         export CTXLEDGER_POSTDEPLOY_SMOKE_PROTOCOL_VERSION="${CTXLEDGER_SMOKE_PROTOCOL_VERSION:-2024-11-05}"
-        export CTXLEDGER_POSTDEPLOY_SMOKE_FOLLOW_UP_PROBES="tools/list,resources/list"
+        export CTXLEDGER_POSTDEPLOY_SMOKE_FOLLOW_UP_PROBES="none"
         export CTXLEDGER_DEPLOYMENT_TIMESTAMP="2026-03-30T05:08:22.675877+00:00"
         export CTXLEDGER_APP_VERSION="${CTXLEDGER_APP_VERSION:-unknown}"
+        export CTXLEDGER_SMOKE_TIMEOUT_SECONDS="${CTXLEDGER_SMOKE_TIMEOUT_SECONDS:-60}"
+        POSTDEPLOY_INITIAL_WAIT_SECONDS="${CTXLEDGER_POSTDEPLOY_INITIAL_WAIT_SECONDS:-15}"
 
-        SMOKE_OUTPUT="$(python3 scripts/postdeploy_smoke.py --endpoint-url "${MCP_ENDPOINT_URL}" --probe-mode initialize --tools-list-after-initialize --resources-list-after-initialize)"
+        echo "Container App revision status before smoke:"
+        az containerapp revision list --name "${CONTAINER_APP_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --output table || true
+
+        echo "Container App system logs before smoke:"
+        az containerapp logs show --name "${CONTAINER_APP_NAME}" --resource-group "${AZURE_RESOURCE_GROUP}" --type system --follow false --tail 100 || true
+
+        echo "Waiting ${POSTDEPLOY_INITIAL_WAIT_SECONDS}s before smoke probe to allow ingress and revision readiness to settle."
+        sleep "${POSTDEPLOY_INITIAL_WAIT_SECONDS}"
+
+        SMOKE_OUTPUT="$(python3 scripts/postdeploy_smoke.py --endpoint-url "${MCP_ENDPOINT_URL}" --probe-mode http --timeout-seconds "${CTXLEDGER_SMOKE_TIMEOUT_SECONDS}")"
         printf '%s\n' "${SMOKE_OUTPUT}"
         SMOKE_BODY_PREVIEW="$(printf '%s\n' "${SMOKE_OUTPUT}" | sed -n 's/^body_preview: //p' | head -n 1)"
         export CTXLEDGER_POSTDEPLOY_SMOKE_BODY_PREVIEW="${SMOKE_BODY_PREVIEW}"

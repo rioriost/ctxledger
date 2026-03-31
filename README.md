@@ -176,6 +176,54 @@ Example VS Code configuration:
 	},
 ```
 
+### SSL/TLS troubleshooting
+
+This troubleshooting applies to the local `localhost:8443` Traefik/TLS setup described in this README. It does not apply to the Azure Container Apps endpoint used by the Azure large deployment path.
+
+If your AI agent or other client reports a certificate trust error, first verify which certificate Traefik is serving.
+
+#### 1. Check the served certificate
+
+```text
+openssl s_client -connect localhost:8443 -servername localhost < /dev/null 2>/dev/null | openssl x509 -noout -subject -issuer
+```
+
+Expected output:
+
+```text
+subject=CN=localhost
+issuer=CN=localhost
+```
+
+If you see `TRAEFIK DEFAULT CERT`, the local certificate is not being selected correctly.
+
+#### 2. Trust the local certificate on macOS
+
+The generated certificate file is:
+
+```text
+docker/traefik/certs/dev.crt
+```
+
+On macOS, open this certificate in Keychain Access and mark it as trusted.
+
+Typical flow:
+
+- open `docker/traefik/certs/dev.crt`
+- add it to Keychain Access
+- open the certificate details
+- under Trust, set the certificate to “Always Trust”
+
+#### 3. Retry the AI agent connection
+
+After trusting the certificate, reconnect your AI agent to:
+
+```text
+https://localhost:8443/mcp
+```
+
+If the endpoint is reachable but your client uses a method that the MCP endpoint does not accept for that probe, you might see an HTTP `405 Method Not Allowed`. That indicates method handling differences, not a TLS trust failure.
+
 ### What you can do with it
 
 An MCP client or agent can:

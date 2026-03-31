@@ -13,13 +13,15 @@ RUN apt-get update \
         libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 COPY schemas ./schemas
+COPY scripts ./scripts
+RUN chmod +x /app/scripts/run_azure_bootstrap.sh /app/scripts/start_with_bootstrap.sh
 
 RUN pip install --upgrade pip \
     && pip install .
 
 EXPOSE 8080
 
-CMD ["python", "-m", "ctxledger", "serve", "--transport", "http", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["/app/scripts/start_with_bootstrap.sh"]

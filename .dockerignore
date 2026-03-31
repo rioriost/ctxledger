@@ -1,0 +1,11 @@
+.git
+.gitignore
+.azure
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.swp
+.DS_Store

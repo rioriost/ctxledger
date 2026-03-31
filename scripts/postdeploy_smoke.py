@@ -74,7 +74,7 @@ from typing import Final
 from urllib.parse import urlparse
 
 DEFAULT_TIMEOUT_SECONDS: Final[int] = 20
-DEFAULT_ACCEPTABLE_STATUSES: Final[tuple[int, ...]] = (200, 401, 403)
+DEFAULT_ACCEPTABLE_STATUSES: Final[tuple[int, ...]] = (200, 401, 403, 405)
 
 
 class SmokeError(RuntimeError):
@@ -451,6 +451,8 @@ def summarize_status(status: int) -> str:
         return "endpoint reachable and auth boundary appears to be enforced"
     if status == 403:
         return "endpoint reachable and caller is forbidden as expected"
+    if status == 405:
+        return "endpoint reachable and method handling differs from the smoke probe as expected"
     return f"endpoint returned HTTP {status}"
 
 

@@ -52,7 +52,7 @@ DEFAULT_EXPECTED_TABLES: Final[tuple[str, ...]] = (
     "workflow_instances",
     "workflow_attempts",
     "workflow_checkpoints",
-    "memory_episodes",
+    "episodes",
     "memory_items",
 )
 DEFAULT_EXPECTED_SCHEMAS: Final[tuple[str, ...]] = ("public",)

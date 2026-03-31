@@ -78,7 +78,7 @@ def _parse_int(name: str, default: int) -> int:
 
 def _parse_optional_int(name: str) -> int | None:
     raw = _get_env(name)
-    if raw is None:
+    if raw is None or raw == "":
         return None
     return _parse_required_int_value(name, raw)
 

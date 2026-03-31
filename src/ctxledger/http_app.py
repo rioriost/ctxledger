@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -146,6 +147,70 @@ def _build_post_route(
     return _handler
 
 
+def _build_bootstrap_log_route() -> Callable[[Request], Response]:
+    bootstrap_log_path = os.getenv("CTXLEDGER_BOOTSTRAP_LOG_PATH", "").strip()
+
+    async def _handler(_request: Request) -> Response:
+        if not bootstrap_log_path:
+            return Response(
+                content=_encode_payload(
+                    {
+                        "error": {
+                            "code": "bootstrap_log_unconfigured",
+                            "message": "bootstrap log path is not configured",
+                        }
+                    }
+                ),
+                status_code=404,
+                media_type="application/json",
+            )
+
+        try:
+            with open(bootstrap_log_path, encoding="utf-8") as handle:
+                content = handle.read()
+        except FileNotFoundError:
+            return Response(
+                content=_encode_payload(
+                    {
+                        "error": {
+                            "code": "bootstrap_log_not_found",
+                            "message": "bootstrap log file was not found",
+                            "path": bootstrap_log_path,
+                        }
+                    }
+                ),
+                status_code=404,
+                media_type="application/json",
+            )
+        except OSError as exc:
+            return Response(
+                content=_encode_payload(
+                    {
+                        "error": {
+                            "code": "bootstrap_log_read_failed",
+                            "message": str(exc),
+                            "path": bootstrap_log_path,
+                        }
+                    }
+                ),
+                status_code=500,
+                media_type="application/json",
+            )
+
+        return Response(
+            content=_encode_payload(
+                {
+                    "path": bootstrap_log_path,
+                    "content": content,
+                }
+            ),
+            status_code=200,
+            media_type="application/json",
+        )
+
+    return _handler
+
+
 def create_fastapi_app(server: CtxLedgerServer) -> FastAPI:
     @asynccontextmanager
     async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -183,6 +248,11 @@ def create_fastapi_app(server: CtxLedgerServer) -> FastAPI:
     app.add_api_route(
         "/debug/tools",
         _build_get_route(server, build_runtime_tools_http_handler),
+        methods=["GET"],
+    )
+    app.add_api_route(
+        "/debug/bootstrap-log",
+        _build_bootstrap_log_route(),
         methods=["GET"],
     )
     app.add_api_route(

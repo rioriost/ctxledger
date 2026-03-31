@@ -1,6 +1,6 @@
 [project]
 name = "ctxledger"
-version = "0.9.0"
+version = "1.0.0"
 description = "Durable Workflow Runtime and Multi-Layer Memory for AI Agents"
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [
@@ -9,9 +9,11 @@ authors = [
 requires-python = ">=3.14"
 license = { file = "LICENSE" }
 dependencies = [
+    "azure-identity>=1.17",
     "fastapi>=0.115",
     "psycopg[binary]>=3.2",
     "psycopg-pool>=3.2",
+    "requests>=2.32",
     "uvicorn[standard]>=0.32",
 ]
 

@@ -7,6 +7,7 @@ from types import FrameType
 from typing import Protocol
 
 from ..config import AppSettings, get_settings
+from ..runtime.database_health import ServerBootstrapError
 from ..runtime.introspection import collect_runtime_introspection
 from ..runtime.serializers import serialize_runtime_introspection_collection
 
@@ -108,7 +109,6 @@ def run_server(
             host=host,
             port=port,
         )
-        from ..runtime.database_health import ServerBootstrapError
         from ..server import create_server
 
         server = create_server(settings)
