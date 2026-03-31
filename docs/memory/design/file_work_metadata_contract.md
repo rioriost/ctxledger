@@ -16,6 +16,7 @@ The goal is to make file-touching work:
 - reusable for resumability
 - reusable for bounded historical progress recall
 - reusable for failure-pattern avoidance
+- restorable as required AI-agent work context when a work loop is resumed or continued
 
 This contract is intentionally bounded.
 It does **not** define a full source-code indexing system, a repository-wide code
@@ -55,9 +56,13 @@ That weakens:
 
 - `resume`
 - `continue`
+- work-loop context restoration for AI-agent task recovery
 - bounded historical progress questions
 - failure and recovery reuse
 - explanation of why a particular file was involved in the work
+
+When file-touching work occurred, missing durable file-work records should be
+read as a resumability gap, not only as an observability gap.
 
 File-work metadata therefore exists to close the gap between:
 
@@ -86,6 +91,7 @@ This means:
 - file-work metadata can support resumability
 - file-work metadata can support bounded historical lookup
 - file-work metadata can support failure-pattern avoidance
+- file-work metadata is required context-restoration material when file-touching work occurred in the active work loop
 - file-work metadata should not silently redefine canonical workflow state
 
 ---
@@ -148,6 +154,8 @@ File-work metadata should **not** be read as:
 - a second canonical workflow-status system
 - a promise that every file operation in every tool is automatically captured in
   perfect detail
+- a replacement for explicit bounded recording when operators or agents need a
+  deliberate human-authored file-work note
 - an unconstrained audit log for every local filesystem event
 
 The bounded contract is about **durable metadata about file-touching work**, not
@@ -167,6 +175,7 @@ File-work metadata should help recover:
 - whether the work was creation-oriented or modification-oriented
 - what purpose the file work served
 - which checkpoint or workflow context the file work belonged to
+- enough file-linked work-loop context to restore the AI agent's concrete task thread
 
 This is useful when a user says:
 
@@ -176,6 +185,9 @@ This is useful when a user says:
 
 and the system needs to surface not only the workflow identity, but also the
 concrete file-work thread.
+
+For file-touching work, this should be read as required restoration material for
+the agent's work context, not as optional extra recall.
 
 ## 2. Historical progress recall
 
@@ -203,7 +215,64 @@ File-work metadata should help preserve the bridge between:
 - what the agent said it would change
 - what file-touching work actually became part of durable memory
 
-## 5. Explanation quality
+## 5. Automatic recording guidance
+
+When the runtime can already see a bounded file-touching tool flow, file-work
+metadata should be recorded naturally as part of that flow rather than treated
+as a separate optional afterthought.
+
+This can still apply when the visible tool surface does not complete the action
+successfully or returns a lookup-style failure such as `tool_not_found`, if the
+attempt itself still exposes bounded file-touching intent that would help an AI
+agent recover the work loop later.
+
+This means the preferred operating posture is:
+
+- file-touching work in an active workflow should usually leave a durable
+  file-work trail without requiring a second manual reminder step
+- the automatic path should preserve bounded metadata already visible at runtime,
+  such as:
+  - `file_path`
+  - `file_name`
+  - `file_operation`
+  - optional `purpose`
+  - related workflow identity
+- automatic recording should strengthen resumability and context restoration, not
+  create a second workflow-truth system
+- explicit `file_work_record` use remains valid when an operator or agent wants
+  a more deliberate summary, wants to fill a gap, or wants to record a
+  higher-signal explanation than the natural automatic path can infer
+
+Current bounded automatic coverage should be read conservatively.
+
+At the current intended boundary, the automatic path covers file-touching tool
+flows such as:
+
+- `edit_file`
+- `copy_path`
+- `move_path`
+- `delete_path`
+- `save_file`
+- `restore_file_from_disk`
+
+These tool names matter because they already expose bounded file-touching
+metadata that the runtime can convert into a durable file-work note without
+requiring unconstrained filesystem observation.
+
+The contract reading should therefore be:
+
+- prefer natural automatic recording when the runtime already has enough bounded
+  context
+- keep bounded failed file-touch attempts as useful context when they help later
+  resumability, recovery, or explanation
+- prefer explicit recording when the work needs a clearer human-authored purpose
+  or when diagnosing an automation gap
+- treat the covered tool set as bounded and explainable rather than open-ended
+  filesystem telemetry
+- expand the covered tool set only when the new tool exposes similarly bounded
+  and explainable file-touch metadata
+
+## 6. Explanation quality
 
 File-work metadata should make it easier to explain:
 
@@ -241,6 +310,7 @@ File-work metadata should be read as:
 - retrieval-relevant
 - explanation-relevant
 - resumability-relevant
+- required context-restoration material when reconstructing file-touching work
 
 but still subordinate to canonical workflow truth for questions like:
 
@@ -248,8 +318,23 @@ but still subordinate to canonical workflow truth for questions like:
 - what checkpoint was actually recorded
 - what verify status was actually persisted
 
+Automatic file-work capture should be interpreted within the same boundary:
+
+- it is a durable support trail
+- it improves resumability and work-loop restoration
+- bounded failed attempts can still be useful support-trail context when they
+  show what file-touching action the agent tried to perform
+- it does not redefine active workflow truth
+- if file-touching work occurred and no durable file-work trail exists, that
+  should be treated as a resumability gap worth investigating
+
 If file-work metadata and canonical workflow state disagree, the canonical
 workflow system-of-record wins.
+
+This canonical-first rule does not reduce the importance of file-work metadata
+for restoration.
+It means workflow truth and file-work restoration material must be read together,
+with different roles.
 
 ---
 

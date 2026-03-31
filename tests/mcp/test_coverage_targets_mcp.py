@@ -162,6 +162,80 @@ def test_build_mcp_interaction_request_event_returns_tool_call_payload() -> None
     }
 
 
+def test_build_mcp_interaction_request_event_extracts_file_work_metadata_for_edit_file() -> None:
+    from ctxledger.mcp.rpc import build_mcp_interaction_request_event
+
+    event = build_mcp_interaction_request_event(
+        method="tools/call",
+        params={
+            "name": "edit_file",
+            "arguments": {
+                "path": "ctxledger/src/ctxledger/mcp/rpc.py",
+                "mode": "edit",
+                "purpose": "add file-work metadata extraction",
+            },
+        },
+    )
+
+    assert event == {
+        "interaction_role": "user",
+        "interaction_direction": "inbound",
+        "transport": "mcp",
+        "interaction_kind": "tool_call",
+        "method": "tools/call",
+        "tool_name": "edit_file",
+        "arguments": {
+            "path": "ctxledger/src/ctxledger/mcp/rpc.py",
+            "mode": "edit",
+            "purpose": "add file-work metadata extraction",
+        },
+        "file_path": "ctxledger/src/ctxledger/mcp/rpc.py",
+        "file_name": "rpc.py",
+        "file_operation": "modify",
+        "purpose": "add file-work metadata extraction",
+    }
+
+
+def test_build_mcp_interaction_request_event_extracts_file_work_metadata_for_copy_path() -> None:
+    from ctxledger.mcp.rpc import build_mcp_interaction_request_event
+
+    event = build_mcp_interaction_request_event(
+        method="tools/call",
+        params={
+            "name": "copy_path",
+            "arguments": {
+                "source_path": "ctxledger/src/source.py",
+                "destination_path": "ctxledger/src/destination.py",
+            },
+        },
+    )
+
+    assert event == {
+        "interaction_role": "user",
+        "interaction_direction": "inbound",
+        "transport": "mcp",
+        "interaction_kind": "tool_call",
+        "method": "tools/call",
+        "tool_name": "copy_path",
+        "arguments": {
+            "source_path": "ctxledger/src/source.py",
+            "destination_path": "ctxledger/src/destination.py",
+        },
+        "file_path": "ctxledger/src/destination.py",
+        "file_paths": [
+            "ctxledger/src/source.py",
+            "ctxledger/src/destination.py",
+        ],
+        "file_work_paths": [
+            "ctxledger/src/source.py",
+            "ctxledger/src/destination.py",
+        ],
+        "file_name": "destination.py",
+        "file_operation": "copy",
+        "file_work_count": 2,
+    }
+
+
 def test_build_mcp_interaction_request_event_returns_resource_read_payload() -> None:
     from ctxledger.mcp.rpc import build_mcp_interaction_request_event
 
@@ -224,6 +298,54 @@ def test_build_mcp_interaction_response_event_returns_tool_result_payload() -> N
         "tool_name": "memory_search",
         "arguments": {"query": "resume"},
         "result": result,
+    }
+
+
+def test_build_mcp_interaction_response_event_extracts_file_work_metadata_for_save_file() -> None:
+    from ctxledger.mcp.rpc import build_mcp_interaction_response_event
+
+    result = {"content": [{"type": "text", "text": "{}"}]}
+
+    event = build_mcp_interaction_response_event(
+        method="tools/call",
+        params={
+            "name": "save_file",
+            "arguments": {
+                "paths": [
+                    "ctxledger/src/ctxledger/mcp/rpc.py",
+                    "ctxledger/tests/mcp/test_coverage_targets_mcp.py",
+                ]
+            },
+        },
+        result=result,
+    )
+
+    assert event == {
+        "interaction_role": "agent",
+        "interaction_direction": "outbound",
+        "transport": "mcp",
+        "interaction_kind": "tool_result",
+        "method": "tools/call",
+        "tool_name": "save_file",
+        "arguments": {
+            "paths": [
+                "ctxledger/src/ctxledger/mcp/rpc.py",
+                "ctxledger/tests/mcp/test_coverage_targets_mcp.py",
+            ]
+        },
+        "result": result,
+        "file_path": "ctxledger/src/ctxledger/mcp/rpc.py",
+        "file_paths": [
+            "ctxledger/src/ctxledger/mcp/rpc.py",
+            "ctxledger/tests/mcp/test_coverage_targets_mcp.py",
+        ],
+        "file_work_paths": [
+            "ctxledger/src/ctxledger/mcp/rpc.py",
+            "ctxledger/tests/mcp/test_coverage_targets_mcp.py",
+        ],
+        "file_name": "rpc.py",
+        "file_operation": "save",
+        "file_work_count": 2,
     }
 
 

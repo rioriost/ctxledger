@@ -572,6 +572,10 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
         workflow_completion_auto_memory_skipped_count=0,
         memory_summary_count=0,
         memory_summary_membership_count=0,
+        derived_memory_item_count=0,
+        derived_memory_item_state="not_materialized",
+        derived_memory_item_reason="no canonical summaries exist yet",
+        derived_memory_graph_status=None,
         age_summary_graph_ready_count=0,
         age_summary_graph_stale_count=0,
         age_summary_graph_degraded_count=0,
@@ -589,6 +593,10 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
         "episode": 5,
         "workflow_complete_auto": 3,
     }
+    assert memory_stats.derived_memory_item_count == 0
+    assert memory_stats.derived_memory_item_state == "not_materialized"
+    assert memory_stats.derived_memory_item_reason == "no canonical summaries exist yet"
+    assert memory_stats.latest_derived_memory_item_created_at is None
 
 
 def test_get_memory_stats_collects_relation_and_provenance_information() -> None:
@@ -604,7 +612,10 @@ def test_get_memory_stats_collects_relation_and_provenance_information() -> None
             self.memory_items = SimpleNamespace(
                 count_all=lambda: 4,
                 max_datetime=lambda field: expected_time,
-                count_by_provenance=lambda: {"episode_summary": 3, "workflow_completion": 1},
+                max_datetime_for_provenance=(
+                    lambda provenance: expected_time if provenance == "derived" else None
+                ),
+                count_by_provenance=lambda: {"derived": 3, "workflow_completion": 1},
             )
             self.memory_embeddings = SimpleNamespace(
                 count_all=lambda: 5, max_datetime=lambda field: expected_time
@@ -627,11 +638,14 @@ def test_get_memory_stats_collects_relation_and_provenance_information() -> None
         memory_embedding_count=5,
         memory_relation_count=6,
         memory_item_provenance_counts={
-            "episode_summary": 3,
+            "derived": 3,
             "workflow_completion": 1,
         },
         memory_summary_count=0,
         memory_summary_membership_count=0,
+        derived_memory_item_count=3,
+        derived_memory_item_state="ready",
+        derived_memory_item_reason="derived memory items are present",
         age_summary_graph_ready_count=0,
         age_summary_graph_stale_count=0,
         age_summary_graph_degraded_count=0,
@@ -640,6 +654,7 @@ def test_get_memory_stats_collects_relation_and_provenance_information() -> None
         latest_memory_item_created_at=expected_time,
         latest_memory_embedding_created_at=expected_time,
         latest_memory_relation_created_at=expected_time,
+        latest_derived_memory_item_created_at=expected_time,
     )
 
 

@@ -9,8 +9,10 @@ import pytest
 
 from ctxledger.config import (
     AppSettings,
+    AzureOpenAIAuthMode,
     DatabaseSettings,
     DebugSettings,
+    EmbeddingExecutionMode,
     EmbeddingProvider,
     EmbeddingSettings,
     HttpSettings,
@@ -50,11 +52,17 @@ def make_settings(
         ),
         embedding=EmbeddingSettings(
             provider=EmbeddingProvider.DISABLED,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=None,
             enabled=False,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         ),
     )
 

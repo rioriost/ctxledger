@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -28,6 +29,8 @@ except ImportError:  # pragma: no cover
     Connection = Any  # type: ignore[assignment]
     ConnectionPool = Any  # type: ignore[assignment]
     dict_row = None  # type: ignore[assignment]
+
+logger = logging.getLogger(__name__)
 
 
 def _require_psycopg() -> None:
@@ -291,6 +294,8 @@ class PostgresDatabaseHealthChecker:
         with _connect(self._config.database_url) as conn:
             self._apply_session_settings(conn)
             with conn.cursor() as cur:
+                cur.execute("LOAD 'age'")
+                cur.execute('SET search_path = ag_catalog, "$user", public')
                 cur.execute(
                     """
                     SELECT 1
@@ -312,10 +317,12 @@ class PostgresDatabaseHealthChecker:
             with _connect(self._config.database_url) as conn:
                 self._apply_session_settings(conn)
                 with conn.cursor() as cur:
+                    cur.execute("LOAD 'age'")
+                    cur.execute('SET search_path = ag_catalog, "$user", public')
                     cur.execute(
                         """
                         SELECT COUNT(*)::bigint AS membership_count
-                        FROM memory_summary_memberships
+                        FROM public.memory_summary_memberships
                         """
                     )
                     membership_row = cur.fetchone()
@@ -326,15 +333,18 @@ class PostgresDatabaseHealthChecker:
                         else 0
                     )
 
+                    graph_name_literal = "'" + graph_name.replace("'", "''") + "'"
                     cur.execute(
-                        """
-                        SELECT COUNT(*)::bigint AS graph_edge_count
-                        FROM cypher(%s, $$
+                        f"""
+                        SELECT *
+                        FROM cypher(
+                            {graph_name_literal},
+                            $$
                             MATCH (:memory_summary)-[r:summarizes]->(:memory_item)
                             RETURN count(r) AS graph_edge_count
-                        $$) AS (graph_edge_count agtype)
-                        """,
-                        (graph_name,),
+                            $$
+                        ) AS (graph_edge_count agtype)
+                        """
                     )
                     graph_row = cur.fetchone()
                     graph_edge_count = (
@@ -348,7 +358,19 @@ class PostgresDatabaseHealthChecker:
             if canonical_membership_count > 0 and graph_edge_count == 0:
                 return AgeGraphStatus.GRAPH_UNAVAILABLE
             return AgeGraphStatus.GRAPH_STALE
-        except Exception:
+        except Exception as exc:
+            logger.exception(
+                "AGE graph readiness check failed",
+                extra={
+                    "graph_name": graph_name,
+                    "database_schema": self._config.schema_name,
+                },
+            )
+            self._last_age_graph_readiness_error = {
+                "graph_name": graph_name,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            }
             return AgeGraphStatus.GRAPH_READ_FAILED
 
     def _apply_session_settings(self, conn: Connection) -> None:

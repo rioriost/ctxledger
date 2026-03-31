@@ -515,6 +515,7 @@ def _age_graph_readiness(args: argparse.Namespace) -> int:
 def _refresh_age_summary_graph(args: argparse.Namespace) -> int:
     try:
         from .config import get_settings
+        from .runtime.age_refresh import refresh_age_summary_graph
 
         try:
             import psycopg
@@ -539,201 +540,18 @@ def _refresh_age_summary_graph(args: argparse.Namespace) -> int:
             )
             return 1
 
-        with psycopg.connect(database_url) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("LOAD 'age'")
-                cursor.execute('SET search_path = ag_catalog, "$user", public')
-                graph_name_literal = "'" + graph_name.replace("'", "''") + "'"
-                cursor.execute(
-                    """
-                    SELECT 1
-                    FROM ag_catalog.ag_graph
-                    WHERE name = %s
-                    LIMIT 1
-                    """,
-                    (graph_name,),
-                )
-                if cursor.fetchone() is None:
-                    cursor.execute(f"SELECT ag_catalog.create_graph({graph_name_literal})")
-                cursor.execute(
-                    f"""
-                    SELECT *
-                    FROM cypher(
-                        {graph_name_literal},
-                        $$
-                        MATCH (n:memory_summary)-[r:summarizes]->()
-                        DELETE r
-                        RETURN 1 AS cleared
-                        $$
-                    ) AS (cleared agtype)
-                    """,
-                )
-                cursor.execute(
-                    f"""
-                    SELECT *
-                    FROM cypher(
-                        {graph_name_literal},
-                        $$
-                        MATCH (n:memory_summary)
-                        DETACH DELETE n
-                        RETURN 1 AS cleared
-                        $$
-                    ) AS (cleared agtype)
-                    """,
-                )
-                cursor.execute(
-                    """
-                    SELECT
-                        memory_summary_id,
-                        workspace_id,
-                        episode_id,
-                        summary_kind
-                    FROM public.memory_summaries
-                    ORDER BY created_at DESC, memory_summary_id DESC
-                    """
-                )
-                summary_rows = cursor.fetchall()
-                for summary_row in summary_rows:
-                    if isinstance(summary_row, tuple):
-                        (
-                            raw_memory_summary_id,
-                            raw_workspace_id,
-                            raw_episode_id,
-                            raw_summary_kind,
-                        ) = summary_row
-                    else:
-                        raw_memory_summary_id = summary_row["memory_summary_id"]
-                        raw_workspace_id = summary_row["workspace_id"]
-                        raw_episode_id = summary_row["episode_id"]
-                        raw_summary_kind = summary_row["summary_kind"]
-
-                    summary_params = json.dumps(
-                        {
-                            "memory_summary_id": str(raw_memory_summary_id),
-                            "workspace_id": str(raw_workspace_id),
-                            "episode_id": (
-                                str(raw_episode_id) if raw_episode_id is not None else None
-                            ),
-                            "summary_kind": str(raw_summary_kind),
-                        },
-                        separators=(",", ":"),
-                        sort_keys=True,
-                    )
-                    cursor.execute(
-                        f"""
-                        SELECT *
-                        FROM cypher(
-                            {graph_name_literal},
-                            $$
-                            CREATE (n:memory_summary {{memory_summary_id: $memory_summary_id, workspace_id: $workspace_id, episode_id: $episode_id, summary_kind: $summary_kind}})
-                            RETURN n
-                            $$,
-                            %s
-                        ) AS (n agtype)
-                        """,
-                        (summary_params,),
-                    )
-
-                cursor.execute(
-                    """
-                    SELECT
-                        memory_summary_membership_id,
-                        memory_summary_id,
-                        memory_id,
-                        membership_order
-                    FROM public.memory_summary_memberships
-                    ORDER BY
-                        memory_summary_id ASC,
-                        membership_order ASC NULLS LAST,
-                        created_at ASC,
-                        memory_summary_membership_id ASC
-                    """
-                )
-                membership_rows = cursor.fetchall()
-                for membership_row in membership_rows:
-                    if isinstance(membership_row, tuple):
-                        (
-                            raw_membership_id,
-                            raw_memory_summary_id,
-                            raw_memory_id,
-                            raw_membership_order,
-                        ) = membership_row
-                    else:
-                        raw_membership_id = membership_row["memory_summary_membership_id"]
-                        raw_memory_summary_id = membership_row["memory_summary_id"]
-                        raw_memory_id = membership_row["memory_id"]
-                        raw_membership_order = membership_row["membership_order"]
-
-                    membership_params = json.dumps(
-                        {
-                            "memory_summary_membership_id": str(raw_membership_id),
-                            "memory_summary_id": str(raw_memory_summary_id),
-                            "memory_id": str(raw_memory_id),
-                            "membership_order": raw_membership_order,
-                        },
-                        separators=(",", ":"),
-                        sort_keys=True,
-                    )
-                    cursor.execute(
-                        f"""
-                        SELECT *
-                        FROM cypher(
-                            {graph_name_literal},
-                            $$
-                            MATCH (summary:memory_summary {{memory_summary_id: $memory_summary_id}})
-                            MATCH (item:memory_item {{memory_id: $memory_id}})
-                            CREATE (summary)-[r:summarizes {{memory_summary_membership_id: $memory_summary_membership_id, memory_summary_id: $memory_summary_id, memory_id: $memory_id, membership_order: $membership_order}}]->(item)
-                            RETURN r
-                            $$,
-                            %s
-                        ) AS (r agtype)
-                        """,
-                        (membership_params,),
-                    )
-
-                cursor.execute(
-                    f"""
-                    SELECT count(*)
-                    FROM cypher(
-                        {graph_name_literal},
-                        $$
-                        MATCH (n:memory_summary)
-                        RETURN count(n) AS node_count
-                        $$
-                    ) AS (node_count agtype)
-                    """,
-                )
-                summary_node_count_row = cursor.fetchone()
-                summary_node_count = (
-                    summary_node_count_row[0]
-                    if isinstance(summary_node_count_row, tuple)
-                    else summary_node_count_row["count"]
-                )
-
-                cursor.execute(
-                    f"""
-                    SELECT count(*)
-                    FROM cypher(
-                        {graph_name_literal},
-                        $$
-                        MATCH (:memory_summary)-[r:summarizes]->(:memory_item)
-                        RETURN count(r) AS edge_count
-                        $$
-                    ) AS (edge_count agtype)
-                    """,
-                )
-                membership_edge_count_row = cursor.fetchone()
-                membership_edge_count = (
-                    membership_edge_count_row[0]
-                    if isinstance(membership_edge_count_row, tuple)
-                    else membership_edge_count_row["count"]
-                )
-            connection.commit()
+        refresh_payload = refresh_age_summary_graph(
+            database_url=database_url,
+            graph_name=graph_name,
+            psycopg_module=psycopg,
+        )
+        summary_node_count = int(refresh_payload["memory_summary_node_count"])
+        membership_edge_count = int(refresh_payload["summarizes_edge_count"])
 
         explainability_payload = {
             "graph_name": graph_name,
-            "memory_summary_node_count": int(summary_node_count),
-            "summarizes_edge_count": int(membership_edge_count),
+            "memory_summary_node_count": summary_node_count,
+            "summarizes_edge_count": membership_edge_count,
             "remember_path_explainability": {
                 "canonical_source": [
                     "memory_summaries",
@@ -906,6 +724,7 @@ def _format_stats_text(stats: object) -> str:
         f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
         f"- interaction_memory_items: {getattr(stats, 'interaction_memory_item_count', 0)}",
         f"- file_work_memory_items: {getattr(stats, 'file_work_memory_item_count', 0)}",
+        f"- derived_memory_items: {getattr(stats, 'derived_memory_item_count', 0)}",
         "",
         "Remember-path observability:",
         f"- checkpoint_auto_memory_recorded: {getattr(stats, 'checkpoint_auto_memory_recorded_count', 0)}",
@@ -920,6 +739,11 @@ def _format_stats_text(stats: object) -> str:
         f"- age_summary_graph_stale: {getattr(stats, 'age_summary_graph_stale_count', 0)}",
         f"- age_summary_graph_degraded: {getattr(stats, 'age_summary_graph_degraded_count', 0)}",
         f"- age_summary_graph_unknown: {getattr(stats, 'age_summary_graph_unknown_count', 0)}",
+        "",
+        "Derived memory state:",
+        f"- derived_memory_item_state: {getattr(stats, 'derived_memory_item_state', 'unknown')}",
+        f"- derived_memory_item_reason: {getattr(stats, 'derived_memory_item_reason', None)}",
+        f"- derived_memory_graph_status: {getattr(stats, 'derived_memory_graph_status', None)}",
         "",
         "Other:",
         f"- checkpoints: {getattr(stats, 'checkpoint_count', 0)}",
@@ -969,6 +793,26 @@ def _stats(args: argparse.Namespace) -> int:
                         stats,
                         "file_work_memory_item_count",
                         0,
+                    ),
+                    "derived_memory_item_count": getattr(
+                        stats,
+                        "derived_memory_item_count",
+                        0,
+                    ),
+                    "derived_memory_item_state": getattr(
+                        stats,
+                        "derived_memory_item_state",
+                        "unknown",
+                    ),
+                    "derived_memory_item_reason": getattr(
+                        stats,
+                        "derived_memory_item_reason",
+                        None,
+                    ),
+                    "derived_memory_graph_status": getattr(
+                        stats,
+                        "derived_memory_graph_status",
+                        None,
                     ),
                     "checkpoint_auto_memory_recorded_count": (
                         stats.checkpoint_auto_memory_recorded_count
@@ -1103,6 +947,7 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- memory_relations: {getattr(stats, 'memory_relation_count', 0)}",
         f"- interaction_memory_items: {getattr(stats, 'interaction_memory_item_count', 0)}",
         f"- file_work_memory_items: {getattr(stats, 'file_work_memory_item_count', 0)}",
+        f"- derived_memory_items: {getattr(stats, 'derived_memory_item_count', 0)}",
         "",
         "Remember-path observability:",
         f"- checkpoint_auto_memory_recorded: {getattr(stats, 'checkpoint_auto_memory_recorded_count', 0)}",
@@ -1117,6 +962,11 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- age_summary_graph_stale: {getattr(stats, 'age_summary_graph_stale_count', 0)}",
         f"- age_summary_graph_degraded: {getattr(stats, 'age_summary_graph_degraded_count', 0)}",
         f"- age_summary_graph_unknown: {getattr(stats, 'age_summary_graph_unknown_count', 0)}",
+        "",
+        "Derived memory state:",
+        f"- derived_memory_item_state: {getattr(stats, 'derived_memory_item_state', 'unknown')}",
+        f"- derived_memory_item_reason: {getattr(stats, 'derived_memory_item_reason', None)}",
+        f"- derived_memory_graph_status: {getattr(stats, 'derived_memory_graph_status', None)}",
         "",
         "Memory item provenance:",
     ]
@@ -1135,6 +985,7 @@ def _format_memory_stats_text(stats: object) -> str:
             f"- memory_item_created_at: {getattr(stats, 'latest_memory_item_created_at', None)}",
             f"- memory_embedding_created_at: {getattr(stats, 'latest_memory_embedding_created_at', None)}",
             f"- memory_relation_created_at: {getattr(stats, 'latest_memory_relation_created_at', None)}",
+            f"- derived_memory_item_created_at: {getattr(stats, 'latest_derived_memory_item_created_at', None)}",
         ]
     )
 
@@ -1249,6 +1100,26 @@ def _memory_stats(args: argparse.Namespace) -> int:
                         "file_work_memory_item_count",
                         0,
                     ),
+                    "derived_memory_item_count": getattr(
+                        stats,
+                        "derived_memory_item_count",
+                        0,
+                    ),
+                    "derived_memory_item_state": getattr(
+                        stats,
+                        "derived_memory_item_state",
+                        "unknown",
+                    ),
+                    "derived_memory_item_reason": getattr(
+                        stats,
+                        "derived_memory_item_reason",
+                        None,
+                    ),
+                    "derived_memory_graph_status": getattr(
+                        stats,
+                        "derived_memory_graph_status",
+                        None,
+                    ),
                     "checkpoint_auto_memory_recorded_count": (
                         stats.checkpoint_auto_memory_recorded_count
                     ),
@@ -1278,6 +1149,9 @@ def _memory_stats(args: argparse.Namespace) -> int:
                     ),
                     "latest_memory_relation_created_at": _isoformat_or_none(
                         stats.latest_memory_relation_created_at
+                    ),
+                    "latest_derived_memory_item_created_at": _isoformat_or_none(
+                        getattr(stats, "latest_derived_memory_item_created_at", None)
                     ),
                 }
             )

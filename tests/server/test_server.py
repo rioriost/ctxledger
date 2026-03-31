@@ -426,6 +426,126 @@ def test_startup_raises_type_error_when_factory_failure_is_not_connection_pool_r
     assert server.health().details["started"] is False
 
 
+def test_startup_refreshes_age_summary_graph_when_graph_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base_settings = make_settings()
+    settings = replace(
+        base_settings,
+        database=replace(
+            base_settings.database,
+            age_enabled=True,
+            age_graph_name="ctxledger_memory",
+        ),
+    )
+    db_checker = FakeDatabaseHealthChecker(
+        age_available_value=True,
+        age_graph_available_value=False,
+    )
+    runtime = FakeRuntime()
+    refresh_calls: list[dict[str, object]] = []
+
+    def fake_refresh_age_summary_graph(
+        *,
+        database_url: str,
+        graph_name: str,
+        psycopg_module: object,
+    ) -> dict[str, object]:
+        refresh_calls.append(
+            {
+                "database_url": database_url,
+                "graph_name": graph_name,
+                "psycopg_module": psycopg_module,
+            }
+        )
+        return {
+            "graph_name": graph_name,
+            "memory_summary_node_count": 2,
+            "summarizes_edge_count": 3,
+        }
+
+    monkeypatch.setattr(
+        "ctxledger.server.refresh_age_summary_graph",
+        fake_refresh_age_summary_graph,
+    )
+
+    server = make_server(
+        settings=settings,
+        db_health_checker=db_checker,
+        runtime=runtime,
+    )
+
+    server.startup()
+
+    assert refresh_calls == [
+        {
+            "database_url": settings.database.url,
+            "graph_name": "ctxledger_memory",
+            "psycopg_module": pytest.importorskip("psycopg"),
+        }
+    ]
+    assert db_checker.age_graph_status_calls == 1
+    assert db_checker.requested_graph_names == ["ctxledger_memory"]
+    assert runtime.start_calls == 1
+
+
+def test_startup_skips_age_summary_graph_refresh_when_graph_is_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base_settings = make_settings()
+    settings = replace(
+        base_settings,
+        database=replace(
+            base_settings.database,
+            age_enabled=True,
+            age_graph_name="ctxledger_memory",
+        ),
+    )
+    db_checker = FakeDatabaseHealthChecker(
+        age_available_value=True,
+        age_graph_available_value=True,
+    )
+    runtime = FakeRuntime()
+    refresh_calls: list[dict[str, object]] = []
+
+    def fake_refresh_age_summary_graph(
+        *,
+        database_url: str,
+        graph_name: str,
+        psycopg_module: object,
+    ) -> dict[str, object]:
+        refresh_calls.append(
+            {
+                "database_url": database_url,
+                "graph_name": graph_name,
+                "psycopg_module": psycopg_module,
+            }
+        )
+        return {
+            "graph_name": graph_name,
+            "memory_summary_node_count": 0,
+            "summarizes_edge_count": 0,
+        }
+
+    monkeypatch.setattr(
+        "ctxledger.server.refresh_age_summary_graph",
+        fake_refresh_age_summary_graph,
+    )
+
+    server = make_server(
+        settings=settings,
+        db_health_checker=db_checker,
+        runtime=runtime,
+    )
+
+    server.startup()
+
+    assert refresh_calls == []
+    assert db_checker.age_graph_status_calls == 1
+    assert db_checker.requested_graph_names == ["ctxledger_memory"]
+    assert runtime.start_calls == 1
+
+
 def test_shutdown_closes_owned_connection_pool_and_clears_workflow_service() -> None:
     settings = make_settings()
     db_checker = FakeDatabaseHealthChecker()

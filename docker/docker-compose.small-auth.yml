@@ -148,7 +148,7 @@ services:
       [
         "sh",
         "-lc",
-        "python -m pip install --upgrade pip && python -m pip install -e . && python -m ctxledger.__init__ apply-schema && python scripts/ensure_age_extension.py --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger && python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory && python scripts/setup_grafana_observability.py && uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080",
+        "python -m pip install --upgrade pip && python -m pip install -e . && python -m ctxledger.__init__ apply-schema && python scripts/ensure_age_extension.py --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger && python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory && (python scripts/setup_grafana_observability.py || echo 'Skipping Grafana observability setup because Grafana DB credentials are not configured') && uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080",
       ]
     expose:
       - "8080"

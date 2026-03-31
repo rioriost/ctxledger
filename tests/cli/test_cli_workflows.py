@@ -639,10 +639,14 @@ def test_main_memory_stats_renders_json_output(
         age_summary_graph_stale_count=0,
         age_summary_graph_degraded_count=0,
         age_summary_graph_unknown_count=0,
+        derived_memory_item_count=0,
+        derived_memory_item_state="unknown",
+        derived_memory_item_reason=None,
         latest_episode_created_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_memory_item_created_at=None,
         latest_memory_embedding_created_at=None,
         latest_memory_relation_created_at=None,
+        latest_derived_memory_item_created_at=None,
     )
 
     class FakeMemoryStatsWorkflowService:
@@ -675,10 +679,15 @@ def test_main_memory_stats_renders_json_output(
         "episode_count": 3,
         "file_work_memory_item_count": 0,
         "interaction_memory_item_count": 0,
+        "derived_memory_item_count": 0,
+        "derived_memory_item_state": "unknown",
+        "derived_memory_item_reason": None,
+        "derived_memory_graph_status": None,
         "latest_episode_created_at": "2026-03-15T09:00:00+00:00",
         "latest_memory_embedding_created_at": None,
         "latest_memory_item_created_at": None,
         "latest_memory_relation_created_at": None,
+        "latest_derived_memory_item_created_at": None,
         "memory_embedding_count": 1,
         "memory_item_count": 4,
         "memory_item_provenance_counts": {

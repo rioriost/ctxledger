@@ -805,7 +805,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(memory_item_count, 0) AS \"Derived Memory Items\"\nFROM observability.memory_item_provenance_counts\nWHERE provenance = 'derived';",
+          "rawSql": "SELECT\n  COALESCE(derived_memory_item_count, 0) AS \"Derived Memory Items\",\n  COALESCE(derived_memory_item_state, 'unknown') AS \"Derived State\",\n  COALESCE(derived_memory_graph_status, 'none') AS \"Derived Graph Status\",\n  COALESCE(derived_memory_item_reason, 'derived memory state is unknown') AS \"Derived Reason\"\nFROM observability.memory_overview;",
           "refId": "A"
         }
       ],

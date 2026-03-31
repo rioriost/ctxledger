@@ -8,7 +8,79 @@ The project currently follows a lightweight, human-maintained changelog style.
 
 ## [Unreleased]
 
-- no unreleased changes yet
+### Added
+
+- a bounded `file_work_record` MCP tool in the default runtime so agents can
+  durably record file-touching work and link it to the active work loop
+- operator and repository guidance that now treats file-work memory as required
+  context-restoration material when file-touching work occurred, not only as an
+  optional observability signal
+- startup-time automatic AGE summary-graph refresh when derived graph readiness
+  is missing, stale, or otherwise needs rebuild help after restart
+
+### Changed
+
+- Grafana and observability SQL now align file-work counting with the bounded
+  service-side file-work contract, including:
+  - `file_name`
+  - `file_path`
+  - `file_operation`
+  - `purpose`
+- the default Docker-backed runtime now exposes a representative file-work
+  producer path, so file-work observability can move off zero through normal MCP
+  use
+- normal file-touching MCP/runtime flows now naturally produce durable
+  file-work records when bounded workflow context is available, including MCP
+  RPC `tools/call` paths, while explicit `file_work_record` remains available
+  for deliberate higher-signal notes and automation-gap repair
+- bounded file-touch attempts can still be recorded as useful AI-agent recovery
+  context even when the visible ctxledger MCP tool surface returns
+  `tool_not_found`, as long as the attempted file-touch metadata is present and
+  explainable
+- repository `.rules`, memory design notes, README guidance, and operator
+  runbooks now consistently require file-touching work to be recorded in
+  ctxledger and later used for resume / continue / work-loop context
+  restoration
+- AGE summary graph refresh now reads cypher-returned agtype counts correctly
+  for summary nodes and `summarizes` edges instead of counting returned rows
+- AGE graph readiness now loads the AGE extension and switches to the AGE search
+  path before issuing cypher queries, and qualifies canonical relational reads
+  explicitly so derived readiness checks work in the default live stack
+- the default startup path now automatically refreshes the derived AGE summary
+  graph when readiness indicates `graph_unavailable`, `graph_stale`, or
+  `graph_read_failed`, reducing restart-time operator repair work
+- observability surfaces now move toward an explicit derived-memory-state reading
+  so operators can distinguish normal absence from canonical-only or degraded
+  derived-layer conditions instead of reading ambiguous `No data`
+- the observability SQL and Grafana memory overview now expose a first explicit
+  derived-memory-state slice with:
+  - `derived_memory_item_count`
+  - `derived_memory_item_state`
+  - `derived_memory_item_reason`
+  - `derived_memory_graph_status`
+  - `latest_derived_memory_item_created_at`
+- derived-memory observability now refines `canonical_only`, `degraded`, and
+  `unknown` using derived graph readiness signals so operators can distinguish:
+  - canonical summary state with a readable graph but no materialized derived items
+  - stale or degraded derived graph conditions
+  - genuinely unknown derived-layer observability
+
+### Validation
+
+- validated live file-work recording in the default Docker stack, including:
+  - `file_work_memory_item_count = 1`
+  - durable file-work metadata visible in PostgreSQL
+  - `file_work_record` exposed through `tools/list`
+- validated live canonical summary creation and membership visibility, including:
+  - `memory_summary_count = 1`
+  - `memory_summary_membership_count = 1`
+- validated live derived AGE summary graph recovery after restart, including:
+  - startup/operator refresh path for the derived graph
+  - `ctxledger refresh-age-summary-graph`
+  - `ctxledger age-graph-readiness`
+  - final readiness state:
+    - `graph_ready`
+    - `operator_action = no_action_required`
 
 ## [0.9.0]
 

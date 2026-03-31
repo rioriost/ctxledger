@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from ctxledger.mcp.tool_handlers import (
+    build_file_work_record_tool_handler,
     build_memory_get_context_tool_handler,
     build_memory_remember_episode_tool_handler,
     build_memory_search_tool_handler,
@@ -75,6 +76,75 @@ def test_build_memory_remember_episode_tool_handler_maps_memory_error() -> None:
             "code": "memory_invalid_request",
             "message": "bad episode",
             "details": {"field": "summary"},
+        },
+    }
+
+
+def test_build_file_work_record_tool_handler_returns_success() -> None:
+    service = FakeMemoryService(remember_result=make_remember_episode_response())
+    handler = build_file_work_record_tool_handler(service)
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "summary": "Recorded file work for observability validation",
+            "attempt_id": str(uuid4()),
+            "file_path": "ctxledger/docs/project/releases/plans/domains/observability/grafana_zero_signal_gap_plan.md",
+            "file_operation": "modify",
+            "purpose": "capture runtime exposure gap follow-up",
+            "metadata": {"source": "runtime_validation"},
+        }
+    )
+
+    assert response.payload["ok"] is True
+    result = response.payload["result"]
+    assert result["feature"] == "memory_remember_episode"
+    assert result["implemented"] is True
+    assert result["message"] == "Episode recorded successfully."
+    assert result["status"] == "recorded"
+    assert result["details"]["file_work_recorded"] is True
+    assert (
+        result["details"]["file_path"]
+        == "ctxledger/docs/project/releases/plans/domains/observability/grafana_zero_signal_gap_plan.md"
+    )
+    assert result["details"]["file_name"] == "grafana_zero_signal_gap_plan.md"
+    assert result["details"]["file_operation"] == "modify"
+    assert result["details"]["purpose"] == "capture runtime exposure gap follow-up"
+
+    assert service.remember_calls is not None
+    call = service.remember_calls[0]
+    assert call.summary == "Recorded file work for observability validation"
+    assert call.metadata["memory_origin"] == "file_work_record"
+    assert call.metadata["interaction_role"] == "agent"
+    assert call.metadata["interaction_kind"] == "file_work_record"
+    assert (
+        call.metadata["file_path"]
+        == "ctxledger/docs/project/releases/plans/domains/observability/grafana_zero_signal_gap_plan.md"
+    )
+    assert call.metadata["file_name"] == "grafana_zero_signal_gap_plan.md"
+    assert call.metadata["file_operation"] == "modify"
+    assert call.metadata["purpose"] == "capture runtime exposure gap follow-up"
+    assert call.metadata["source"] == "runtime_validation"
+
+
+def test_build_file_work_record_tool_handler_requires_file_path() -> None:
+    service = FakeMemoryService(remember_result=make_remember_episode_response())
+    handler = build_file_work_record_tool_handler(service)
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "summary": "Recorded file work for observability validation",
+            "file_operation": "modify",
+        }
+    )
+
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "file_path must be a non-empty string",
+            "details": {"field": "file_path"},
         },
     }
 

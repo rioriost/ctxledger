@@ -617,12 +617,18 @@ def test_format_stats_text_renders_values() -> None:
         checkpoint_auto_memory_skipped_count=19,
         workflow_completion_auto_memory_recorded_count=20,
         workflow_completion_auto_memory_skipped_count=21,
-        memory_summary_count=22,
-        memory_summary_membership_count=23,
-        age_summary_graph_ready_count=24,
-        age_summary_graph_stale_count=25,
-        age_summary_graph_degraded_count=26,
-        age_summary_graph_unknown_count=27,
+        derived_memory_item_count=22,
+        derived_memory_item_state="canonical_only",
+        derived_memory_item_reason=(
+            "canonical summary state exists but derived memory items are not materialized"
+        ),
+        derived_memory_graph_status="graph_ready",
+        memory_summary_count=23,
+        memory_summary_membership_count=24,
+        age_summary_graph_ready_count=25,
+        age_summary_graph_stale_count=26,
+        age_summary_graph_degraded_count=27,
+        age_summary_graph_unknown_count=28,
         latest_workflow_updated_at=datetime(2024, 10, 1, tzinfo=UTC),
         latest_checkpoint_created_at=datetime(2024, 10, 2, tzinfo=UTC),
         latest_verify_report_created_at=datetime(2024, 10, 3, tzinfo=UTC),
@@ -645,16 +651,23 @@ def test_format_stats_text_renders_values() -> None:
     assert "- episodes: 15" in rendered
     assert "- memory_items: 16" in rendered
     assert "- memory_embeddings: 17" in rendered
+    assert "- derived_memory_items: 22" in rendered
     assert "- checkpoint_auto_memory_recorded: 18" in rendered
     assert "- checkpoint_auto_memory_skipped: 19" in rendered
     assert "- workflow_completion_auto_memory_recorded: 20" in rendered
     assert "- workflow_completion_auto_memory_skipped: 21" in rendered
-    assert "- memory_summaries: 22" in rendered
-    assert "- memory_summary_memberships: 23" in rendered
-    assert "- age_summary_graph_ready: 24" in rendered
-    assert "- age_summary_graph_stale: 25" in rendered
-    assert "- age_summary_graph_degraded: 26" in rendered
-    assert "- age_summary_graph_unknown: 27" in rendered
+    assert "- memory_summaries: 23" in rendered
+    assert "- memory_summary_memberships: 24" in rendered
+    assert "- age_summary_graph_ready: 25" in rendered
+    assert "- age_summary_graph_stale: 26" in rendered
+    assert "- age_summary_graph_degraded: 27" in rendered
+    assert "- age_summary_graph_unknown: 28" in rendered
+    assert "- derived_memory_item_state: canonical_only" in rendered
+    assert (
+        "- derived_memory_item_reason: canonical summary state exists but derived memory items are not materialized"
+        in rendered
+    )
+    assert "- derived_memory_graph_status: graph_ready" in rendered
     assert "- checkpoints: 14" in rendered
     assert "2024-10-01 00:00:00+00:00" in rendered
     assert "2024-10-06 00:00:00+00:00" in rendered

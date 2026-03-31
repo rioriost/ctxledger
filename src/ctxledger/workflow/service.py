@@ -281,6 +281,10 @@ class WorkflowStats:
     file_work_memory_item_count: int = 0
     memory_summary_count: int = 0
     memory_summary_membership_count: int = 0
+    derived_memory_item_count: int = 0
+    derived_memory_item_state: str = "unknown"
+    derived_memory_item_reason: str | None = None
+    derived_memory_graph_status: str | None = None
     age_summary_graph_ready_count: int = 0
     age_summary_graph_stale_count: int = 0
     age_summary_graph_degraded_count: int = 0
@@ -308,6 +312,10 @@ class MemoryStats:
     file_work_memory_item_count: int = 0
     memory_summary_count: int = 0
     memory_summary_membership_count: int = 0
+    derived_memory_item_count: int = 0
+    derived_memory_item_state: str = "unknown"
+    derived_memory_item_reason: str | None = None
+    derived_memory_graph_status: str | None = None
     age_summary_graph_ready_count: int = 0
     age_summary_graph_stale_count: int = 0
     age_summary_graph_degraded_count: int = 0
@@ -316,6 +324,7 @@ class MemoryStats:
     latest_memory_item_created_at: datetime | None = None
     latest_memory_embedding_created_at: datetime | None = None
     latest_memory_relation_created_at: datetime | None = None
+    latest_derived_memory_item_created_at: datetime | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -632,10 +641,24 @@ class WorkflowService:
             )
             memory_item_provenance_counts = self._count_memory_item_provenance(uow)
 
+            derived_memory_item_count = memory_item_provenance_counts.get("derived", 0)
             age_summary_graph_ready_count = 1 if memory_summary_membership_count > 0 else 0
             age_summary_graph_stale_count = 0
             age_summary_graph_degraded_count = 0
             age_summary_graph_unknown_count = 1 if memory_summary_membership_count == 0 else 0
+            (
+                derived_memory_item_state,
+                derived_memory_item_reason,
+                derived_memory_graph_status,
+            ) = self._derive_memory_item_state(
+                derived_memory_item_count=derived_memory_item_count,
+                memory_summary_count=memory_summary_count,
+                memory_summary_membership_count=memory_summary_membership_count,
+                age_summary_graph_ready_count=age_summary_graph_ready_count,
+                age_summary_graph_stale_count=age_summary_graph_stale_count,
+                age_summary_graph_degraded_count=age_summary_graph_degraded_count,
+                age_summary_graph_unknown_count=age_summary_graph_unknown_count,
+            )
             interaction_memory_item_count = memory_item_provenance_counts.get("interaction", 0)
             file_work_memory_item_count = self._count_memory_items_with_file_work_metadata(uow)
 
@@ -732,6 +755,10 @@ class WorkflowService:
                 file_work_memory_item_count=file_work_memory_item_count,
                 memory_summary_count=memory_summary_count,
                 memory_summary_membership_count=memory_summary_membership_count,
+                derived_memory_item_count=derived_memory_item_count,
+                derived_memory_item_state=derived_memory_item_state,
+                derived_memory_item_reason=derived_memory_item_reason,
+                derived_memory_graph_status=derived_memory_graph_status,
                 age_summary_graph_ready_count=age_summary_graph_ready_count,
                 age_summary_graph_stale_count=age_summary_graph_stale_count,
                 age_summary_graph_degraded_count=age_summary_graph_degraded_count,
@@ -781,12 +808,30 @@ class WorkflowService:
 
             memory_item_provenance_counts = self._count_memory_item_provenance(uow)
 
+            derived_memory_item_count = memory_item_provenance_counts.get("derived", 0)
             age_summary_graph_ready_count = 1 if memory_summary_membership_count > 0 else 0
             age_summary_graph_stale_count = 0
             age_summary_graph_degraded_count = 0
             age_summary_graph_unknown_count = 1 if memory_summary_membership_count == 0 else 0
+            (
+                derived_memory_item_state,
+                derived_memory_item_reason,
+                derived_memory_graph_status,
+            ) = self._derive_memory_item_state(
+                derived_memory_item_count=derived_memory_item_count,
+                memory_summary_count=memory_summary_count,
+                memory_summary_membership_count=memory_summary_membership_count,
+                age_summary_graph_ready_count=age_summary_graph_ready_count,
+                age_summary_graph_stale_count=age_summary_graph_stale_count,
+                age_summary_graph_degraded_count=age_summary_graph_degraded_count,
+                age_summary_graph_unknown_count=age_summary_graph_unknown_count,
+            )
             interaction_memory_item_count = memory_item_provenance_counts.get("interaction", 0)
             file_work_memory_item_count = self._count_memory_items_with_file_work_metadata(uow)
+            latest_derived_memory_item_created_at = self._max_datetime_for_provenance(
+                uow,
+                provenance="derived",
+            )
 
             return MemoryStats(
                 episode_count=episode_count,
@@ -815,6 +860,10 @@ class WorkflowService:
                 file_work_memory_item_count=file_work_memory_item_count,
                 memory_summary_count=memory_summary_count,
                 memory_summary_membership_count=memory_summary_membership_count,
+                derived_memory_item_count=derived_memory_item_count,
+                derived_memory_item_state=derived_memory_item_state,
+                derived_memory_item_reason=derived_memory_item_reason,
+                derived_memory_graph_status=derived_memory_graph_status,
                 age_summary_graph_ready_count=age_summary_graph_ready_count,
                 age_summary_graph_stale_count=age_summary_graph_stale_count,
                 age_summary_graph_degraded_count=age_summary_graph_degraded_count,
@@ -823,6 +872,7 @@ class WorkflowService:
                 latest_memory_item_created_at=latest_memory_item_created_at,
                 latest_memory_embedding_created_at=latest_memory_embedding_created_at,
                 latest_memory_relation_created_at=latest_memory_relation_created_at,
+                latest_derived_memory_item_created_at=latest_derived_memory_item_created_at,
             )
 
     def list_workflows(
@@ -1844,6 +1894,130 @@ class WorkflowService:
 
         raise PersistenceError(
             "memory stats provenance aggregation is not supported for memory items"
+        )
+
+    def _max_datetime_for_provenance(
+        self,
+        uow: UnitOfWork,
+        *,
+        provenance: str,
+    ) -> datetime | None:
+        repository = getattr(uow, "memory_items", None)
+        if repository is None:
+            return None
+
+        records_by_id = getattr(repository, "_records_by_id", None)
+        if records_by_id is None:
+            values_by_id = getattr(repository, "_values_by_id", None)
+            if isinstance(values_by_id, dict):
+                records_by_id = values_by_id
+
+        if isinstance(records_by_id, dict):
+            timestamps = [
+                created_at
+                for record in records_by_id.values()
+                if str(getattr(record, "provenance", "")) == provenance
+                and isinstance((created_at := getattr(record, "created_at", None)), datetime)
+            ]
+            if not timestamps:
+                return None
+            return max(timestamps)
+
+        max_method = getattr(repository, "max_datetime_for_provenance", None)
+        if callable(max_method):
+            value = max_method(provenance)
+            return value if isinstance(value, datetime) or value is None else None
+
+        list_by_workspace_id = getattr(repository, "list_by_workspace_id", None)
+        workspaces = getattr(uow, "workspaces", None)
+        list_workspaces = getattr(workspaces, "list_all", None) if workspaces is not None else None
+        if callable(list_by_workspace_id) and callable(list_workspaces):
+            timestamps: list[datetime] = []
+            seen_memory_ids: set[UUID] = set()
+            for workspace in list_workspaces(limit=1000):
+                workspace_id = getattr(workspace, "workspace_id", None)
+                if workspace_id is None:
+                    continue
+                for memory_item in list_by_workspace_id(workspace_id, limit=10000):
+                    memory_id = getattr(memory_item, "memory_id", None)
+                    if memory_id in seen_memory_ids:
+                        continue
+                    seen_memory_ids.add(memory_id)
+                    if str(getattr(memory_item, "provenance", "")) != provenance:
+                        continue
+                    created_at = getattr(memory_item, "created_at", None)
+                    if isinstance(created_at, datetime):
+                        timestamps.append(created_at)
+            if not timestamps:
+                return None
+            return max(timestamps)
+
+        return None
+
+    def _derive_memory_item_state(
+        self,
+        *,
+        derived_memory_item_count: int,
+        memory_summary_count: int,
+        memory_summary_membership_count: int,
+        age_summary_graph_ready_count: int,
+        age_summary_graph_stale_count: int,
+        age_summary_graph_degraded_count: int,
+        age_summary_graph_unknown_count: int,
+    ) -> tuple[str, str | None, str | None]:
+        if derived_memory_item_count > 0:
+            return (
+                "ready",
+                "derived memory items are present",
+                "graph_ready" if age_summary_graph_ready_count > 0 else None,
+            )
+
+        if memory_summary_count == 0:
+            return (
+                "not_materialized",
+                "no canonical summaries exist yet",
+                None,
+            )
+
+        if memory_summary_membership_count == 0:
+            return (
+                "not_materialized",
+                "no canonical summary memberships exist yet",
+                None,
+            )
+
+        if age_summary_graph_degraded_count > 0:
+            return (
+                "degraded",
+                "canonical summary state exists but the derived graph layer is degraded",
+                "graph_degraded",
+            )
+
+        if age_summary_graph_stale_count > 0:
+            return (
+                "degraded",
+                "canonical summary state exists but the derived graph layer is stale",
+                "graph_stale",
+            )
+
+        if age_summary_graph_unknown_count > 0:
+            return (
+                "unknown",
+                "canonical summary state exists but derived graph readiness is unknown",
+                "unknown",
+            )
+
+        if age_summary_graph_ready_count > 0:
+            return (
+                "canonical_only",
+                "canonical summary state exists but derived memory items are not materialized",
+                "graph_ready",
+            )
+
+        return (
+            "canonical_only",
+            "canonical summary state exists but derived memory items are not materialized",
+            None,
         )
 
     def _count_memory_items_with_file_work_metadata(self, uow: Any) -> int:

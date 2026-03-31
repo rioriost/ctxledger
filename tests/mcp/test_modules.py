@@ -9,8 +9,10 @@ import pytest
 
 from ctxledger.config import (
     AppSettings,
+    AzureOpenAIAuthMode,
     DatabaseSettings,
     DebugSettings,
+    EmbeddingExecutionMode,
     EmbeddingProvider,
     EmbeddingSettings,
     HttpSettings,
@@ -82,11 +84,17 @@ def make_settings(
         ),
         embedding=EmbeddingSettings(
             provider=EmbeddingProvider.DISABLED,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=None,
             enabled=False,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         ),
     )
 
@@ -940,6 +948,12 @@ def test_handle_mcp_rpc_request_returns_tools_call_payload() -> None:
                 metadata=dict(metadata or {}),
             )
 
+        def remember_episode(
+            self,
+            request: object,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(request=request)
+
     runtime._build_workflow_backed_memory_service = lambda server: FakePersistenceService()
 
     response = handle_mcp_rpc_request(
@@ -1033,6 +1047,110 @@ def test_handle_mcp_rpc_request_returns_tools_call_payload() -> None:
             },
         }
     ]
+
+
+def test_handle_mcp_rpc_request_auto_records_file_work_for_file_touching_tool_call() -> None:
+    settings = make_settings()
+    runtime = FakeRpcRuntime(
+        settings=settings,
+        tool_response=McpToolResponse(
+            payload={
+                "ok": True,
+                "result": {
+                    "message": "file updated",
+                    "workflow_instance_id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+            }
+        ),
+    )
+    recorded_requests: list[object] = []
+
+    class FakePersistenceService:
+        def persist_interaction_memory(
+            self,
+            *,
+            content: str,
+            interaction_role: str,
+            interaction_kind: str,
+            workspace_id: str | None = None,
+            workflow_instance_id: str | None = None,
+            metadata: dict[str, object] | None = None,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                content=content,
+                interaction_role=interaction_role,
+                interaction_kind=interaction_kind,
+                workspace_id=workspace_id,
+                workflow_instance_id=workflow_instance_id,
+                metadata=dict(metadata or {}),
+            )
+
+        def remember_episode(
+            self,
+            request: object,
+        ) -> object:
+            from tests.mcp.conftest import make_remember_episode_response
+
+            recorded_requests.append(request)
+            return make_remember_episode_response()
+
+    runtime._build_workflow_backed_memory_service = lambda server: FakePersistenceService()
+
+    response = handle_mcp_rpc_request(
+        runtime,
+        {
+            "jsonrpc": "2.0",
+            "id": 30,
+            "method": "tools/call",
+            "params": {
+                "name": "edit_file",
+                "arguments": {
+                    "path": "ctxledger/docs/operations/runbooks/grafana_operator_runbook.md",
+                    "mode": "edit",
+                    "purpose": "document automatic file-work recording",
+                    "workflow_instance_id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+            },
+        },
+    )
+
+    assert response == {
+        "jsonrpc": "2.0",
+        "id": 30,
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "ok": True,
+                            "result": {
+                                "message": "file updated",
+                                "workflow_instance_id": "123e4567-e89b-12d3-a456-426614174000",
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+            ]
+        },
+    }
+    assert len(recorded_requests) == 1
+    remember_request = recorded_requests[0]
+    assert remember_request.workflow_instance_id == "123e4567-e89b-12d3-a456-426614174000"
+    assert (
+        remember_request.summary
+        == "Auto-recorded file-work after edit_file: modify ctxledger/docs/operations/runbooks/grafana_operator_runbook.md (document automatic file-work recording)"
+    )
+    assert remember_request.metadata["memory_origin"] == "file_work_record"
+    assert remember_request.metadata["interaction_kind"] == "file_work_record"
+    assert (
+        remember_request.metadata["file_path"]
+        == "ctxledger/docs/operations/runbooks/grafana_operator_runbook.md"
+    )
+    assert remember_request.metadata["file_name"] == "grafana_operator_runbook.md"
+    assert remember_request.metadata["file_operation"] == "modify"
+    assert remember_request.metadata["purpose"] == "document automatic file-work recording"
 
 
 def test_handle_mcp_rpc_request_returns_resources_list_payload() -> None:

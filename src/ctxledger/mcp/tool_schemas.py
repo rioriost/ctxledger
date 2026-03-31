@@ -276,3 +276,48 @@ MEMORY_GET_CONTEXT_TOOL_SCHEMA = McpToolSchema(
         },
     },
 )
+
+FILE_WORK_RECORD_TOOL_SCHEMA = McpToolSchema(
+    type="object",
+    properties={
+        "workflow_instance_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workflow instance identifier associated with the file work.",
+        },
+        "summary": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Short durable summary of the file work being recorded.",
+        },
+        "attempt_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional workflow attempt identifier.",
+        },
+        "file_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Repository-relative or canonical file path for the primary file touched.",
+        },
+        "file_name": {
+            "type": "string",
+            "description": "Optional file name when it should be recorded explicitly.",
+        },
+        "file_operation": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Bounded file operation label such as create, modify, move, copy, delete, save, or restore.",
+        },
+        "purpose": {
+            "type": "string",
+            "description": "Optional purpose of the file work.",
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Optional additional bounded file-work metadata.",
+            "additionalProperties": True,
+        },
+    },
+    required=("workflow_instance_id", "summary", "file_path", "file_operation"),
+)

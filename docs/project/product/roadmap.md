@@ -14,7 +14,28 @@ For `0.9.0`, read the bounded contract and acceptance references together:
 - `docs/memory/design/interaction_memory_contract.md`
 - `docs/memory/design/failure_reuse_contract.md`
 
-## Completed milestones through `0.9.0`
+## 1.0.0
+
+Delivery focus:
+
+- Azure deployment support
+- large deployment pattern validation
+- Azure-facing infrastructure and operational acceptance
+- repository-supported remote deployment path beyond the local-only posture
+
+Status notes:
+
+- `1.0.0` should be read as the Azure milestone for `ctxledger`
+- the large deployment pattern and Azure-facing release work belong to `1.0.0`, not to `1.0.1`
+- `1.0.1` should therefore be read as a follow-on stabilization and observability patch on top of the Azure release, not as the Azure milestone itself
+
+For `1.0.1`, read the release-facing closeout as an operations-and-observability stabilization slice on top of the completed `1.0.0` Azure milestone rather than as a new architectural milestone.
+
+Release-facing closeout artifact:
+
+- `docs/project/releases/1.0.1_closeout.md`
+
+## Completed milestones through `1.0.1`
 
 ## 0.1.0
 
@@ -237,6 +258,59 @@ Status notes:
 - `ctxledger` and repository `.rules` behave as one coordinated operating model for the bounded milestone
 - no remaining implementation work is tracked here for the `0.9.0` milestone
 
+## 1.0.1
+
+Delivery focus:
+
+- startup and operator-path reliability hardening for the derived AGE layer
+- natural file-work recording in bounded file-touching flows
+- live validation of small-auth operational behavior
+- CLI, SQL, Grafana, and runbook observability alignment
+- replacement of ambiguous derived-layer `No data` readings with explicit operator state
+
+Status notes:
+
+- AGE summary graph refresh is automated on startup for bounded degraded states and remains available as an operator fallback path
+- the shared AGE refresh path and the live small-auth startup path were repaired and validated against real restart behavior
+- file-touching work now naturally produces durable file-work records in bounded runtime and MCP RPC flows when workflow context is available
+- bounded file-touch attempts remain valid AI-agent recovery context even when the visible MCP tool surface returns `tool_not_found`, as long as the attempted file-touch metadata is present and explainable
+- live validation proved:
+  - derived AGE graph recovery to `graph_ready`
+  - automatic file-work recording in the running small-auth stack
+- PostgreSQL-backed memory summary repositories now support the counting paths needed for live `memory-stats`
+- `memory-stats` and `stats` both expose explicit derived-memory-state fields instead of forcing operators to infer meaning from empty panels
+- observability SQL and Grafana now surface:
+  - `derived_memory_item_count`
+  - `derived_memory_item_state`
+  - `derived_memory_item_reason`
+  - `derived_memory_graph_status`
+  - `latest_derived_memory_item_created_at`
+- current operator-facing derived-memory readings can distinguish:
+  - `ready`
+  - `not_materialized`
+  - `canonical_only`
+  - `degraded`
+  - `unknown`
+- the intended `1.0.1` closeout slice is complete
+
+## Planned milestone `1.1.0`
+
+Delivery focus:
+
+- stronger truth-sourcing for derived-memory observability
+- tighter linkage between derived-memory state and real AGE readiness signals
+- possible formal materialization policy for derived memory items
+- better operator verification paths and release-facing observability guidance
+- follow-on refinement once the `1.0.1` stabilization slice is closed
+
+Planned themes:
+
+- replace remaining heuristic derived-state classification with a more direct readiness-backed source where practical
+- refine how `degraded`, `stale`, and `unknown` are surfaced across SQL, CLI, Grafana, and runtime introspection
+- decide whether derived memory items should remain an explicitly non-materialized support concept in some cases or become a more formal generated layer
+- capture the live operator verification flow as a more formal release-facing and runbook-facing procedure
+- continue improving operator clarity without weakening the canonical-truth boundary
+
 ## Cross-version guiding rules
 
 - PostgreSQL remains the canonical system of record
@@ -248,6 +322,7 @@ Status notes:
 
 ## Immediate next steps
 
-- no remaining implementation work is tracked in this roadmap for milestones up to and including `0.9.0`
-- use future roadmap sections only for post-`0.9.0` planning
+- no remaining implementation work is tracked in this roadmap for milestones up to and including `1.0.1`
+- use future roadmap sections only for post-`1.0.1` planning
+- treat the current derived-memory and observability follow-up themes as `1.1.0` planning work rather than `1.0.1` release debt
 

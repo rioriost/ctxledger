@@ -4,11 +4,16 @@ import json
 from typing import Any, Protocol
 
 from ..memory.service import MemoryServiceError
+from ..runtime.file_work_automation import (
+    extract_file_work_metadata,
+    record_file_work_automation,
+)
 from .lifecycle import (
     McpLifecycleState,
     build_jsonrpc_success_response,
     dispatch_lifecycle_method,
 )
+from .tool_handlers import build_file_work_record_tool_handler
 from .tool_schemas import McpToolSchema, serialize_mcp_tool_schema
 
 
@@ -32,6 +37,10 @@ def build_mcp_interaction_request_event(
             "method": method,
             "tool_name": tool_name.strip(),
             "arguments": arguments,
+            **extract_file_work_metadata(
+                tool_name=tool_name,
+                arguments=arguments,
+            ),
         }
 
     if method == "resources/read":
@@ -72,6 +81,10 @@ def build_mcp_interaction_response_event(
             "tool_name": tool_name.strip(),
             "arguments": arguments,
             "result": result,
+            **extract_file_work_metadata(
+                tool_name=tool_name,
+                arguments=arguments,
+            ),
         }
 
     if method == "resources/read":
@@ -256,6 +269,64 @@ def _persist_interaction_event_pair(
         return
 
 
+def _remember_file_work_from_tool_use(
+    runtime: McpRpcRuntime,
+    *,
+    request_event: dict[str, Any] | None,
+    response_event: dict[str, Any] | None,
+) -> None:
+    if request_event is None or response_event is None:
+        return
+
+    if request_event.get("method") != "tools/call":
+        return
+
+    tool_name = request_event.get("tool_name")
+    if not isinstance(tool_name, str) or not tool_name.strip():
+        return
+    if tool_name == "file_work_record":
+        return
+
+    server = getattr(runtime, "_server", None)
+    workflow_service = getattr(server, "workflow_service", None) if server is not None else None
+    if server is None or workflow_service is None:
+        return
+
+    memory_service_builder = getattr(runtime, "_build_workflow_backed_memory_service", None)
+    if not callable(memory_service_builder):
+        return
+
+    arguments = request_event.get("arguments")
+    if not isinstance(arguments, dict):
+        arguments = {}
+
+    _, workflow_instance_id = _extract_interaction_scope_ids(
+        request_event=request_event,
+        response_event=response_event,
+    )
+    if workflow_instance_id is None or not workflow_instance_id.strip():
+        return
+
+    result_payload = response_event.get("result")
+    if not isinstance(result_payload, dict):
+        result_payload = {}
+
+    persistence_service = memory_service_builder(server)
+    remember_handler = build_file_work_record_tool_handler(persistence_service)
+
+    record_file_work_automation(
+        remember_handler=remember_handler,
+        workflow_instance_id=workflow_instance_id.strip(),
+        tool_name=tool_name,
+        arguments=arguments,
+        response_payload=result_payload,
+        recording_mode="automatic_from_mcp_rpc",
+        extra_metadata={
+            "source_response_event": dict(response_event),
+        },
+    )
+
+
 LIFECYCLE_METHODS = frozenset(
     {
         "initialize",
@@ -313,6 +384,11 @@ def handle_mcp_rpc_request(
         setattr(runtime, "_last_mcp_interaction_response_event", interaction_response_event)
 
     _persist_interaction_event_pair(
+        runtime,
+        request_event=interaction_request_event,
+        response_event=interaction_response_event,
+    )
+    _remember_file_work_from_tool_use(
         runtime,
         request_event=interaction_request_event,
         response_event=interaction_response_event,

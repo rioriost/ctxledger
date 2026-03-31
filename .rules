@@ -156,6 +156,7 @@ USE memory_search_for:
 - prior_failures_or_tradeoffs
 - reusable_patterns_or_recovery
 - interaction_or_file_work_signals_when_debugging_or_repeating_work
+- file_work_linked_context_restoration_when_resuming_or_continuing_work
 
 RULE remember_episode_usage
 USE memory_remember_episode_for_high_signal_knowledge:
@@ -221,6 +222,44 @@ RULE observability_signal_reading
 READ as operator_signals_not_canonical_truth:
 - interaction_memory_item_count
 - file_work_memory_item_count
+
+RULE file_work_recording_required
+DO record file-touching work in ctxledger when the agent:
+- creates_a_file
+- modifies_a_file
+- overwrites_a_file
+- copies_a_file
+- moves_or_renames_a_file
+- deletes_a_file
+- restores_a_file
+- saves_a_file_after_meaningful_work
+INCLUDE when known:
+- workflow_instance_id
+- attempt_id
+- file_path
+- file_name
+- file_operation
+- purpose
+- work_loop_context
+
+RULE file_work_recording_scope
+DO link file-work records to the active work loop
+DO preserve repository_relative_or_canonical_file_path_when_possible
+DO preserve why_the_file_was_touched_not_only_that_it_was_touched
+NEVER record file-work as detached_unscoped_notes_when workflow_context_is_available
+
+RULE file_work_recovery_usage
+DO use recorded file-work memory as context-restoration material for:
+- resume
+- continue
+- work_loop_recovery
+- historical_file_work_lookup
+DO prefer file-work-linked durable memory over ad_hoc recollection when reconstructing agent work context
+
+RULE file_work_required_for_context_restoration
+READ file-work memory as required_context_material_for_ai_agent_work_restoration
+WHEN file_touching_work_occurred
+DO treat missing_file_work_recording_as a resumability_gap_not_a_minor_observability_gap
 
 RULE memory_episode_content
 WHEN recording_episode

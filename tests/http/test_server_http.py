@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -31,6 +32,7 @@ from ctxledger.runtime.server_responses import (
     build_runtime_introspection_response,
 )
 from ctxledger.runtime.types import McpHttpResponse, WorkflowResumeResponse
+from tests.mcp.conftest import make_remember_episode_response
 from tests.support.server_test_support import (
     _EXPLICIT_NONE,
     FakeDatabaseHealthChecker,
@@ -643,6 +645,7 @@ def test_http_runtime_adapter_introspect_returns_registered_routes() -> None:
     assert introspection.transport == "http"
     assert introspection.routes == runtime.introspection_endpoints()
     assert introspection.tools == (
+        "file_work_record",
         "memory_get_context",
         "memory_remember_episode",
         "memory_search",
@@ -681,6 +684,7 @@ def test_collect_runtime_introspection_returns_http_runtime_introspection() -> N
             transport="http",
             routes=("workflow_resume",),
             tools=(
+                "file_work_record",
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
@@ -1131,6 +1135,7 @@ def test_build_debug_tools_http_handler_returns_runtime_tools_only() -> None:
             {
                 "transport": "http",
                 "tools": [
+                    "file_work_record",
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
@@ -1162,6 +1167,7 @@ def test_build_debug_tools_http_handler_returns_http_only_empty_tools() -> None:
             {
                 "transport": "http",
                 "tools": [
+                    "file_work_record",
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
@@ -1265,6 +1271,7 @@ def test_http_runtime_adapter_dispatches_registered_debug_tools_handler() -> Non
             {
                 "transport": "http",
                 "tools": [
+                    "file_work_record",
                     "memory_get_context",
                     "memory_remember_episode",
                     "memory_search",
@@ -1339,6 +1346,7 @@ def test_http_mcp_route_supports_tools_list_over_http() -> None:
     tool_names = [tool["name"] for tool in tools]
 
     assert tool_names == [
+        "file_work_record",
         "memory_get_context",
         "memory_remember_episode",
         "memory_search",
@@ -1536,6 +1544,81 @@ def test_http_mcp_rpc_tools_list_returns_registered_tools_with_input_schemas() -
         tools["memory_get_context"]["inputSchema"]["properties"]["primary_only"]["type"]
         == "boolean"
     )
+
+
+def test_http_runtime_adapter_dispatch_tool_auto_records_file_work_after_edit_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings()
+    workflow_instance_id = uuid4()
+    remember_response = make_remember_episode_response()
+
+    server, runtime, _, _ = make_http_runtime(
+        settings=settings,
+        started=True,
+    )
+
+    class FakeMemoryService:
+        def __init__(self) -> None:
+            self.remember_calls: list[object] = []
+
+        def remember_episode(self, request: object) -> object:
+            self.remember_calls.append(request)
+            return remember_response
+
+        def search(self, request: object) -> object:
+            raise AssertionError("search should not be called")
+
+        def get_context(self, request: object) -> object:
+            raise AssertionError("get_context should not be called")
+
+        def persist_interaction_memory(self, **kwargs: object) -> None:
+            return None
+
+    fake_memory_service = FakeMemoryService()
+
+    monkeypatch.setattr(
+        "ctxledger.runtime.http_runtime.build_workflow_backed_memory_service",
+        lambda _server: fake_memory_service,
+    )
+
+    response = runtime.dispatch_tool(
+        "edit_file",
+        {
+            "path": "ctxledger/docs/operations/runbooks/grafana_operator_runbook.md",
+            "mode": "edit",
+            "purpose": "document automatic file-work recording",
+            "workflow_instance_id": str(workflow_instance_id),
+        },
+    )
+
+    assert response.payload["ok"] is False
+    assert response.payload["error"]["code"] == "tool_not_found"
+    assert len(fake_memory_service.remember_calls) == 1
+
+    remember_request = fake_memory_service.remember_calls[0]
+    assert remember_request.workflow_instance_id == str(workflow_instance_id)
+    assert (
+        remember_request.summary
+        == "Auto-recorded file-work after edit_file: modify ctxledger/docs/operations/runbooks/grafana_operator_runbook.md (document automatic file-work recording)"
+    )
+    assert remember_request.metadata["memory_origin"] == "file_work_record"
+    assert remember_request.metadata["interaction_kind"] == "file_work_record"
+    assert (
+        remember_request.metadata["file_path"]
+        == "ctxledger/docs/operations/runbooks/grafana_operator_runbook.md"
+    )
+    assert remember_request.metadata["file_name"] == "grafana_operator_runbook.md"
+    assert remember_request.metadata["file_operation"] == "modify"
+    assert remember_request.metadata["purpose"] == "document automatic file-work recording"
+    assert remember_request.metadata["recording_mode"] == "automatic_from_http_runtime"
+    assert remember_request.metadata["source_tool_name"] == "edit_file"
+    assert remember_request.metadata["source_arguments"] == {
+        "path": "ctxledger/docs/operations/runbooks/grafana_operator_runbook.md",
+        "mode": "edit",
+        "purpose": "document automatic file-work recording",
+        "workflow_instance_id": str(workflow_instance_id),
+    }
 
 
 def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payload() -> None:

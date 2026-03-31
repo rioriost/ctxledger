@@ -18,6 +18,7 @@ It provides:
 - automatic and explicit memory capture
 - bounded historical recall
 - file-work metadata capture
+- searchable file-work records linked to work loops
 - PostgreSQL-backed persistence
 - HTTPS-friendly local deployment
 - operator-facing observability
@@ -303,6 +304,8 @@ An MCP client or agent can:
 - checkpoint progress with bounded auto-memory capture
 - resume work from durable state
 - complete a workflow with verification status
+- record file-touching work in durable ctxledger state with the `file_work_record` MCP tool
+- search later for file-linked work context during resume, continue, and debugging
 - record explicit high-signal episodes
 - search memory with bounded canonical retrieval
 - read grouped context optimized for hierarchy-aware clients
@@ -418,6 +421,8 @@ Current development posture:
 - workflow, checkpoint, and projection state remain canonical-first
 - summaries, rankings, and graph-backed structures are derived support layers
 - file-work metadata is stored without broad file-content indexing
+- the default runtime exposes a bounded `file_work_record` MCP tool so agents can record file-touching work in the active work loop
+- normal file-touching runtime flows should also naturally leave a durable file-work trail when bounded workflow context is available, with explicit `file_work_record` still available for deliberate higher-signal notes or gap-filling
 - the README is intentionally brief; use the docs above for details
 
 ---

@@ -110,11 +110,152 @@ SELECT
   (
     SELECT COUNT(*)::bigint
     FROM memory_items
-    WHERE COALESCE(metadata_json ->> 'file_path', '') <> ''
+    WHERE
+      -- Keep file-work observability aligned with the service-side bounded
+      -- file-work contract. The primary single-file fields below match the
+      -- current WorkflowService/Postgres repository counting semantics.
+      COALESCE(metadata_json ->> 'file_name', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_path', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_operation', '') <> ''
+       OR COALESCE(metadata_json ->> 'purpose', '') <> ''
+       -- Retain the multi-file / aggregate compatibility fields so older or
+       -- broader metadata producers still appear in Grafana observability.
        OR COALESCE(metadata_json ->> 'file_paths', '') <> ''
        OR COALESCE(metadata_json ->> 'file_work_count', '') <> ''
        OR COALESCE(metadata_json ->> 'file_work_paths', '') <> ''
   ) AS file_work_memory_item_count,
+  (
+    SELECT COUNT(*)::bigint
+    FROM memory_items
+    WHERE provenance = 'derived'
+  ) AS derived_memory_item_count,
+  (
+    SELECT
+      CASE
+        WHEN derived_counts.derived_memory_item_count > 0
+          THEN 'ready'
+        WHEN canonical_counts.memory_summary_count = 0
+          THEN 'not_materialized'
+        WHEN canonical_counts.memory_summary_membership_count = 0
+          THEN 'not_materialized'
+        WHEN age_readiness.age_summary_graph_degraded_count > 0
+          THEN 'degraded'
+        WHEN age_readiness.age_summary_graph_stale_count > 0
+          THEN 'degraded'
+        WHEN age_readiness.age_summary_graph_unknown_count > 0
+          THEN 'unknown'
+        ELSE 'canonical_only'
+      END
+    FROM
+      (
+        SELECT COUNT(*)::bigint AS derived_memory_item_count
+        FROM memory_items
+        WHERE provenance = 'derived'
+      ) AS derived_counts,
+      (
+        SELECT
+          (SELECT COUNT(*)::bigint FROM memory_summaries) AS memory_summary_count,
+          (SELECT COUNT(*)::bigint FROM memory_summary_memberships) AS memory_summary_membership_count
+      ) AS canonical_counts,
+      (
+        SELECT
+          CASE
+            WHEN (SELECT COUNT(*)::bigint FROM memory_summary_memberships) > 0
+              THEN 1
+            ELSE 0
+          END AS age_summary_graph_ready_count,
+          0::bigint AS age_summary_graph_stale_count,
+          0::bigint AS age_summary_graph_degraded_count,
+          CASE
+            WHEN (SELECT COUNT(*)::bigint FROM memory_summary_memberships) = 0
+              THEN 1
+            ELSE 0
+          END AS age_summary_graph_unknown_count
+      ) AS age_readiness
+  ) AS derived_memory_item_state,
+  (
+    SELECT
+      CASE
+        WHEN canonical_counts.memory_summary_count = 0
+          THEN NULL
+        WHEN canonical_counts.memory_summary_membership_count = 0
+          THEN NULL
+        WHEN age_readiness.age_summary_graph_degraded_count > 0
+          THEN 'graph_degraded'
+        WHEN age_readiness.age_summary_graph_stale_count > 0
+          THEN 'graph_stale'
+        WHEN age_readiness.age_summary_graph_unknown_count > 0
+          THEN 'unknown'
+        WHEN age_readiness.age_summary_graph_ready_count > 0
+          THEN 'graph_ready'
+        ELSE NULL
+      END
+    FROM
+      (
+        SELECT
+          (SELECT COUNT(*)::bigint FROM memory_summaries) AS memory_summary_count,
+          (SELECT COUNT(*)::bigint FROM memory_summary_memberships) AS memory_summary_membership_count
+      ) AS canonical_counts,
+      (
+        SELECT
+          CASE
+            WHEN (SELECT COUNT(*)::bigint FROM memory_summary_memberships) > 0
+              THEN 1
+            ELSE 0
+          END AS age_summary_graph_ready_count,
+          0::bigint AS age_summary_graph_stale_count,
+          0::bigint AS age_summary_graph_degraded_count,
+          CASE
+            WHEN (SELECT COUNT(*)::bigint FROM memory_summary_memberships) = 0
+              THEN 1
+            ELSE 0
+          END AS age_summary_graph_unknown_count
+      ) AS age_readiness
+  ) AS derived_memory_graph_status,
+  (
+    SELECT
+      CASE
+        WHEN derived_counts.derived_memory_item_count > 0
+          THEN 'derived memory items are present'
+        WHEN canonical_counts.memory_summary_count = 0
+          THEN 'no canonical summaries exist yet'
+        WHEN canonical_counts.memory_summary_membership_count = 0
+          THEN 'no canonical summary memberships exist yet'
+        WHEN age_readiness.age_summary_graph_degraded_count > 0
+          THEN 'canonical summary state exists but the derived graph layer is degraded'
+        WHEN age_readiness.age_summary_graph_stale_count > 0
+          THEN 'canonical summary state exists but the derived graph layer is stale'
+        WHEN age_readiness.age_summary_graph_unknown_count > 0
+          THEN 'canonical summary state exists but derived graph readiness is unknown'
+        ELSE 'canonical summary state exists but derived memory items are not materialized'
+      END
+    FROM
+      (
+        SELECT COUNT(*)::bigint AS derived_memory_item_count
+        FROM memory_items
+        WHERE provenance = 'derived'
+      ) AS derived_counts,
+      (
+        SELECT
+          (SELECT COUNT(*)::bigint FROM memory_summaries) AS memory_summary_count,
+          (SELECT COUNT(*)::bigint FROM memory_summary_memberships) AS memory_summary_membership_count
+      ) AS canonical_counts,
+      (
+        SELECT
+          CASE
+            WHEN (SELECT COUNT(*)::bigint FROM memory_summary_memberships) > 0
+              THEN 1
+            ELSE 0
+          END AS age_summary_graph_ready_count,
+          0::bigint AS age_summary_graph_stale_count,
+          0::bigint AS age_summary_graph_degraded_count,
+          CASE
+            WHEN (SELECT COUNT(*)::bigint FROM memory_summary_memberships) = 0
+              THEN 1
+            ELSE 0
+          END AS age_summary_graph_unknown_count
+      ) AS age_readiness
+  ) AS derived_memory_item_reason,
   (SELECT MAX(created_at) FROM memory_summaries) AS latest_memory_summary_created_at,
   (
     SELECT MAX(created_at)
@@ -124,7 +265,18 @@ SELECT
   (
     SELECT MAX(created_at)
     FROM memory_items
-    WHERE COALESCE(metadata_json ->> 'file_path', '') <> ''
+    WHERE provenance = 'derived'
+  ) AS latest_derived_memory_item_created_at,
+  (
+    SELECT MAX(created_at)
+    FROM memory_items
+    WHERE
+      -- Use the same aligned file-work predicate here as the count above so
+      -- freshness and volume panels describe the same bounded operator signal.
+      COALESCE(metadata_json ->> 'file_name', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_path', '') <> ''
+       OR COALESCE(metadata_json ->> 'file_operation', '') <> ''
+       OR COALESCE(metadata_json ->> 'purpose', '') <> ''
        OR COALESCE(metadata_json ->> 'file_paths', '') <> ''
        OR COALESCE(metadata_json ->> 'file_work_count', '') <> ''
        OR COALESCE(metadata_json ->> 'file_work_paths', '') <> ''
@@ -184,7 +336,12 @@ SELECT
     SELECT COUNT(*)::bigint
     FROM memory_items
     WHERE (
-      COALESCE(metadata_json ->> 'file_path', '') <> ''
+      -- Reuse the aligned file-work predicate for recent-activity reporting so
+      -- 24h trend panels stay consistent with the overview counters.
+      COALESCE(metadata_json ->> 'file_name', '') <> ''
+      OR COALESCE(metadata_json ->> 'file_path', '') <> ''
+      OR COALESCE(metadata_json ->> 'file_operation', '') <> ''
+      OR COALESCE(metadata_json ->> 'purpose', '') <> ''
       OR COALESCE(metadata_json ->> 'file_paths', '') <> ''
       OR COALESCE(metadata_json ->> 'file_work_count', '') <> ''
       OR COALESCE(metadata_json ->> 'file_work_paths', '') <> ''

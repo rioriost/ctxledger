@@ -11,6 +11,7 @@ from ..mcp.resource_handlers import (
     parse_workspace_resume_resource_uri,
 )
 from ..mcp.tool_handlers import (
+    build_file_work_record_tool_handler,
     build_mcp_error_response,
     build_memory_get_context_tool_handler,
     build_memory_remember_episode_tool_handler,
@@ -24,6 +25,7 @@ from ..mcp.tool_handlers import (
 )
 from ..mcp.tool_schemas import (
     DEFAULT_EMPTY_MCP_TOOL_SCHEMA,
+    FILE_WORK_RECORD_TOOL_SCHEMA,
     MEMORY_GET_CONTEXT_TOOL_SCHEMA,
     MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
     MEMORY_SEARCH_TOOL_SCHEMA,
@@ -35,6 +37,10 @@ from ..mcp.tool_schemas import (
     McpToolSchema,
 )
 from ..memory.service import MemoryService, MemoryServiceError
+from .file_work_automation import (
+    extract_file_work_metadata,
+    record_file_work_automation,
+)
 from .http_handlers import (
     build_mcp_http_handler,
     build_runtime_introspection_http_handler,
@@ -211,6 +217,46 @@ class HttpRuntimeAdapter:
         except MemoryServiceError:
             pass
 
+    def _remember_file_work_from_tool_use(
+        self,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any],
+        response_payload: dict[str, Any],
+        workflow_instance_id: str | None,
+    ) -> None:
+        if self._server is None or self._server.workflow_service is None:
+            return
+        if workflow_instance_id is None or not workflow_instance_id.strip():
+            return
+
+        memory_service = build_workflow_backed_memory_service(self._server)
+        remember_handler = build_file_work_record_tool_handler(memory_service)
+        file_work_metadata = extract_file_work_metadata(
+            tool_name=tool_name,
+            arguments=arguments,
+        )
+
+        response_payload_for_recording = dict(response_payload)
+        result_wrapper = response_payload_for_recording.get("result")
+        if isinstance(result_wrapper, dict) and "content" not in response_payload_for_recording:
+            response_payload_for_recording["content"] = result_wrapper.get("content")
+
+        record_file_work_automation(
+            remember_handler=remember_handler,
+            workflow_instance_id=workflow_instance_id.strip(),
+            tool_name=tool_name,
+            arguments=arguments,
+            response_payload=response_payload_for_recording,
+            recording_mode="automatic_from_http_runtime",
+            extra_metadata={
+                "source_result_wrapper": result_wrapper
+                if isinstance(result_wrapper, dict)
+                else None,
+                "file_work_metadata": file_work_metadata,
+            },
+        )
+
     def register_handler(self, route_name: str, handler: WorkflowHttpHandler) -> None:
         self._handlers[route_name] = handler
 
@@ -228,6 +274,7 @@ class HttpRuntimeAdapter:
 
     def registered_tools(self) -> tuple[str, ...]:
         return (
+            "file_work_record",
             "memory_get_context",
             "memory_remember_episode",
             "memory_search",
@@ -240,6 +287,7 @@ class HttpRuntimeAdapter:
 
     def tool_schema(self, tool_name: str) -> McpToolSchema:
         tool_schemas = {
+            "file_work_record": FILE_WORK_RECORD_TOOL_SCHEMA,
             "memory_get_context": MEMORY_GET_CONTEXT_TOOL_SCHEMA,
             "memory_remember_episode": MEMORY_REMEMBER_EPISODE_TOOL_SCHEMA,
             "memory_search": MEMORY_SEARCH_TOOL_SCHEMA,
@@ -360,6 +408,7 @@ class HttpRuntimeAdapter:
     ) -> McpToolResponse:
         memory_service = build_workflow_backed_memory_service(self._server)
         tool_handlers = {
+            "file_work_record": build_file_work_record_tool_handler(memory_service),
             "memory_get_context": build_memory_get_context_tool_handler(memory_service),
             "memory_remember_episode": build_memory_remember_episode_tool_handler(memory_service),
             "memory_search": build_memory_search_tool_handler(memory_service),
@@ -370,13 +419,30 @@ class HttpRuntimeAdapter:
             "workspace_register": build_workspace_register_tool_handler(self._server),
         }
         handler = tool_handlers.get(tool_name)
+
+        normalized_arguments = dict(arguments)
+
         if handler is None:
+            _, workflow_instance_id = self._extract_interaction_scope_ids(
+                arguments=normalized_arguments,
+                response_payload={},
+            )
+            self._remember_file_work_from_tool_use(
+                tool_name=tool_name,
+                arguments=normalized_arguments,
+                response_payload={
+                    "error": {
+                        "code": "tool_not_found",
+                        "message": f"unknown MCP tool '{tool_name}'",
+                    }
+                },
+                workflow_instance_id=workflow_instance_id,
+            )
             return build_mcp_error_response(
                 code="tool_not_found",
                 message=f"unknown MCP tool '{tool_name}'",
             )
 
-        normalized_arguments = dict(arguments)
         self._last_interaction_request_event = {
             "interaction_role": "user",
             "interaction_direction": "inbound",
@@ -415,6 +481,12 @@ class HttpRuntimeAdapter:
                 "result": response_payload,
             },
             workspace_id=workspace_id,
+            workflow_instance_id=workflow_instance_id,
+        )
+        self._remember_file_work_from_tool_use(
+            tool_name=tool_name,
+            arguments=normalized_arguments,
+            response_payload=response_payload,
             workflow_instance_id=workflow_instance_id,
         )
 

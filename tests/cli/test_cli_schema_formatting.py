@@ -34,10 +34,16 @@ def test_format_stats_text_uses_zero_defaults_for_missing_fields() -> None:
     assert "- episodes: 0" in rendered
     assert "- memory_items: 0" in rendered
     assert "- memory_embeddings: 0" in rendered
+    assert "- interaction_memory_items: 0" in rendered
+    assert "- file_work_memory_items: 0" in rendered
+    assert "- derived_memory_items: 0" in rendered
     assert "- checkpoint_auto_memory_recorded: 0" in rendered
     assert "- checkpoint_auto_memory_skipped: 0" in rendered
     assert "- workflow_completion_auto_memory_recorded: 0" in rendered
     assert "- workflow_completion_auto_memory_skipped: 0" in rendered
+    assert "- derived_memory_item_state: unknown" in rendered
+    assert "- derived_memory_item_reason: None" in rendered
+    assert "- derived_memory_graph_status: None" in rendered
     assert "- checkpoints: 0" in rendered
     assert "- workflow_updated_at: None" in rendered
     assert "- checkpoint_created_at: None" in rendered

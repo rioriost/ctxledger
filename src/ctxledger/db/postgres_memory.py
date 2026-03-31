@@ -234,6 +234,19 @@ class PostgresMemoryItemRepository(MemoryItemRepository):
             row = cur.fetchone()
         return _optional_datetime(None if row is None else row["value"])
 
+    def max_datetime_for_provenance(self, provenance: str) -> datetime | None:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT MAX(created_at) AS value
+                FROM memory_items
+                WHERE provenance = %s
+                """,
+                (provenance,),
+            )
+            row = cur.fetchone()
+        return _optional_datetime(None if row is None else row["value"])
+
     def create(self, memory_item: MemoryItemRecord) -> MemoryItemRecord:
         with self._conn.cursor() as cur:
             cur.execute(
@@ -438,6 +451,12 @@ class PostgresMemorySummaryRepository:
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
 
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM memory_summaries")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
+
     def create(self, summary: MemorySummaryRecord) -> MemorySummaryRecord:
         with self._conn.cursor() as cur:
             cur.execute(
@@ -586,6 +605,12 @@ class PostgresMemorySummaryRepository:
 class PostgresMemorySummaryMembershipRepository:
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
+
+    def count_all(self) -> int:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM memory_summary_memberships")
+            row = cur.fetchone()
+        return int(row["count"]) if row is not None else 0
 
     def create(
         self,

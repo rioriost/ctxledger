@@ -84,6 +84,66 @@ def test_age_graph_readiness_requires_graph_name(
     )
 
 
+def test_age_graph_readiness_handles_cypher_count_result_surface_without_false_graph_read_failed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    settings = make_settings()
+    settings = settings.__class__(
+        app_name=settings.app_name,
+        app_version=settings.app_version,
+        environment=settings.environment,
+        database=settings.database.__class__(
+            url="postgresql://explicit/db",
+            connect_timeout_seconds=settings.database.connect_timeout_seconds,
+            statement_timeout_ms=settings.database.statement_timeout_ms,
+            schema_name=settings.database.schema_name,
+            pool_min_size=settings.database.pool_min_size,
+            pool_max_size=settings.database.pool_max_size,
+            pool_timeout_seconds=settings.database.pool_timeout_seconds,
+            age_enabled=True,
+            age_graph_name="ctxledger_ready_graph",
+        ),
+        http=settings.http,
+        debug=settings.debug,
+        logging=settings.logging,
+        embedding=settings.embedding,
+    )
+    monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
+
+    class FakeChecker:
+        def __init__(self, config: object) -> None:
+            self.config = config
+
+        def age_graph_status(self, graph_name: str) -> object:
+            assert graph_name == "ctxledger_ready_graph"
+            return SimpleNamespace(value="graph_ready")
+
+        def age_available(self) -> bool:
+            return True
+
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresDatabaseHealthChecker",
+        FakeChecker,
+    )
+
+    exit_code = cli_module._age_graph_readiness(
+        SimpleNamespace(
+            database_url="postgresql://explicit/db",
+            graph_name="ctxledger_ready_graph",
+        )
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert payload["age_graph_status"] == "graph_ready"
+    assert payload["summary_graph_mirroring"]["readiness_state"] == "ready"
+    assert payload["summary_graph_mirroring"]["operator_action"] == "no_action_required"
+    assert captured.err == ""
+
+
 def test_age_graph_readiness_uses_explicit_database_url_and_graph_name(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

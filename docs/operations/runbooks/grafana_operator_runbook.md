@@ -31,6 +31,10 @@ This runbook covers:
 - starting Grafana with the Compose overlay
 - verifying datasource connectivity
 - confirming dashboard provisioning
+- understanding AGE refresh-after-restart behavior for derived summary graph state
+- understanding startup auto-refresh and operator fallback for the derived AGE summary graph
+- understanding automatic file-work recording behavior in normal MCP tool flows
+- understanding the derived memory state model so operators can distinguish normal absence from degraded observability
 - basic operational and security guidance
 
 This runbook assumes you are working in a local or internal operator environment.
@@ -259,6 +263,51 @@ Common causes:
 - PostgreSQL not reachable from Grafana
 - provisioning file syntax issues
 
+### Important zero-state reading before UI inspection
+
+A healthy Grafana container and a healthy datasource do **not** imply that every
+panel should be non-zero.
+
+In the current `ctxledger` posture, some zero or `No data` readings can be
+expected and should be interpreted carefully.
+
+Read the dashboards in this order:
+
+1. datasource and panel SQL health
+2. canonical workflow and memory counts
+3. canonical summary counts
+4. derived-layer readings
+
+Keep these boundaries explicit:
+
+- Grafana is a read-only observability surface
+- PostgreSQL canonical state remains the source of truth
+- summary rows and summary memberships are canonical relational artifacts when
+  they exist
+- graph-backed or otherwise derived readings remain auxiliary and degradable
+
+That means a zero-state panel is not automatically a Grafana failure.
+
+Representative examples:
+
+- `Canonical Summaries = 0`
+  - can be expected when no explicit summary build ran and no checkpoint-gated
+    workflow-completion summary build was requested
+- `Summary Memberships = 0`
+  - can be expected when no canonical summaries have been built yet
+- derived or auxiliary summary-related panels showing `No data`
+  - can be expected downstream of an empty canonical summary layer
+- `File-Work Memory Items = 0`
+  - should be read differently:
+    this may indicate that interaction capture is present but bounded file-work
+    metadata capture is not yet operationally visible in current data
+
+The key operator rule is:
+
+- do **not** treat derived-layer thinness as canonical-state loss
+- do **not** treat every zero as a Docker, Grafana, or datasource problem
+- first confirm whether the zero reflects actual bounded product state
+
 ---
 
 ## 12. Step 7 — Log in and verify provisioning
@@ -322,6 +371,53 @@ ctxledger failures --limit 10
 
 The exact presentation differs, but the underlying counts and states should be consistent with canonical PostgreSQL state.
 
+### Additional checks for memory and summary panels
+
+When validating the memory dashboard, check both the raw counts and the meaning
+of low or empty readings.
+
+Recommended spot checks:
+
+- `interaction_memory_item_count`
+- `file_work_memory_item_count`
+- `memory_summary_count`
+- `memory_summary_membership_count`
+
+Representative SQL checks:
+
+```/dev/null/sql#L1-4
+SELECT
+  interaction_memory_item_count,
+  file_work_memory_item_count,
+  memory_summary_count,
+  memory_summary_membership_count
+FROM observability.memory_overview;
+```
+
+Operator reading guidance:
+
+- non-zero interaction memory with zero file-work memory
+  - usually means durable interaction capture is visible but file-work-tagged
+    memory is absent in current data
+- zero summaries and zero memberships
+  - can be expected when no explicit or checkpoint-gated summary build has been
+    requested yet
+- derived-layer thinness or `No data`
+  - should be read as downstream of canonical summary absence unless other
+    canonical counters suggest broader problems
+- after a Docker restart, canonical summary rows and memberships can still exist
+  while the derived AGE summary graph is not yet rebuilt
+  - in that case, readiness can temporarily read as graph unavailable or
+    degraded until the AGE summary graph is refreshed
+  - this is a derived-layer rebuild issue, not canonical summary loss
+
+Use these checks to distinguish:
+
+- broken datasource or broken SQL
+- quiet but valid product state
+- bounded feature gap that still needs implementation work
+- derived graph state that simply needs post-restart refresh
+
 ---
 
 ## 14. Operational checks after deployment
@@ -362,6 +458,34 @@ SELECT * FROM observability.workflow_overview;
 SELECT * FROM observability.workflow_recent LIMIT 5;
 ```
 
+If dashboards load but some tiles remain `0` or `No data`, do not collapse that
+into “dashboard is empty”.
+
+Instead separate the problem into:
+
+1. dashboard plumbing failure
+   - panel SQL errors
+   - permission errors
+   - missing views
+   - datasource connectivity problems
+
+2. valid current-state zero
+   - no summaries built yet
+   - no summary memberships yet
+   - no derived-layer signal because canonical summary inputs are absent
+
+3. bounded product-surface gap
+   - interaction capture visible, but file-work-aware memory capture still absent
+
+This distinction matters because the corrective action differs:
+
+- plumbing failure
+  - fix SQL, role grants, or connectivity
+- valid current-state zero
+  - explain and verify against canonical state
+- bounded product-surface gap
+  - inspect capture semantics and implementation, not Grafana health alone
+
 ---
 
 ## 15.2 Datasource test fails
@@ -382,7 +506,121 @@ Checks:
 
 ---
 
-## 15.3 Permission denied on `public` objects
+## 15.3 AGE derived graph reads look unavailable after restart
+
+This can be expected after `docker compose down` / `up` or other restart-style
+stack recreation flows.
+
+Current operator reading:
+
+- canonical PostgreSQL summary rows remain the source of truth
+- the AGE summary graph is derived and rebuildable
+- after restart, canonical summary counts can remain non-zero while AGE derived
+  readiness temporarily reports:
+  - `graph_unavailable`
+  - degraded summary-graph mirroring status
+- this does **not** mean canonical summaries were lost
+
+Typical reading pattern:
+
+1. `observability.memory_overview` still shows:
+   - `memory_summary_count > 0`
+   - `memory_summary_membership_count > 0`
+2. AGE readiness is not yet `graph_ready`
+3. Grafana derived-layer panels may remain thin until refresh
+
+Updated runtime reading:
+
+- the default startup path now attempts an automatic AGE summary-graph refresh
+  when readiness indicates derived graph state is missing, stale, or otherwise
+  needs rebuild help
+- the automatic refresh is meant to cover the normal restart case so operators do
+  not have to run a manual repair step every time
+- canonical relational summary state remains authoritative even when the derived
+  graph has not caught up yet
+
+Operator fallback still matters when:
+
+- startup refresh fails
+- AGE extension availability changes
+- operators want to force a rebuild after investigation
+- the graph was rebuilt from an older or partially broken runtime state
+
+Manual corrective action:
+
+```/dev/null/sh#L1-1
+docker exec ctxledger-server-private sh -lc "cd /app && python -m ctxledger.__init__ refresh-age-summary-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory && python -m ctxledger.__init__ age-graph-readiness --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory"
+```
+
+Expected result after refresh:
+
+- `refresh-age-summary-graph` reports rebuilt summary nodes and `summarizes` edges
+- `age-graph-readiness` reports:
+  - `age_graph_status = graph_ready`
+  - `readiness_state = ready`
+  - `operator_action = no_action_required`
+
+Use this interpretation rule:
+
+- restart-time AGE thinness is a derived rebuild concern
+- canonical summary absence is a different issue and should be diagnosed separately
+
+---
+
+## 15.4 Natural file-work recording during normal MCP work
+
+The default runtime now treats file-touching work as something that should
+naturally leave a durable file-work trail in the active work loop.
+
+Operator reading:
+
+- explicit `file_work_record` calls still remain valid
+- normal MCP tool flows that touch files should also be read with file-work
+  recording in mind, not as a separate optional cleanup step
+- this includes MCP RPC tool-call flows, where bounded file-touching metadata can
+  now be turned into a durable file-work record when workflow context is present
+- if the visible ctxledger MCP tool surface returns `tool_not_found`, the
+  attempted file-touch can still be useful resumability context for an AI agent
+  when the bounded file-touch metadata is present
+- this is meant to reduce the chance that real file edits happen while the
+  durable resumability trail stays empty
+
+What operators should expect from the flow:
+
+1. a file-touching tool call happens in an active workflow context
+2. the runtime already sees bounded file-work metadata such as:
+   - `file_path`
+   - `file_name`
+   - `file_operation`
+   - optional `purpose`
+3. this should work not only for direct runtime dispatch paths but also for MCP
+   RPC `tools/call` flows that carry the same bounded file-touching context
+4. when the exposed tool surface returns `tool_not_found`, operators should
+   still read the attempted bounded file-touch as potentially meaningful file-work
+   context rather than as worthless noise
+5. the work loop should naturally produce a durable file-work record linked to
+   the workflow rather than relying only on local recollection later
+
+Operational implication:
+
+- if file-touching work occurred but file-work memory remains absent, read that
+  as a resumability gap and inspect the runtime flow, not as a harmless
+  observability-only miss
+
+Recommended operator verification:
+
+- confirm the active work loop has a workflow identifier
+- run a bounded file-touching MCP action in that workflow
+- if the client uses MCP RPC, verify the same behavior through a `tools/call`
+  path rather than checking only direct runtime dispatch
+- if the visible tool surface returns `tool_not_found`, confirm whether the
+  attempted bounded file-touch still produced durable file-work memory
+- check that file-work memory becomes visible in the expected observability
+  surfaces
+- keep using explicit `file_work_record` when operators want a deliberate,
+  human-chosen summary or when diagnosing automation gaps
+
+## 15.5 Permission denied on `public` objects
 
 This can be expected if a dashboard or query accidentally hits raw tables instead of views.
 
@@ -393,7 +631,78 @@ Fix:
 
 ---
 
-## 15.4 SQL errors in dashboard panels
+## 15.6 Derived Memory Items panel shows `No data`
+
+This should be read carefully.
+
+Preferred operator reading:
+
+- `0` with an explicit derived state is better than ambiguous `No data`
+- derived memory state should be interpreted together with:
+  - canonical summary count
+  - canonical summary membership count
+  - AGE graph readiness
+- the main operator question is not only “how many derived items exist?” but also
+  “why are they absent?”
+
+Recommended state model:
+
+- `ready`
+  - derived memory items are present
+- `not_materialized`
+  - no canonical summary memberships exist yet, so there is nothing useful to derive
+- `canonical_only`
+  - canonical summary state exists, the derived graph layer is readable, but
+    derived memory items themselves are not materialized
+- `degraded`
+  - derivation should exist, but the supporting derived layer is unavailable,
+    stale, or otherwise unhealthy
+- `unknown`
+  - observability cannot currently explain the state confidently
+
+Recommended derived graph status reading:
+
+- `graph_ready`
+  - the derived graph layer is readable
+- `graph_stale`
+  - the derived graph exists but does not match canonical summary state closely enough
+- `graph_degraded`
+  - the derived graph layer should be treated as unhealthy
+- `unknown`
+  - the operator surface cannot explain the graph condition confidently
+- `none`
+  - no graph status should be inferred for this row yet
+
+Operational guidance:
+
+- if canonical summary and membership counts are both zero, treat missing derived
+  items as normal `not_materialized` behavior
+- if canonical summary state exists but the derived item count is still zero,
+  prefer an explicit state such as `canonical_only` over leaving the panel at
+  `No data`
+- if derived state is `canonical_only` and derived graph status is `graph_ready`,
+  read that as “canonical summary state is healthy, but derived memory items are
+  not materialized”
+- if derived state is `degraded` and derived graph status is `graph_stale` or
+  `graph_degraded`, read that as a derived-layer problem, not as canonical
+  summary loss
+- if derived state is `unknown`, inspect the SQL view, dashboard query, and
+  runtime readiness surfaces before assuming the product state itself is unknown
+- if the panel truly has no returned row, inspect the underlying SQL view or
+  dashboard query before assuming the product state itself is unknown
+
+Recommended dashboard posture:
+
+- show:
+  - derived item count
+  - derived state
+  - derived graph status
+  - derived reason
+- avoid a panel design where the operator only sees `No data` with no explanation
+
+---
+
+## 15.7 SQL errors in dashboard panels
 
 Possible causes:
 
@@ -404,6 +713,18 @@ Possible causes:
 Fix:
 
 - inspect panel query
+- validate against psql
+- update the view or query conservatively
+
+---
+
+## 15.8 Placeholder secrets accidentally used
+
+If you started Grafana with placeholder passwords:
+
+- rotate the Grafana admin password
+- rotate the Grafana PostgreSQL role password
+- restart the stack with correct env values
 - validate against psql
 - update the view or query conservatively
 

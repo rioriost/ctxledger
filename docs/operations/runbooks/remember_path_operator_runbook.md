@@ -8,6 +8,7 @@ Use this runbook when you need to answer any of these questions:
 - are checkpoint-origin and completion-origin memory paths both firing
 - are remember-path writes being skipped too often
 - are summaries or graph reads thin because canonical remember writes are weak
+- is file-work-aware capture absent even though interaction capture is present
 - is duplicate suppression blocking expected memory creation
 
 This runbook is operator-facing.
@@ -30,6 +31,7 @@ Keep these boundaries explicit:
 - workflow state is canonical operational truth
 - episodes, memory items, and memory relations are canonical remember artifacts
 - summaries are canonical relational artifacts when explicitly built
+- file-work memory signals are bounded observability readings over durable memory metadata, not a separate workflow-truth layer
 - AGE graph state is derived and degradable
 - graph thinness is often downstream of weak canonical remember input
 
@@ -195,6 +197,35 @@ These are coarse operator counters.
 They help you spot underperforming paths quickly.
 They are **not** a replacement for detailed per-event investigation.
 
+### 4.4 Zero-signal readings that need careful interpretation
+
+A zero or `No data` reading is not automatically a defect.
+
+Read the current zero-signal classes like this:
+
+- `file_work_memory_item_count = 0`
+  - no currently counted durable memory items carry bounded file-work metadata
+  - this can mean either:
+    - file-work-aware capture has not happened yet
+    - current file-work producers are too weak for representative usage
+    - or observability definitions drifted from service-side file-work semantics
+- `memory_summary_count = 0`
+  - no canonical summaries have been built yet
+  - under the current bounded policy, this can be expected when summary build was never explicitly requested
+- `memory_summary_membership_count = 0`
+  - either no summaries exist yet, or summaries were built incorrectly
+  - if summary count is also zero, this is normally just downstream of summary absence
+- graph or derived-layer thinness
+  - often downstream of weak canonical remember input or absent canonical summary rows
+  - do not read this first as graph failure or canonical-state loss
+
+For operator work, the right order is still:
+
+1. confirm workflow/checkpoint truth
+2. confirm canonical memory counts and provenance
+3. confirm whether summary build was ever requested
+4. only then interpret derived-layer thinness
+
 ---
 
 ## 5. Healthy readings
@@ -228,6 +259,22 @@ A healthy representative deployment tends to show:
 - relation-aware retrieval returning meaningful auxiliary context
 - summary / graph layers reading from non-trivial canonical substrate
 
+### 5.4 Healthy reading for file-work and summary signals
+
+A healthy operator reading does **not** require every zero to disappear.
+
+Use these interpretations:
+
+- interaction memory non-zero with file-work memory still zero
+  - interaction capture is functioning
+  - file-work-aware capture is still absent or not yet visible
+  - investigate product-state coverage before blaming Docker, Grafana, or the graph layer
+- summary count zero with active remember-path counts
+  - remember-path can still be healthy
+  - summary build is narrower and may simply not have been requested yet
+- derived-layer thinness with summary count zero
+  - this is usually expected downstream thinness, not a proof that canonical remember writes failed
+
 ---
 
 ## 6. Unhealthy readings and what they usually mean
@@ -242,6 +289,70 @@ Usually means one or more of:
 - remember-path auto-memory is active but mostly gated out
 
 Check:
+
+- whether workflow completion payloads include usable `current_objective`, `next_intended_action`, `root_cause`, `recovery_pattern`, `failure_reason`, or `verify_status`
+- whether completions are repeatedly near-identical and getting suppressed
+- whether the workflows being closed are actually meaningful enough to expect durable closeout memory
+
+### 6.3 interaction memory exists, but file-work memory stays at zero
+
+Usually means one or more of:
+
+- interaction capture is healthy, but file-work metadata is not being populated into durable memory
+- repository work is happening, but the current file-work-producing paths are weaker than the intended `0.9.0` contract
+- observability SQL and service-side file-work counting semantics are not fully aligned
+
+Check:
+
+- whether representative durable memory metadata includes fields such as:
+  - `file_name`
+  - `file_path`
+  - `file_operation`
+  - `purpose`
+- whether file-work intent is present only in transient interaction payloads rather than durable memory metadata
+- whether operator-facing SQL/view definitions match the current bounded file-work contract
+
+Important reading:
+
+- `file_work_memory_item_count = 0` does **not** mean all memory capture is broken
+- it specifically means file-work-aware durable memory is not currently visible through the bounded counting contract
+
+### 6.4 summaries stay at zero while remember-path counts grow
+
+Usually means:
+
+- canonical remember writes are happening
+- summary build was never requested
+- or explicit summary build has not yet been run for representative episodes
+
+Check:
+
+- whether the latest checkpoint requested summary build
+- whether explicit summary building was ever invoked for representative episodes
+- whether operators are incorrectly expecting always-on summary automation
+
+Read this carefully:
+
+- current summary automation is narrow
+- current summary automation is checkpoint-gated
+- summary absence is not, by itself, a remember-path failure
+
+### 6.5 derived layer is thin or `No data`
+
+Usually means:
+
+- canonical summaries are absent
+- canonical remember input is thin
+- or the derived layer has little current substrate to read from
+
+Check:
+
+- canonical memory counts first
+- summary counts next
+- graph/derived posture only after that
+
+Do **not** treat derived thinness as proof of canonical summary loss.
+
 
 - whether checkpoints contain `current_objective`, `next_intended_action`, `root_cause`, `recovery_pattern`, or `what_remains`
 - whether checkpoints are repeating nearly the same summary and fields
@@ -387,6 +498,14 @@ memory_get_context
 memory_search
   query = "root cause recovery pattern"
   workspace_id = <workspace_id>
+
+# if file-touching work occurred, inspect file-work restoration material too
+memory_search
+  query = "file work"
+  workspace_id = <workspace_id>
+  filters = {
+    "file_operation": "modify"
+  }
   limit = 10
 ```
 
@@ -403,6 +522,15 @@ What to read in the outputs:
   - `remember_path_detail.promotion_source`
   - `remember_path_detail.supports_relation_present`
   - `remember_path_detail.supports_relation_reasons`
+
+If the work loop touched files, also inspect whether retrieval surfaces:
+
+- `file_name`
+- `file_path`
+- `file_operation`
+- `purpose`
+
+Read these as context-restoration material for the active work loop, not only as observability details.
 
 ### Step 6 — Inspect summary / graph only after canonical checks
 
@@ -623,6 +751,15 @@ memory_get_context
 
 memory_search
   query = "supports relation"
+
+If the affected work loop touched files, add:
+
+memory_search
+  query = "file work"
+  workspace_id = <workspace_id>
+  filters = {
+    "file_operation": "modify"
+  }
   workspace_id = <workspace_id>
 ```
 
@@ -686,6 +823,15 @@ memory_get_context
 
 memory_search
   query = "supports relation"
+
+If the affected work loop touched files, add:
+
+memory_search
+  query = "file work"
+  workspace_id = <workspace_id>
+  filters = {
+    "file_operation": "modify"
+  }
   workspace_id = <workspace_id>
 ```
 
@@ -769,7 +915,8 @@ Use this short checklist first.
 6. Are `memory_relations` non-zero in representative remember-path-heavy usage?
 7. Use `memory_get_context` to inspect origin / promoted field / relation reason details for one affected workflow.
 8. Use `memory_search` to inspect ranking explainability for one affected workspace.
-9. Only then inspect summary and graph layers.
+9. If file-touching work occurred, verify that file-work records are searchable and linked to the same work loop.
+10. Only then inspect summary and graph layers.
 
 ---
 

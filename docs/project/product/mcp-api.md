@@ -39,6 +39,7 @@ The current repository also evidences bounded memory capabilities beyond pure wo
 - grouped `memory_get_context` output with route-aware and summary-selection details
 - bounded `memory_search` over canonical memory with interaction-aware, file-work-aware, and failure-reuse-aware explanation shaping
 - automatic bounded interaction-memory capture for MCP and HTTP request/response paths
+- automatic bounded file-work recording for file-touching tool flows when workflow context is available, including MCP RPC `tools/call` paths and direct runtime dispatch paths
 
 The currently evidenced remote serving shape is:
 
@@ -94,6 +95,18 @@ Examples:
 - `workflow_complete`
 - `memory_remember_episode`
 - `memory_get_context`
+
+For current file-touching development flows, operators should also read these MCP-adjacent tool names as bounded automatic file-work producers when workflow context is available:
+
+- `edit_file`
+- `copy_path`
+- `move_path`
+- `delete_path`
+- `save_file`
+- `restore_file_from_disk`
+
+This automatic path does not replace explicit `file_work_record`.
+It means the runtime can naturally convert already-visible bounded file-touching metadata into a durable file-work note instead of relying only on a second manual reminder step.
 
 Tool argument discovery is implemented through `tools/list`, which now returns concrete `inputSchema` payloads for the visible tool surface.
 
@@ -238,6 +251,63 @@ Its current intended behavior is:
 - remain bounded to workflow-linked episode retrieval rather than semantic search
 
 These fields are meant to explain the current episode-oriented and grouped
+memory retrieval path, not to redefine workflow truth.
+
+---
+
+## 3.3 Automatic file-work recording boundary
+
+The MCP surface now also has a bounded automatic file-work recording posture for
+file-touching tool flows.
+
+Current intended reading:
+
+- if a tool flow already exposes bounded file-touching metadata such as:
+  - `file_path`
+  - `file_name`
+  - `file_operation`
+  - optional `purpose`
+- and workflow context is available
+- the runtime may write a durable file-work record automatically
+- this remains acceptable even when the visible ctxledger MCP tool surface does
+  not implement that tool directly and returns `tool_not_found`, because the
+  attempted file-touch is still useful resumability and work-loop context for an
+  AI agent
+
+This currently matters most for:
+
+- MCP RPC `tools/call`
+- direct runtime dispatch paths that carry the same bounded tool arguments
+
+The current bounded covered tool set is:
+
+- `edit_file`
+- `copy_path`
+- `move_path`
+- `delete_path`
+- `save_file`
+- `restore_file_from_disk`
+
+Interpretation boundary:
+
+- this is meant to improve resumability and work-loop restoration
+- this is not a promise of unconstrained filesystem telemetry
+- this does not replace explicit `file_work_record`
+- a bounded file-touch attempt can still be worth recording even if the visible
+  MCP response is `tool_not_found`, because the attempted action itself may be
+  operationally meaningful to the agent's recovery path
+- explicit `file_work_record` remains the right path when an agent or operator
+  wants a clearer human-authored summary or needs to repair an automation gap
+
+The practical operator expectation is therefore:
+
+1. run a file-touching tool in workflow context
+2. expect bounded file-work memory to appear naturally
+3. if the exposed ctxledger MCP tool surface returns `tool_not_found`, still
+   treat the attempted bounded file-touch as potentially valid file-work context
+   rather than assuming it is worthless to later recovery
+4. fall back to explicit `file_work_record` if a more deliberate note is needed
+   or if automation did not produce the desired durable record
 context assembly behavior.
 At the current implementation stage, `matched_episode_count` and
 `episodes_returned` may be the same value, but they are kept separate so the

@@ -58,6 +58,12 @@ def test_main_stats_renders_text_output(
         workflow_completion_auto_memory_skipped_count=54,
         interaction_memory_item_count=7,
         file_work_memory_item_count=9,
+        derived_memory_item_count=0,
+        derived_memory_item_state="canonical_only",
+        derived_memory_item_reason=(
+            "canonical summary state exists but derived memory items are not materialized"
+        ),
+        derived_memory_graph_status="graph_ready",
         memory_summary_count=9,
         memory_summary_membership_count=21,
         age_summary_graph_ready_count=1,
@@ -114,6 +120,7 @@ def test_main_stats_renders_text_output(
     assert "- memory_embeddings: 3" in captured.out
     assert "- interaction_memory_items: 7" in captured.out
     assert "- file_work_memory_items: 9" in captured.out
+    assert "- derived_memory_items: 0" in captured.out
     assert "Remember-path observability:" in captured.out
     assert "- checkpoint_auto_memory_recorded: 12" in captured.out
     assert "- checkpoint_auto_memory_skipped: 45" in captured.out
@@ -126,6 +133,13 @@ def test_main_stats_renders_text_output(
     assert "- age_summary_graph_stale: 0" in captured.out
     assert "- age_summary_graph_degraded: 0" in captured.out
     assert "- age_summary_graph_unknown: 0" in captured.out
+    assert "Derived memory state:" in captured.out
+    assert "- derived_memory_item_state: canonical_only" in captured.out
+    assert (
+        "- derived_memory_item_reason: canonical summary state exists but derived memory items are not materialized"
+        in captured.out
+    )
+    assert "- derived_memory_graph_status: graph_ready" in captured.out
     assert "Other:" in captured.out
     assert "- checkpoints: 57" in captured.out
     assert "Latest activity:" in captured.out
@@ -180,6 +194,12 @@ def test_main_stats_renders_json_output(
         workflow_completion_auto_memory_skipped_count=0,
         interaction_memory_item_count=2,
         file_work_memory_item_count=3,
+        derived_memory_item_count=0,
+        derived_memory_item_state="canonical_only",
+        derived_memory_item_reason=(
+            "canonical summary state exists but derived memory items are not materialized"
+        ),
+        derived_memory_graph_status="graph_ready",
         memory_summary_count=2,
         memory_summary_membership_count=5,
         age_summary_graph_ready_count=1,
@@ -209,6 +229,10 @@ def test_main_stats_renders_json_output(
 
     assert exit_code == 0
     assert payload == {
+        "age_summary_graph_degraded_count": 0,
+        "age_summary_graph_ready_count": 1,
+        "age_summary_graph_stale_count": 0,
+        "age_summary_graph_unknown_count": 0,
         "attempt_status_counts": {
             "cancelled": 0,
             "failed": 0,
@@ -218,6 +242,10 @@ def test_main_stats_renders_json_output(
         "checkpoint_auto_memory_recorded_count": 0,
         "checkpoint_auto_memory_skipped_count": 0,
         "checkpoint_count": 5,
+        "derived_memory_graph_status": "graph_ready",
+        "derived_memory_item_count": 0,
+        "derived_memory_item_reason": "canonical summary state exists but derived memory items are not materialized",
+        "derived_memory_item_state": "canonical_only",
         "episode_count": 3,
         "file_work_memory_item_count": 3,
         "interaction_memory_item_count": 2,
@@ -231,10 +259,6 @@ def test_main_stats_renders_json_output(
         "memory_item_count": 4,
         "memory_summary_count": 2,
         "memory_summary_membership_count": 5,
-        "age_summary_graph_ready_count": 1,
-        "age_summary_graph_stale_count": 0,
-        "age_summary_graph_degraded_count": 0,
-        "age_summary_graph_unknown_count": 0,
         "verify_status_counts": {
             "failed": 0,
             "passed": 2,
@@ -373,8 +397,14 @@ def test_format_stats_text_uses_zero_defaults_for_missing_fields() -> None:
     assert "- episodes: 0" in rendered
     assert "- memory_items: 0" in rendered
     assert "- memory_embeddings: 0" in rendered
-    assert "- interaction_memory_items: 0" in rendered
-    assert "- file_work_memory_items: 0" in rendered
+    assert "- derived_memory_items: 0" in rendered
+    assert "- checkpoint_auto_memory_recorded: 0" in rendered
+    assert "- checkpoint_auto_memory_skipped: 0" in rendered
+    assert "- workflow_completion_auto_memory_recorded: 0" in rendered
+    assert "- workflow_completion_auto_memory_skipped: 0" in rendered
+    assert "- derived_memory_item_state: unknown" in rendered
+    assert "- derived_memory_item_reason: None" in rendered
+    assert "- derived_memory_graph_status: None" in rendered
     assert "- checkpoints: 0" in rendered
     assert "- workflow_updated_at: None" in rendered
     assert "- checkpoint_created_at: None" in rendered
@@ -474,10 +504,14 @@ def test_main_memory_stats_renders_json_output(
         },
         interaction_memory_item_count=1,
         file_work_memory_item_count=2,
+        derived_memory_item_count=0,
+        derived_memory_item_state="unknown",
+        derived_memory_item_reason=None,
         latest_episode_created_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_memory_item_created_at=None,
         latest_memory_embedding_created_at=None,
         latest_memory_relation_created_at=None,
+        latest_derived_memory_item_created_at=None,
     )
 
     class FakeMemoryStatsWorkflowService:
@@ -510,10 +544,15 @@ def test_main_memory_stats_renders_json_output(
         "episode_count": 3,
         "file_work_memory_item_count": 2,
         "interaction_memory_item_count": 1,
+        "derived_memory_item_count": 0,
+        "derived_memory_item_state": "unknown",
+        "derived_memory_item_reason": None,
+        "derived_memory_graph_status": None,
         "latest_episode_created_at": "2026-03-15T09:00:00+00:00",
         "latest_memory_embedding_created_at": None,
         "latest_memory_item_created_at": None,
         "latest_memory_relation_created_at": None,
+        "latest_derived_memory_item_created_at": None,
         "memory_embedding_count": 1,
         "memory_item_count": 4,
         "memory_item_provenance_counts": {

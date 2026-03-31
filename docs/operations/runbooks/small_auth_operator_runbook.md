@@ -231,11 +231,57 @@ It also verifies workflow-oriented operations, including:
 - `workflow_checkpoint`
 - `workflow_resume`
 - `workflow_complete`
+- `file_work_record`
 
 and workflow resource reads for:
 
 - `workspace://{workspace_id}/resume`
 - `workspace://{workspace_id}/workflow/{workflow_instance_id}`
+
+### 8.1 File-work recording verification
+
+After authenticated workflow verification, run one bounded file-work recording
+through MCP for the active workflow.
+
+Representative request shape:
+
+```/dev/null/json#L1-14
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "file_work_record",
+    "arguments": {
+      "workflow_instance_id": "<workflow_instance_id>",
+      "attempt_id": "<attempt_id>",
+      "summary": "Recorded file-work validation event",
+      "file_path": "ctxledger/docs/operations/runbooks/small_auth_operator_runbook.md",
+      "file_operation": "modify",
+      "purpose": "verify durable file-work capture in the small auth pattern"
+    }
+  }
+}
+```
+
+Expected result:
+
+- the tool call succeeds through the authenticated MCP path
+- ctxledger records durable file-work metadata linked to the active work loop
+- later resume, continue, and memory search paths can use that file-linked
+  context
+
+Recommended validation after the tool call:
+
+- inspect `memory-stats`
+- inspect file-work-sensitive Grafana panels where relevant
+- confirm the recorded file path and operation are present in durable state
+
+The `file_work_record` tool matters because file-touching work should be
+restorable from durable ctxledger state later.
+In the small auth pattern, operators should verify that bounded file-work
+records can be written through the authenticated MCP path, not only that generic
+workflow tools succeed.
 
 ---
 
@@ -445,6 +491,14 @@ but not as a final multi-user identity architecture.
 ## 13. Recommended Operator Checklist
 
 Use this quick checklist for a normal work loop.
+
+1. bring up the stack and confirm containers are healthy
+2. verify unauthenticated requests fail with `401`
+3. verify authenticated workflow smoke succeeds
+4. verify `tools/list` includes `file_work_record`
+5. record one bounded file-work event in the active workflow
+6. confirm the file-work event is visible in durable ctxledger state
+7. confirm normal workflow resume and completion paths still work
 
 ### Startup
 - choose `CTXLEDGER_SMALL_AUTH_TOKEN`

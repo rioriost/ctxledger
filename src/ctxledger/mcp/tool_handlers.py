@@ -678,6 +678,129 @@ def build_memory_remember_episode_tool_handler(
     return _handler
 
 
+def build_file_work_record_tool_handler(
+    memory_service: MemoryService,
+):
+    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+        workflow_instance_id = arguments.get("workflow_instance_id")
+        if not isinstance(workflow_instance_id, str) or not workflow_instance_id.strip():
+            return build_mcp_error_response(
+                code="invalid_request",
+                message="workflow_instance_id must be a non-empty string",
+                details={"field": "workflow_instance_id"},
+            )
+
+        summary = arguments.get("summary")
+        if not isinstance(summary, str) or not summary.strip():
+            return build_mcp_error_response(
+                code="invalid_request",
+                message="summary must be a non-empty string",
+                details={"field": "summary"},
+            )
+
+        file_path = arguments.get("file_path")
+        if not isinstance(file_path, str) or not file_path.strip():
+            return build_mcp_error_response(
+                code="invalid_request",
+                message="file_path must be a non-empty string",
+                details={"field": "file_path"},
+            )
+
+        file_operation = arguments.get("file_operation")
+        if not isinstance(file_operation, str) or not file_operation.strip():
+            return build_mcp_error_response(
+                code="invalid_request",
+                message="file_operation must be a non-empty string",
+                details={"field": "file_operation"},
+            )
+
+        attempt_id = arguments.get("attempt_id")
+        if attempt_id is not None and not isinstance(attempt_id, str):
+            return build_mcp_error_response(
+                code="invalid_request",
+                message="attempt_id must be a string when provided",
+                details={"field": "attempt_id"},
+            )
+
+        file_name = arguments.get("file_name")
+        if file_name is not None and not isinstance(file_name, str):
+            return build_mcp_error_response(
+                code="invalid_request",
+                message="file_name must be a string when provided",
+                details={"field": "file_name"},
+            )
+
+        purpose = arguments.get("purpose")
+        if purpose is not None and not isinstance(purpose, str):
+            return build_mcp_error_response(
+                code="invalid_request",
+                message="purpose must be a string when provided",
+                details={"field": "purpose"},
+            )
+
+        metadata = _parse_optional_dict_argument(arguments, "metadata")
+        if isinstance(metadata, _mcp_tool_response_cls()):
+            return metadata
+
+        normalized_file_path = file_path.strip()
+        normalized_file_name = (
+            file_name.strip()
+            if isinstance(file_name, str) and file_name.strip()
+            else normalized_file_path.rsplit("/", 1)[-1]
+        )
+        normalized_file_operation = file_operation.strip()
+        normalized_purpose = (
+            purpose.strip() if isinstance(purpose, str) and purpose.strip() else None
+        )
+
+        bounded_metadata = {
+            **metadata,
+            "memory_origin": "file_work_record",
+            "interaction_role": "agent",
+            "interaction_kind": "file_work_record",
+            "file_path": normalized_file_path,
+            "file_name": normalized_file_name,
+            "file_operation": normalized_file_operation,
+        }
+        if normalized_purpose is not None:
+            bounded_metadata["purpose"] = normalized_purpose
+
+        try:
+            response = memory_service.remember_episode(
+                RememberEpisodeRequest(
+                    workflow_instance_id=workflow_instance_id.strip(),
+                    summary=summary.strip(),
+                    attempt_id=(
+                        attempt_id.strip()
+                        if isinstance(attempt_id, str) and attempt_id.strip()
+                        else None
+                    ),
+                    metadata=bounded_metadata,
+                )
+            )
+            from ..runtime.serializers import serialize_remember_episode_response
+
+            payload = serialize_remember_episode_response(response)
+            if isinstance(payload.get("details"), dict):
+                payload["details"] = {
+                    **payload["details"],
+                    "file_work_recorded": True,
+                    "file_path": normalized_file_path,
+                    "file_name": normalized_file_name,
+                    "file_operation": normalized_file_operation,
+                    "purpose": normalized_purpose,
+                }
+            return build_mcp_success_response(payload)
+        except MemoryServiceError as exc:
+            return build_mcp_error_response(
+                code=exc.code.value,
+                message=exc.message,
+                details=exc.details,
+            )
+
+    return _handler
+
+
 def build_memory_search_tool_handler(
     memory_service: MemoryService,
 ):

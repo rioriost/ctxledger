@@ -9,6 +9,9 @@ from .db.postgres import (
     PostgresConfig,
     build_connection_pool,
 )
+from .runtime.age_refresh import (
+    refresh_age_summary_graph,
+)
 from .runtime.database_health import (
     build_database_health_checker,
 )
@@ -95,6 +98,50 @@ class CtxLedgerServer:
             and bool(settings.database.url)
         )
         self._started = False
+
+    def _refresh_age_summary_graph_on_startup(self) -> None:
+        if not self.settings.database.age_enabled:
+            return
+
+        graph_name = self.settings.database.age_graph_name
+        if not graph_name:
+            return
+
+        try:
+            graph_status = self.db_health_checker.age_graph_status(graph_name)
+        except Exception:
+            logger.exception(
+                "ctxledger AGE graph status check failed before startup refresh",
+                extra={"graph_name": graph_name},
+            )
+            return
+
+        if graph_status not in {"graph_unavailable", "graph_stale", "graph_read_failed"}:
+            return
+
+        database_url = self.settings.database.url
+        if not database_url:
+            logger.warning(
+                "ctxledger AGE startup refresh skipped because database URL is not configured",
+                extra={"graph_name": graph_name, "graph_status": graph_status},
+            )
+            return
+
+        try:
+            refresh_age_summary_graph(
+                database_url=database_url,
+                graph_name=graph_name,
+                psycopg_module=__import__("psycopg"),
+            )
+            logger.info(
+                "ctxledger AGE startup refresh completed",
+                extra={"graph_name": graph_name, "previous_graph_status": graph_status},
+            )
+        except Exception:
+            logger.exception(
+                "ctxledger AGE startup refresh failed",
+                extra={"graph_name": graph_name, "previous_graph_status": graph_status},
+            )
 
     def get_workflow_resume(
         self,
@@ -202,6 +249,8 @@ class CtxLedgerServer:
             else:
                 self.workflow_service = self.workflow_service_factory()
 
+        self._refresh_age_summary_graph_on_startup()
+
         if self.runtime is not None:
             self.runtime.start()
 
@@ -263,9 +312,7 @@ def create_server(
         ),
         connection_pool=connection_pool,
     )
-    server.runtime = (
-        runtime if runtime is not None else build_http_runtime_adapter(server)
-    )
+    server.runtime = runtime if runtime is not None else build_http_runtime_adapter(server)
     return server
 
 

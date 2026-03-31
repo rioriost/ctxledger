@@ -8,8 +8,10 @@ from uuid import uuid4
 
 from ctxledger.config import (
     AppSettings,
+    AzureOpenAIAuthMode,
     DatabaseSettings,
     DebugSettings,
+    EmbeddingExecutionMode,
     EmbeddingProvider,
     EmbeddingSettings,
     HttpSettings,
@@ -266,10 +268,16 @@ def make_settings(
         embedding=EmbeddingSettings(
             enabled=False,
             provider=EmbeddingProvider.DISABLED,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="local-stub-v1",
             api_key=None,
             base_url=None,
             dimensions=None,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         ),
     )
 
@@ -447,6 +455,7 @@ def build_runtime_summary_payload(
             "transport": "http",
             "routes": routes,
             "tools": [
+                "file_work_record",
                 "memory_get_context",
                 "memory_remember_episode",
                 "memory_search",
