@@ -29,6 +29,8 @@
 
 ### ローカル起動で得られるもの
 
+#### クイックスタート (small): ローカル Docker/TLS パターン
+
 標準のローカル構成では次を使えます。
 
 - MCP endpoint
@@ -39,7 +41,19 @@
 - repository-owned local image path を使う PostgreSQL 17
 - Docker Compose による一式起動
 
-### クイックスタート
+#### クイックスタート (large): Azure deployment パターン
+
+Azure large deployment path では次を使えます。
+
+- MCP endpoint
+  - Azure Container Apps の HTTPS endpoint
+- Azure OpenAI を使う PostgreSQL `azure_ai` bootstrap
+- Azure Database for PostgreSQL Flexible Server
+- Azure Container Registry による remote image build
+- Azure Developer CLI (`azd`) の 1 コマンド deployment flow
+- `.azure/mcp-snippets` 配下に生成される MCP client snippets
+
+### クイックスタート (small)
 
 #### 1. リポジトリを取得して移動する
 
@@ -189,7 +203,7 @@ VS Code設定例:
 
 ## SSL/TLS troubleshooting
 
-この troubleshooting は、この README で説明している `localhost:8443` の Traefik/TLS ローカル構成向けです。Azure large deployment path で使う Azure Container Apps endpoint には適用しません。
+この troubleshooting は、small パターンで使う `localhost:8443` の Traefik/TLS ローカル構成専用です。Azure large deployment path で使う Azure Container Apps endpoint には適用しません。
 
 AI エージェントや他の client が certificate trust error を出す場合、まず Traefik がどの証明書を返しているか確認します。
 
@@ -234,6 +248,62 @@ https://localhost:8443/mcp
 ```
 
 endpoint 自体には到達しているものの、client の probe method を MCP endpoint が受け付けない場合は、HTTP `405 Method Not Allowed` になることがあります。これは method の違いを示すもので、TLS trust failure そのものではありません。
+
+### クイックスタート (large)
+
+このパスは、`ctxledger` を Azure Container Apps、Azure Database for PostgreSQL Flexible Server、Azure OpenAI を使う構成で Azure に deploy したい場合に使います。
+
+#### 1. リポジトリを取得して移動する
+
+```/dev/null/sh#L1-2
+git clone https://github.com/rioriost/ctxledger.git
+cd ctxledger
+```
+
+#### 2. Azure に sign in して対象 subscription を選ぶ
+
+Azure CLI と Azure Developer CLI が入っている前提で、sign in して使う subscription を選びます。
+
+```/dev/null/sh#L1-3
+az login
+azd auth login
+az account set --subscription YOUR_SUBSCRIPTION_ID_OR_NAME
+```
+
+#### 3. Azure large deployment を実行する
+
+想定する happy path は 1 コマンドです。
+
+```/dev/null/sh#L1-1
+azd up
+```
+
+この flow で Azure infrastructure の provision、container image の build / deploy、PostgreSQL / `azure_ai` bootstrap、schema 適用、bounded postdeploy smoke test まで実行します。
+
+#### 4. 生成された environment と MCP snippets を確認する
+
+deploy 成功後、`azd` は environment values と MCP client snippets をローカル workspace に書き出します。
+
+主な生成パス:
+
+- environment values
+  - `.azure/ctxledger/.env`
+- MCP snippet README
+  - `.azure/mcp-snippets/README.md`
+- MCP snippet summary
+  - `.azure/mcp-snippets/summary.json`
+
+#### 5. Azure endpoint に MCP client を接続する
+
+`azd up` が表示した MCP endpoint を使うか、snippet README を開いて使う client 用の設定をコピーします。
+
+deploy 後の endpoint は次の形です。
+
+```/dev/null/text#L1-1
+https://<your-container-app-fqdn>/mcp
+```
+
+現在の Azure large default flow では、単純な HTTP smoke probe で HTTP `405 Method Not Allowed` が返ることがあります。これは endpoint 自体には到達していて、method handling の違いを示しているもので、endpoint unavailable を意味しません。
 
 ### できること
 

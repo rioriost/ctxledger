@@ -29,6 +29,8 @@ It provides:
 
 ### What you get
 
+#### Quick Start (small): local Docker/TLS pattern
+
 The default local setup gives you:
 
 - MCP endpoint:
@@ -39,7 +41,19 @@ The default local setup gives you:
 - PostgreSQL 17 with the repository-owned local image path
 - Docker Compose startup for the full local stack
 
-### Quick start
+#### Quick Start (large): Azure deployment pattern
+
+The Azure large deployment path gives you:
+
+- MCP endpoint:
+  - Azure Container Apps HTTPS endpoint
+- Azure OpenAI-backed PostgreSQL `azure_ai` bootstrap
+- Azure Database for PostgreSQL Flexible Server
+- Azure Container Registry remote image build
+- Azure Developer CLI (`azd`) one-command deployment flow
+- generated MCP client snippets under `.azure/mcp-snippets`
+
+### Quick Start (small)
 
 #### 1. Clone the repository and move into it
 
@@ -178,7 +192,7 @@ Example VS Code configuration:
 
 ### SSL/TLS troubleshooting
 
-This troubleshooting applies to the local `localhost:8443` Traefik/TLS setup described in this README. It does not apply to the Azure Container Apps endpoint used by the Azure large deployment path.
+This troubleshooting applies only to the local `localhost:8443` Traefik/TLS setup used by the small pattern. It does not apply to the Azure Container Apps endpoint used by the Azure large deployment path.
 
 If your AI agent or other client reports a certificate trust error, first verify which certificate Traefik is serving.
 
@@ -223,6 +237,62 @@ https://localhost:8443/mcp
 ```
 
 If the endpoint is reachable but your client uses a method that the MCP endpoint does not accept for that probe, you might see an HTTP `405 Method Not Allowed`. That indicates method handling differences, not a TLS trust failure.
+
+### Quick Start (large)
+
+Use this path when you want to deploy `ctxledger` to Azure Container Apps with Azure Database for PostgreSQL Flexible Server and Azure OpenAI.
+
+#### 1. Clone the repository and move into it
+
+```/dev/null/sh#L1-2
+git clone https://github.com/rioriost/ctxledger.git
+cd ctxledger
+```
+
+#### 2. Sign in to Azure and select the target subscription
+
+Make sure the Azure CLI and Azure Developer CLI are installed, then sign in and select the subscription you want to use.
+
+```/dev/null/sh#L1-3
+az login
+azd auth login
+az account set --subscription YOUR_SUBSCRIPTION_ID_OR_NAME
+```
+
+#### 3. Run the Azure large deployment
+
+The intended happy path is a single command:
+
+```/dev/null/sh#L1-1
+azd up
+```
+
+This flow provisions the Azure infrastructure, builds and deploys the container image, bootstraps PostgreSQL / `azure_ai`, applies the schema, and runs a bounded postdeploy smoke test.
+
+#### 4. Review the generated environment and MCP snippets
+
+After a successful deployment, `azd` writes deployment environment values and MCP client snippets to the local workspace.
+
+Important generated paths:
+
+- environment values
+  - `.azure/ctxledger/.env`
+- MCP snippet README
+  - `.azure/mcp-snippets/README.md`
+- MCP snippet summary
+  - `.azure/mcp-snippets/summary.json`
+
+#### 5. Connect your MCP client to the Azure endpoint
+
+Use the generated MCP endpoint shown by `azd up`, or open the snippet README and copy the client configuration that matches your tool.
+
+The deployed endpoint has the form:
+
+```/dev/null/text#L1-1
+https://<your-container-app-fqdn>/mcp
+```
+
+If you are using the current Azure large default flow, a basic HTTP smoke probe might return HTTP `405 Method Not Allowed`. That still indicates that the endpoint is reachable; it reflects method handling rather than endpoint unavailability.
 
 ### What you can do with it
 
