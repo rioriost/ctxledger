@@ -1,6 +1,6 @@
 [project]
 name = "ctxledger"
-version = "1.0.0"
+version = "1.0.2"
 description = "Durable Workflow Runtime and Multi-Layer Memory for AI Agents"
 readme = { file = "README.md", content-type = "text/markdown" }
 authors = [

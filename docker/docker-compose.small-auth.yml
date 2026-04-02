@@ -62,7 +62,7 @@ services:
       start_period: 10s
 
   grafana:
-    image: grafana/grafana:11.1.4
+    image: grafana/grafana:11.1.7
     container_name: ctxledger-grafana
     restart: unless-stopped
     depends_on:
