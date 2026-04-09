@@ -245,6 +245,7 @@ class GetContextRequest:
     workflow_instance_id: str | None = None
     ticket_id: str | None = None
     limit: int = 10
+    memory_items_per_episode_limit: int = 10
     include_episodes: bool = True
     include_memory_items: bool = True
     include_summaries: bool = True

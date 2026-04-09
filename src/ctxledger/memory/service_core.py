@@ -2063,6 +2063,7 @@ class MemoryService(
                 episodes=episodes,
                 include_memory_items=request.include_memory_items,
                 include_summaries=request.include_summaries,
+                memory_items_per_episode_limit=request.memory_items_per_episode_limit,
             )
         )
 
@@ -2115,6 +2116,21 @@ class MemoryService(
                 summary_details=summary_details,
             )
         )
+        if request.primary_only:
+            summaries = tuple(
+                {
+                    "episode_id": summary.get("episode_id"),
+                    "workflow_instance_id": summary.get("workflow_instance_id"),
+                    "memory_summary_id": summary.get("memory_summary_id"),
+                    "summary_kind": summary.get("summary_kind"),
+                    "memory_item_count": summary.get("memory_item_count"),
+                    "member_memory_count": summary.get("member_memory_count"),
+                    "member_memory_ids": summary.get("member_memory_ids", [])[:5],
+                    "created_at": summary.get("created_at"),
+                    "updated_at": summary.get("updated_at"),
+                }
+                for summary in summaries
+            )
         inherited_memory_items = inherited_workspace_items
 
         related_memory_items = self._collect_supports_related_memory_items(
@@ -2364,33 +2380,196 @@ class MemoryService(
         }
 
         if request.primary_only:
+            compact_memory_context_groups: list[dict[str, Any]] = []
+            for group in memory_context_groups:
+                group_memory_items = tuple(
+                    memory_item
+                    for memory_item in group.get("memory_items", [])
+                    if isinstance(memory_item, dict)
+                )
+                compact_group = {
+                    "scope": group.get("scope"),
+                    "scope_id": group.get("scope_id"),
+                    "group_id": group.get("group_id"),
+                    "parent_scope": group.get("parent_scope"),
+                    "parent_scope_id": group.get("parent_scope_id"),
+                    "parent_group_scope": group.get("parent_group_scope"),
+                    "parent_group_id": group.get("parent_group_id"),
+                    "selection_kind": group.get("selection_kind"),
+                    "selection_route": group.get("selection_route"),
+                }
+
+                if "selected_via_summary_first" in group:
+                    compact_group["selected_via_summary_first"] = group.get(
+                        "selected_via_summary_first"
+                    )
+                if "child_episode_ids" in group:
+                    compact_group["child_episode_ids"] = group.get(
+                        "child_episode_ids", []
+                    )[:5]
+                if "child_episode_count" in group:
+                    compact_group["child_episode_count"] = group.get(
+                        "child_episode_count"
+                    )
+                if "child_episode_ordering" in group:
+                    compact_group["child_episode_ordering"] = group.get(
+                        "child_episode_ordering"
+                    )
+                if "child_episode_groups_emitted" in group:
+                    compact_group["child_episode_groups_emitted"] = group.get(
+                        "child_episode_groups_emitted"
+                    )
+                if "child_episode_groups_emission_reason" in group:
+                    compact_group["child_episode_groups_emission_reason"] = group.get(
+                        "child_episode_groups_emission_reason"
+                    )
+                if "relation_type" in group:
+                    compact_group["relation_type"] = group.get("relation_type")
+                if "source_memory_ids" in group:
+                    compact_group["source_memory_ids"] = group.get(
+                        "source_memory_ids", []
+                    )[:5]
+                if "source_episode_ids" in group:
+                    compact_group["source_episode_ids"] = group.get(
+                        "source_episode_ids", []
+                    )
+                if "interaction_memory_present" in group:
+                    compact_group["interaction_memory_present"] = group.get(
+                        "interaction_memory_present"
+                    )
+                if "interaction_memory_count" in group:
+                    compact_group["interaction_memory_count"] = group.get(
+                        "interaction_memory_count"
+                    )
+                if "interaction_roles_present" in group:
+                    compact_group["interaction_roles_present"] = group.get(
+                        "interaction_roles_present",
+                        [],
+                    )
+                if "interaction_kinds_present" in group:
+                    compact_group["interaction_kinds_present"] = group.get(
+                        "interaction_kinds_present",
+                        [],
+                    )
+                if "file_work_memory_present" in group:
+                    compact_group["file_work_memory_present"] = group.get(
+                        "file_work_memory_present"
+                    )
+                if "file_work_memory_count" in group:
+                    compact_group["file_work_memory_count"] = group.get(
+                        "file_work_memory_count"
+                    )
+
+                if "summaries" in group:
+                    group_summaries = [
+                        summary
+                        for summary in group.get("summaries", [])
+                        if isinstance(summary, dict)
+                    ]
+                    compact_group["summary_count"] = len(group_summaries)
+                    compact_group["summary_ids"] = [
+                        summary.get("memory_summary_id")
+                        for summary in group_summaries[:5]
+                    ]
+                    compact_group["summary_kinds"] = sorted(
+                        {
+                            str(summary.get("summary_kind"))
+                            for summary in group_summaries
+                            if isinstance(summary.get("summary_kind"), str)
+                            and str(summary.get("summary_kind")).strip()
+                        }
+                    )
+
+                if "memory_items" in group:
+                    compact_group["memory_item_count"] = len(group_memory_items)
+                    compact_group["memory_item_ids"] = [
+                        memory_item.get("memory_id")
+                        for memory_item in group_memory_items[:5]
+                    ]
+                    compact_group["memory_item_types"] = sorted(
+                        {
+                            str(memory_item.get("type"))
+                            for memory_item in group_memory_items
+                            if isinstance(memory_item.get("type"), str)
+                            and str(memory_item.get("type")).strip()
+                        }
+                    )
+                    compact_group["memory_item_provenance"] = sorted(
+                        {
+                            str(memory_item.get("provenance"))
+                            for memory_item in group_memory_items
+                            if isinstance(memory_item.get("provenance"), str)
+                            and str(memory_item.get("provenance")).strip()
+                        }
+                    )
+                    compact_group["file_work_memory_present"] = any(
+                        isinstance(memory_item.get("file_path"), str)
+                        and memory_item.get("file_path", "").strip()
+                        for memory_item in group_memory_items
+                    )
+                    compact_group["file_work_memory_count"] = sum(
+                        1
+                        for memory_item in group_memory_items
+                        if isinstance(memory_item.get("file_path"), str)
+                        and memory_item.get("file_path", "").strip()
+                    )
+
+                compact_memory_context_groups.append(compact_group)
+
             response_details = {
                 key: value
                 for key, value in response_details.items()
                 if key
-                not in {
-                    "memory_items",
-                    "related_memory_items_by_episode",
-                    "remember_path_explainability_by_episode",
-                    "remember_path_relation_reasons",
-                    "remember_path_relation_reason_primary",
-                    "remember_path_origin_counts",
-                    "remember_path_promotion_field_counts",
-                    "remember_path_relation_reason_counts",
-                    "readiness_explainability",
-                    "inherited_memory_items",
-                    "related_memory_items",
-                    "flat_related_memory_items_is_compatibility_field",
-                    "flat_related_memory_items_matches_grouped_episode_related_items",
-                    "related_memory_items_by_episode_is_primary_structured_output",
-                    "related_memory_items_by_episode_are_compatibility_output",
-                    "group_related_memory_items_are_convenience_output",
-                    "readiness_explainability_is_compatibility_output",
-                    "remember_path_explainability_by_episode_is_compatibility_output",
-                    "remember_path_relation_reasons_is_compatibility_output",
-                    "remember_path_relation_reason_primary_is_compatibility_output",
+                in {
+                    "query",
+                    "normalized_query",
+                    "query_tokens",
+                    "lookup_scope",
+                    "workspace_id",
+                    "workflow_instance_id",
+                    "ticket_id",
+                    "limit",
+                    "include_episodes",
+                    "include_memory_items",
+                    "include_summaries",
+                    "query_filter_applied",
+                    "episodes_before_query_filter",
+                    "matched_episode_count",
+                    "episodes_returned",
+                    "summary_selection_applied",
+                    "summary_selection_kind",
+                    "hierarchy_applied",
+                    "inherited_context_is_auxiliary",
+                    "inherited_context_returned_without_episode_matches",
+                    "inherited_context_returned_as_auxiliary_without_episode_matches",
+                    "related_context_is_auxiliary",
+                    "related_context_relation_types",
+                    "related_context_selection_route",
+                    "retrieval_routes_present",
+                    "primary_retrieval_routes_present",
+                    "auxiliary_retrieval_routes_present",
+                    "retrieval_route_presence",
+                    "retrieval_route_group_counts",
+                    "retrieval_route_item_counts",
+                    "summary_first_has_episode_groups",
+                    "summary_first_is_summary_only",
+                    "summary_first_child_episode_count",
+                    "summary_first_child_episode_ids",
+                    "primary_episode_groups_present_after_query_filter",
+                    "auxiliary_only_after_query_filter",
+                    "related_context_returned_without_episode_matches",
+                    "all_episodes_filtered_out_by_query",
+                    "memory_context_groups_are_primary_output",
+                    "memory_context_groups_are_primary_explainability_surface",
+                    "top_level_explainability_prefers_grouped_routes",
+                    "relation_memory_context_groups_are_primary_output",
                 }
             }
+            response_details["memory_context_groups"] = compact_memory_context_groups
+
+        response_episodes = episodes
+        if request.primary_only:
+            response_episodes = tuple()
 
         return GetContextResponse(
             feature=MemoryFeature.GET_CONTEXT,
@@ -2398,7 +2577,7 @@ class MemoryService(
             message="Episode-oriented memory context retrieved successfully.",
             status="ok",
             available_in_version="0.2.0",
-            episodes=episodes,
+            episodes=response_episodes,
             details=response_details,
         )
 

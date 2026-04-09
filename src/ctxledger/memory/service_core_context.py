@@ -51,7 +51,9 @@ class ContextShapingMixin:
                 )
                 metadata_matches = [
                     metadata_query_string
-                    for metadata_query_string in metadata_query_strings(episode.metadata)
+                    for metadata_query_string in metadata_query_strings(
+                        episode.metadata
+                    )
                     if text_matches_query(
                         text=metadata_query_string,
                         normalized_query=normalized_query,
@@ -101,14 +103,18 @@ class ContextShapingMixin:
                 continue
 
             summary_ids = tuple(summary.memory_summary_id for summary in summaries)
-            memberships = self._memory_summary_membership_repository.list_by_summary_ids(
-                summary_ids
-            )
-            memberships_by_summary_id: dict[UUID, list[MemorySummaryMembershipRecord]] = {}
-            for membership in memberships:
-                memberships_by_summary_id.setdefault(membership.memory_summary_id, []).append(
-                    membership
+            memberships = (
+                self._memory_summary_membership_repository.list_by_summary_ids(
+                    summary_ids
                 )
+            )
+            memberships_by_summary_id: dict[
+                UUID, list[MemorySummaryMembershipRecord]
+            ] = {}
+            for membership in memberships:
+                memberships_by_summary_id.setdefault(
+                    membership.memory_summary_id, []
+                ).append(membership)
 
             for summary in summaries:
                 summary_memberships = tuple(
@@ -132,7 +138,8 @@ class ContextShapingMixin:
                         "metadata": dict(summary.metadata),
                         "member_memory_count": len(member_memory_items),
                         "member_memory_ids": [
-                            str(memory_item.memory_id) for memory_item in member_memory_items
+                            str(memory_item.memory_id)
+                            for memory_item in member_memory_items
                         ],
                         "member_memory_items": [
                             self._serialize_memory_item(memory_item)
@@ -149,18 +156,21 @@ class ContextShapingMixin:
         episodes: tuple[EpisodeRecord, ...],
         include_memory_items: bool,
         include_summaries: bool,
+        memory_items_per_episode_limit: int,
     ) -> tuple[dict[str, Any], ...]:
         details: list[dict[str, Any]] = []
         memory_items_by_episode_id: dict[UUID, tuple[MemoryItemRecord, ...]] = {}
 
         episode_ids = tuple(episode.episode_id for episode in episodes)
-        bulk_memory_items = self._memory_item_repository.list_by_episode_ids(episode_ids)
+        bulk_memory_items = self._memory_item_repository.list_by_episode_ids(
+            episode_ids
+        )
         for episode in episodes:
             episode_memory_items = tuple(
                 memory_item
                 for memory_item in bulk_memory_items
                 if memory_item.episode_id == episode.episode_id
-            )
+            )[:memory_items_per_episode_limit]
             memory_items_by_episode_id[episode.episode_id] = episode_memory_items
 
         for episode in episodes:
@@ -173,7 +183,8 @@ class ContextShapingMixin:
 
             if include_memory_items:
                 detail["memory_items"] = [
-                    self._serialize_memory_item(memory_item) for memory_item in memory_items
+                    self._serialize_memory_item(memory_item)
+                    for memory_item in memory_items
                 ]
                 detail["remember_path_memory_items"] = [
                     {
@@ -193,15 +204,21 @@ class ContextShapingMixin:
                             if memory_item.provenance == "episode"
                             else "other"
                         ),
-                        "interaction_role": memory_item.metadata.get("interaction_role"),
-                        "interaction_kind": memory_item.metadata.get("interaction_kind"),
+                        "interaction_role": memory_item.metadata.get(
+                            "interaction_role"
+                        ),
+                        "interaction_kind": memory_item.metadata.get(
+                            "interaction_kind"
+                        ),
                         "file_name": memory_item.metadata.get("file_name"),
                         "file_path": memory_item.metadata.get("file_path"),
                         "file_operation": memory_item.metadata.get("file_operation"),
                         "purpose": memory_item.metadata.get("purpose"),
                         "memory_origin": memory_item.metadata.get("memory_origin"),
                         "promotion_field": memory_item.metadata.get("promotion_field"),
-                        "promotion_source": memory_item.metadata.get("promotion_source"),
+                        "promotion_source": memory_item.metadata.get(
+                            "promotion_source"
+                        ),
                         "checkpoint_id": memory_item.metadata.get("checkpoint_id"),
                         "step_name": memory_item.metadata.get("step_name"),
                         "workflow_status": memory_item.metadata.get("workflow_status"),
@@ -221,7 +238,8 @@ class ContextShapingMixin:
                     promotion_field = memory_item.metadata.get("promotion_field")
                     if isinstance(promotion_field, str) and promotion_field.strip():
                         remember_path_promotion_field_counts[promotion_field] = (
-                            remember_path_promotion_field_counts.get(promotion_field, 0) + 1
+                            remember_path_promotion_field_counts.get(promotion_field, 0)
+                            + 1
                         )
 
                 detail["remember_path_memory_summary"] = {
@@ -243,7 +261,8 @@ class ContextShapingMixin:
                     )
                 )
                 detail["related_memory_items"] = [
-                    self._serialize_memory_item(memory_item) for memory_item in related_memory_items
+                    self._serialize_memory_item(memory_item)
+                    for memory_item in related_memory_items
                 ]
                 detail["related_memory_item_provenance"] = [
                     {
@@ -253,7 +272,9 @@ class ContextShapingMixin:
                         "target_memory_id": str(relation.target_memory_id),
                         "source_group_scope": "episode",
                         "target_group_scope": (
-                            "episode" if memory_item.episode_id is not None else "workspace"
+                            "episode"
+                            if memory_item.episode_id is not None
+                            else "workspace"
                         ),
                         "target_group_selection_kind": "supports_related_auxiliary",
                         "target_provenance": memory_item.provenance,
@@ -270,16 +291,26 @@ class ContextShapingMixin:
                             if memory_item.provenance == "episode"
                             else "other"
                         ),
-                        "target_interaction_role": memory_item.metadata.get("interaction_role"),
-                        "target_interaction_kind": memory_item.metadata.get("interaction_kind"),
+                        "target_interaction_role": memory_item.metadata.get(
+                            "interaction_role"
+                        ),
+                        "target_interaction_kind": memory_item.metadata.get(
+                            "interaction_kind"
+                        ),
                         "target_file_name": memory_item.metadata.get("file_name"),
                         "target_file_path": memory_item.metadata.get("file_path"),
-                        "target_file_operation": memory_item.metadata.get("file_operation"),
+                        "target_file_operation": memory_item.metadata.get(
+                            "file_operation"
+                        ),
                         "target_purpose": memory_item.metadata.get("purpose"),
                         "source_memory_origin": relation.metadata.get("memory_origin"),
                         "relation_reason": relation.metadata.get("relation_reason"),
-                        "source_memory_type": relation.metadata.get("source_memory_type"),
-                        "target_memory_type": relation.metadata.get("target_memory_type"),
+                        "source_memory_type": relation.metadata.get(
+                            "source_memory_type"
+                        ),
+                        "target_memory_type": relation.metadata.get(
+                            "target_memory_type"
+                        ),
                     }
                     for memory_item, relation in zip(
                         related_memory_items,
@@ -303,10 +334,16 @@ class ContextShapingMixin:
                         "memory_relation_id": str(relation.memory_relation_id),
                         "relation_type": relation.relation_type,
                         "relation_reason": relation.metadata.get("relation_reason"),
-                        "relation_description": relation.metadata.get("relation_description"),
+                        "relation_description": relation.metadata.get(
+                            "relation_description"
+                        ),
                         "memory_origin": relation.metadata.get("memory_origin"),
-                        "source_memory_type": relation.metadata.get("source_memory_type"),
-                        "target_memory_type": relation.metadata.get("target_memory_type"),
+                        "source_memory_type": relation.metadata.get(
+                            "source_memory_type"
+                        ),
+                        "target_memory_type": relation.metadata.get(
+                            "target_memory_type"
+                        ),
                         "source_memory_id": str(relation.source_memory_id),
                         "target_memory_id": str(relation.target_memory_id),
                     }
@@ -317,23 +354,30 @@ class ContextShapingMixin:
                         relation_reason: sum(
                             1
                             for relation in related_memory_relations
-                            if relation.metadata.get("relation_reason") == relation_reason
+                            if relation.metadata.get("relation_reason")
+                            == relation_reason
                         )
                         for relation_reason in sorted(
                             {
                                 str(relation.metadata.get("relation_reason"))
                                 for relation in related_memory_relations
-                                if isinstance(relation.metadata.get("relation_reason"), str)
-                                and str(relation.metadata.get("relation_reason")).strip()
+                                if isinstance(
+                                    relation.metadata.get("relation_reason"), str
+                                )
+                                and str(
+                                    relation.metadata.get("relation_reason")
+                                ).strip()
                             }
                         )
                     },
                     "checkpoint_origin_present": any(
-                        relation.metadata.get("memory_origin") == "workflow_checkpoint_auto"
+                        relation.metadata.get("memory_origin")
+                        == "workflow_checkpoint_auto"
                         for relation in related_memory_relations
                     ),
                     "completion_origin_present": any(
-                        relation.metadata.get("memory_origin") == "workflow_complete_auto"
+                        relation.metadata.get("memory_origin")
+                        == "workflow_complete_auto"
                         for relation in related_memory_relations
                     ),
                 }
@@ -356,7 +400,9 @@ class ContextShapingMixin:
                         {
                             str(memory_item.metadata.get("memory_origin"))
                             for memory_item in memory_items
-                            if isinstance(memory_item.metadata.get("memory_origin"), str)
+                            if isinstance(
+                                memory_item.metadata.get("memory_origin"), str
+                            )
                             and str(memory_item.metadata.get("memory_origin")).strip()
                         }
                     ),
@@ -364,7 +410,9 @@ class ContextShapingMixin:
                         {
                             str(memory_item.metadata.get("promotion_field"))
                             for memory_item in memory_items
-                            if isinstance(memory_item.metadata.get("promotion_field"), str)
+                            if isinstance(
+                                memory_item.metadata.get("promotion_field"), str
+                            )
                             and str(memory_item.metadata.get("promotion_field")).strip()
                         }
                     ),
@@ -372,8 +420,12 @@ class ContextShapingMixin:
                         {
                             str(memory_item.metadata.get("promotion_source"))
                             for memory_item in memory_items
-                            if isinstance(memory_item.metadata.get("promotion_source"), str)
-                            and str(memory_item.metadata.get("promotion_source")).strip()
+                            if isinstance(
+                                memory_item.metadata.get("promotion_source"), str
+                            )
+                            and str(
+                                memory_item.metadata.get("promotion_source")
+                            ).strip()
                         }
                     ),
                     "relation_reasons": remember_path_relation_reasons,
@@ -382,7 +434,9 @@ class ContextShapingMixin:
                         if remember_path_relation_reasons
                         else None
                     ),
-                    "relation_reasons_frontloaded": bool(remember_path_relation_reasons),
+                    "relation_reasons_frontloaded": bool(
+                        remember_path_relation_reasons
+                    ),
                     "relation_reason_count": len(remember_path_relation_reasons),
                     "relation_reason_counts": detail.get(
                         "remember_path_relation_summary",
@@ -406,7 +460,9 @@ class ContextShapingMixin:
                     "episode_id": str(episode.episode_id),
                     "workflow_instance_id": str(episode.workflow_instance_id),
                     "memory_item_count": memory_item_count,
-                    "memory_item_types": [memory_item.type for memory_item in memory_items],
+                    "memory_item_types": [
+                        memory_item.type for memory_item in memory_items
+                    ],
                     "memory_item_provenance": [
                         memory_item.provenance for memory_item in memory_items
                     ],
@@ -421,18 +477,25 @@ class ContextShapingMixin:
                         )
                     },
                     "interaction_memory_count": sum(
-                        1 for memory_item in memory_items if memory_item.provenance == "interaction"
+                        1
+                        for memory_item in memory_items
+                        if memory_item.provenance == "interaction"
                     ),
                     "interaction_memory_present": any(
-                        memory_item.provenance == "interaction" for memory_item in memory_items
+                        memory_item.provenance == "interaction"
+                        for memory_item in memory_items
                     ),
                     "interaction_roles_present": sorted(
                         {
                             str(memory_item.metadata.get("interaction_role"))
                             for memory_item in memory_items
                             if memory_item.provenance == "interaction"
-                            and isinstance(memory_item.metadata.get("interaction_role"), str)
-                            and str(memory_item.metadata.get("interaction_role")).strip()
+                            and isinstance(
+                                memory_item.metadata.get("interaction_role"), str
+                            )
+                            and str(
+                                memory_item.metadata.get("interaction_role")
+                            ).strip()
                         }
                     ),
                     "interaction_kinds_present": sorted(
@@ -440,8 +503,12 @@ class ContextShapingMixin:
                             str(memory_item.metadata.get("interaction_kind"))
                             for memory_item in memory_items
                             if memory_item.provenance == "interaction"
-                            and isinstance(memory_item.metadata.get("interaction_kind"), str)
-                            and str(memory_item.metadata.get("interaction_kind")).strip()
+                            and isinstance(
+                                memory_item.metadata.get("interaction_kind"), str
+                            )
+                            and str(
+                                memory_item.metadata.get("interaction_kind")
+                            ).strip()
                         }
                     ),
                     "remember_path_explainability": remember_path_summary_explainability,
@@ -483,7 +550,9 @@ class ContextShapingMixin:
         graph_summary_related_memory_items: tuple[MemoryItemRecord, ...],
     ) -> dict[str, Any]:
         episode_direct_group_present = bool(
-            include_memory_items and matched_episode_count > 0 and not summary_selection_applied
+            include_memory_items
+            and matched_episode_count > 0
+            and not summary_selection_applied
         )
         graph_summary_group_present = bool(graph_summary_related_memory_items)
         episode_direct_item_count = (
@@ -493,12 +562,16 @@ class ContextShapingMixin:
         )
         summary_episode_scope_count = (
             matched_episode_count
-            if include_memory_items and matched_episode_count > 0 and summary_selection_applied
+            if include_memory_items
+            and matched_episode_count > 0
+            and summary_selection_applied
             else 0
         )
         summary_episode_scope_item_count = (
             sum(len(detail.get("memory_items", [])) for detail in memory_item_details)
-            if include_memory_items and matched_episode_count > 0 and summary_selection_applied
+            if include_memory_items
+            and matched_episode_count > 0
+            and summary_selection_applied
             else 0
         )
         summary_first_has_episode_groups = summary_episode_scope_count > 0
@@ -519,14 +592,17 @@ class ContextShapingMixin:
         auxiliary_only_after_query_filter = bool(
             not primary_episode_groups_present_after_query_filter
             and (
-                inherited_memory_items or related_memory_items or graph_summary_related_memory_items
+                inherited_memory_items
+                or related_memory_items
+                or graph_summary_related_memory_items
             )
         )
         relation_supports_source_episode_count = len(
             {
                 detail["episode_id"]
                 for detail in memory_item_details
-                if detail.get("related_memory_items") and isinstance(detail.get("episode_id"), str)
+                if detail.get("related_memory_items")
+                and isinstance(detail.get("episode_id"), str)
             }
         )
 
@@ -536,9 +612,17 @@ class ContextShapingMixin:
                 for route in [
                     "summary_first" if summary_selection_applied else None,
                     "episode_direct" if episode_direct_group_present else None,
-                    ("workspace_inherited_auxiliary" if inherited_memory_items else None),
+                    (
+                        "workspace_inherited_auxiliary"
+                        if inherited_memory_items
+                        else None
+                    ),
                     ("relation_supports_auxiliary" if related_memory_items else None),
-                    ("graph_summary_auxiliary" if graph_summary_group_present else None),
+                    (
+                        "graph_summary_auxiliary"
+                        if graph_summary_group_present
+                        else None
+                    ),
                 ]
                 if route is not None
             ],
@@ -553,15 +637,25 @@ class ContextShapingMixin:
             "auxiliary_retrieval_routes_present": [
                 route
                 for route in [
-                    ("workspace_inherited_auxiliary" if inherited_memory_items else None),
+                    (
+                        "workspace_inherited_auxiliary"
+                        if inherited_memory_items
+                        else None
+                    ),
                     ("relation_supports_auxiliary" if related_memory_items else None),
-                    ("graph_summary_auxiliary" if graph_summary_group_present else None),
+                    (
+                        "graph_summary_auxiliary"
+                        if graph_summary_group_present
+                        else None
+                    ),
                 ]
                 if route is not None
             ],
             "retrieval_route_group_counts": {
                 "summary_first": 1 if summary_selection_applied else 0,
-                "episode_direct": matched_episode_count if episode_direct_group_present else 0,
+                "episode_direct": matched_episode_count
+                if episode_direct_group_present
+                else 0,
                 "workspace_inherited_auxiliary": 1 if inherited_memory_items else 0,
                 "relation_supports_auxiliary": (
                     matched_episode_count if related_memory_items else 0
@@ -603,7 +697,10 @@ class ContextShapingMixin:
                     "group_present": episode_direct_group_present,
                     "item_present": bool(
                         episode_direct_group_present
-                        and any(detail.get("memory_items", []) for detail in memory_item_details)
+                        and any(
+                            detail.get("memory_items", [])
+                            for detail in memory_item_details
+                        )
                     ),
                 },
                 "workspace_inherited_auxiliary": {
@@ -628,7 +725,9 @@ class ContextShapingMixin:
                 },
                 "episode_direct": {
                     "summary": 0,
-                    "episode": (matched_episode_count if episode_direct_group_present else 0),
+                    "episode": (
+                        matched_episode_count if episode_direct_group_present else 0
+                    ),
                     "workspace": 0,
                     "relation": 0,
                 },
@@ -667,14 +766,18 @@ class ContextShapingMixin:
                 "workspace_inherited_auxiliary": {
                     "summary": 0,
                     "episode": 0,
-                    "workspace": (len(inherited_memory_items) if inherited_memory_items else 0),
+                    "workspace": (
+                        len(inherited_memory_items) if inherited_memory_items else 0
+                    ),
                     "relation": 0,
                 },
                 "relation_supports_auxiliary": {
                     "summary": 0,
                     "episode": 0,
                     "workspace": 0,
-                    "relation": (len(related_memory_items) if related_memory_items else 0),
+                    "relation": (
+                        len(related_memory_items) if related_memory_items else 0
+                    ),
                 },
                 "graph_summary_auxiliary": {
                     "summary": 0,
@@ -748,7 +851,9 @@ class ContextShapingMixin:
 
         if summary_selection_applied:
             summary_parent_scope_id = (
-                resolved_workflow_instance_id if len(resolved_workflow_ids) == 1 else None
+                resolved_workflow_instance_id
+                if len(resolved_workflow_ids) == 1
+                else None
             )
             summary_group_id = "summary:episode_summary_first"
             memory_context_groups.append(
@@ -760,7 +865,9 @@ class ContextShapingMixin:
                     "parent_scope_id": summary_parent_scope_id,
                     "selection_kind": summary_selection_kind,
                     "selection_route": "summary_first",
-                    "child_episode_ids": [detail["episode_id"] for detail in memory_item_details],
+                    "child_episode_ids": [
+                        detail["episode_id"] for detail in memory_item_details
+                    ],
                     "child_episode_count": len(memory_item_details),
                     "child_episode_ordering": "returned_episode_order",
                     "child_episode_groups_emitted": bool(
@@ -779,11 +886,12 @@ class ContextShapingMixin:
                                     relation_reason
                                     for summary in summaries
                                     for relation_reason in (
-                                        summary.get("remember_path_explainability", {}).get(
-                                            "relation_reasons", []
-                                        )
+                                        summary.get(
+                                            "remember_path_explainability", {}
+                                        ).get("relation_reasons", [])
                                     )
-                                    if isinstance(relation_reason, str) and relation_reason.strip()
+                                    if isinstance(relation_reason, str)
+                                    and relation_reason.strip()
                                 }
                             ),
                             "remember_path_summary_relation_reason_primary": (
@@ -792,9 +900,9 @@ class ContextShapingMixin:
                                         relation_reason
                                         for summary in summaries
                                         for relation_reason in (
-                                            summary.get("remember_path_explainability", {}).get(
-                                                "relation_reasons", []
-                                            )
+                                            summary.get(
+                                                "remember_path_explainability", {}
+                                            ).get("relation_reasons", [])
                                         )
                                         if isinstance(relation_reason, str)
                                         and relation_reason.strip()
@@ -821,7 +929,9 @@ class ContextShapingMixin:
                                         relation_reason
                                         for summary in summaries
                                         for relation_reason in (
-                                            summary.get("remember_path_explainability", {}).get(
+                                            summary.get(
+                                                "remember_path_explainability", {}
+                                            ).get(
                                                 "relation_reason_counts",
                                                 {},
                                             )
@@ -878,13 +988,17 @@ class ContextShapingMixin:
                         "scope_id": str(episode.episode_id),
                         "parent_scope": "workflow_instance",
                         "parent_scope_id": str(episode.workflow_instance_id),
-                        "parent_group_scope": ("summary" if summary_selection_applied else None),
+                        "parent_group_scope": (
+                            "summary" if summary_selection_applied else None
+                        ),
                         "parent_group_id": (
                             summary_group_id if summary_selection_applied else None
                         ),
                         "selection_kind": "direct_episode",
                         "selection_route": (
-                            "summary_first" if summary_selection_applied else "episode_direct"
+                            "summary_first"
+                            if summary_selection_applied
+                            else "episode_direct"
                         ),
                         "selected_via_summary_first": summary_selection_applied,
                         "memory_items": non_interaction_memory_items,
@@ -996,7 +1110,9 @@ class ContextShapingMixin:
                         {
                             detail["source_memory_id"]
                             for detail in memory_item_details
-                            for detail in detail.get("related_memory_item_provenance", [])
+                            for detail in detail.get(
+                                "related_memory_item_provenance", []
+                            )
                             if detail.get("relation_type") == "supports"
                             and isinstance(detail.get("source_memory_id"), str)
                         }
@@ -1081,7 +1197,8 @@ class ContextShapingMixin:
                                     )
                                     .get("relation_reason_counts", {})
                                     .keys()
-                                    if isinstance(relation_reason, str) and relation_reason.strip()
+                                    if isinstance(relation_reason, str)
+                                    and relation_reason.strip()
                                 }
                             )
                         },
@@ -1177,10 +1294,14 @@ class ContextShapingMixin:
         return {
             "memory_id": str(memory_item.memory_id),
             "workspace_id": (
-                str(memory_item.workspace_id) if memory_item.workspace_id is not None else None
+                str(memory_item.workspace_id)
+                if memory_item.workspace_id is not None
+                else None
             ),
             "episode_id": (
-                str(memory_item.episode_id) if memory_item.episode_id is not None else None
+                str(memory_item.episode_id)
+                if memory_item.episode_id is not None
+                else None
             ),
             "type": memory_item.type,
             "provenance": memory_item.provenance,
@@ -1188,7 +1309,8 @@ class ContextShapingMixin:
                 "interaction"
                 if memory_item.provenance == "interaction"
                 else "workflow_memory"
-                if memory_item.provenance in {"workflow_checkpoint_auto", "workflow_complete_auto"}
+                if memory_item.provenance
+                in {"workflow_checkpoint_auto", "workflow_complete_auto"}
                 else "episode_memory"
                 if memory_item.provenance == "episode"
                 else "other"
