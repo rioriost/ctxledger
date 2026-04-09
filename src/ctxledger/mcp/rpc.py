@@ -342,7 +342,7 @@ def ensure_lifecycle_state(runtime: McpRpcRuntime) -> McpLifecycleState:
     lifecycle_state = getattr(runtime, "_mcp_lifecycle_state", None)
     if lifecycle_state is None:
         lifecycle_state = McpLifecycleState()
-        setattr(runtime, "_mcp_lifecycle_state", lifecycle_state)
+        runtime._mcp_lifecycle_state = lifecycle_state
     return lifecycle_state
 
 
@@ -361,7 +361,7 @@ def handle_mcp_rpc_request(
         params=normalized_params,
     )
     if interaction_request_event is not None:
-        setattr(runtime, "_last_mcp_interaction_request_event", interaction_request_event)
+        runtime._last_mcp_interaction_request_event = interaction_request_event
 
     lifecycle_result = _dispatch_lifecycle_request(runtime, method, params)
     if method in LIFECYCLE_METHODS:
@@ -381,7 +381,7 @@ def handle_mcp_rpc_request(
         result=result,
     )
     if interaction_response_event is not None:
-        setattr(runtime, "_last_mcp_interaction_response_event", interaction_response_event)
+        runtime._last_mcp_interaction_response_event = interaction_response_event
 
     _persist_interaction_event_pair(
         runtime,

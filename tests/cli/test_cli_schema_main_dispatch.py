@@ -4,25 +4,23 @@ import argparse
 import json
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
 
 import ctxledger.__init__ as cli_module
-from ctxledger.version import get_app_version
 from ctxledger.workflow.service import (
-    FailureListEntry,
     MemoryStats,
-    WorkflowListEntry,
     WorkflowStats,
 )
 
 from .conftest import make_settings
 
 
-def test_main_unknown_command_uses_parser_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_unknown_command_uses_parser_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     parser_calls: list[str] = []
 
     class FakeParser:
@@ -87,7 +85,9 @@ def test_main_dispatches_build_episode_summary(
         )
         return 12
 
-    monkeypatch.setattr(cli_module, "_build_episode_summary", fake_build_episode_summary)
+    monkeypatch.setattr(
+        cli_module, "_build_episode_summary", fake_build_episode_summary
+    )
 
     result = cli_module.main(
         [
@@ -459,7 +459,9 @@ def test_refresh_age_summary_graph_reports_failure_with_current_narrow_fake_grap
             commit_calls.append("commit")
 
     fake_psycopg = SimpleNamespace(
-        connect=lambda database_url: connect_calls.append(database_url) or FakeConnection()
+        connect=lambda database_url: (
+            connect_calls.append(database_url) or FakeConnection()
+        )
     )
 
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
@@ -475,13 +477,22 @@ def test_refresh_age_summary_graph_reports_failure_with_current_narrow_fake_grap
 
     assert exit_code == 1
     assert captured.out == ""
-    assert "Failed to refresh AGE summary graph: summary graph refresh exploded" in captured.err
+    assert (
+        "Failed to refresh AGE summary graph: summary graph refresh exploded"
+        in captured.err
+    )
     assert connect_calls == ["postgresql://explicit/db"]
     assert commit_calls == []
     assert executed_queries[0] == ("LOAD 'age'", None)
-    assert executed_queries[1] == ('SET search_path = ag_catalog, "$user", public', None)
+    assert executed_queries[1] == (
+        'SET search_path = ag_catalog, "$user", public',
+        None,
+    )
     assert executed_queries[2][1] == ("ctxledger_summary_graph",)
-    assert executed_queries[3][0] == "SELECT ag_catalog.create_graph('ctxledger_summary_graph')"
+    assert (
+        executed_queries[3][0]
+        == "SELECT ag_catalog.create_graph('ctxledger_summary_graph')"
+    )
     assert executed_queries[3][1] is None
     assert "MATCH (n:memory_summary)-[r:summarizes]->()" in executed_queries[4][0]
     assert "MATCH (n:memory_summary)" in executed_queries[5][0]
@@ -528,7 +539,10 @@ def test_refresh_age_summary_graph_reports_failure(
 
     assert exit_code == 1
     assert captured.out == ""
-    assert "Failed to refresh AGE summary graph: summary graph refresh exploded" in captured.err
+    assert (
+        "Failed to refresh AGE summary graph: summary graph refresh exploded"
+        in captured.err
+    )
 
 
 def test_main_dispatches_to_resume_workflow(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -731,7 +745,9 @@ def test_build_postgres_workflow_service_returns_settings_service_and_pool(
         assert received_config is config_marker
         return pool_marker
 
-    def fake_build_postgres_uow_factory(received_config: object, received_pool: object) -> object:
+    def fake_build_postgres_uow_factory(
+        received_config: object, received_pool: object
+    ) -> object:
         assert received_config is config_marker
         assert received_pool is pool_marker
         return uow_factory_marker
@@ -742,12 +758,16 @@ def test_build_postgres_workflow_service_returns_settings_service_and_pool(
 
     monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
     monkeypatch.setattr("ctxledger.db.postgres.PostgresConfig", FakePostgresConfig)
-    monkeypatch.setattr("ctxledger.db.postgres.build_connection_pool", fake_build_connection_pool)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.build_connection_pool", fake_build_connection_pool
+    )
     monkeypatch.setattr(
         "ctxledger.db.postgres.build_postgres_uow_factory",
         fake_build_postgres_uow_factory,
     )
-    monkeypatch.setattr("ctxledger.workflow.service.WorkflowService", FakeWorkflowService)
+    monkeypatch.setattr(
+        "ctxledger.workflow.service.WorkflowService", FakeWorkflowService
+    )
 
     returned_settings, workflow_service, connection_pool = (
         cli_module._build_postgres_workflow_service()
@@ -762,7 +782,9 @@ def test_build_postgres_workflow_service_returns_settings_service_and_pool(
 def test_build_postgres_workflow_service_raises_for_missing_database_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings(database_url=""))
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings", lambda: make_settings(database_url="")
+    )
 
     with pytest.raises(RuntimeError, match="missing_database_url"):
         cli_module._build_postgres_workflow_service()
@@ -891,7 +913,9 @@ def test_stats_renders_json_output_and_closes_pool(
     assert payload["completion_summary_build_status_total_count"] == 9
     assert payload["completion_summary_build_attempted_minus_status_total_count"] == -5
     assert payload["completion_summary_build_skipped_reason_total_count"] == 3
-    assert payload["completion_summary_build_status_minus_skipped_reason_total_count"] == 6
+    assert (
+        payload["completion_summary_build_status_minus_skipped_reason_total_count"] == 6
+    )
     assert payload["memory_summary_count"] == 13
     assert payload["memory_summary_membership_count"] == 14
     assert payload["age_summary_graph_ready_count"] == 15
@@ -982,6 +1006,7 @@ def test_memory_stats_renders_text_output_and_closes_pool(
         },
         completion_summary_build_status_total_count=3,
         completion_summary_build_skipped_reason_total_count=2,
+        completion_summary_build_status_minus_skipped_reason_total_count=1,
         memory_summary_count=7,
         memory_summary_membership_count=8,
         age_summary_graph_ready_count=1,
@@ -1109,4 +1134,6 @@ def test_workflows_reports_invalid_workspace_id_error(
 
     assert exit_code == 1
     assert captured.out == ""
-    assert "Failed to load workflows: badly formed hexadecimal UUID string" in captured.err
+    assert (
+        "Failed to load workflows: badly formed hexadecimal UUID string" in captured.err
+    )

@@ -8,7 +8,7 @@ logic so those concerns can evolve independently.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -67,8 +67,8 @@ class EpisodeRecord:
     attempt_id: UUID | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     status: str = "recorded"
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -82,8 +82,8 @@ class MemoryItemRecord:
     provenance: str = "episode"
     content: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -95,7 +95,7 @@ class MemoryEmbeddingRecord:
     embedding_model: str
     embedding: tuple[float, ...] = ()
     content_hash: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -107,7 +107,7 @@ class MemoryRelationRecord:
     target_memory_id: UUID
     relation_type: str
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -120,8 +120,8 @@ class MemorySummaryRecord:
     summary_text: str = ""
     summary_kind: str = "episode_summary"
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -133,7 +133,7 @@ class MemorySummaryMembershipRecord:
     memory_id: UUID
     membership_order: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -155,7 +155,7 @@ class BuildEpisodeSummaryResult:
     message: str
     status: str = "ok"
     available_in_version: str | None = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     summary: MemorySummaryRecord | None = None
     memberships: tuple[MemorySummaryMembershipRecord, ...] = ()
     summary_built: bool = False
@@ -173,7 +173,7 @@ class RememberEpisodeResponse:
     message: str
     status: str = "recorded"
     available_in_version: str | None = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     episode: EpisodeRecord | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
@@ -187,7 +187,7 @@ class GetContextResponse:
     message: str
     status: str = "ok"
     available_in_version: str | None = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     episodes: tuple[EpisodeRecord, ...] = ()
     details: dict[str, Any] = field(default_factory=dict)
 
@@ -208,8 +208,8 @@ class SearchResultRecord:
     lexical_score: float = 0.0
     semantic_score: float = 0.0
     ranking_details: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -221,7 +221,7 @@ class SearchMemoryResponse:
     message: str
     status: str = "ok"
     available_in_version: str | None = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     results: tuple[SearchResultRecord, ...] = ()
     details: dict[str, Any] = field(default_factory=dict)
 
@@ -267,5 +267,5 @@ class StubResponse:
     message: str
     status: str = "not_implemented"
     available_in_version: str | None = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     details: dict[str, Any] = field(default_factory=dict)

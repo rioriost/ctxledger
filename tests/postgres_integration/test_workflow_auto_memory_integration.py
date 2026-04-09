@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
+
 from ctxledger.config import (
+    AzureOpenAIAuthMode,
+    EmbeddingExecutionMode,
     EmbeddingProvider,
     EmbeddingSettings,
 )
@@ -39,6 +44,29 @@ from ctxledger.workflow.service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def patch_embedding_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = SimpleNamespace(
+        embedding=SimpleNamespace(
+            enabled=True,
+            provider=EmbeddingProvider.LOCAL_STUB,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
+            azure_openai_embedding_deployment=None,
+            dimensions=1536,
+            model="local-stub-v1",
+            azure_openai_auth_mode=SimpleNamespace(value="auto"),
+        )
+    )
+    monkeypatch.setattr(
+        "ctxledger.workflow.memory_bridge.get_settings",
+        lambda: settings,
+    )
+    monkeypatch.setattr(
+        "ctxledger.memory.service_core_search.SearchHelperMixin._load_embedding_settings",
+        lambda self: settings.embedding,
+    )
+
+
 def _build_local_stub_workflow_service(
     uow_factory,
     *,
@@ -64,16 +92,24 @@ def _build_local_stub_workflow_service(
         workflow_memory_bridge=WorkflowMemoryBridge(
             episode_repository=UnitOfWorkEpisodeRepository(uow_factory),
             memory_item_repository=UnitOfWorkMemoryItemRepository(uow_factory),
-            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(uow_factory),
+            memory_embedding_repository=UnitOfWorkMemoryEmbeddingRepository(
+                uow_factory
+            ),
             summary_builder=summary_builder,
             embedding_generator=build_embedding_generator(
                 EmbeddingSettings(
                     provider=EmbeddingProvider.LOCAL_STUB,
+                    execution_mode=EmbeddingExecutionMode.APP_GENERATED,
                     model="local-stub-v1",
                     api_key=None,
                     base_url=None,
                     dimensions=1536,
                     enabled=True,
+                    azure_openai_endpoint=None,
+                    azure_openai_embedding_deployment=None,
+                    azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+                    azure_openai_subscription_key=None,
+                    azure_openai_api_version=None,
                 )
             ),
         ),
@@ -88,11 +124,17 @@ def _build_local_stub_memory_service(uow_factory) -> MemoryService:
         embedding_generator=build_embedding_generator(
             EmbeddingSettings(
                 provider=EmbeddingProvider.LOCAL_STUB,
+                execution_mode=EmbeddingExecutionMode.APP_GENERATED,
                 model="local-stub-v1",
                 api_key=None,
                 base_url=None,
                 dimensions=1536,
                 enabled=True,
+                azure_openai_endpoint=None,
+                azure_openai_embedding_deployment=None,
+                azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+                azure_openai_subscription_key=None,
+                azure_openai_api_version=None,
             )
         ),
         workflow_lookup=UnitOfWorkWorkflowLookupRepository(uow_factory),
@@ -181,7 +223,9 @@ def test_postgres_workflow_complete_auto_records_memory_and_embedding(
     assert checkpoint_result.verify_report is not None
     assert checkpoint_result.verify_report.status == VerifyStatus.PASSED
 
-    assert auto_episode.workflow_instance_id == (started.workflow_instance.workflow_instance_id)
+    assert auto_episode.workflow_instance_id == (
+        started.workflow_instance.workflow_instance_id
+    )
     assert auto_episode.attempt_id == started.attempt.attempt_id
     assert auto_episode.metadata == {
         "auto_generated": True,
@@ -254,7 +298,9 @@ def test_postgres_workflow_complete_auto_memory_is_searchable(
             attempt_id=started.attempt.attempt_id,
             step_name="investigate_projection_drift",
             summary="Investigated projection drift root cause in deployment workflow",
-            checkpoint_json={"next_intended_action": "Write fix and validate semantic retrieval"},
+            checkpoint_json={
+                "next_intended_action": "Write fix and validate semantic retrieval"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -502,7 +548,9 @@ def test_postgres_workflow_complete_auto_memory_builds_summary_when_gated_builde
     assert summary_build_details["summary_build_status"] == "built"
     assert summary_build_details["summary_build_skipped_reason"] is None
     assert summary_build_details["summary_build_replaced_existing_summary"] is False
-    assert summary_build_details["built_memory_summary_id"] == str(built_summary.memory_summary_id)
+    assert summary_build_details["built_memory_summary_id"] == str(
+        built_summary.memory_summary_id
+    )
     assert summary_build_details["built_summary_kind"] == "episode_summary"
     assert summary_build_details["built_summary_membership_count"] == 3
     assert completed.warnings == ()
@@ -512,8 +560,12 @@ def test_postgres_workflow_complete_auto_memory_builds_summary_when_gated_builde
     assert built_summary.metadata["workflow_instance_id"] == str(
         started.workflow_instance.workflow_instance_id
     )
-    assert built_summary.metadata["auto_memory_episode_id"] == str(auto_episode.episode_id)
-    assert built_summary.metadata["remember_path_memory_origins"] == ["workflow_complete_auto"]
+    assert built_summary.metadata["auto_memory_episode_id"] == str(
+        auto_episode.episode_id
+    )
+    assert built_summary.metadata["remember_path_memory_origins"] == [
+        "workflow_complete_auto"
+    ]
     assert built_summary.metadata["remember_path_promotion_fields"] == [
         "next_intended_action",
         "verify_status",
@@ -522,7 +574,9 @@ def test_postgres_workflow_complete_auto_memory_builds_summary_when_gated_builde
         "latest_checkpoint.next_intended_action",
         "verify_report.status",
     ]
-    assert built_summary.metadata["remember_path_memory_origins"] == ["workflow_complete_auto"]
+    assert built_summary.metadata["remember_path_memory_origins"] == [
+        "workflow_complete_auto"
+    ]
     assert built_summary.metadata["remember_path_promotion_fields"] == [
         "next_intended_action",
         "verify_status",
@@ -763,7 +817,9 @@ def test_postgres_workflow_complete_auto_memory_suppresses_duplicate_closeout(
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="Checkpoint summary for duplicate suppression",
-            checkpoint_json={"next_intended_action": "Implement the minimum heuristic path"},
+            checkpoint_json={
+                "next_intended_action": "Implement the minimum heuristic path"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -781,29 +837,35 @@ def test_postgres_workflow_complete_auto_memory_suppresses_duplicate_closeout(
     )
 
     reopened_attempt = workflow_service.resume_workflow(
-        ResumeWorkflowInput(workflow_instance_id=started.workflow_instance.workflow_instance_id)
+        ResumeWorkflowInput(
+            workflow_instance_id=started.workflow_instance.workflow_instance_id
+        )
     )
     assert reopened_attempt.resumable_status == ResumableStatus.TERMINAL
 
-    duplicate_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
-        workflow=first_completed.workflow_instance,
-        attempt=first_completed.attempt,
-        latest_checkpoint=WorkflowCheckpoint(
-            checkpoint_id=uuid4(),
-            workflow_instance_id=started.workflow_instance.workflow_instance_id,
-            attempt_id=started.attempt.attempt_id,
-            step_name="design_phase2",
-            summary="Checkpoint summary for duplicate suppression",
-            checkpoint_json={"next_intended_action": "Implement the minimum heuristic path"},
-        ),
-        verify_report=VerifyReport(
-            verify_id=uuid4(),
-            attempt_id=started.attempt.attempt_id,
-            status=VerifyStatus.PASSED,
-            report_json={"checks": ["pytest"], "status": "passed"},
-        ),
-        summary="Completed heuristic planning pass",
-        failure_reason=None,
+    duplicate_result = (
+        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+            workflow=first_completed.workflow_instance,
+            attempt=first_completed.attempt,
+            latest_checkpoint=WorkflowCheckpoint(
+                checkpoint_id=uuid4(),
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                step_name="design_phase2",
+                summary="Checkpoint summary for duplicate suppression",
+                checkpoint_json={
+                    "next_intended_action": "Implement the minimum heuristic path"
+                },
+            ),
+            verify_report=VerifyReport(
+                verify_id=uuid4(),
+                attempt_id=started.attempt.attempt_id,
+                status=VerifyStatus.PASSED,
+                report_json={"checks": ["pytest"], "status": "passed"},
+            ),
+            summary="Completed heuristic planning pass",
+            failure_reason=None,
+        )
     )
 
     with uow_factory() as uow:
@@ -820,8 +882,13 @@ def test_postgres_workflow_complete_auto_memory_suppresses_duplicate_closeout(
 
     assert first_completed.auto_memory_details is not None
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
-    assert first_completed.auto_memory_details["embedding_persistence_status"] == "stored"
-    assert first_completed.auto_memory_details["embedding_generation_skipped_reason"] is None
+    assert (
+        first_completed.auto_memory_details["embedding_persistence_status"] == "stored"
+    )
+    assert (
+        first_completed.auto_memory_details["embedding_generation_skipped_reason"]
+        is None
+    )
     assert first_completed.auto_memory_details["embedding_provider"] == "local_stub"
     assert first_completed.auto_memory_details["embedding_model"] == "local-stub-v1"
     assert first_completed.auto_memory_details["embedding_vector_dimensions"] == 1536
@@ -876,7 +943,9 @@ def test_postgres_workflow_complete_auto_memory_suppresses_near_duplicate_closeo
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="First checkpoint summary",
-            checkpoint_json={"next_intended_action": "Implement the minimum heuristic path"},
+            checkpoint_json={
+                "next_intended_action": "Implement the minimum heuristic path"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -903,7 +972,9 @@ def test_postgres_workflow_complete_auto_memory_suppresses_near_duplicate_closeo
                 attempt_id=started.attempt.attempt_id,
                 step_name="design_phase2",
                 summary="Second checkpoint summary",
-                checkpoint_json={"next_intended_action": "Implement the minimum heuristic path"},
+                checkpoint_json={
+                    "next_intended_action": "Implement the minimum heuristic path"
+                },
             ),
             verify_report=VerifyReport(
                 verify_id=uuid4(),
@@ -980,7 +1051,9 @@ def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_with_high_s
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="Investigated duplicate suppression behavior",
-            checkpoint_json={"next_intended_action": "Implement summary similarity gating"},
+            checkpoint_json={
+                "next_intended_action": "Implement summary similarity gating"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -997,27 +1070,27 @@ def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_with_high_s
         )
     )
 
-    near_duplicate_result = (
-        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
-            workflow=first_completed.workflow_instance,
-            attempt=first_completed.attempt,
-            latest_checkpoint=WorkflowCheckpoint(
-                checkpoint_id=uuid4(),
-                workflow_instance_id=started.workflow_instance.workflow_instance_id,
-                attempt_id=started.attempt.attempt_id,
-                step_name="design_phase2",
-                summary="Investigated duplicate suppression behavior again",
-                checkpoint_json={"next_intended_action": "Implement summary similarity gating"},
-            ),
-            verify_report=VerifyReport(
-                verify_id=uuid4(),
-                attempt_id=started.attempt.attempt_id,
-                status=VerifyStatus.PASSED,
-                report_json={"checks": ["pytest"], "status": "passed"},
-            ),
-            summary="Implemented gating for summary similarity in duplicate suppression",
-            failure_reason=None,
-        )
+    near_duplicate_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+        workflow=first_completed.workflow_instance,
+        attempt=first_completed.attempt,
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Investigated duplicate suppression behavior again",
+            checkpoint_json={
+                "next_intended_action": "Implement summary similarity gating"
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=started.attempt.attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"], "status": "passed"},
+        ),
+        summary="Implemented gating for summary similarity in duplicate suppression",
+        failure_reason=None,
     )
 
     with uow_factory() as uow:
@@ -1084,7 +1157,9 @@ def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_when_simila
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="Investigated duplicate suppression behavior",
-            checkpoint_json={"next_intended_action": "Implement summary similarity gating"},
+            checkpoint_json={
+                "next_intended_action": "Implement summary similarity gating"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -1111,7 +1186,9 @@ def test_postgres_workflow_complete_auto_memory_skips_near_duplicate_when_simila
                 attempt_id=started.attempt.attempt_id,
                 step_name="design_phase2",
                 summary="Investigated duplicate suppression behavior for another path",
-                checkpoint_json={"next_intended_action": "Implement summary similarity gating"},
+                checkpoint_json={
+                    "next_intended_action": "Implement summary similarity gating"
+                },
             ),
             verify_report=VerifyReport(
                 verify_id=uuid4(),
@@ -1188,7 +1265,9 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_old_closeout_as_n
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="First checkpoint summary",
-            checkpoint_json={"next_intended_action": "Implement the minimum heuristic path"},
+            checkpoint_json={
+                "next_intended_action": "Implement the minimum heuristic path"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -1251,25 +1330,29 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_old_closeout_as_n
             )
         uow.commit()
 
-    later_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
-        workflow=first_completed.workflow_instance,
-        attempt=first_completed.attempt,
-        latest_checkpoint=WorkflowCheckpoint(
-            checkpoint_id=uuid4(),
-            workflow_instance_id=started.workflow_instance.workflow_instance_id,
-            attempt_id=started.attempt.attempt_id,
-            step_name="design_phase2",
-            summary="Second checkpoint summary",
-            checkpoint_json={"next_intended_action": "Implement the minimum heuristic path"},
-        ),
-        verify_report=VerifyReport(
-            verify_id=uuid4(),
-            attempt_id=started.attempt.attempt_id,
-            status=VerifyStatus.PASSED,
-            report_json={"checks": ["pytest"], "status": "passed"},
-        ),
-        summary="Second completion summary",
-        failure_reason=None,
+    later_result = (
+        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+            workflow=first_completed.workflow_instance,
+            attempt=first_completed.attempt,
+            latest_checkpoint=WorkflowCheckpoint(
+                checkpoint_id=uuid4(),
+                workflow_instance_id=started.workflow_instance.workflow_instance_id,
+                attempt_id=started.attempt.attempt_id,
+                step_name="design_phase2",
+                summary="Second checkpoint summary",
+                checkpoint_json={
+                    "next_intended_action": "Implement the minimum heuristic path"
+                },
+            ),
+            verify_report=VerifyReport(
+                verify_id=uuid4(),
+                attempt_id=started.attempt.attempt_id,
+                status=VerifyStatus.PASSED,
+                report_json={"checks": ["pytest"], "status": "passed"},
+            ),
+            summary="Second completion summary",
+            failure_reason=None,
+        )
     )
 
     with uow_factory() as uow:
@@ -1320,7 +1403,9 @@ def test_postgres_workflow_complete_auto_memory_records_when_summary_similarity_
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="Investigated duplicate suppression behavior",
-            checkpoint_json={"next_intended_action": "Implement summary similarity gating"},
+            checkpoint_json={
+                "next_intended_action": "Implement summary similarity gating"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -1410,7 +1495,9 @@ def test_postgres_workflow_complete_auto_memory_uses_extracted_and_metadata_fiel
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="Compared extracted closeout fields",
-            checkpoint_json={"next_intended_action": "Implement metadata-aware duplicate matching"},
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -1427,29 +1514,27 @@ def test_postgres_workflow_complete_auto_memory_uses_extracted_and_metadata_fiel
         )
     )
 
-    near_duplicate_result = (
-        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
-            workflow=first_completed.workflow_instance,
-            attempt=first_completed.attempt,
-            latest_checkpoint=WorkflowCheckpoint(
-                checkpoint_id=uuid4(),
-                workflow_instance_id=started.workflow_instance.workflow_instance_id,
-                attempt_id=started.attempt.attempt_id,
-                step_name="design_phase2",
-                summary="Compared extracted closeout fields again",
-                checkpoint_json={
-                    "next_intended_action": "Implement metadata-aware duplicate matching"
-                },
-            ),
-            verify_report=VerifyReport(
-                verify_id=uuid4(),
-                attempt_id=started.attempt.attempt_id,
-                status=VerifyStatus.PASSED,
-                report_json={"checks": ["pytest"], "status": "passed"},
-            ),
-            summary="Refined duplicate detection with metadata-aware closeout matching",
-            failure_reason=None,
-        )
+    near_duplicate_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+        workflow=first_completed.workflow_instance,
+        attempt=first_completed.attempt,
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Compared extracted closeout fields again",
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=started.attempt.attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"], "status": "passed"},
+        ),
+        summary="Refined duplicate detection with metadata-aware closeout matching",
+        failure_reason=None,
     )
 
     with uow_factory() as uow:
@@ -1516,7 +1601,9 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_attempt
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="Compared weighted closeout fields",
-            checkpoint_json={"next_intended_action": "Implement metadata-aware duplicate matching"},
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -1533,39 +1620,37 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_attempt
         )
     )
 
-    attempt_different_result = (
-        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
-            workflow=first_completed.workflow_instance,
-            attempt=WorkflowAttempt(
-                attempt_id=started.attempt.attempt_id,
-                workflow_instance_id=started.workflow_instance.workflow_instance_id,
-                attempt_number=2,
-                status=WorkflowAttemptStatus.FAILED,
-                verify_status=VerifyStatus.PASSED,
-                started_at=started.attempt.started_at,
-                finished_at=datetime.now(UTC),
-                created_at=started.attempt.created_at,
-                updated_at=datetime.now(UTC),
-            ),
-            latest_checkpoint=WorkflowCheckpoint(
-                checkpoint_id=uuid4(),
-                workflow_instance_id=started.workflow_instance.workflow_instance_id,
-                attempt_id=started.attempt.attempt_id,
-                step_name="design_phase2",
-                summary="Compared weighted closeout fields again",
-                checkpoint_json={
-                    "next_intended_action": "Implement metadata-aware duplicate matching"
-                },
-            ),
-            verify_report=VerifyReport(
-                verify_id=uuid4(),
-                attempt_id=started.attempt.attempt_id,
-                status=VerifyStatus.PASSED,
-                report_json={"checks": ["pytest"], "status": "passed"},
-            ),
-            summary="Completed weighted closeout duplicate matching refinement",
-            failure_reason=None,
-        )
+    attempt_different_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+        workflow=first_completed.workflow_instance,
+        attempt=WorkflowAttempt(
+            attempt_id=started.attempt.attempt_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_number=2,
+            status=WorkflowAttemptStatus.FAILED,
+            verify_status=VerifyStatus.PASSED,
+            started_at=started.attempt.started_at,
+            finished_at=datetime.now(UTC),
+            created_at=started.attempt.created_at,
+            updated_at=datetime.now(UTC),
+        ),
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Compared weighted closeout fields again",
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=started.attempt.attempt_id,
+            status=VerifyStatus.PASSED,
+            report_json={"checks": ["pytest"], "status": "passed"},
+        ),
+        summary="Completed weighted closeout duplicate matching refinement",
+        failure_reason=None,
     )
 
     with uow_factory() as uow:
@@ -1585,13 +1670,17 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_attempt
     assert attempt_different_result is not None
     assert attempt_different_result.details["auto_memory_recorded"] is True
     assert attempt_different_result.details["embedding_persistence_status"] == "stored"
-    assert attempt_different_result.details["embedding_generation_skipped_reason"] is None
+    assert (
+        attempt_different_result.details["embedding_generation_skipped_reason"] is None
+    )
     assert attempt_different_result.details["embedding_provider"] == "local_stub"
     assert attempt_different_result.details["embedding_model"] == "local-stub-v1"
     assert attempt_different_result.details["embedding_vector_dimensions"] == 1536
     assert attempt_different_result.details["embedding_content_hash"] is not None
     assert len(auto_episodes) == 2
-    assert any(episode.metadata.get("attempt_status") == "failed" for episode in auto_episodes)
+    assert any(
+        episode.metadata.get("attempt_status") == "failed" for episode in auto_episodes
+    )
 
 
 def test_postgres_workflow_complete_auto_memory_does_not_treat_different_failure_reason_as_near_duplicate(
@@ -1619,7 +1708,9 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_failure
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="Compared weighted closeout fields",
-            checkpoint_json={"next_intended_action": "Implement metadata-aware duplicate matching"},
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
             verify_status=VerifyStatus.FAILED,
             verify_report={"checks": ["pytest"], "status": "failed"},
         )
@@ -1637,40 +1728,38 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_failure
         )
     )
 
-    failure_reason_different_result = (
-        workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
-            workflow=first_completed.workflow_instance,
-            attempt=WorkflowAttempt(
-                attempt_id=started.attempt.attempt_id,
-                workflow_instance_id=started.workflow_instance.workflow_instance_id,
-                attempt_number=2,
-                status=WorkflowAttemptStatus.FAILED,
-                verify_status=VerifyStatus.FAILED,
-                failure_reason="second failure path",
-                started_at=started.attempt.started_at,
-                finished_at=datetime.now(UTC),
-                created_at=started.attempt.created_at,
-                updated_at=datetime.now(UTC),
-            ),
-            latest_checkpoint=WorkflowCheckpoint(
-                checkpoint_id=uuid4(),
-                workflow_instance_id=started.workflow_instance.workflow_instance_id,
-                attempt_id=started.attempt.attempt_id,
-                step_name="design_phase2",
-                summary="Compared weighted closeout fields again",
-                checkpoint_json={
-                    "next_intended_action": "Implement metadata-aware duplicate matching"
-                },
-            ),
-            verify_report=VerifyReport(
-                verify_id=uuid4(),
-                attempt_id=started.attempt.attempt_id,
-                status=VerifyStatus.FAILED,
-                report_json={"checks": ["pytest"], "status": "failed"},
-            ),
-            summary="Failed while refining duplicate matching with metadata-aware fields",
+    failure_reason_different_result = workflow_service._workflow_memory_bridge.record_workflow_completion_memory(
+        workflow=first_completed.workflow_instance,
+        attempt=WorkflowAttempt(
+            attempt_id=started.attempt.attempt_id,
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_number=2,
+            status=WorkflowAttemptStatus.FAILED,
+            verify_status=VerifyStatus.FAILED,
             failure_reason="second failure path",
-        )
+            started_at=started.attempt.started_at,
+            finished_at=datetime.now(UTC),
+            created_at=started.attempt.created_at,
+            updated_at=datetime.now(UTC),
+        ),
+        latest_checkpoint=WorkflowCheckpoint(
+            checkpoint_id=uuid4(),
+            workflow_instance_id=started.workflow_instance.workflow_instance_id,
+            attempt_id=started.attempt.attempt_id,
+            step_name="design_phase2",
+            summary="Compared weighted closeout fields again",
+            checkpoint_json={
+                "next_intended_action": "Implement metadata-aware duplicate matching"
+            },
+        ),
+        verify_report=VerifyReport(
+            verify_id=uuid4(),
+            attempt_id=started.attempt.attempt_id,
+            status=VerifyStatus.FAILED,
+            report_json={"checks": ["pytest"], "status": "failed"},
+        ),
+        summary="Failed while refining duplicate matching with metadata-aware fields",
+        failure_reason="second failure path",
     )
 
     with uow_factory() as uow:
@@ -1689,15 +1778,24 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_failure
     assert first_completed.auto_memory_details["auto_memory_recorded"] is True
     assert failure_reason_different_result is not None
     assert failure_reason_different_result.details["auto_memory_recorded"] is True
-    assert failure_reason_different_result.details["embedding_persistence_status"] == "stored"
-    assert failure_reason_different_result.details["embedding_generation_skipped_reason"] is None
+    assert (
+        failure_reason_different_result.details["embedding_persistence_status"]
+        == "stored"
+    )
+    assert (
+        failure_reason_different_result.details["embedding_generation_skipped_reason"]
+        is None
+    )
     assert failure_reason_different_result.details["embedding_provider"] == "local_stub"
     assert failure_reason_different_result.details["embedding_model"] == "local-stub-v1"
-    assert failure_reason_different_result.details["embedding_vector_dimensions"] == 1536
+    assert (
+        failure_reason_different_result.details["embedding_vector_dimensions"] == 1536
+    )
     assert failure_reason_different_result.details["embedding_content_hash"] is not None
     assert len(auto_episodes) == 2
     assert any(
-        episode.metadata.get("failure_reason") == "second failure path" for episode in auto_episodes
+        episode.metadata.get("failure_reason") == "second failure path"
+        for episode in auto_episodes
     )
 
 
@@ -1726,7 +1824,9 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_verify_
             attempt_id=started.attempt.attempt_id,
             step_name="design_phase2",
             summary="First checkpoint summary",
-            checkpoint_json={"next_intended_action": "Implement the minimum heuristic path"},
+            checkpoint_json={
+                "next_intended_action": "Implement the minimum heuristic path"
+            },
             verify_status=VerifyStatus.PASSED,
             verify_report={"checks": ["pytest"], "status": "passed"},
         )
@@ -1763,7 +1863,9 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_verify_
                 attempt_id=started.attempt.attempt_id,
                 step_name="design_phase2",
                 summary="Second checkpoint summary",
-                checkpoint_json={"next_intended_action": "Implement the minimum heuristic path"},
+                checkpoint_json={
+                    "next_intended_action": "Implement the minimum heuristic path"
+                },
             ),
             verify_report=VerifyReport(
                 verify_id=uuid4(),
@@ -1793,10 +1895,14 @@ def test_postgres_workflow_complete_auto_memory_does_not_treat_different_verify_
     assert verify_different_result is not None
     assert verify_different_result.details["auto_memory_recorded"] is True
     assert verify_different_result.details["embedding_persistence_status"] == "stored"
-    assert verify_different_result.details["embedding_generation_skipped_reason"] is None
+    assert (
+        verify_different_result.details["embedding_generation_skipped_reason"] is None
+    )
     assert verify_different_result.details["embedding_provider"] == "local_stub"
     assert verify_different_result.details["embedding_model"] == "local-stub-v1"
     assert verify_different_result.details["embedding_vector_dimensions"] == 1536
     assert verify_different_result.details["embedding_content_hash"] is not None
     assert len(auto_episodes) == 2
-    assert any(episode.metadata.get("verify_status") == "failed" for episode in auto_episodes)
+    assert any(
+        episode.metadata.get("verify_status") == "failed" for episode in auto_episodes
+    )

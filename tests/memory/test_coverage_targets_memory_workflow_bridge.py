@@ -1,51 +1,26 @@
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
 from ctxledger.config import (
+    EmbeddingExecutionMode,
     EmbeddingProvider,
-    EmbeddingSettings,
 )
 from ctxledger.memory.embeddings import (
-    DisabledEmbeddingGenerator,
     EmbeddingGenerationError,
     EmbeddingRequest,
     EmbeddingResult,
-    ExternalAPIEmbeddingGenerator,
     LocalStubEmbeddingGenerator,
-    build_embedding_generator,
     compute_content_hash,
 )
 from ctxledger.memory.service import (
-    EpisodeRecord,
-    GetMemoryContextRequest,
     InMemoryEpisodeRepository,
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
     InMemoryMemoryRelationRepository,
-    InMemoryWorkflowLookupRepository,
-    MemoryEmbeddingRecord,
-    MemoryFeature,
-    MemoryItemRecord,
-    RememberEpisodeRequest,
-    RememberEpisodeResponse,
-    SearchMemoryRequest,
-    SearchMemoryResponse,
-    SearchResultRecord,
-    StubResponse,
-)
-from ctxledger.memory.types import MemoryRelationRecord
-from ctxledger.runtime.introspection import RuntimeIntrospection
-from ctxledger.runtime.serializers import (
-    serialize_runtime_introspection,
-    serialize_runtime_introspection_collection,
-    serialize_search_memory_response,
-    serialize_stub_response,
 )
 from ctxledger.workflow.service import (
     VerifyReport,
@@ -56,6 +31,24 @@ from ctxledger.workflow.service import (
     WorkflowInstance,
     WorkflowInstanceStatus,
 )
+
+
+@pytest.fixture(autouse=True)
+def patch_embedding_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "ctxledger.workflow.memory_bridge.get_settings",
+        lambda: SimpleNamespace(
+            embedding=SimpleNamespace(
+                enabled=True,
+                provider=EmbeddingProvider.LOCAL_STUB,
+                execution_mode=EmbeddingExecutionMode.APP_GENERATED,
+                azure_openai_embedding_deployment=None,
+                dimensions=8,
+                model="local-stub-v1",
+                azure_openai_auth_mode=SimpleNamespace(value="auto"),
+            )
+        ),
+    )
 
 
 def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> None:
@@ -135,6 +128,10 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
         "step_name": "validate_openai",
         "current_objective": "Ship OpenAI embedding integration safely",
         "next_intended_action": "Review diff and commit",
+        "summary_build_requested": False,
+        "summary_build_attempted": False,
+        "summary_build_succeeded": False,
+        "summary_build_skipped_reason": "summary_builder_not_configured",
     }
     assert "Completion summary: Validated OpenAI embedding integration end to end" in (
         result.episode.summary
@@ -142,7 +139,10 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
     assert "Latest checkpoint summary: Broader targeted regression is green" in (
         result.episode.summary
     )
-    assert "Current objective: Ship OpenAI embedding integration safely" in result.episode.summary
+    assert (
+        "Current objective: Ship OpenAI embedding integration safely"
+        in result.episode.summary
+    )
     assert "Last planned next action: Review diff and commit" in result.episode.summary
     assert "Verify status: passed" in result.episode.summary
     assert "Workflow status: completed" in result.episode.summary
@@ -160,17 +160,23 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
         "workflow_next_action",
         "workflow_verification_outcome",
     }
-    assert {item.metadata["promotion_field"] for item in result.promoted_memory_items} == {
+    assert {
+        item.metadata["promotion_field"] for item in result.promoted_memory_items
+    } == {
         "current_objective",
         "next_intended_action",
         "verify_status",
     }
 
     objective_item = next(
-        item for item in result.promoted_memory_items if item.type == "workflow_objective"
+        item
+        for item in result.promoted_memory_items
+        if item.type == "workflow_objective"
     )
     next_action_item = next(
-        item for item in result.promoted_memory_items if item.type == "workflow_next_action"
+        item
+        for item in result.promoted_memory_items
+        if item.type == "workflow_next_action"
     )
     verify_item = next(
         item
@@ -196,27 +202,55 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
     assert result.details["embedding_vector_dimensions"] == 8
     assert result.details["embedding_content_hash"] == compute_content_hash(
         result.memory_item.content,
-        result.memory_item.metadata,
+        {
+            "auto_generated": True,
+            "memory_origin": "workflow_complete_auto",
+            "workflow_status": "completed",
+            "attempt_status": "succeeded",
+            "attempt_number": 1,
+            "verify_status": "passed",
+            "step_name": "validate_openai",
+            "current_objective": "Ship OpenAI embedding integration safely",
+            "next_intended_action": "Review diff and commit",
+        },
     )
     assert result.details["promoted_memory_item_count"] == 3
     assert result.details["memory_relation_count"] == 2
     assert result.details["stage_details"]["gating"]["status"] == "passed"
     assert result.details["stage_details"]["summary_selection"]["status"] == "built"
-    assert result.details["stage_details"]["promoted_memory_items"]["status"] == "recorded"
-    assert result.details["stage_details"]["promoted_memory_items"]["created_count"] == 3
+    assert (
+        result.details["stage_details"]["promoted_memory_items"]["status"] == "recorded"
+    )
+    assert (
+        result.details["stage_details"]["promoted_memory_items"]["created_count"] == 3
+    )
     assert result.details["stage_details"]["relations"]["status"] == "recorded"
     assert result.details["stage_details"]["relations"]["created_count"] == 2
-    assert result.details["stage_details"]["relations"]["relation_type_counts"] == {"supports": 2}
+    assert result.details["stage_details"]["relations"]["relation_type_counts"] == {
+        "supports": 2
+    }
     assert result.details["stage_details"]["embedding"]["status"] == "stored"
+    assert result.details["stage_details"]["summary_build"] == {
+        "summary_build_attempted": False,
+        "summary_build_succeeded": False,
+        "summary_build_requested": False,
+        "summary_build_status": None,
+        "summary_build_skipped_reason": "summary_builder_not_configured",
+    }
 
     assert len(episode_repository.episodes) == 1
     assert len(memory_item_repository.memory_items) == 4
     assert len(memory_embedding_repository.embeddings) == 1
     assert len(memory_relation_repository.relations) == 2
-    assert memory_embedding_repository.embeddings[0].memory_id == result.memory_item.memory_id
+    assert (
+        memory_embedding_repository.embeddings[0].memory_id
+        == result.memory_item.memory_id
+    )
 
 
-def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources() -> None:
+def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources() -> (
+    None
+):
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     workflow_id = uuid4()
@@ -275,7 +309,9 @@ def test_workflow_memory_bridge_skips_completion_memory_without_summary_sources(
     }
 
 
-def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation_fails() -> None:
+def test_workflow_memory_bridge_returns_failed_embedding_details_when_generation_fails() -> (
+    None
+):
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     class FailingEmbeddingGenerator:
@@ -403,15 +439,22 @@ def test_workflow_memory_bridge_records_failure_reason_memory_and_relation() -> 
 
     assert result is not None
     assert len(result.promoted_memory_items) == 3
-    assert {item.metadata["promotion_field"] for item in result.promoted_memory_items} == {
+    assert {
+        item.metadata["promotion_field"] for item in result.promoted_memory_items
+    } == {
         "current_objective",
         "verify_status",
         "failure_reason",
     }
     failure_item = next(
-        item for item in result.promoted_memory_items if item.type == "workflow_failure_reason"
+        item
+        for item in result.promoted_memory_items
+        if item.type == "workflow_failure_reason"
     )
-    assert failure_item.content == "Dependency versions drifted and broke the integration path"
+    assert (
+        failure_item.content
+        == "Dependency versions drifted and broke the integration path"
+    )
 
     assert len(result.relations) == 2
     assert {relation.metadata["relation_reason"] for relation in result.relations} == {
@@ -439,6 +482,7 @@ def test_workflow_memory_bridge_post_init_uses_external_generator_when_enabled(
             embedding=SimpleNamespace(
                 enabled=True,
                 provider=EmbeddingProvider.OPENAI,
+                execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             )
         ),
     )
@@ -475,6 +519,7 @@ def test_workflow_memory_bridge_post_init_skips_local_stub_autobuild(
             embedding=SimpleNamespace(
                 enabled=True,
                 provider=EmbeddingProvider.LOCAL_STUB,
+                execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             )
         ),
     )
@@ -515,7 +560,9 @@ def test_workflow_memory_bridge_post_init_swallows_settings_error(
     assert bridge.embedding_generator is None
 
 
-def test_workflow_memory_bridge_returns_skip_result_when_summary_sources_are_absent() -> None:
+def test_workflow_memory_bridge_returns_skip_result_when_summary_sources_are_absent() -> (
+    None
+):
     from ctxledger.workflow.memory_bridge import WorkflowMemoryBridge
 
     workflow_id = uuid4()

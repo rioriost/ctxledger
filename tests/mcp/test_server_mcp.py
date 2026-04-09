@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import json
 from dataclasses import replace
 from uuid import uuid4
-
-import pytest
 
 from ctxledger.mcp.resource_handlers import (
     build_workflow_detail_resource_handler,
@@ -53,7 +50,9 @@ def test_build_resume_workflow_tool_handler_returns_success_payload() -> None:
         resume=resume,
     )
 
-    response = handler({"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)})
+    response = handler(
+        {"workflow_instance_id": str(resume.workflow_instance.workflow_instance_id)}
+    )
 
     assert isinstance(response, McpToolResponse)
     assert response.payload["ok"] is True
@@ -62,7 +61,9 @@ def test_build_resume_workflow_tool_handler_returns_success_payload() -> None:
     )
 
 
-def test_build_resume_workflow_tool_handler_returns_invalid_request_for_missing_id() -> None:
+def test_build_resume_workflow_tool_handler_returns_invalid_request_for_missing_id() -> (
+    None
+):
     settings = make_settings()
     handler, _, _ = make_tool_handler(
         build_resume_workflow_tool_handler,
@@ -82,7 +83,9 @@ def test_build_resume_workflow_tool_handler_returns_invalid_request_for_missing_
     }
 
 
-def test_build_resume_workflow_tool_handler_returns_invalid_request_for_bad_uuid() -> None:
+def test_build_resume_workflow_tool_handler_returns_invalid_request_for_bad_uuid() -> (
+    None
+):
     settings = make_settings()
     handler, _, _ = make_tool_handler(
         build_resume_workflow_tool_handler,
@@ -280,7 +283,9 @@ def test_build_workflow_start_tool_handler_returns_success_payload() -> None:
     ]
 
 
-def test_build_workflow_start_tool_handler_returns_invalid_request_for_bad_workspace_id() -> None:
+def test_build_workflow_start_tool_handler_returns_invalid_request_for_bad_workspace_id() -> (
+    None
+):
     settings = make_settings()
     handler, _, _ = make_tool_handler(
         build_workflow_start_tool_handler,
@@ -505,7 +510,9 @@ def test_build_workflow_checkpoint_tool_handler_returns_invalid_request_for_miss
     }
 
 
-def test_build_workflow_checkpoint_tool_handler_returns_server_not_ready_error() -> None:
+def test_build_workflow_checkpoint_tool_handler_returns_server_not_ready_error() -> (
+    None
+):
     settings = make_settings()
     handler, _, _ = make_tool_handler(
         build_workflow_checkpoint_tool_handler,
@@ -617,7 +624,9 @@ def test_build_workflow_complete_tool_handler_returns_success_payload() -> None:
     ]
 
 
-def test_build_workflow_complete_tool_handler_returns_auto_memory_warning_payload() -> None:
+def test_build_workflow_complete_tool_handler_returns_auto_memory_warning_payload() -> (
+    None
+):
     settings = make_settings()
     auto_memory_details = {
         "auto_memory_recorded": True,
@@ -628,7 +637,9 @@ def test_build_workflow_complete_tool_handler_returns_auto_memory_warning_payloa
     warning = replace(
         resume_warning,
         code="auto_memory_embedding_failed",
-        message=("workflow completion memory was recorded but embedding persistence failed"),
+        message=(
+            "workflow completion memory was recorded but embedding persistence failed"
+        ),
         details=auto_memory_details,
     )
     resume, complete_result = make_completed_workflow_result_stub(
@@ -685,7 +696,9 @@ def test_build_workflow_complete_tool_handler_returns_auto_memory_warning_payloa
     }
 
 
-def test_build_workflow_complete_tool_handler_returns_invalid_request_for_bad_status() -> None:
+def test_build_workflow_complete_tool_handler_returns_invalid_request_for_bad_status() -> (
+    None
+):
     settings = make_settings()
     handler, _, _ = make_tool_handler(
         build_workflow_complete_tool_handler,
@@ -934,10 +947,15 @@ def test_build_memory_get_context_tool_handler_returns_invalid_request() -> None
     assert response.payload["error"]["code"] == "memory_invalid_request"
 
 
-def test_parse_workspace_resume_resource_uri_returns_workspace_id_for_valid_uri() -> None:
+def test_parse_workspace_resume_resource_uri_returns_workspace_id_for_valid_uri() -> (
+    None
+):
     workspace_id = uuid4()
 
-    assert parse_workspace_resume_resource_uri(f"workspace://{workspace_id}/resume") == workspace_id
+    assert (
+        parse_workspace_resume_resource_uri(f"workspace://{workspace_id}/resume")
+        == workspace_id
+    )
 
 
 def test_parse_workspace_resume_resource_uri_returns_none_for_invalid_uri() -> None:
@@ -961,10 +979,15 @@ def test_parse_workflow_detail_resource_uri_returns_none_for_invalid_uri() -> No
 
     assert parse_workflow_detail_resource_uri("") is None
     assert (
-        parse_workflow_detail_resource_uri(f"workspace://{workspace_id}/workflow/not-a-uuid")
+        parse_workflow_detail_resource_uri(
+            f"workspace://{workspace_id}/workflow/not-a-uuid"
+        )
         is None
     )
-    assert parse_workflow_detail_resource_uri(f"workspace://not-a-uuid/workflow/{uuid4()}") is None
+    assert (
+        parse_workflow_detail_resource_uri(f"workspace://not-a-uuid/workflow/{uuid4()}")
+        is None
+    )
     assert parse_workflow_detail_resource_uri("workspace://abc/resume") is None
 
 
@@ -979,7 +1002,9 @@ def test_build_workspace_resume_resource_handler_returns_success_payload() -> No
 
     assert isinstance(response, McpResourceResponse)
     assert response.status_code == 200
-    assert response.payload["uri"] == f"workspace://{resume.workspace.workspace_id}/resume"
+    assert (
+        response.payload["uri"] == f"workspace://{resume.workspace.workspace_id}/resume"
+    )
     resource = response.payload["resource"]
     assert resource["workspace"]["workspace_id"] == str(resume.workspace.workspace_id)
     assert resource["workspace"]["repo_url"] == resume.workspace.repo_url
@@ -1006,7 +1031,9 @@ def test_build_workspace_resume_resource_handler_returns_success_payload() -> No
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workspace_resume_resource_handler_returns_not_found_for_invalid_uri() -> None:
+def test_build_workspace_resume_resource_handler_returns_not_found_for_invalid_uri() -> (
+    None
+):
     settings = make_settings()
     handler = make_resource_handler(
         build_workspace_resume_resource_handler,
@@ -1026,7 +1053,9 @@ def test_build_workspace_resume_resource_handler_returns_not_found_for_invalid_u
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workspace_resume_resource_handler_returns_server_not_ready_error() -> None:
+def test_build_workspace_resume_resource_handler_returns_server_not_ready_error() -> (
+    None
+):
     settings = make_settings()
     handler = make_resource_handler(
         build_workspace_resume_resource_handler,
@@ -1068,7 +1097,9 @@ def test_build_workflow_detail_resource_handler_returns_success_payload() -> Non
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workflow_detail_resource_handler_returns_not_found_for_invalid_uri() -> None:
+def test_build_workflow_detail_resource_handler_returns_not_found_for_invalid_uri() -> (
+    None
+):
     settings = make_settings()
     handler = make_resource_handler(
         build_workflow_detail_resource_handler,
@@ -1091,7 +1122,9 @@ def test_build_workflow_detail_resource_handler_returns_not_found_for_invalid_ur
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workflow_detail_resource_handler_returns_server_not_ready_error() -> None:
+def test_build_workflow_detail_resource_handler_returns_server_not_ready_error() -> (
+    None
+):
     settings = make_settings()
     handler = make_resource_handler(
         build_workflow_detail_resource_handler,

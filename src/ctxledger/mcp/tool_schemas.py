@@ -315,7 +315,8 @@ MEMORY_GET_CONTEXT_TOOL_SCHEMA = McpToolSchema(
         },
         "primary_only": {
             "type": "boolean",
-            "description": "Whether to return only the primary grouped surface and omit compatibility-oriented fields.",
+            "description": "Whether to return only the primary grouped \
+            surface and omit compatibility-oriented fields.",
         },
     },
 )
@@ -341,7 +342,8 @@ FILE_WORK_RECORD_TOOL_SCHEMA = McpToolSchema(
         "file_path": {
             "type": "string",
             "minLength": 1,
-            "description": "Repository-relative or canonical file path for the primary file touched.",
+            "description": "Repository-relative or canonical file \
+            path for the primary file touched.",
         },
         "file_name": {
             "type": "string",
@@ -350,7 +352,8 @@ FILE_WORK_RECORD_TOOL_SCHEMA = McpToolSchema(
         "file_operation": {
             "type": "string",
             "minLength": 1,
-            "description": "Bounded file operation label such as create, modify, move, copy, delete, save, or restore.",
+            "description": "Bounded file operation label such as create, \
+            modify, move, copy, delete, save, or restore.",
         },
         "purpose": {
             "type": "string",

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
+
+from ctxledger.config import EmbeddingExecutionMode, EmbeddingProvider
 from ctxledger.memory.service import (
     GetMemoryContextRequest,
     InMemoryEpisodeRepository,
@@ -31,6 +35,24 @@ from .conftest import (
     make_service_and_uow,
     register_workspace,
 )
+
+
+@pytest.fixture(autouse=True)
+def patch_embedding_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "ctxledger.workflow.memory_bridge.get_settings",
+        lambda: SimpleNamespace(
+            embedding=SimpleNamespace(
+                enabled=False,
+                provider=EmbeddingProvider.DISABLED,
+                execution_mode=EmbeddingExecutionMode.APP_GENERATED,
+                azure_openai_embedding_deployment=None,
+                dimensions=None,
+                model="text-embedding-3-small",
+                azure_openai_auth_mode=SimpleNamespace(value="auto"),
+            )
+        ),
+    )
 
 
 def test_checkpoint_auto_memory_records_promoted_memory_and_relations() -> None:
@@ -73,18 +95,26 @@ def test_checkpoint_auto_memory_records_promoted_memory_and_relations() -> None:
     assert result.auto_memory_details["embedding_persistence_status"] == "skipped"
     assert (
         result.auto_memory_details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
     assert result.auto_memory_details["stage_details"]["gating"]["status"] == "passed"
-    assert result.auto_memory_details["stage_details"]["summary_selection"]["status"] == "built"
-    assert result.auto_memory_details["stage_details"]["promoted_memory_items"]["status"] == (
-        "recorded"
+    assert (
+        result.auto_memory_details["stage_details"]["summary_selection"]["status"]
+        == "built"
     )
-    assert result.auto_memory_details["stage_details"]["relations"]["status"] == "recorded"
+    assert result.auto_memory_details["stage_details"]["promoted_memory_items"][
+        "status"
+    ] == ("recorded")
+    assert (
+        result.auto_memory_details["stage_details"]["relations"]["status"] == "recorded"
+    )
     assert result.warnings == ()
 
     assert len(episode_repository.episodes) == 1
-    assert episode_repository.episodes[0].metadata["memory_origin"] == "workflow_checkpoint_auto"
+    assert (
+        episode_repository.episodes[0].metadata["memory_origin"]
+        == "workflow_checkpoint_auto"
+    )
     assert (
         episode_repository.episodes[0].metadata["current_objective"]
         == "Make checkpoint memory promotion automatic"
@@ -113,11 +143,12 @@ def test_checkpoint_auto_memory_records_promoted_memory_and_relations() -> None:
 
     assert len(memory_embedding_repository.embeddings) == 0
     assert len(memory_relation_repository.relations) == 2
-    assert {relation.relation_type for relation in memory_relation_repository.relations} == {
-        "supports"
-    }
     assert {
-        relation.metadata["relation_reason"] for relation in memory_relation_repository.relations
+        relation.relation_type for relation in memory_relation_repository.relations
+    } == {"supports"}
+    assert {
+        relation.metadata["relation_reason"]
+        for relation in memory_relation_repository.relations
     } == {
         "next_action_supports_objective",
         "verification_supports_completion_note",
@@ -163,11 +194,14 @@ def test_checkpoint_auto_memory_records_root_cause_and_recovery_pattern() -> Non
     assert result.auto_memory_details["promoted_memory_item_count"] == 5
     assert result.auto_memory_details["memory_relation_count"] == 2
     assert (
-        result.auto_memory_details["stage_details"]["promoted_memory_items"]["created_count"] == 5
+        result.auto_memory_details["stage_details"]["promoted_memory_items"][
+            "created_count"
+        ]
+        == 5
     )
-    assert result.auto_memory_details["stage_details"]["relations"]["relation_type_counts"] == {
-        "supports": 2
-    }
+    assert result.auto_memory_details["stage_details"]["relations"][
+        "relation_type_counts"
+    ] == {"supports": 2}
     assert result.warnings == ()
 
     assert len(episode_repository.episodes) == 1
@@ -178,8 +212,9 @@ def test_checkpoint_auto_memory_records_root_cause_and_recovery_pattern() -> Non
         "Promote structured checkpoint fields into memory items and supports edges"
     )
     assert episode_repository.episodes[0].metadata["verify_status"] == "failed"
-    assert "Root cause: Checkpoint promotion was not yet writing canonical memory items" in (
-        episode_repository.episodes[0].summary
+    assert (
+        "Root cause: Checkpoint promotion was not yet writing canonical memory items"
+        in (episode_repository.episodes[0].summary)
     )
     assert (
         "Recovery pattern: Promote structured checkpoint fields into memory items and supports edges"
@@ -199,7 +234,8 @@ def test_checkpoint_auto_memory_records_root_cause_and_recovery_pattern() -> Non
     assert len(memory_embedding_repository.embeddings) == 0
     assert len(memory_relation_repository.relations) == 2
     assert {
-        relation.metadata["relation_reason"] for relation in memory_relation_repository.relations
+        relation.metadata["relation_reason"]
+        for relation in memory_relation_repository.relations
     } == {
         "verification_supports_completion_note",
         "recovery_pattern_supports_root_cause",
@@ -263,17 +299,24 @@ def test_end_to_end_remember_path_across_checkpoint_completion_and_retrieval() -
     assert completion_result.auto_memory_details["memory_relation_count"] == 3
 
     assert len(episode_repository.episodes) == 2
-    assert episode_repository.episodes[0].metadata["memory_origin"] == "workflow_checkpoint_auto"
-    assert episode_repository.episodes[1].metadata["memory_origin"] == "workflow_complete_auto"
+    assert (
+        episode_repository.episodes[0].metadata["memory_origin"]
+        == "workflow_checkpoint_auto"
+    )
+    assert (
+        episode_repository.episodes[1].metadata["memory_origin"]
+        == "workflow_complete_auto"
+    )
 
     assert len(memory_item_repository.memory_items) == 13
     assert len(memory_embedding_repository.embeddings) == 0
     assert len(memory_relation_repository.relations) == 6
-    assert {relation.relation_type for relation in memory_relation_repository.relations} == {
-        "supports"
-    }
     assert {
-        relation.metadata["relation_reason"] for relation in memory_relation_repository.relations
+        relation.relation_type for relation in memory_relation_repository.relations
+    } == {"supports"}
+    assert {
+        relation.metadata["relation_reason"]
+        for relation in memory_relation_repository.relations
     } == {
         "next_action_supports_objective",
         "recovery_pattern_supports_root_cause",
@@ -360,7 +403,8 @@ def test_end_to_end_remember_path_across_checkpoint_completion_and_retrieval() -
     supports_source_ids = tuple(
         item.memory_id
         for item in memory_item_repository.memory_items
-        if item.metadata.get("promotion_field") in {"next_intended_action", "recovery_pattern"}
+        if item.metadata.get("promotion_field")
+        in {"next_intended_action", "recovery_pattern"}
     )
     assert supports_source_ids
     assert (
@@ -371,7 +415,9 @@ def test_end_to_end_remember_path_across_checkpoint_completion_and_retrieval() -
     )
 
 
-def test_complete_workflow_auto_memory_records_when_checkpoint_has_next_action() -> None:
+def test_complete_workflow_auto_memory_records_when_checkpoint_has_next_action() -> (
+    None
+):
     (
         bridge,
         episode_repository,
@@ -418,7 +464,7 @@ def test_complete_workflow_auto_memory_records_when_checkpoint_has_next_action()
     assert result.auto_memory_details["embedding_persistence_status"] == "skipped"
     assert (
         result.auto_memory_details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
     assert result.auto_memory_details["promoted_memory_item_count"] == 2
     assert result.auto_memory_details["memory_relation_count"] == 1
@@ -427,7 +473,10 @@ def test_complete_workflow_auto_memory_records_when_checkpoint_has_next_action()
     assert len(memory_item_repository.memory_items) == 6
     assert len(memory_embedding_repository.embeddings) == 0
     assert len(memory_relation_repository.relations) == 2
-    assert episode_repository.episodes[1].metadata["memory_origin"] == "workflow_complete_auto"
+    assert (
+        episode_repository.episodes[1].metadata["memory_origin"]
+        == "workflow_complete_auto"
+    )
     assert (
         episode_repository.episodes[1].metadata["next_intended_action"]
         == "Implement the minimum heuristic path"
@@ -541,17 +590,21 @@ def test_complete_workflow_auto_memory_records_when_verify_failed() -> None:
     assert result.auto_memory_details["embedding_persistence_status"] == "skipped"
     assert (
         result.auto_memory_details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
     assert result.auto_memory_details["promoted_memory_item_count"] == 1
     assert result.auto_memory_details["memory_relation_count"] == 1
     assert len(episode_repository.episodes) == 2
-    assert episode_repository.episodes[1].metadata["memory_origin"] == "workflow_complete_auto"
+    assert (
+        episode_repository.episodes[1].metadata["memory_origin"]
+        == "workflow_complete_auto"
+    )
     assert episode_repository.episodes[1].metadata["verify_status"] == "failed"
     assert "Verify status: failed" in episode_repository.episodes[1].summary
     assert len(memory_relation_repository.relations) == 2
     assert {
-        relation.metadata["relation_reason"] for relation in memory_relation_repository.relations
+        relation.metadata["relation_reason"]
+        for relation in memory_relation_repository.relations
     } == {
         "verification_supports_completion_note",
         "verification_supports_completion_note",
@@ -607,7 +660,7 @@ def test_complete_workflow_auto_memory_skips_duplicate_closeout_summary() -> Non
     assert result.details["embedding_persistence_status"] == "skipped"
     assert (
         result.details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
 
     duplicate_result = bridge.record_workflow_completion_memory(
@@ -670,7 +723,9 @@ def test_complete_workflow_auto_memory_skips_duplicate_closeout_summary() -> Non
     assert len(memory_embedding_repository.embeddings) == 0
 
 
-def test_complete_workflow_auto_memory_skips_near_duplicate_checkpoint_closeout() -> None:
+def test_complete_workflow_auto_memory_skips_near_duplicate_checkpoint_closeout() -> (
+    None
+):
     (
         bridge,
         episode_repository,
@@ -719,7 +774,7 @@ def test_complete_workflow_auto_memory_skips_near_duplicate_checkpoint_closeout(
     assert result.details["embedding_persistence_status"] == "skipped"
     assert (
         result.details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
 
     near_duplicate_result = bridge.record_workflow_completion_memory(
@@ -782,7 +837,9 @@ def test_complete_workflow_auto_memory_skips_near_duplicate_checkpoint_closeout(
     assert len(memory_embedding_repository.embeddings) == 0
 
 
-def test_complete_workflow_auto_memory_does_not_treat_old_closeout_as_near_duplicate() -> None:
+def test_complete_workflow_auto_memory_does_not_treat_old_closeout_as_near_duplicate() -> (
+    None
+):
     (
         bridge,
         episode_repository,
@@ -868,7 +925,7 @@ def test_complete_workflow_auto_memory_does_not_treat_old_closeout_as_near_dupli
     assert later_result.details["embedding_persistence_status"] == "skipped"
     assert (
         later_result.details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
     assert len(episode_repository.episodes) == 2
     assert len(memory_item_repository.memory_items) == 6
@@ -960,14 +1017,16 @@ def test_complete_workflow_auto_memory_does_not_treat_different_verify_status_as
     assert second_result.details["embedding_persistence_status"] == "skipped"
     assert (
         second_result.details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
     assert len(episode_repository.episodes) == 2
     assert len(memory_item_repository.memory_items) == 6
     assert episode_repository.episodes[1].metadata["verify_status"] == "failed"
 
 
-def test_complete_workflow_auto_memory_skips_near_duplicate_with_high_summary_similarity() -> None:
+def test_complete_workflow_auto_memory_skips_near_duplicate_with_high_summary_similarity() -> (
+    None
+):
     (
         bridge,
         episode_repository,
@@ -1181,7 +1240,9 @@ def test_complete_workflow_auto_memory_skips_near_duplicate_when_similarity_is_o
     assert len(memory_embedding_repository.embeddings) == 0
 
 
-def test_complete_workflow_auto_memory_records_when_summary_similarity_is_below_threshold() -> None:
+def test_complete_workflow_auto_memory_records_when_summary_similarity_is_below_threshold() -> (
+    None
+):
     (
         bridge,
         episode_repository,
@@ -1249,7 +1310,9 @@ def test_complete_workflow_auto_memory_records_when_summary_similarity_is_below_
                 "Documented operator-facing rollout guidance for the refined suppression logic"
             ),
             checkpoint_json={
-                "next_intended_action": ("Publish operator-facing duplicate suppression notes"),
+                "next_intended_action": (
+                    "Publish operator-facing duplicate suppression notes"
+                ),
             },
         ),
         verify_report=VerifyReport(
@@ -1267,14 +1330,16 @@ def test_complete_workflow_auto_memory_records_when_summary_similarity_is_below_
     assert second_result.details["embedding_persistence_status"] == "skipped"
     assert (
         second_result.details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
     assert len(episode_repository.episodes) == 2
     assert len(memory_item_repository.memory_items) == 6
     assert len(memory_embedding_repository.embeddings) == 0
 
 
-def test_complete_workflow_auto_memory_extracts_semantic_fields_from_summary_lines() -> None:
+def test_complete_workflow_auto_memory_extracts_semantic_fields_from_summary_lines() -> (
+    None
+):
     bridge, _, _, _, _ = build_recording_workflow_memory_bridge()
 
     extracted = bridge._extract_closeout_fields(
@@ -1498,7 +1563,7 @@ def test_complete_workflow_auto_memory_does_not_treat_different_attempt_status_a
     assert second_result.details["embedding_persistence_status"] == "skipped"
     assert (
         second_result.details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
     assert len(episode_repository.episodes) == 2
     assert len(memory_item_repository.memory_items) == 6
@@ -1591,8 +1656,11 @@ def test_complete_workflow_auto_memory_does_not_treat_different_failure_reason_a
     assert second_result.details["embedding_persistence_status"] == "skipped"
     assert (
         second_result.details["embedding_generation_skipped_reason"]
-        == "embedding_persistence_not_configured"
+        == "embedding_generation_disabled"
     )
     assert len(episode_repository.episodes) == 2
     assert len(memory_item_repository.memory_items) == 8
-    assert episode_repository.episodes[1].metadata["failure_reason"] == "second failure path"
+    assert (
+        episode_repository.episodes[1].metadata["failure_reason"]
+        == "second failure path"
+    )

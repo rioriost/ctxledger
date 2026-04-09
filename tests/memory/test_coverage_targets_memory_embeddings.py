@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
 from ctxledger.config import (
+    AzureOpenAIAuthMode,
+    EmbeddingExecutionMode,
     EmbeddingProvider,
     EmbeddingSettings,
 )
@@ -22,53 +23,54 @@ from ctxledger.memory.embeddings import (
     compute_content_hash,
 )
 from ctxledger.memory.service import (
-    EpisodeRecord,
-    GetMemoryContextRequest,
     InMemoryEpisodeRepository,
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
-    InMemoryMemoryRelationRepository,
     InMemoryWorkflowLookupRepository,
-    MemoryEmbeddingRecord,
     MemoryFeature,
-    MemoryItemRecord,
-    MemoryRelationRecord,
     MemoryService,
     RememberEpisodeRequest,
-    RememberEpisodeResponse,
-    SearchMemoryRequest,
-    SearchMemoryResponse,
-    SearchResultRecord,
-    StubResponse,
 )
-from ctxledger.memory.types import MemoryRelationRecord
-from ctxledger.runtime.introspection import RuntimeIntrospection
-from ctxledger.runtime.serializers import (
-    serialize_runtime_introspection,
-    serialize_runtime_introspection_collection,
-    serialize_search_memory_response,
-    serialize_stub_response,
-)
-from ctxledger.workflow.service import (
-    VerifyReport,
-    VerifyStatus,
-    WorkflowAttempt,
-    WorkflowAttemptStatus,
-    WorkflowCheckpoint,
-    WorkflowInstance,
-    WorkflowInstanceStatus,
-)
+
+
+@pytest.fixture(autouse=True)
+def patch_embedding_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = SimpleNamespace(
+        embedding=SimpleNamespace(
+            enabled=True,
+            provider=EmbeddingProvider.LOCAL_STUB,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
+            azure_openai_embedding_deployment=None,
+            dimensions=8,
+            model="local-stub-v1",
+            azure_openai_auth_mode=SimpleNamespace(value="auto"),
+        )
+    )
+    monkeypatch.setattr(
+        "ctxledger.memory.service_core_search.SearchHelperMixin._load_embedding_settings",
+        lambda self: settings.embedding,
+    )
+    monkeypatch.setattr(
+        "ctxledger.memory.service_core.service_module.get_settings",
+        lambda: settings,
+    )
 
 
 def test_build_embedding_generator_returns_disabled_generator_when_disabled() -> None:
     generator = build_embedding_generator(
         EmbeddingSettings(
             provider=EmbeddingProvider.DISABLED,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="unused",
             api_key=None,
             base_url=None,
             dimensions=None,
             enabled=False,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         )
     )
 
@@ -80,7 +82,9 @@ def test_build_embedding_generator_returns_disabled_generator_when_disabled() ->
     assert exc_info.value.provider == "disabled"
 
 
-def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest() -> None:
+def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest() -> (
+    None
+):
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()
     memory_item_repository = InMemoryMemoryItemRepository()
@@ -123,7 +127,9 @@ def test_memory_service_persists_local_stub_embedding_after_memory_item_ingest()
     )
     assert memory_embedding_repository.embeddings[0].embedding_model == "local-stub-v1"
     assert len(memory_embedding_repository.embeddings[0].embedding) == 8
-    assert memory_embedding_repository.embeddings[0].content_hash == compute_content_hash(
+    assert memory_embedding_repository.embeddings[
+        0
+    ].content_hash == compute_content_hash(
         "Persist embedding for this memory item",
         {"kind": "checkpoint", "component": "memory"},
     )
@@ -181,9 +187,13 @@ def test_memory_service_persists_openai_embedding_after_memory_item_ingest() -> 
         memory_embedding_repository.embeddings[0].memory_id
         == memory_item_repository.memory_items[0].memory_id
     )
-    assert memory_embedding_repository.embeddings[0].embedding_model == ("text-embedding-3-small")
+    assert memory_embedding_repository.embeddings[0].embedding_model == (
+        "text-embedding-3-small"
+    )
     assert memory_embedding_repository.embeddings[0].embedding == (0.25, -0.5, 1.0)
-    assert memory_embedding_repository.embeddings[0].content_hash == compute_content_hash(
+    assert memory_embedding_repository.embeddings[
+        0
+    ].content_hash == compute_content_hash(
         "External embedding provider remains optional",
         {"kind": "checkpoint", "component": "memory"},
     )
@@ -193,11 +203,17 @@ def test_build_embedding_generator_returns_local_stub_generator() -> None:
     generator = build_embedding_generator(
         EmbeddingSettings(
             provider=EmbeddingProvider.LOCAL_STUB,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="local-stub-v1",
             api_key=None,
             base_url=None,
             dimensions=8,
             enabled=True,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         )
     )
 
@@ -254,11 +270,17 @@ def test_build_embedding_generator_returns_openai_generator_by_default_shape() -
     generator = build_embedding_generator(
         EmbeddingSettings(
             provider=EmbeddingProvider.OPENAI,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="text-embedding-3-small",
             api_key="secret",
             base_url=None,
             dimensions=1536,
             enabled=True,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         )
     )
 

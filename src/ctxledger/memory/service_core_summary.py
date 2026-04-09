@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -118,7 +118,9 @@ class EpisodeSummaryBuilder:
             for summary in existing_summaries
             if summary.summary_kind == request.summary_kind
         )
-        replaced_existing_summary = bool(request.replace_existing and existing_matching_summaries)
+        replaced_existing_summary = bool(
+            request.replace_existing and existing_matching_summaries
+        )
 
         if request.replace_existing:
             for existing_summary in existing_matching_summaries:
@@ -130,7 +132,9 @@ class EpisodeSummaryBuilder:
                 )
 
         workspace_id = (
-            self.workspace_lookup.workspace_id_by_workflow_id(episode.workflow_instance_id)
+            self.workspace_lookup.workspace_id_by_workflow_id(
+                episode.workflow_instance_id
+            )
             if self.workspace_lookup is not None
             else None
         )
@@ -176,7 +180,7 @@ class EpisodeSummaryBuilder:
             **dict(request.metadata),
         }
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         summary = self.memory_summary_repository.create(
             MemorySummaryRecord(
                 memory_summary_id=uuid4(),
@@ -223,7 +227,9 @@ class EpisodeSummaryBuilder:
                 "episode_id": str(episode_id),
                 "summary_kind": request.summary_kind,
                 "member_memory_count": len(memory_items),
-                "member_memory_ids": [str(memory_item.memory_id) for memory_item in memory_items],
+                "member_memory_ids": [
+                    str(memory_item.memory_id) for memory_item in memory_items
+                ],
                 "remember_path_memory_origins": remember_path_memory_origins,
                 "remember_path_promotion_fields": remember_path_promotion_fields,
                 "remember_path_promotion_sources": remember_path_promotion_sources,
@@ -234,7 +240,9 @@ class EpisodeSummaryBuilder:
                         "provenance": memory_item.provenance,
                         "memory_origin": memory_item.metadata.get("memory_origin"),
                         "promotion_field": memory_item.metadata.get("promotion_field"),
-                        "promotion_source": memory_item.metadata.get("promotion_source"),
+                        "promotion_source": memory_item.metadata.get(
+                            "promotion_source"
+                        ),
                         "checkpoint_id": memory_item.metadata.get("checkpoint_id"),
                         "step_name": memory_item.metadata.get("step_name"),
                         "workflow_status": memory_item.metadata.get("workflow_status"),

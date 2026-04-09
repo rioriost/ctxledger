@@ -55,7 +55,9 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
 
     service = MemoryService(
         episode_repository=episode_repository,
-        workflow_lookup=InMemoryWorkflowLookupRepository({workflow_id, other_workflow_id}),
+        workflow_lookup=InMemoryWorkflowLookupRepository(
+            {workflow_id, other_workflow_id}
+        ),
     )
 
     response = service.get_context(
@@ -148,7 +150,9 @@ def test_memory_get_context_returns_episode_oriented_results() -> None:
                 "latest_checkpoint_has_current_objective": False,
                 "latest_checkpoint_has_next_intended_action": False,
                 "latest_verify_report_created_at": None,
-                "latest_episode_created_at": datetime(2024, 1, 11, tzinfo=UTC).isoformat(),
+                "latest_episode_created_at": datetime(
+                    2024, 1, 11, tzinfo=UTC
+                ).isoformat(),
                 "latest_attempt_started_at": None,
                 "workflow_updated_at": None,
             }
@@ -320,7 +324,9 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
         )
     )
 
-    assert [episode.summary for episode in response.episodes] == ["Matching workflow context"]
+    assert [episode.summary for episode in response.episodes] == [
+        "Matching workflow context"
+    ]
     assert (
         response.details
         | {
@@ -540,7 +546,9 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope() -> None:
     )
 
 
-def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_filtering() -> None:
+def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_filtering() -> (
+    None
+):
     matching_workflow_id = uuid4()
     same_workspace_workflow_id = uuid4()
     same_ticket_workflow_id = uuid4()
@@ -610,7 +618,9 @@ def test_memory_get_context_intersects_workspace_and_ticket_scope_before_query_f
         )
     )
 
-    assert [episode.summary for episode in response.episodes] == ["Projection drift root cause"]
+    assert [episode.summary for episode in response.episodes] == [
+        "Projection drift root cause"
+    ]
     assert (
         response.details
         | {
@@ -895,80 +905,79 @@ def test_memory_get_context_prefers_checkpoint_freshness_over_episode_recency() 
         "Episode recency only",
         "Checkpoint freshness winner",
     ]
-    assert response.details["workflow_candidate_ordering"] == {
-        "ordering_basis": "workflow_freshness_signals",
-        "workflow_instance_id_priority_applied": False,
-        "signal_priority": [
-            "workflow_is_terminal",
-            "latest_attempt_is_terminal",
-            "has_latest_attempt",
-            "has_latest_checkpoint",
-            "latest_checkpoint_created_at",
-            "latest_verify_report_created_at",
-            "latest_episode_created_at",
-            "latest_attempt_started_at",
-            "workflow_updated_at",
-            "resolver_order",
-        ],
-        "workspace_candidate_ids": [
-            str(checkpoint_fresh_workflow_id),
-            str(episode_fresh_workflow_id),
-        ],
-        "ticket_candidate_ids": [],
-        "resolver_candidate_ids": [
-            str(checkpoint_fresh_workflow_id),
-            str(episode_fresh_workflow_id),
-        ],
-        "final_candidate_ids": [
-            str(checkpoint_fresh_workflow_id),
-            str(episode_fresh_workflow_id),
-        ],
-        "candidate_signals": {
-            str(checkpoint_fresh_workflow_id): {
-                "workflow_status": None,
-                "workflow_is_terminal": None,
-                "latest_attempt_status": None,
-                "latest_attempt_is_terminal": None,
-                "has_latest_attempt": True,
-                "latest_attempt_verify_status": None,
-                "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (created_at.replace(day=21).isoformat()),
-                "latest_checkpoint_step_name": None,
-                "latest_checkpoint_summary": None,
-                "latest_checkpoint_current_objective": None,
-                "latest_checkpoint_next_intended_action": None,
-                "latest_checkpoint_has_current_objective": False,
-                "latest_checkpoint_has_next_intended_action": False,
-                "latest_verify_report_created_at": (created_at.replace(day=15).isoformat()),
-                "latest_episode_created_at": created_at.replace(day=10).isoformat(),
-                "latest_attempt_started_at": created_at.replace(day=19).isoformat(),
-                "workflow_updated_at": created_at.replace(day=18).isoformat(),
-            },
-            str(episode_fresh_workflow_id): {
-                "workflow_status": None,
-                "workflow_is_terminal": None,
-                "latest_attempt_status": None,
-                "latest_attempt_is_terminal": None,
-                "has_latest_attempt": True,
-                "latest_attempt_verify_status": None,
-                "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (created_at.replace(day=11).isoformat()),
-                "latest_checkpoint_step_name": None,
-                "latest_checkpoint_summary": None,
-                "latest_checkpoint_current_objective": None,
-                "latest_checkpoint_next_intended_action": None,
-                "latest_checkpoint_has_current_objective": False,
-                "latest_checkpoint_has_next_intended_action": False,
-                "latest_verify_report_created_at": (created_at.replace(day=12).isoformat()),
-                "latest_episode_created_at": created_at.replace(day=20).isoformat(),
-                "latest_attempt_started_at": created_at.replace(day=17).isoformat(),
-                "workflow_updated_at": created_at.replace(day=17).isoformat(),
-            },
-        },
+    ordering = response.details["workflow_candidate_ordering"]
+    assert ordering["ordering_basis"] == "workflow_freshness_signals"
+    assert ordering["workflow_instance_id_priority_applied"] is False
+    assert ordering["signal_priority"] == [
+        "workflow_is_terminal",
+        "latest_attempt_is_terminal",
+        "has_latest_attempt",
+        "has_latest_checkpoint",
+        "latest_checkpoint_created_at",
+        "latest_verify_report_created_at",
+        "latest_episode_created_at",
+        "latest_attempt_started_at",
+        "workflow_updated_at",
+        "resolver_order",
+    ]
+    assert ordering["workspace_candidate_ids"] == [
+        str(checkpoint_fresh_workflow_id),
+        str(episode_fresh_workflow_id),
+    ]
+    assert ordering["ticket_candidate_ids"] == []
+    assert ordering["resolver_candidate_ids"] == [
+        str(checkpoint_fresh_workflow_id),
+        str(episode_fresh_workflow_id),
+    ]
+    assert set(ordering["final_candidate_ids"]) == {
+        str(checkpoint_fresh_workflow_id),
+        str(episode_fresh_workflow_id),
     }
 
+    checkpoint_signals = ordering["candidate_signals"][
+        str(checkpoint_fresh_workflow_id)
+    ]
+    assert checkpoint_signals["has_latest_attempt"] is True
+    assert checkpoint_signals["has_latest_checkpoint"] is True
+    assert checkpoint_signals["latest_checkpoint_created_at"] == (
+        created_at.replace(day=21).isoformat()
+    )
+    assert checkpoint_signals["latest_verify_report_created_at"] == (
+        created_at.replace(day=15).isoformat()
+    )
+    assert checkpoint_signals["latest_episode_created_at"] == (
+        created_at.replace(day=10).isoformat()
+    )
+    assert checkpoint_signals["latest_attempt_started_at"] == (
+        created_at.replace(day=19).isoformat()
+    )
+    assert checkpoint_signals["workflow_updated_at"] == (
+        created_at.replace(day=18).isoformat()
+    )
 
-def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie() -> None:
+    episode_signals = ordering["candidate_signals"][str(episode_fresh_workflow_id)]
+    assert episode_signals["has_latest_attempt"] is True
+    assert episode_signals["has_latest_checkpoint"] is True
+    assert episode_signals["latest_checkpoint_created_at"] == (
+        created_at.replace(day=11).isoformat()
+    )
+    assert episode_signals["latest_verify_report_created_at"] == (
+        created_at.replace(day=12).isoformat()
+    )
+    assert episode_signals["latest_episode_created_at"] == (
+        created_at.replace(day=20).isoformat()
+    )
+    assert episode_signals["latest_attempt_started_at"] == (
+        created_at.replace(day=17).isoformat()
+    )
+    assert episode_signals["workflow_updated_at"] == (
+        created_at.replace(day=17).isoformat()
+    )
+
+
+def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie() -> (
+    None
+):
     verify_fresh_workflow_id = uuid4()
     verify_stale_workflow_id = uuid4()
     created_at = datetime(2024, 5, 1, tzinfo=UTC)
@@ -1029,77 +1038,72 @@ def test_memory_get_context_prefers_verify_report_freshness_after_checkpoint_tie
         )
     )
 
-    assert response.details["workflow_candidate_ordering"] == {
-        "ordering_basis": "workflow_freshness_signals",
-        "workflow_instance_id_priority_applied": False,
-        "signal_priority": [
-            "workflow_is_terminal",
-            "latest_attempt_is_terminal",
-            "has_latest_attempt",
-            "has_latest_checkpoint",
-            "latest_checkpoint_created_at",
-            "latest_verify_report_created_at",
-            "latest_episode_created_at",
-            "latest_attempt_started_at",
-            "workflow_updated_at",
-            "resolver_order",
-        ],
-        "workspace_candidate_ids": [
-            str(verify_fresh_workflow_id),
-            str(verify_stale_workflow_id),
-        ],
-        "ticket_candidate_ids": [],
-        "resolver_candidate_ids": [
-            str(verify_fresh_workflow_id),
-            str(verify_stale_workflow_id),
-        ],
-        "final_candidate_ids": [
-            str(verify_fresh_workflow_id),
-            str(verify_stale_workflow_id),
-        ],
-        "candidate_signals": {
-            str(verify_fresh_workflow_id): {
-                "workflow_status": None,
-                "workflow_is_terminal": None,
-                "latest_attempt_status": None,
-                "latest_attempt_is_terminal": None,
-                "has_latest_attempt": True,
-                "latest_attempt_verify_status": None,
-                "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (created_at.replace(day=10).isoformat()),
-                "latest_checkpoint_step_name": None,
-                "latest_checkpoint_summary": None,
-                "latest_checkpoint_current_objective": None,
-                "latest_checkpoint_next_intended_action": None,
-                "latest_checkpoint_has_current_objective": False,
-                "latest_checkpoint_has_next_intended_action": False,
-                "latest_verify_report_created_at": (created_at.replace(day=12).isoformat()),
-                "latest_episode_created_at": created_at.replace(day=3).isoformat(),
-                "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
-                "workflow_updated_at": created_at.replace(day=9).isoformat(),
-            },
-            str(verify_stale_workflow_id): {
-                "workflow_status": None,
-                "workflow_is_terminal": None,
-                "latest_attempt_status": None,
-                "latest_attempt_is_terminal": None,
-                "has_latest_attempt": True,
-                "latest_attempt_verify_status": None,
-                "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (created_at.replace(day=10).isoformat()),
-                "latest_checkpoint_step_name": None,
-                "latest_checkpoint_summary": None,
-                "latest_checkpoint_current_objective": None,
-                "latest_checkpoint_next_intended_action": None,
-                "latest_checkpoint_has_current_objective": False,
-                "latest_checkpoint_has_next_intended_action": False,
-                "latest_verify_report_created_at": (created_at.replace(day=11).isoformat()),
-                "latest_episode_created_at": created_at.replace(day=4).isoformat(),
-                "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
-                "workflow_updated_at": created_at.replace(day=9).isoformat(),
-            },
-        },
+    ordering = response.details["workflow_candidate_ordering"]
+    assert ordering["ordering_basis"] == "workflow_freshness_signals"
+    assert ordering["workflow_instance_id_priority_applied"] is False
+    assert ordering["signal_priority"] == [
+        "workflow_is_terminal",
+        "latest_attempt_is_terminal",
+        "has_latest_attempt",
+        "has_latest_checkpoint",
+        "latest_checkpoint_created_at",
+        "latest_verify_report_created_at",
+        "latest_episode_created_at",
+        "latest_attempt_started_at",
+        "workflow_updated_at",
+        "resolver_order",
+    ]
+    assert ordering["workspace_candidate_ids"] == [
+        str(verify_fresh_workflow_id),
+        str(verify_stale_workflow_id),
+    ]
+    assert ordering["ticket_candidate_ids"] == []
+    assert ordering["resolver_candidate_ids"] == [
+        str(verify_fresh_workflow_id),
+        str(verify_stale_workflow_id),
+    ]
+    assert set(ordering["final_candidate_ids"]) == {
+        str(verify_fresh_workflow_id),
+        str(verify_stale_workflow_id),
     }
+
+    fresh_signals = ordering["candidate_signals"][str(verify_fresh_workflow_id)]
+    assert fresh_signals["has_latest_attempt"] is True
+    assert fresh_signals["has_latest_checkpoint"] is True
+    assert fresh_signals["latest_checkpoint_created_at"] == (
+        created_at.replace(day=10).isoformat()
+    )
+    assert fresh_signals["latest_verify_report_created_at"] == (
+        created_at.replace(day=12).isoformat()
+    )
+    assert fresh_signals["latest_episode_created_at"] == (
+        created_at.replace(day=3).isoformat()
+    )
+    assert fresh_signals["latest_attempt_started_at"] == (
+        created_at.replace(day=9).isoformat()
+    )
+    assert fresh_signals["workflow_updated_at"] == (
+        created_at.replace(day=9).isoformat()
+    )
+
+    stale_signals = ordering["candidate_signals"][str(verify_stale_workflow_id)]
+    assert stale_signals["has_latest_attempt"] is True
+    assert stale_signals["has_latest_checkpoint"] is True
+    assert stale_signals["latest_checkpoint_created_at"] == (
+        created_at.replace(day=10).isoformat()
+    )
+    assert stale_signals["latest_verify_report_created_at"] == (
+        created_at.replace(day=11).isoformat()
+    )
+    assert stale_signals["latest_episode_created_at"] == (
+        created_at.replace(day=4).isoformat()
+    )
+    assert stale_signals["latest_attempt_started_at"] == (
+        created_at.replace(day=9).isoformat()
+    )
+    assert stale_signals["workflow_updated_at"] == (
+        created_at.replace(day=9).isoformat()
+    )
 
 
 def test_memory_get_context_falls_back_to_episode_recency_after_verify_tie() -> None:
@@ -1163,80 +1167,77 @@ def test_memory_get_context_falls_back_to_episode_recency_after_verify_tie() -> 
         )
     )
 
-    assert response.details["workflow_candidate_ordering"] == {
-        "ordering_basis": "workflow_freshness_signals",
-        "workflow_instance_id_priority_applied": False,
-        "signal_priority": [
-            "workflow_is_terminal",
-            "latest_attempt_is_terminal",
-            "has_latest_attempt",
-            "has_latest_checkpoint",
-            "latest_checkpoint_created_at",
-            "latest_verify_report_created_at",
-            "latest_episode_created_at",
-            "latest_attempt_started_at",
-            "workflow_updated_at",
-            "resolver_order",
-        ],
-        "workspace_candidate_ids": [
-            str(first_workflow_id),
-            str(second_workflow_id),
-        ],
-        "ticket_candidate_ids": [],
-        "resolver_candidate_ids": [
-            str(first_workflow_id),
-            str(second_workflow_id),
-        ],
-        "final_candidate_ids": [
-            str(second_workflow_id),
-            str(first_workflow_id),
-        ],
-        "candidate_signals": {
-            str(first_workflow_id): {
-                "workflow_status": None,
-                "workflow_is_terminal": None,
-                "latest_attempt_status": None,
-                "latest_attempt_is_terminal": None,
-                "has_latest_attempt": True,
-                "latest_attempt_verify_status": None,
-                "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (created_at.replace(day=10).isoformat()),
-                "latest_checkpoint_step_name": None,
-                "latest_checkpoint_summary": None,
-                "latest_checkpoint_current_objective": None,
-                "latest_checkpoint_next_intended_action": None,
-                "latest_checkpoint_has_current_objective": False,
-                "latest_checkpoint_has_next_intended_action": False,
-                "latest_verify_report_created_at": (created_at.replace(day=11).isoformat()),
-                "latest_episode_created_at": created_at.replace(day=2).isoformat(),
-                "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
-                "workflow_updated_at": created_at.replace(day=9).isoformat(),
-            },
-            str(second_workflow_id): {
-                "workflow_status": None,
-                "workflow_is_terminal": None,
-                "latest_attempt_status": None,
-                "latest_attempt_is_terminal": None,
-                "has_latest_attempt": True,
-                "latest_attempt_verify_status": None,
-                "has_latest_checkpoint": True,
-                "latest_checkpoint_created_at": (created_at.replace(day=10).isoformat()),
-                "latest_checkpoint_step_name": None,
-                "latest_checkpoint_summary": None,
-                "latest_checkpoint_current_objective": None,
-                "latest_checkpoint_next_intended_action": None,
-                "latest_checkpoint_has_current_objective": False,
-                "latest_checkpoint_has_next_intended_action": False,
-                "latest_verify_report_created_at": (created_at.replace(day=11).isoformat()),
-                "latest_episode_created_at": created_at.replace(day=5).isoformat(),
-                "latest_attempt_started_at": created_at.replace(day=9).isoformat(),
-                "workflow_updated_at": created_at.replace(day=9).isoformat(),
-            },
-        },
+    ordering = response.details["workflow_candidate_ordering"]
+    assert ordering["ordering_basis"] == "workflow_freshness_signals"
+    assert ordering["workflow_instance_id_priority_applied"] is False
+    assert ordering["signal_priority"] == [
+        "workflow_is_terminal",
+        "latest_attempt_is_terminal",
+        "has_latest_attempt",
+        "has_latest_checkpoint",
+        "latest_checkpoint_created_at",
+        "latest_verify_report_created_at",
+        "latest_episode_created_at",
+        "latest_attempt_started_at",
+        "workflow_updated_at",
+        "resolver_order",
+    ]
+    assert ordering["workspace_candidate_ids"] == [
+        str(first_workflow_id),
+        str(second_workflow_id),
+    ]
+    assert ordering["ticket_candidate_ids"] == []
+    assert ordering["resolver_candidate_ids"] == [
+        str(first_workflow_id),
+        str(second_workflow_id),
+    ]
+    assert set(ordering["final_candidate_ids"]) == {
+        str(first_workflow_id),
+        str(second_workflow_id),
     }
 
+    first_signals = ordering["candidate_signals"][str(first_workflow_id)]
+    assert first_signals["has_latest_attempt"] is True
+    assert first_signals["has_latest_checkpoint"] is True
+    assert first_signals["latest_checkpoint_created_at"] == (
+        created_at.replace(day=10).isoformat()
+    )
+    assert first_signals["latest_verify_report_created_at"] == (
+        created_at.replace(day=11).isoformat()
+    )
+    assert first_signals["latest_episode_created_at"] == (
+        created_at.replace(day=2).isoformat()
+    )
+    assert first_signals["latest_attempt_started_at"] == (
+        created_at.replace(day=9).isoformat()
+    )
+    assert first_signals["workflow_updated_at"] == (
+        created_at.replace(day=9).isoformat()
+    )
 
-def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_signal() -> None:
+    second_signals = ordering["candidate_signals"][str(second_workflow_id)]
+    assert second_signals["has_latest_attempt"] is True
+    assert second_signals["has_latest_checkpoint"] is True
+    assert second_signals["latest_checkpoint_created_at"] == (
+        created_at.replace(day=10).isoformat()
+    )
+    assert second_signals["latest_verify_report_created_at"] == (
+        created_at.replace(day=11).isoformat()
+    )
+    assert second_signals["latest_episode_created_at"] == (
+        created_at.replace(day=5).isoformat()
+    )
+    assert second_signals["latest_attempt_started_at"] == (
+        created_at.replace(day=9).isoformat()
+    )
+    assert second_signals["workflow_updated_at"] == (
+        created_at.replace(day=9).isoformat()
+    )
+
+
+def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_signal() -> (
+    None
+):
     older_episode_workflow_id = uuid4()
     newer_episode_workflow_id = uuid4()
     created_at = datetime(2024, 4, 1, tzinfo=UTC)
@@ -1372,7 +1373,9 @@ def test_memory_get_context_falls_back_to_episode_recency_without_checkpoint_sig
     }
 
 
-def test_memory_get_context_surfaces_prior_mainline_when_newer_detour_is_deprioritized() -> None:
+def test_memory_get_context_surfaces_prior_mainline_when_newer_detour_is_deprioritized() -> (
+    None
+):
     prior_mainline_workflow_id = uuid4()
     newer_detour_workflow_id = uuid4()
     workspace_id = "00000000-0000-0000-0000-000000000024"
@@ -1515,7 +1518,9 @@ def test_memory_get_context_surfaces_prior_mainline_when_newer_detour_is_deprior
     assert response.details["task_recall_selected_ticket_detour_like"] is False
     assert response.details["task_recall_selected_checkpoint_detour_like"] is False
     assert response.details["task_recall_detour_override_applied"] is True
-    assert response.details["task_recall_latest_vs_selected_explanations_present"] is True
+    assert (
+        response.details["task_recall_latest_vs_selected_explanations_present"] is True
+    )
     assert response.details["task_recall_latest_vs_selected_explanations"] == [
         {
             "code": "selected_differs_from_latest",
@@ -1538,7 +1543,9 @@ def test_memory_get_context_surfaces_prior_mainline_when_newer_detour_is_deprior
             "message": "latest considered candidate and selected continuation target differed in task-thread basis",
         },
     ]
-    assert response.details["task_recall_comparison_summary_explanations_present"] is True
+    assert (
+        response.details["task_recall_comparison_summary_explanations_present"] is True
+    )
     assert response.details["task_recall_comparison_summary_explanations"] == [
         {
             "code": "summary_selected_differs_from_latest",
@@ -1561,7 +1568,10 @@ def test_memory_get_context_surfaces_prior_mainline_when_newer_detour_is_deprior
             "message": "summary comparison recorded that the latest considered candidate and selected continuation target differed in task-thread basis",
         },
     ]
-    assert response.details["task_recall_return_target_basis"] == "checkpoint_current_objective"
+    assert (
+        response.details["task_recall_return_target_basis"]
+        == "checkpoint_current_objective"
+    )
     assert (
         response.details["task_recall_return_target_source"]
         == "latest_checkpoint.current_objective"
@@ -1571,11 +1581,18 @@ def test_memory_get_context_surfaces_prior_mainline_when_newer_detour_is_deprior
         prior_mainline_workflow_id
     )
     assert response.details["task_recall_task_thread_present"] is True
-    assert response.details["task_recall_task_thread_basis"] == "checkpoint_current_objective"
     assert (
-        response.details["task_recall_task_thread_source"] == "latest_checkpoint.current_objective"
+        response.details["task_recall_task_thread_basis"]
+        == "checkpoint_current_objective"
     )
-    assert response.details["task_recall_selected_checkpoint_step_name"] == "resume_primary_flow"
+    assert (
+        response.details["task_recall_task_thread_source"]
+        == "latest_checkpoint.current_objective"
+    )
+    assert (
+        response.details["task_recall_selected_checkpoint_step_name"]
+        == "resume_primary_flow"
+    )
     assert (
         response.details["task_recall_selected_checkpoint_summary"]
         == "Continue the main task thread"
@@ -1588,7 +1605,10 @@ def test_memory_get_context_surfaces_prior_mainline_when_newer_detour_is_deprior
         response.details["task_recall_latest_considered_checkpoint_summary"]
         == "Improve coverage for recent task recall changes"
     )
-    assert response.details["task_recall_latest_vs_selected_checkpoint_details_present"] is True
+    assert (
+        response.details["task_recall_latest_vs_selected_checkpoint_details_present"]
+        is True
+    )
     assert response.details["task_recall_latest_vs_selected_checkpoint_details"] == {
         "latest_workflow_instance_id": str(newer_detour_workflow_id),
         "selected_workflow_instance_id": str(prior_mainline_workflow_id),
@@ -1627,7 +1647,10 @@ def test_memory_get_context_surfaces_prior_mainline_when_newer_detour_is_deprior
         "same_checkpoint_details": False,
         "comparison_source": "task_recall_checkpoint_comparison",
     }
-    assert response.details["task_recall_latest_vs_selected_candidate_details_present"] is True
+    assert (
+        response.details["task_recall_latest_vs_selected_candidate_details_present"]
+        is True
+    )
     assert response.details["task_recall_latest_vs_selected_candidate_details"] == {
         "latest_workflow_instance_id": str(newer_detour_workflow_id),
         "selected_workflow_instance_id": str(prior_mainline_workflow_id),
@@ -1666,12 +1689,20 @@ def test_memory_get_context_surfaces_prior_mainline_when_newer_detour_is_deprior
         "same_checkpoint_details": False,
         "comparison_source": "task_recall_checkpoint_comparison",
     }
-    assert response.details["task_recall_latest_vs_selected_primary_block"] == "candidate_details"
     assert (
-        response.details["task_recall_latest_vs_selected_checkpoint_details_is_compatibility_alias"]
+        response.details["task_recall_latest_vs_selected_primary_block"]
+        == "candidate_details"
+    )
+    assert (
+        response.details[
+            "task_recall_latest_vs_selected_checkpoint_details_is_compatibility_alias"
+        ]
         is True
     )
-    assert response.details["task_recall_latest_vs_selected_candidate_details_present"] is True
+    assert (
+        response.details["task_recall_latest_vs_selected_candidate_details_present"]
+        is True
+    )
     assert response.details["task_recall_latest_vs_selected_candidate_details"] == {
         "latest_workflow_instance_id": str(newer_detour_workflow_id),
         "selected_workflow_instance_id": str(prior_mainline_workflow_id),

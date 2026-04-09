@@ -11,7 +11,7 @@ re-export ``MemoryService`` during the transition.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
@@ -27,16 +27,11 @@ from ..runtime.task_recall import (
 )
 from . import service as service_module
 from .embeddings import (
-    EmbeddingGenerationError,
     EmbeddingGenerator,
-    EmbeddingRequest,
 )
 from .helpers import (
-    embedding_dot_product,
-    metadata_query_strings,
     normalize_query_text,
     query_tokens,
-    text_matches_query,
 )
 from .protocols import (
     EpisodeRepository,
@@ -44,7 +39,6 @@ from .protocols import (
     MemoryItemRepository,
     MemoryRelationMemoryItemLookupRepository,
     MemoryRelationRepository,
-    MemoryRelationSupportsTargetLookupRepository,
     MemorySummaryMembershipRepository,
     MemorySummaryRepository,
     WorkflowLookupRepository,
@@ -82,6 +76,7 @@ from .service_core_task_recall import TaskRecallMixin
 from .service_core_workflow import WorkflowResolutionMixin
 from .types import (
     BuildEpisodeSummaryRequest,
+    BuildEpisodeSummaryResult,
     EpisodeRecord,
     GetContextResponse,
     GetMemoryContextRequest,
@@ -91,8 +86,6 @@ from .types import (
     MemoryItemRecord,
     MemoryRelationRecord,
     MemoryServiceError,
-    MemorySummaryMembershipRecord,
-    MemorySummaryRecord,
     RememberEpisodeRequest,
     RememberEpisodeResponse,
     SearchMemoryRequest,
@@ -157,7 +150,8 @@ class MemoryService(
         episode_repository: EpisodeRepository | None = None,
         memory_item_repository: MemoryItemRepository | None = None,
         memory_summary_repository: MemorySummaryRepository | None = None,
-        memory_summary_membership_repository: MemorySummaryMembershipRepository | None = None,
+        memory_summary_membership_repository: MemorySummaryMembershipRepository
+        | None = None,
         memory_embedding_repository: MemoryEmbeddingRepository | None = None,
         memory_relation_repository: MemoryRelationRepository | None = None,
         embedding_generator: EmbeddingGenerator | None = None,
@@ -165,12 +159,15 @@ class MemoryService(
         workspace_lookup: WorkspaceLookupRepository | None = None,
     ) -> None:
         self._episode_repository = episode_repository or InMemoryEpisodeRepository()
-        self._memory_item_repository = memory_item_repository or InMemoryMemoryItemRepository()
+        self._memory_item_repository = (
+            memory_item_repository or InMemoryMemoryItemRepository()
+        )
         self._memory_summary_repository = (
             memory_summary_repository or InMemoryMemorySummaryRepository()
         )
         self._memory_summary_membership_repository = (
-            memory_summary_membership_repository or InMemoryMemorySummaryMembershipRepository()
+            memory_summary_membership_repository
+            or InMemoryMemorySummaryMembershipRepository()
         )
         self._memory_embedding_repository = memory_embedding_repository
         self._memory_relation_repository = (
@@ -242,7 +239,9 @@ class MemoryService(
 
         provenance_filter = normalized_filters.get("provenance")
         if isinstance(provenance_filter, list) and provenance_filter:
-            if memory_item.provenance not in {str(value) for value in provenance_filter}:
+            if memory_item.provenance not in {
+                str(value) for value in provenance_filter
+            }:
                 return False
         elif isinstance(provenance_filter, str) and provenance_filter.strip():
             if memory_item.provenance != provenance_filter.strip():
@@ -253,7 +252,8 @@ class MemoryService(
             "interaction"
             if memory_item.provenance == "interaction"
             else "workflow_memory"
-            if memory_item.provenance in {"workflow_checkpoint_auto", "workflow_complete_auto"}
+            if memory_item.provenance
+            in {"workflow_checkpoint_auto", "workflow_complete_auto"}
             else "episode_memory"
             if memory_item.provenance == "episode"
             else "other"
@@ -276,9 +276,14 @@ class MemoryService(
         interaction_roles_filter = normalized_filters.get("interaction_roles")
         interaction_role = memory_item.metadata.get("interaction_role")
         if isinstance(interaction_roles_filter, list) and interaction_roles_filter:
-            if str(interaction_role) not in {str(value) for value in interaction_roles_filter}:
+            if str(interaction_role) not in {
+                str(value) for value in interaction_roles_filter
+            }:
                 return False
-        elif isinstance(interaction_roles_filter, str) and interaction_roles_filter.strip():
+        elif (
+            isinstance(interaction_roles_filter, str)
+            and interaction_roles_filter.strip()
+        ):
             if str(interaction_role) != interaction_roles_filter.strip():
                 return False
 
@@ -289,7 +294,9 @@ class MemoryService(
                 str(value) for value in interaction_kind_filter
             }:
                 return False
-        elif isinstance(interaction_kind_filter, str) and interaction_kind_filter.strip():
+        elif (
+            isinstance(interaction_kind_filter, str) and interaction_kind_filter.strip()
+        ):
             if str(stored_interaction_kind) != interaction_kind_filter.strip():
                 return False
 
@@ -482,9 +489,11 @@ class MemoryService(
             )
 
         if resolved_workspace_id is None and resolved_workflow_instance_id is not None:
-            resolved_workspace_id = self._resolve_workspace_id(resolved_workflow_instance_id)
+            resolved_workspace_id = self._resolve_workspace_id(
+                resolved_workflow_instance_id
+            )
 
-        created_at = datetime.now(timezone.utc)
+        created_at = datetime.now(UTC)
         memory_item = self._memory_item_repository.create(
             MemoryItemRecord(
                 memory_id=uuid4(),
@@ -507,7 +516,9 @@ class MemoryService(
         self._maybe_store_embedding(memory_item)
         return memory_item
 
-    def remember_episode(self, request: RememberEpisodeRequest) -> RememberEpisodeResponse:
+    def remember_episode(
+        self, request: RememberEpisodeRequest
+    ) -> RememberEpisodeResponse:
         """Persist a new episode associated with a workflow."""
         self._require_non_empty(
             request.workflow_instance_id,
@@ -535,8 +546,9 @@ class MemoryService(
             else None
         )
 
-        if self._workflow_lookup is not None and not self._workflow_lookup.workflow_exists(
-            workflow_instance_id
+        if (
+            self._workflow_lookup is not None
+            and not self._workflow_lookup.workflow_exists(workflow_instance_id)
         ):
             raise MemoryServiceError(
                 code=MemoryErrorCode.WORKFLOW_NOT_FOUND,
@@ -578,7 +590,9 @@ class MemoryService(
             episode=episode,
             details={
                 "workflow_instance_id": str(episode.workflow_instance_id),
-                "attempt_id": (str(episode.attempt_id) if episode.attempt_id is not None else None),
+                "attempt_id": (
+                    str(episode.attempt_id) if episode.attempt_id is not None else None
+                ),
                 **embedding_outcome,
             },
         )
@@ -693,14 +707,18 @@ class MemoryService(
             combined_fields = tuple(dict.fromkeys((*matched_fields, *semantic_fields)))
             lexical_component = lexical_score * lexical_weight
             semantic_component = semantic_score * semantic_weight
-            hybrid_score, score_mode, semantic_only_discount_applied = apply_semantic_only_discount(
-                lexical_score=lexical_score,
-                semantic_score=semantic_score,
-                lexical_component=lexical_component,
-                semantic_component=semantic_component,
-                semantic_only_discount=semantic_only_discount,
+            hybrid_score, score_mode, semantic_only_discount_applied = (
+                apply_semantic_only_discount(
+                    lexical_score=lexical_score,
+                    semantic_score=semantic_score,
+                    lexical_component=lexical_component,
+                    semantic_component=semantic_component,
+                    semantic_only_discount=semantic_only_discount,
+                )
             )
-            completion_tiebreak_priority = completion_memory_tiebreak_priority(memory_item)
+            completion_tiebreak_priority = completion_memory_tiebreak_priority(
+                memory_item
+            )
 
             selected_continuation_target_bonus_applied = False
             (
@@ -756,7 +774,8 @@ class MemoryService(
                             else "interaction_priority_bonus"
                         ),
                         "message": (
-                            "interaction memory was prioritized because the bounded search filters requested interaction or file-work context"
+                            "interaction memory was prioritized because the bounded search filters \
+                            requested interaction or file-work context"
                             if interaction_context_requested
                             else "interaction memory received a bounded ranking preference"
                         ),
@@ -773,14 +792,17 @@ class MemoryService(
                     {
                         "code": "failure_reuse_file_work_signal",
                         "message": (
-                            "file-work and interaction metadata made this result a stronger bounded failure-reuse candidate"
+                            "file-work and interaction metadata made this result a stronger bounded \
+                            failure-reuse candidate"
                         ),
                     }
                 )
 
-            latest_task_recall_ticket_detour_like, latest_task_recall_checkpoint_detour_like, _ = (
-                self._task_recall_search_detour_details(latest_task_recall_signals)
-            )
+            (
+                latest_task_recall_ticket_detour_like,
+                latest_task_recall_checkpoint_detour_like,
+                _,
+            ) = self._task_recall_search_detour_details(latest_task_recall_signals)
             (
                 selected_task_recall_ticket_detour_like,
                 selected_task_recall_checkpoint_detour_like,
@@ -832,17 +854,26 @@ class MemoryService(
                         "task_recall_detail": task_recall_detail,
                         "remember_path_detail": {
                             "memory_origin": memory_item.metadata.get("memory_origin"),
-                            "promotion_field": memory_item.metadata.get("promotion_field"),
-                            "promotion_source": memory_item.metadata.get("promotion_source"),
+                            "promotion_field": memory_item.metadata.get(
+                                "promotion_field"
+                            ),
+                            "promotion_source": memory_item.metadata.get(
+                                "promotion_source"
+                            ),
                             "checkpoint_id": memory_item.metadata.get("checkpoint_id"),
                             "step_name": memory_item.metadata.get("step_name"),
-                            "workflow_status": memory_item.metadata.get("workflow_status"),
-                            "attempt_status": memory_item.metadata.get("attempt_status"),
+                            "workflow_status": memory_item.metadata.get(
+                                "workflow_status"
+                            ),
+                            "attempt_status": memory_item.metadata.get(
+                                "attempt_status"
+                            ),
                             "supports_relation_present": bool(
                                 self._memory_relation_repository is not None
                                 and any(
                                     relation.source_memory_id == memory_item.memory_id
-                                    or relation.target_memory_id == memory_item.memory_id
+                                    or relation.target_memory_id
+                                    == memory_item.memory_id
                                     for relation in self._memory_relation_repository.list_by_source_memory_ids(
                                         (memory_item.memory_id,)
                                     )
@@ -854,8 +885,12 @@ class MemoryService(
                                     for relation in self._memory_relation_repository.list_by_source_memory_ids(
                                         (memory_item.memory_id,)
                                     )
-                                    if isinstance(relation.metadata.get("relation_reason"), str)
-                                    and str(relation.metadata.get("relation_reason")).strip()
+                                    if isinstance(
+                                        relation.metadata.get("relation_reason"), str
+                                    )
+                                    and str(
+                                        relation.metadata.get("relation_reason")
+                                    ).strip()
                                 ]
                                 if self._memory_relation_repository is not None
                                 else []
@@ -874,11 +909,17 @@ class MemoryService(
                                 if memory_item.provenance == "episode"
                                 else "other"
                             ),
-                            "interaction_role": memory_item.metadata.get("interaction_role"),
-                            "interaction_kind": memory_item.metadata.get("interaction_kind"),
+                            "interaction_role": memory_item.metadata.get(
+                                "interaction_role"
+                            ),
+                            "interaction_kind": memory_item.metadata.get(
+                                "interaction_kind"
+                            ),
                             "file_name": memory_item.metadata.get("file_name"),
                             "file_path": memory_item.metadata.get("file_path"),
-                            "file_operation": memory_item.metadata.get("file_operation"),
+                            "file_operation": memory_item.metadata.get(
+                                "file_operation"
+                            ),
                             "purpose": memory_item.metadata.get("purpose"),
                             "failure_reuse_detail": failure_reuse_detail,
                         },
@@ -901,7 +942,9 @@ class MemoryService(
         limited_results = tuple(scored_results[: request.limit])
 
         search_mode = (
-            "hybrid_memory_item_search" if semantic_query_generated else "memory_item_lexical"
+            "hybrid_memory_item_search"
+            if semantic_query_generated
+            else "memory_item_lexical"
         )
         message = (
             "Hybrid lexical and semantic memory search completed successfully."
@@ -946,22 +989,20 @@ class MemoryService(
             selected_task_recall_checkpoint_detour_like=selected_task_recall_checkpoint_detour_like,
             task_recall_selected_equals_latest=task_recall_selected_equals_latest,
         )
-        latest_vs_selected_search_comparison_summary_explanations = (
-            build_latest_vs_selected_search_comparison_summary_explanations(
-                latest_vs_selected_search_context_present=(
-                    latest_vs_selected_search_context_present
-                ),
-                latest_task_recall_signals=latest_task_recall_signals,
-                selected_task_recall_signals=selected_task_recall_signals,
-                latest_task_recall_ticket_detour_like=latest_task_recall_ticket_detour_like,
-                latest_task_recall_checkpoint_detour_like=(
-                    latest_task_recall_checkpoint_detour_like
-                ),
-                selected_task_recall_ticket_detour_like=selected_task_recall_ticket_detour_like,
-                selected_task_recall_checkpoint_detour_like=(
-                    selected_task_recall_checkpoint_detour_like
-                ),
-            )
+        latest_vs_selected_search_comparison_summary_explanations = build_latest_vs_selected_search_comparison_summary_explanations(
+            latest_vs_selected_search_context_present=(
+                latest_vs_selected_search_context_present
+            ),
+            latest_task_recall_signals=latest_task_recall_signals,
+            selected_task_recall_signals=selected_task_recall_signals,
+            latest_task_recall_ticket_detour_like=latest_task_recall_ticket_detour_like,
+            latest_task_recall_checkpoint_detour_like=(
+                latest_task_recall_checkpoint_detour_like
+            ),
+            selected_task_recall_ticket_detour_like=selected_task_recall_ticket_detour_like,
+            selected_task_recall_checkpoint_detour_like=(
+                selected_task_recall_checkpoint_detour_like
+            ),
         )
 
         details = build_search_response_details(
@@ -982,7 +1023,9 @@ class MemoryService(
             latest_task_recall_workflow_id=latest_task_recall_workflow_id,
             selected_task_recall_workflow_id=selected_task_recall_workflow_id,
             task_recall_selected_equals_latest=task_recall_selected_equals_latest,
-            latest_vs_selected_search_context_present=(latest_vs_selected_search_context_present),
+            latest_vs_selected_search_context_present=(
+                latest_vs_selected_search_context_present
+            ),
             latest_vs_selected_search_context=latest_vs_selected_search_context,
             latest_vs_selected_search_comparison_summary_explanations=(
                 latest_vs_selected_search_comparison_summary_explanations
@@ -1048,8 +1091,9 @@ class MemoryService(
                 field_name="workflow_instance_id",
                 feature=MemoryFeature.GET_CONTEXT,
             )
-            if self._workflow_lookup is not None and not self._workflow_lookup.workflow_exists(
-                workflow_instance_id
+            if (
+                self._workflow_lookup is not None
+                and not self._workflow_lookup.workflow_exists(workflow_instance_id)
             ):
                 raise MemoryServiceError(
                     code=MemoryErrorCode.WORKFLOW_NOT_FOUND,
@@ -1072,9 +1116,11 @@ class MemoryService(
                         limit=request.limit,
                     )
                 else:
-                    workspace_workflow_ids = self._workflow_lookup.workflow_ids_by_workspace_id(
-                        request.workspace_id or "",
-                        limit=request.limit,
+                    workspace_workflow_ids = (
+                        self._workflow_lookup.workflow_ids_by_workspace_id(
+                            request.workspace_id or "",
+                            limit=request.limit,
+                        )
                     )
 
             if self._has_text(request.ticket_id):
@@ -1089,9 +1135,11 @@ class MemoryService(
                         limit=request.limit,
                     )
                 else:
-                    ticket_workflow_ids = self._workflow_lookup.workflow_ids_by_ticket_id(
-                        request.ticket_id or "",
-                        limit=request.limit,
+                    ticket_workflow_ids = (
+                        self._workflow_lookup.workflow_ids_by_ticket_id(
+                            request.ticket_id or "",
+                            limit=request.limit,
+                        )
                     )
 
             if workspace_workflow_ids and ticket_workflow_ids:
@@ -1124,9 +1172,13 @@ class MemoryService(
                 raw_ordering_signals = self._workflow_ordering_signals(
                     workflow_ids=resolver_ordered_workflow_ids
                 )
-            ordering_signals = self._workflow_ordering_signals(workflow_ids=resolved_workflow_ids)
+            ordering_signals = self._workflow_ordering_signals(
+                workflow_ids=resolved_workflow_ids
+            )
         elif resolved_workflow_ids:
-            ordering_signals = self._workflow_ordering_signals(workflow_ids=resolved_workflow_ids)
+            ordering_signals = self._workflow_ordering_signals(
+                workflow_ids=resolved_workflow_ids
+            )
 
         inherited_workspace_items: tuple[MemoryItemRecord, ...] = ()
         resolved_workspace_id = request.workspace_id
@@ -1140,16 +1192,20 @@ class MemoryService(
             )
             if raw_workspace_id is not None:
                 resolved_workspace_id = str(raw_workspace_id)
-                inherited_workspace_items = self._memory_item_repository.list_workspace_root_items(
-                    raw_workspace_id,
-                    limit=request.limit,
+                inherited_workspace_items = (
+                    self._memory_item_repository.list_workspace_root_items(
+                        raw_workspace_id,
+                        limit=request.limit,
+                    )
                 )
 
         selected_task_recall_workflow_id = (
             str(resolved_workflow_ids[0]) if resolved_workflow_ids else None
         )
         latest_task_recall_workflow_id = (
-            str(resolver_ordered_workflow_ids[0]) if resolver_ordered_workflow_ids else None
+            str(resolver_ordered_workflow_ids[0])
+            if resolver_ordered_workflow_ids
+            else None
         )
         task_recall_selected_equals_latest = (
             selected_task_recall_workflow_id is not None
@@ -1176,10 +1232,18 @@ class MemoryService(
             "next_intended_action": latest_task_recall_signals.get(
                 "latest_checkpoint_next_intended_action"
             ),
-            "verify_target": latest_task_recall_signals.get("latest_checkpoint_verify_target"),
-            "resume_hint": latest_task_recall_signals.get("latest_checkpoint_resume_hint"),
-            "blocker_or_risk": latest_task_recall_signals.get("latest_checkpoint_blocker_or_risk"),
-            "failure_guard": latest_task_recall_signals.get("latest_checkpoint_failure_guard"),
+            "verify_target": latest_task_recall_signals.get(
+                "latest_checkpoint_verify_target"
+            ),
+            "resume_hint": latest_task_recall_signals.get(
+                "latest_checkpoint_resume_hint"
+            ),
+            "blocker_or_risk": latest_task_recall_signals.get(
+                "latest_checkpoint_blocker_or_risk"
+            ),
+            "failure_guard": latest_task_recall_signals.get(
+                "latest_checkpoint_failure_guard"
+            ),
         }
         selected_task_recall_checkpoint_json = {
             "current_objective": selected_task_recall_signals.get(
@@ -1188,12 +1252,18 @@ class MemoryService(
             "next_intended_action": selected_task_recall_signals.get(
                 "latest_checkpoint_next_intended_action"
             ),
-            "verify_target": selected_task_recall_signals.get("latest_checkpoint_verify_target"),
-            "resume_hint": selected_task_recall_signals.get("latest_checkpoint_resume_hint"),
+            "verify_target": selected_task_recall_signals.get(
+                "latest_checkpoint_verify_target"
+            ),
+            "resume_hint": selected_task_recall_signals.get(
+                "latest_checkpoint_resume_hint"
+            ),
             "blocker_or_risk": selected_task_recall_signals.get(
                 "latest_checkpoint_blocker_or_risk"
             ),
-            "failure_guard": selected_task_recall_signals.get("latest_checkpoint_failure_guard"),
+            "failure_guard": selected_task_recall_signals.get(
+                "latest_checkpoint_failure_guard"
+            ),
         }
         task_recall_latest_workflow_terminal = bool(
             latest_task_recall_signals.get("workflow_is_terminal", False)
@@ -1216,38 +1286,25 @@ class MemoryService(
             _,
         ) = self._task_recall_search_detour_details(selected_task_recall_signals)
         task_recall_selected_primary_objective_text = (
-            str(selected_task_recall_signals.get("latest_checkpoint_current_objective")).strip()
-            if selected_task_recall_signals.get("latest_checkpoint_current_objective") is not None
-            and str(selected_task_recall_signals.get("latest_checkpoint_current_objective")).strip()
+            str(
+                selected_task_recall_signals.get("latest_checkpoint_current_objective")
+            ).strip()
+            if selected_task_recall_signals.get("latest_checkpoint_current_objective")
+            is not None
+            and str(
+                selected_task_recall_signals.get("latest_checkpoint_current_objective")
+            ).strip()
             else None
         )
         latest_detour_task_recall_workflow_id = (
             latest_task_recall_workflow_id
             if latest_task_recall_workflow_id is not None
-            and (task_recall_latest_ticket_detour_like or task_recall_latest_checkpoint_detour_like)
+            and (
+                task_recall_latest_ticket_detour_like
+                or task_recall_latest_checkpoint_detour_like
+            )
             else None
         )
-        latest_detour_task_recall_signals = (
-            latest_task_recall_signals if latest_detour_task_recall_workflow_id is not None else {}
-        )
-        latest_detour_task_recall_checkpoint_json = {
-            "current_objective": latest_detour_task_recall_signals.get(
-                "latest_checkpoint_current_objective"
-            ),
-            "next_intended_action": latest_detour_task_recall_signals.get(
-                "latest_checkpoint_next_intended_action"
-            ),
-            "verify_target": latest_detour_task_recall_signals.get(
-                "latest_checkpoint_verify_target"
-            ),
-            "resume_hint": latest_detour_task_recall_signals.get("latest_checkpoint_resume_hint"),
-            "blocker_or_risk": latest_detour_task_recall_signals.get(
-                "latest_checkpoint_blocker_or_risk"
-            ),
-            "failure_guard": latest_detour_task_recall_signals.get(
-                "latest_checkpoint_failure_guard"
-            ),
-        }
         task_recall_prior_mainline_workflow_id = None
         task_recall_prior_mainline_signals: dict[str, str | bool | None] = {}
         task_recall_prior_mainline_checkpoint_json = {
@@ -1260,7 +1317,9 @@ class MemoryService(
         }
 
         if latest_detour_task_recall_workflow_id is not None:
-            for workflow_id in [str(workflow_id) for workflow_id in resolved_workflow_ids]:
+            for workflow_id in [
+                str(workflow_id) for workflow_id in resolved_workflow_ids
+            ]:
                 if workflow_id == latest_detour_task_recall_workflow_id:
                     continue
                 candidate_signal_map = ordering_signals.get(workflow_id, {})
@@ -1289,7 +1348,9 @@ class MemoryService(
         ):
             task_recall_prior_mainline_workflow_id = selected_task_recall_workflow_id
             task_recall_prior_mainline_signals = selected_task_recall_signals
-            task_recall_prior_mainline_checkpoint_json = selected_task_recall_checkpoint_json
+            task_recall_prior_mainline_checkpoint_json = (
+                selected_task_recall_checkpoint_json
+            )
 
         for index, workflow_id in enumerate(
             [str(workflow_id) for workflow_id in resolved_workflow_ids]
@@ -1297,7 +1358,9 @@ class MemoryService(
             signal_map = ordering_signals.get(workflow_id, {})
             workflow_terminal = bool(signal_map.get("workflow_is_terminal", False))
             has_latest_attempt = bool(signal_map.get("has_latest_attempt", False))
-            latest_attempt_terminal = bool(signal_map.get("latest_attempt_is_terminal", False))
+            latest_attempt_terminal = bool(
+                signal_map.get("latest_attempt_is_terminal", False)
+            )
             has_latest_checkpoint = bool(signal_map.get("has_latest_checkpoint", False))
             is_latest = workflow_id == latest_task_recall_workflow_id
             selected = workflow_id == selected_task_recall_workflow_id
@@ -1365,7 +1428,9 @@ class MemoryService(
                         selected_task_recall_signals.get("has_latest_attempt", False)
                     ),
                     latest_attempt_terminal=bool(
-                        selected_task_recall_signals.get("latest_attempt_is_terminal", False)
+                        selected_task_recall_signals.get(
+                            "latest_attempt_is_terminal", False
+                        )
                     ),
                     has_latest_checkpoint=bool(
                         selected_task_recall_signals.get("has_latest_checkpoint", False)
@@ -1377,7 +1442,9 @@ class MemoryService(
             and not task_recall_explanations
             and (task_recall_selected_equals_latest or len(resolved_workflow_ids) == 1)
         ):
-            task_recall_explanations.extend(build_latest_candidate_retained_explanations())
+            task_recall_explanations.extend(
+                build_latest_candidate_retained_explanations()
+            )
 
         details = {
             "query": request.query,
@@ -1415,15 +1482,21 @@ class MemoryService(
                 "workspace_candidate_ids": [
                     str(workflow_id) for workflow_id in workspace_workflow_ids
                 ],
-                "ticket_candidate_ids": [str(workflow_id) for workflow_id in ticket_workflow_ids],
+                "ticket_candidate_ids": [
+                    str(workflow_id) for workflow_id in ticket_workflow_ids
+                ],
                 "resolver_candidate_ids": [
                     str(workflow_id) for workflow_id in resolver_ordered_workflow_ids
                 ],
-                "final_candidate_ids": [str(workflow_id) for workflow_id in resolved_workflow_ids],
+                "final_candidate_ids": [
+                    str(workflow_id) for workflow_id in resolved_workflow_ids
+                ],
                 "candidate_signals": ordering_signals,
             },
             "resolved_workflow_count": len(resolved_workflow_ids),
-            "resolved_workflow_ids": [str(workflow_id) for workflow_id in resolved_workflow_ids],
+            "resolved_workflow_ids": [
+                str(workflow_id) for workflow_id in resolved_workflow_ids
+            ],
             **build_memory_context_task_recall_details(
                 selected_workflow=(
                     SimpleNamespace(
@@ -1457,10 +1530,14 @@ class MemoryService(
                         selected_task_recall_signals.get("has_latest_attempt", False)
                     ),
                     "latest_attempt_terminal": bool(
-                        latest_task_recall_signals.get("latest_attempt_is_terminal", False)
+                        latest_task_recall_signals.get(
+                            "latest_attempt_is_terminal", False
+                        )
                     ),
                     "selected_attempt_terminal": bool(
-                        selected_task_recall_signals.get("latest_attempt_is_terminal", False)
+                        selected_task_recall_signals.get(
+                            "latest_attempt_is_terminal", False
+                        )
                     ),
                     "latest_has_checkpoint_signal": bool(
                         latest_task_recall_signals.get("has_latest_checkpoint", False)
@@ -1543,7 +1620,9 @@ class MemoryService(
                         selected_task_recall_signals.get("task_thread_candidate", False)
                     )
                     or selected_task_recall_workflow_id is not None,
-                    "task_thread_basis": selected_task_recall_signals.get("task_thread_basis"),
+                    "task_thread_basis": selected_task_recall_signals.get(
+                        "task_thread_basis"
+                    ),
                     "task_thread_source": (
                         "selected_task_recall_ranking"
                         if bool(
@@ -1574,15 +1653,25 @@ class MemoryService(
                     else None
                 ),
                 latest_checkpoint_step_name=(
-                    str(latest_task_recall_signals.get("latest_checkpoint_step_name")).strip()
-                    if latest_task_recall_signals.get("latest_checkpoint_step_name") is not None
-                    and str(latest_task_recall_signals.get("latest_checkpoint_step_name")).strip()
+                    str(
+                        latest_task_recall_signals.get("latest_checkpoint_step_name")
+                    ).strip()
+                    if latest_task_recall_signals.get("latest_checkpoint_step_name")
+                    is not None
+                    and str(
+                        latest_task_recall_signals.get("latest_checkpoint_step_name")
+                    ).strip()
                     else None
                 ),
                 latest_checkpoint_summary=(
-                    str(latest_task_recall_signals.get("latest_checkpoint_summary")).strip()
-                    if latest_task_recall_signals.get("latest_checkpoint_summary") is not None
-                    and str(latest_task_recall_signals.get("latest_checkpoint_summary")).strip()
+                    str(
+                        latest_task_recall_signals.get("latest_checkpoint_summary")
+                    ).strip()
+                    if latest_task_recall_signals.get("latest_checkpoint_summary")
+                    is not None
+                    and str(
+                        latest_task_recall_signals.get("latest_checkpoint_summary")
+                    ).strip()
                     else None
                 ),
             ),
@@ -1622,15 +1711,21 @@ class MemoryService(
                         latest_task_recall_signals.get("has_latest_attempt", False)
                     ),
                     "attempt_terminal": bool(
-                        latest_task_recall_signals.get("latest_attempt_is_terminal", False)
+                        latest_task_recall_signals.get(
+                            "latest_attempt_is_terminal", False
+                        )
                     ),
                     "has_checkpoint_signal": bool(
                         latest_task_recall_signals.get("has_latest_checkpoint", False)
                     ),
                     "return_target_basis": (
-                        "latest_candidate" if task_recall_selected_equals_latest else None
+                        "latest_candidate"
+                        if task_recall_selected_equals_latest
+                        else None
                     ),
-                    "task_thread_basis": latest_task_recall_signals.get("task_thread_basis"),
+                    "task_thread_basis": latest_task_recall_signals.get(
+                        "task_thread_basis"
+                    ),
                 }
                 if latest_detour_task_recall_workflow_id is not None
                 else None
@@ -1657,10 +1752,14 @@ class MemoryService(
                     "checkpoint_detour_like": False,
                     "detour_like": False,
                     "workflow_terminal": bool(
-                        task_recall_prior_mainline_signals.get("workflow_is_terminal", False)
+                        task_recall_prior_mainline_signals.get(
+                            "workflow_is_terminal", False
+                        )
                     ),
                     "has_attempt_signal": bool(
-                        task_recall_prior_mainline_signals.get("has_latest_attempt", False)
+                        task_recall_prior_mainline_signals.get(
+                            "has_latest_attempt", False
+                        )
                     ),
                     "attempt_terminal": bool(
                         task_recall_prior_mainline_signals.get(
@@ -1669,7 +1768,9 @@ class MemoryService(
                         )
                     ),
                     "has_checkpoint_signal": bool(
-                        task_recall_prior_mainline_signals.get("has_latest_checkpoint", False)
+                        task_recall_prior_mainline_signals.get(
+                            "has_latest_checkpoint", False
+                        )
                     ),
                     "return_target_basis": (
                         "checkpoint_current_objective"
@@ -1764,7 +1865,10 @@ class MemoryService(
                     "summary_first": 0,
                     "episode_direct": 0,
                     "workspace_inherited_auxiliary": (
-                        1 if inherited_workspace_items and resolved_workspace_id is not None else 0
+                        1
+                        if inherited_workspace_items
+                        and resolved_workspace_id is not None
+                        else 0
                     ),
                     "relation_supports_auxiliary": 0,
                     "graph_summary_auxiliary": 0,
@@ -1787,7 +1891,8 @@ class MemoryService(
                     },
                     "workspace_inherited_auxiliary": {
                         "group_present": bool(
-                            inherited_workspace_items and resolved_workspace_id is not None
+                            inherited_workspace_items
+                            and resolved_workspace_id is not None
                         ),
                         "item_present": bool(inherited_workspace_items),
                     },
@@ -1818,7 +1923,8 @@ class MemoryService(
                         "episode": 0,
                         "workspace": (
                             1
-                            if inherited_workspace_items and resolved_workspace_id is not None
+                            if inherited_workspace_items
+                            and resolved_workspace_id is not None
                             else 0
                         ),
                         "relation": 0,
@@ -1873,7 +1979,8 @@ class MemoryService(
                     "episode_direct": [],
                     "workspace_inherited_auxiliary": (
                         ["workspace"]
-                        if inherited_workspace_items and resolved_workspace_id is not None
+                        if inherited_workspace_items
+                        and resolved_workspace_id is not None
                         else []
                     ),
                     "relation_supports_auxiliary": [],
@@ -1951,10 +2058,12 @@ class MemoryService(
             normalized_query=normalized_query,
             query_tokens=query_token_values,
         )
-        memory_item_details_before_query_filter = self._build_memory_item_details_for_episodes(
-            episodes=episodes,
-            include_memory_items=request.include_memory_items,
-            include_summaries=request.include_summaries,
+        memory_item_details_before_query_filter = (
+            self._build_memory_item_details_for_episodes(
+                episodes=episodes,
+                include_memory_items=request.include_memory_items,
+                include_summaries=request.include_summaries,
+            )
         )
 
         if normalized_query is not None:
@@ -1975,7 +2084,8 @@ class MemoryService(
 
             episodes = tuple(filtered_episodes)
             all_episodes_filtered_out_by_query = (
-                bool(episode_explanations_before_query_filter) and not filtered_episode_explanations
+                bool(episode_explanations_before_query_filter)
+                and not filtered_episode_explanations
             )
             if filtered_episode_explanations:
                 episode_explanations = tuple(filtered_episode_explanations)
@@ -2011,9 +2121,11 @@ class MemoryService(
             memory_item_details=memory_item_details,
             limit=request.limit,
         )
-        graph_summary_related_memory_items = self._collect_graph_summary_related_memory_items(
-            memory_item_details=memory_item_details,
-            limit=request.limit,
+        graph_summary_related_memory_items = (
+            self._collect_graph_summary_related_memory_items(
+                memory_item_details=memory_item_details,
+                limit=request.limit,
+            )
         )
         memory_context_groups = self._build_memory_context_groups(
             episodes=episodes,
@@ -2055,7 +2167,9 @@ class MemoryService(
                         "remember_path_relation_explanations",
                         [],
                     ),
-                    "relation_summary": detail.get("remember_path_relation_summary", {}),
+                    "relation_summary": detail.get(
+                        "remember_path_relation_summary", {}
+                    ),
                 }
                 for detail in memory_item_details
             },
@@ -2068,7 +2182,9 @@ class MemoryService(
                 {
                     relation_reason
                     for detail in memory_item_details
-                    for relation_reason in detail.get("remember_path_relation_summary", {})
+                    for relation_reason in detail.get(
+                        "remember_path_relation_summary", {}
+                    )
                     .get("relation_reason_counts", {})
                     .keys()
                     if isinstance(relation_reason, str) and relation_reason.strip()
@@ -2079,7 +2195,9 @@ class MemoryService(
                     {
                         relation_reason
                         for detail in memory_item_details
-                        for relation_reason in detail.get("remember_path_relation_summary", {})
+                        for relation_reason in detail.get(
+                            "remember_path_relation_summary", {}
+                        )
                         .get("relation_reason_counts", {})
                         .keys()
                         if isinstance(relation_reason, str) and relation_reason.strip()
@@ -2123,7 +2241,9 @@ class MemoryService(
                     {
                         promotion_field
                         for detail in memory_item_details
-                        for promotion_field in detail.get("remember_path_memory_summary", {})
+                        for promotion_field in detail.get(
+                            "remember_path_memory_summary", {}
+                        )
                         .get("promotion_field_counts", {})
                         .keys()
                         if isinstance(promotion_field, str) and promotion_field.strip()
@@ -2141,7 +2261,9 @@ class MemoryService(
                     {
                         relation_reason
                         for detail in memory_item_details
-                        for relation_reason in detail.get("remember_path_relation_summary", {})
+                        for relation_reason in detail.get(
+                            "remember_path_relation_summary", {}
+                        )
                         .get("relation_reason_counts", {})
                         .keys()
                         if isinstance(relation_reason, str) and relation_reason.strip()
@@ -2149,7 +2271,8 @@ class MemoryService(
                 )
             },
             "memory_item_counts_by_episode": {
-                detail["episode_id"]: detail["memory_item_count"] for detail in memory_item_details
+                detail["episode_id"]: detail["memory_item_count"]
+                for detail in memory_item_details
             },
             "summaries": list(summaries),
             "summary_selection_applied": summary_selection_applied,
@@ -2165,7 +2288,9 @@ class MemoryService(
             "related_context_is_auxiliary": bool(
                 related_memory_items or graph_summary_related_memory_items
             ),
-            "related_context_relation_types": (["supports"] if related_memory_items else [])
+            "related_context_relation_types": (
+                ["supports"] if related_memory_items else []
+            )
             + (["summarizes"] if graph_summary_related_memory_items else []),
             "related_context_selection_route": (
                 "graph_summary_auxiliary"
@@ -2227,11 +2352,14 @@ class MemoryService(
             },
             "memory_context_groups": memory_context_groups,
             "inherited_memory_items": [
-                self._serialize_memory_item(memory_item) for memory_item in inherited_memory_items
+                self._serialize_memory_item(memory_item)
+                for memory_item in inherited_memory_items
             ],
             "related_memory_items": [
                 self._serialize_memory_item(memory_item)
-                for memory_item in (related_memory_items or graph_summary_related_memory_items)
+                for memory_item in (
+                    related_memory_items or graph_summary_related_memory_items
+                )
             ],
         }
 
@@ -2327,14 +2455,6 @@ class MemoryService(
         if not workflow_ids:
             return ()
 
-        workflow_episode_lists = [
-            self._episode_repository.list_by_workflow_id(
-                workflow_id,
-                limit=limit,
-            )
-            for workflow_id in workflow_ids
-        ]
-
         return self._interleave_workflow_episodes(
             workflow_ids=workflow_ids,
             limit=limit,
@@ -2353,8 +2473,9 @@ class MemoryService(
             if memory_item.content.strip()
         ]
         if normalized_episode_summary and normalized_memory_contents:
-            return f"{normalized_episode_summary}\n\nIncluded memory items:\n- " + "\n- ".join(
-                normalized_memory_contents
+            return (
+                f"{normalized_episode_summary}\n\nIncluded memory items:\n- "
+                + "\n- ".join(normalized_memory_contents)
             )
         if normalized_episode_summary:
             return normalized_episode_summary

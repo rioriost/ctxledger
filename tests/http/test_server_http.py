@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -54,7 +53,9 @@ def test_parse_workflow_resume_request_path_returns_uuid_for_valid_path() -> Non
         == workflow_instance_id
     )
     assert (
-        parse_workflow_resume_request_path(f"/workflow-resume/{workflow_instance_id}?format=json")
+        parse_workflow_resume_request_path(
+            f"/workflow-resume/{workflow_instance_id}?format=json"
+        )
         == workflow_instance_id
     )
 
@@ -81,7 +82,9 @@ def test_build_workflow_resume_http_handler_returns_success_response() -> None:
 
     server.startup()
 
-    response = handler(f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}")
+    response = handler(
+        f"/workflow-resume/{resume.workflow_instance.workflow_instance_id}"
+    )
 
     assert isinstance(response, WorkflowResumeResponse)
     assert response.status_code == 200
@@ -89,7 +92,9 @@ def test_build_workflow_resume_http_handler_returns_success_response() -> None:
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workflow_resume_http_handler_returns_not_found_for_invalid_path() -> None:
+def test_build_workflow_resume_http_handler_returns_not_found_for_invalid_path() -> (
+    None
+):
     settings = make_settings()
     server = make_server(
         settings=settings,
@@ -113,7 +118,9 @@ def test_build_workflow_resume_http_handler_returns_not_found_for_invalid_path()
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workflow_resume_http_handler_returns_503_when_server_is_not_ready() -> None:
+def test_build_workflow_resume_http_handler_returns_503_when_server_is_not_ready() -> (
+    None
+):
     settings = make_settings()
     server = make_server(settings=settings)
     handler = build_workflow_resume_http_handler(server)
@@ -335,7 +342,9 @@ def test_build_runtime_introspection_response_includes_age_prototype_details() -
     assert "runtime" in response.payload
 
 
-def test_age_prototype_runtime_details_readiness_payload_surfaces_explainability_fields() -> None:
+def test_age_prototype_runtime_details_readiness_payload_surfaces_explainability_fields() -> (
+    None
+):
     settings = make_settings()
     health_checker = FakeDatabaseHealthChecker(
         age_available_value=True,
@@ -603,7 +612,9 @@ def test_dispatch_http_request_returns_route_not_found_result() -> None:
     }
 
 
-def test_dispatch_http_request_returns_error_result_for_handler_error_response() -> None:
+def test_dispatch_http_request_returns_error_result_for_handler_error_response() -> (
+    None
+):
     settings = make_settings()
     server = make_server(
         settings=settings,
@@ -719,7 +730,9 @@ def test_serialize_runtime_introspection_returns_json_ready_payload() -> None:
     }
 
 
-def test_serialize_runtime_introspection_collection_returns_json_ready_payloads() -> None:
+def test_serialize_runtime_introspection_collection_returns_json_ready_payloads() -> (
+    None
+):
     introspections = (
         RuntimeIntrospection(
             transport="http",
@@ -741,7 +754,9 @@ def test_serialize_runtime_introspection_collection_returns_json_ready_payloads(
     ]
 
 
-def test_build_runtime_introspection_response_returns_http_payload_for_single_runtime() -> None:
+def test_build_runtime_introspection_response_returns_http_payload_for_single_runtime() -> (
+    None
+):
     settings = make_settings()
     server, _, _, _ = make_http_runtime(
         settings=settings,
@@ -802,7 +817,9 @@ def test_build_runtime_introspection_response_returns_http_payload_for_single_ru
     }
 
 
-def test_build_runtime_introspection_response_exposes_readiness_explainability_fields() -> None:
+def test_build_runtime_introspection_response_exposes_readiness_explainability_fields() -> (
+    None
+):
     settings = make_settings()
     server, _, _, _ = make_http_runtime(
         settings=settings,
@@ -810,12 +827,20 @@ def test_build_runtime_introspection_response_exposes_readiness_explainability_f
 
     response = build_runtime_introspection_response(server)
 
-    summary_graph_mirroring = response.payload["age_prototype"]["summary_graph_mirroring"]
+    summary_graph_mirroring = response.payload["age_prototype"][
+        "summary_graph_mirroring"
+    ]
     assert summary_graph_mirroring["relation_type"] == "summarizes"
     assert summary_graph_mirroring["selection_route"] == "graph_summary_auxiliary"
     assert summary_graph_mirroring["explainability_scope"] == "readiness"
-    assert summary_graph_mirroring["refresh_command"] == "ctxledger refresh-age-summary-graph"
-    assert summary_graph_mirroring["read_path_scope"] == "narrow_auxiliary_summary_member_traversal"
+    assert (
+        summary_graph_mirroring["refresh_command"]
+        == "ctxledger refresh-age-summary-graph"
+    )
+    assert (
+        summary_graph_mirroring["read_path_scope"]
+        == "narrow_auxiliary_summary_member_traversal"
+    )
 
 
 def test_build_runtime_introspection_response_returns_empty_runtime_list_when_runtime_is_missing() -> (
@@ -945,7 +970,9 @@ def test_build_runtime_introspection_http_handler_returns_success_response() -> 
     }
 
 
-def test_build_runtime_introspection_http_handler_returns_not_found_for_invalid_path() -> None:
+def test_build_runtime_introspection_http_handler_returns_not_found_for_invalid_path() -> (
+    None
+):
     settings = make_settings()
     server, _, _, _ = make_http_runtime(
         settings=settings,
@@ -985,7 +1012,9 @@ def test_build_http_runtime_adapter_omits_runtime_introspection_route_when_debug
     )
 
 
-def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handler() -> None:
+def test_http_runtime_adapter_dispatches_registered_runtime_introspection_handler() -> (
+    None
+):
     settings = make_settings()
     server, _, _, _ = make_http_runtime(
         settings=settings,
@@ -1357,7 +1386,9 @@ def test_http_mcp_route_supports_tools_list_over_http() -> None:
         "workspace_register",
     ]
 
-    workspace_register_tool = next(tool for tool in tools if tool["name"] == "workspace_register")
+    workspace_register_tool = next(
+        tool for tool in tools if tool["name"] == "workspace_register"
+    )
     assert workspace_register_tool["inputSchema"] == {
         "type": "object",
         "properties": {
@@ -1535,9 +1566,14 @@ def test_http_mcp_rpc_tools_list_returns_registered_tools_with_input_schemas() -
         "canonical_path",
         "default_branch",
     ]
-    assert tools["workflow_start"]["inputSchema"]["properties"]["workspace_id"]["format"] == "uuid"
     assert (
-        tools["memory_get_context"]["inputSchema"]["properties"]["include_summaries"]["type"]
+        tools["workflow_start"]["inputSchema"]["properties"]["workspace_id"]["format"]
+        == "uuid"
+    )
+    assert (
+        tools["memory_get_context"]["inputSchema"]["properties"]["include_summaries"][
+            "type"
+        ]
         == "boolean"
     )
     assert (
@@ -1610,7 +1646,9 @@ def test_http_runtime_adapter_dispatch_tool_auto_records_file_work_after_edit_fi
     )
     assert remember_request.metadata["file_name"] == "grafana_operator_runbook.md"
     assert remember_request.metadata["file_operation"] == "modify"
-    assert remember_request.metadata["purpose"] == "document automatic file-work recording"
+    assert (
+        remember_request.metadata["purpose"] == "document automatic file-work recording"
+    )
     assert remember_request.metadata["recording_mode"] == "automatic_from_http_runtime"
     assert remember_request.metadata["source_tool_name"] == "edit_file"
     assert remember_request.metadata["source_arguments"] == {
@@ -1621,7 +1659,9 @@ def test_http_runtime_adapter_dispatch_tool_auto_records_file_work_after_edit_fi
     }
 
 
-def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payload() -> None:
+def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payload() -> (
+    None
+):
     settings = make_settings()
     workflow_id = uuid4()
     episode_id = uuid4()
@@ -1779,7 +1819,9 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payloa
             return memory_service
 
     fake_memory_service = FakeMemoryService()
-    http_runtime_module.build_workflow_backed_memory_service = lambda server: fake_memory_service
+    http_runtime_module.build_workflow_backed_memory_service = lambda server: (
+        fake_memory_service
+    )
 
     try:
         response = runtime.dispatch(
@@ -1818,9 +1860,13 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_first_payloa
     assert payload["ok"] is True
     assert payload["result"]["feature"] == "memory_get_context"
     assert payload["result"]["details"]["summary_selection_applied"] is True
-    assert payload["result"]["details"]["summary_selection_kind"] == "memory_summary_first"
+    assert (
+        payload["result"]["details"]["summary_selection_kind"] == "memory_summary_first"
+    )
     assert payload["result"]["details"]["retrieval_routes_present"] == ["summary_first"]
-    assert payload["result"]["details"]["primary_retrieval_routes_present"] == ["summary_first"]
+    assert payload["result"]["details"]["primary_retrieval_routes_present"] == [
+        "summary_first"
+    ]
     assert payload["result"]["details"]["remember_path_relation_reasons"] == [
         "checkpoint_to_completion_support",
         "summary_member_support",
@@ -2017,7 +2063,9 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_only_primary
             return memory_service
 
     fake_memory_service = FakeMemoryService()
-    http_runtime_module.build_workflow_backed_memory_service = lambda server: fake_memory_service
+    http_runtime_module.build_workflow_backed_memory_service = lambda server: (
+        fake_memory_service
+    )
 
     try:
         response = runtime.dispatch(
@@ -2057,7 +2105,10 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_only_primary
     assert payload["ok"] is True
     assert payload["result"]["feature"] == "memory_get_context"
     assert payload["result"]["details"]["summary_selection_applied"] is True
-    assert payload["result"]["details"]["summary_selection_kind"] == "episode_summary_first"
+    assert (
+        payload["result"]["details"]["summary_selection_kind"]
+        == "episode_summary_first"
+    )
     assert payload["result"]["details"]["summary_first_has_episode_groups"] is False
     assert payload["result"]["details"]["summary_first_is_summary_only"] is True
     assert payload["result"]["details"]["summary_first_child_episode_count"] == 1
@@ -2065,7 +2116,10 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_summary_only_primary
         str(episode_id),
     ]
     assert (
-        payload["result"]["details"]["primary_episode_groups_present_after_query_filter"] is False
+        payload["result"]["details"][
+            "primary_episode_groups_present_after_query_filter"
+        ]
+        is False
     )
     assert payload["result"]["details"]["auxiliary_only_after_query_filter"] is False
     assert payload["result"]["details"]["retrieval_routes_present"] == ["summary_first"]
@@ -2174,7 +2228,9 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_episode_less_narrow_
             return memory_service
 
     fake_memory_service = FakeMemoryService()
-    http_runtime_module.build_workflow_backed_memory_service = lambda server: fake_memory_service
+    http_runtime_module.build_workflow_backed_memory_service = lambda server: (
+        fake_memory_service
+    )
 
     try:
         response = runtime.dispatch(
@@ -2249,7 +2305,10 @@ def test_http_mcp_rpc_tools_call_returns_memory_get_context_episode_less_narrow_
     assert "summary_first_is_summary_only" not in payload["result"]["details"]
     assert "summary_first_child_episode_count" not in payload["result"]["details"]
     assert "summary_first_child_episode_ids" not in payload["result"]["details"]
-    assert "primary_episode_groups_present_after_query_filter" not in payload["result"]["details"]
+    assert (
+        "primary_episode_groups_present_after_query_filter"
+        not in payload["result"]["details"]
+    )
     assert "auxiliary_only_after_query_filter" not in payload["result"]["details"]
     assert len(fake_memory_service.calls) == 1
 

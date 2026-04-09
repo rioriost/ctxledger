@@ -31,19 +31,18 @@ from ..workflow.service import (
 if TYPE_CHECKING:
     from ..runtime.types import McpToolResponse
     from ..server import CtxLedgerServer
-    from ..workflow.service import UnitOfWork
 
 
 logger = logging.getLogger(__name__)
 
 
-def _mcp_tool_response_cls() -> type["McpToolResponse"]:
+def _mcp_tool_response_cls() -> type[McpToolResponse]:
     from ..runtime.types import McpToolResponse
 
     return McpToolResponse
 
 
-def build_mcp_success_response(result: dict[str, Any]) -> "McpToolResponse":
+def build_mcp_success_response(result: dict[str, Any]) -> McpToolResponse:
     response_cls = _mcp_tool_response_cls()
     return response_cls(
         payload={
@@ -58,7 +57,7 @@ def build_mcp_error_response(
     code: str,
     message: str,
     details: dict[str, Any] | None = None,
-) -> "McpToolResponse":
+) -> McpToolResponse:
     response_cls = _mcp_tool_response_cls()
     return response_cls(
         payload={
@@ -75,7 +74,7 @@ def build_mcp_error_response(
 def _parse_required_uuid_argument(
     arguments: dict[str, Any],
     field_name: str,
-) -> UUID | "McpToolResponse":
+) -> UUID | McpToolResponse:
     raw_value = arguments.get(field_name)
     if not isinstance(raw_value, str) or not raw_value.strip():
         return build_mcp_error_response(
@@ -97,7 +96,7 @@ def _parse_required_uuid_argument(
 def _parse_required_string_argument(
     arguments: dict[str, Any],
     field_name: str,
-) -> str | "McpToolResponse":
+) -> str | McpToolResponse:
     raw_value = arguments.get(field_name)
     if not isinstance(raw_value, str) or not raw_value.strip():
         return build_mcp_error_response(
@@ -111,7 +110,7 @@ def _parse_required_string_argument(
 def _parse_optional_string_argument(
     arguments: dict[str, Any],
     field_name: str,
-) -> str | None | "McpToolResponse":
+) -> str | None | McpToolResponse:
     raw_value = arguments.get(field_name)
     if raw_value is None:
         return None
@@ -127,7 +126,7 @@ def _parse_optional_string_argument(
 def _parse_optional_dict_argument(
     arguments: dict[str, Any],
     field_name: str,
-) -> dict[str, Any] | "McpToolResponse":
+) -> dict[str, Any] | McpToolResponse:
     raw_value = arguments.get(field_name)
     if raw_value is None:
         return {}
@@ -143,7 +142,7 @@ def _parse_optional_dict_argument(
 def _merge_top_level_checkpoint_fields(
     arguments: dict[str, Any],
     checkpoint_json: dict[str, Any],
-) -> dict[str, Any] | "McpToolResponse":
+) -> dict[str, Any] | McpToolResponse:
     merged = dict(checkpoint_json)
     for field_name in (
         "current_objective",
@@ -166,7 +165,7 @@ def _merge_top_level_checkpoint_fields(
 
 def _parse_optional_verify_status_argument(
     arguments: dict[str, Any],
-) -> VerifyStatus | None | "McpToolResponse":
+) -> VerifyStatus | None | McpToolResponse:
     raw_value = arguments.get("verify_status")
     if raw_value is None:
         return None
@@ -191,7 +190,7 @@ def _parse_optional_verify_status_argument(
 
 def _parse_required_workflow_status_argument(
     arguments: dict[str, Any],
-) -> WorkflowInstanceStatus | "McpToolResponse":
+) -> WorkflowInstanceStatus | McpToolResponse:
     raw_value = arguments.get("workflow_status")
     if not isinstance(raw_value, str) or not raw_value.strip():
         return build_mcp_error_response(
@@ -216,7 +215,7 @@ def _map_workflow_error_to_mcp_response(
     exc: Exception,
     *,
     default_message: str,
-) -> "McpToolResponse":
+) -> McpToolResponse:
     if isinstance(exc, WorkflowError):
         code = exc.code
         if code in {
@@ -260,9 +259,9 @@ def _map_workflow_error_to_mcp_response(
 
 
 def build_resume_workflow_tool_handler(
-    server: "CtxLedgerServer",
+    server: CtxLedgerServer,
 ):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
         workflow_instance_id = _parse_required_uuid_argument(
             arguments,
             "workflow_instance_id",
@@ -287,9 +286,9 @@ def build_resume_workflow_tool_handler(
 
 
 def build_workspace_register_tool_handler(
-    server: "CtxLedgerServer",
+    server: CtxLedgerServer,
 ):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
         repo_url = _parse_required_string_argument(arguments, "repo_url")
         if isinstance(repo_url, _mcp_tool_response_cls()):
             return repo_url
@@ -365,9 +364,9 @@ def build_workspace_register_tool_handler(
 
 
 def build_workflow_start_tool_handler(
-    server: "CtxLedgerServer",
+    server: CtxLedgerServer,
 ):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
         workspace_id = _parse_required_uuid_argument(arguments, "workspace_id")
         if isinstance(workspace_id, _mcp_tool_response_cls()):
             return workspace_id
@@ -417,9 +416,9 @@ def build_workflow_start_tool_handler(
 
 
 def build_workflow_checkpoint_tool_handler(
-    server: "CtxLedgerServer",
+    server: CtxLedgerServer,
 ):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
         workflow_instance_id = _parse_required_uuid_argument(
             arguments,
             "workflow_instance_id",
@@ -520,9 +519,9 @@ def build_workflow_checkpoint_tool_handler(
 
 
 def build_workflow_complete_tool_handler(
-    server: "CtxLedgerServer",
+    server: CtxLedgerServer,
 ):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
         workflow_instance_id = _parse_required_uuid_argument(
             arguments,
             "workflow_instance_id",
@@ -584,7 +583,7 @@ def build_workflow_complete_tool_handler(
                 if server.workflow_service is not None
                 else False,
                 "workflow_memory_bridge_type": (
-                    type(getattr(server.workflow_service, "_workflow_memory_bridge")).__name__
+                    type(server.workflow_service._workflow_memory_bridge).__name__
                     if getattr(server.workflow_service, "_workflow_memory_bridge", None) is not None
                     else None
                 )
@@ -677,7 +676,7 @@ def build_workflow_complete_tool_handler(
 def build_memory_remember_episode_tool_handler(
     memory_service: MemoryService,
 ):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
         try:
             response = memory_service.remember_episode(
                 RememberEpisodeRequest(
@@ -709,7 +708,7 @@ def build_memory_remember_episode_tool_handler(
 def build_file_work_record_tool_handler(
     memory_service: MemoryService,
 ):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
         workflow_instance_id = arguments.get("workflow_instance_id")
         if not isinstance(workflow_instance_id, str) or not workflow_instance_id.strip():
             return build_mcp_error_response(
@@ -832,7 +831,7 @@ def build_file_work_record_tool_handler(
 def build_memory_search_tool_handler(
     memory_service: MemoryService,
 ):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
         try:
             response = memory_service.search(
                 SearchMemoryRequest(
@@ -864,7 +863,7 @@ def build_memory_search_tool_handler(
 def build_memory_get_context_tool_handler(
     memory_service: MemoryService,
 ):
-    def _handler(arguments: dict[str, Any]) -> "McpToolResponse":
+    def _handler(arguments: dict[str, Any]) -> McpToolResponse:
         try:
             response = memory_service.get_context(
                 GetMemoryContextRequest(
@@ -921,7 +920,7 @@ def build_memory_get_context_tool_handler(
 
 
 def build_workflow_backed_memory_service(
-    server: "CtxLedgerServer | None",
+    server: CtxLedgerServer | None,
 ) -> MemoryService:
     if server is None or server.workflow_service is None:
         return MemoryService()

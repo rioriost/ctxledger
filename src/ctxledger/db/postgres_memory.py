@@ -683,7 +683,10 @@ class PostgresMemorySummaryMembershipRepository:
                     created_at
                 FROM memory_summary_memberships
                 WHERE memory_summary_id = %s
-                ORDER BY membership_order ASC NULLS LAST, created_at ASC, memory_summary_membership_id ASC
+                ORDER BY
+                    membership_order ASC NULLS LAST,
+                    created_at ASC,
+                    memory_summary_membership_id ASC
                 LIMIT %s
                 """,
                 (memory_summary_id, limit),
@@ -768,7 +771,7 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
 
         with self._conn.cursor() as cur:
             cur.execute(
-                f"""
+                """
                 INSERT INTO memory_embeddings (
                     memory_embedding_id,
                     memory_id,
@@ -981,7 +984,10 @@ class PostgresMemoryEmbeddingRepository(MemoryEmbeddingRepository):
                     ON mi.memory_id = me.memory_id
                 WHERE me.embedding IS NOT NULL
                   {workspace_filter_sql}
-                ORDER BY me.embedding <-> %s::vector ASC, me.created_at DESC, me.memory_embedding_id DESC
+                ORDER BY
+                    me.embedding <-> %s::vector ASC,
+                    me.created_at DESC,
+                    me.memory_embedding_id DESC
                 LIMIT %s
                 """,
                 params,
@@ -1222,7 +1228,8 @@ class PostgresMemoryRelationRepository:
                 FROM cypher(
                     %s,
                     $$
-                    MATCH (source:memory_item)<-[:summarizes]-(summary:memory_summary)-[:summarizes]->(member:memory_item)
+                    MATCH (source:memory_item)<-[:summarizes]-(summary:memory_summary)
+                          -[:summarizes]->(member:memory_item)
                     WHERE source.memory_id IN $source_memory_ids
                     RETURN DISTINCT member.memory_id AS member_memory_id
                     $$

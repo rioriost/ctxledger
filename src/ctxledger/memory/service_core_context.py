@@ -8,7 +8,6 @@ from .helpers import metadata_query_strings, text_matches_query
 from .types import (
     EpisodeRecord,
     MemoryItemRecord,
-    MemoryRelationRecord,
     MemorySummaryMembershipRecord,
     MemorySummaryRecord,
 )

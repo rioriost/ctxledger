@@ -265,7 +265,6 @@ def build_workspace_resume_resource_response(
     server: CtxLedgerServer,
     workspace_id: UUID,
 ) -> McpResourceResponse:
-    from .serializers import serialize_workflow_resume
     from .types import McpResourceResponse
 
     if server.workflow_service is None:

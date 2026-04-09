@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -8,18 +7,12 @@ from uuid import UUID, uuid4
 import pytest
 
 from ctxledger.config import (
+    EmbeddingExecutionMode,
     EmbeddingProvider,
-    EmbeddingSettings,
 )
 from ctxledger.memory.embeddings import (
-    DisabledEmbeddingGenerator,
-    EmbeddingGenerationError,
     EmbeddingRequest,
     EmbeddingResult,
-    ExternalAPIEmbeddingGenerator,
-    LocalStubEmbeddingGenerator,
-    build_embedding_generator,
-    compute_content_hash,
 )
 from ctxledger.memory.service import (
     EpisodeRecord,
@@ -27,37 +20,38 @@ from ctxledger.memory.service import (
     InMemoryEpisodeRepository,
     InMemoryMemoryEmbeddingRepository,
     InMemoryMemoryItemRepository,
-    InMemoryMemoryRelationRepository,
     InMemoryWorkflowLookupRepository,
     MemoryEmbeddingRecord,
     MemoryFeature,
     MemoryItemRecord,
-    MemoryRelationRecord,
     MemoryService,
     RememberEpisodeRequest,
     RememberEpisodeResponse,
     SearchMemoryRequest,
-    SearchMemoryResponse,
-    SearchResultRecord,
-    StubResponse,
 )
-from ctxledger.memory.types import MemoryRelationRecord
-from ctxledger.runtime.introspection import RuntimeIntrospection
-from ctxledger.runtime.serializers import (
-    serialize_runtime_introspection,
-    serialize_runtime_introspection_collection,
-    serialize_search_memory_response,
-    serialize_stub_response,
-)
-from ctxledger.workflow.service import (
-    VerifyReport,
-    VerifyStatus,
-    WorkflowAttempt,
-    WorkflowAttemptStatus,
-    WorkflowCheckpoint,
-    WorkflowInstance,
-    WorkflowInstanceStatus,
-)
+
+
+@pytest.fixture(autouse=True)
+def patch_embedding_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = SimpleNamespace(
+        embedding=SimpleNamespace(
+            enabled=True,
+            provider=EmbeddingProvider.LOCAL_STUB,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
+            azure_openai_embedding_deployment=None,
+            dimensions=8,
+            model="local-stub-v1",
+            azure_openai_auth_mode=SimpleNamespace(value="auto"),
+        )
+    )
+    monkeypatch.setattr(
+        "ctxledger.memory.service_core_search.SearchHelperMixin._load_embedding_settings",
+        lambda self: settings.embedding,
+    )
+    monkeypatch.setattr(
+        "ctxledger.memory.service_core.service_module.get_settings",
+        lambda: settings,
+    )
 
 
 def test_memory_service_records_episodes_and_returns_search_results() -> None:
@@ -145,10 +139,16 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert memory_item_repository.memory_items[0].workspace_id == UUID(
         "00000000-0000-0000-0000-000000000001"
     )
-    assert memory_item_repository.memory_items[0].episode_id == remember_response.episode.episode_id
+    assert (
+        memory_item_repository.memory_items[0].episode_id
+        == remember_response.episode.episode_id
+    )
     assert memory_item_repository.memory_items[0].type == "episode_note"
     assert memory_item_repository.memory_items[0].provenance == "episode"
-    assert memory_item_repository.memory_items[0].content == "Episode summary with relevant context"
+    assert (
+        memory_item_repository.memory_items[0].content
+        == "Episode summary with relevant context"
+    )
     assert memory_item_repository.memory_items[0].metadata == {
         "kind": "checkpoint",
         "topic": "relevant context",
@@ -170,8 +170,13 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     )
     assert search_response.details["results_returned"] == 1
     assert len(search_response.results) == 1
-    assert search_response.results[0].memory_id == memory_item_repository.memory_items[0].memory_id
-    assert search_response.results[0].workspace_id == UUID("00000000-0000-0000-0000-000000000001")
+    assert (
+        search_response.results[0].memory_id
+        == memory_item_repository.memory_items[0].memory_id
+    )
+    assert search_response.results[0].workspace_id == UUID(
+        "00000000-0000-0000-0000-000000000001"
+    )
     assert search_response.results[0].episode_id == remember_response.episode.episode_id
     assert search_response.results[0].workflow_instance_id is None
     assert search_response.results[0].attempt_id is None
@@ -187,7 +192,12 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
 
     assert context_response.feature == MemoryFeature.GET_CONTEXT
     assert primary_only_context_response.feature == MemoryFeature.GET_CONTEXT
-    assert primary_only_context_response.details["memory_context_groups_are_primary_output"] is True
+    assert (
+        primary_only_context_response.details[
+            "memory_context_groups_are_primary_output"
+        ]
+        is True
+    )
     assert (
         primary_only_context_response.details[
             "memory_context_groups_are_primary_explainability_surface"
@@ -195,7 +205,9 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
         is True
     )
     assert (
-        primary_only_context_response.details["top_level_explainability_prefers_grouped_routes"]
+        primary_only_context_response.details[
+            "top_level_explainability_prefers_grouped_routes"
+        ]
         is True
     )
     assert "memory_items" not in primary_only_context_response.details
@@ -326,7 +338,10 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
     )
     assert search_response.results[0].ranking_details["semantic_component"] == 0.0
     assert search_response.results[0].ranking_details["score_mode"] == "lexical_only"
-    assert search_response.results[0].ranking_details["semantic_only_discount_applied"] is False
+    assert (
+        search_response.results[0].ranking_details["semantic_only_discount_applied"]
+        is False
+    )
     assert search_response.results[0].ranking_details["reason_list"] == [
         {
             "code": "lexical_signal_present",
@@ -343,15 +358,19 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
             "message": "the result ranked using lexical evidence only",
         },
     ]
-    assert search_response.results[0].ranking_details["task_recall_detail"]["matched_fields"] == [
-        "content"
-    ]
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "matched_fields"
+    ] == ["content"]
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_type"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "memory_item_type"
+        ]
         == "episode_note"
     )
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "memory_item_provenance"
+        ]
         == "episode"
     )
     assert (
@@ -361,16 +380,23 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         ]
     )
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["workspace_constrained"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "workspace_constrained"
+        ]
         is True
     )
     assert search_response.details["task_recall_context_present"] is True
-    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
+    assert search_response.details[
+        "task_recall_latest_considered_workflow_instance_id"
+    ] == str(workflow_id)
+    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(
         workflow_id
     )
-    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(workflow_id)
     assert search_response.details["task_recall_selected_equals_latest"] is True
-    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is False
+    assert (
+        search_response.details["task_recall_latest_vs_selected_comparison_present"]
+        is False
+    )
     assert (
         search_response.results[0].ranking_details["task_recall_detail"][
             "task_recall_context_present"
@@ -384,7 +410,9 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         "selected_workflow_instance_id"
     ] == str(workflow_id)
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_equals_latest"
+        ]
         is True
     )
     assert (
@@ -483,8 +511,13 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
     assert search_response.results[1].ranking_details["semantic_component"] == (
         search_response.results[1].semantic_score
     )
-    assert search_response.results[1].ranking_details["score_mode"] == ("semantic_only_discounted")
-    assert search_response.results[1].ranking_details["semantic_only_discount_applied"] is True
+    assert search_response.results[1].ranking_details["score_mode"] == (
+        "semantic_only_discounted"
+    )
+    assert (
+        search_response.results[1].ranking_details["semantic_only_discount_applied"]
+        is True
+    )
     assert search_response.results[1].ranking_details["reason_list"] == [
         {
             "code": "lexical_signal_absent",
@@ -506,15 +539,19 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
             "value": 0.75,
         },
     ]
-    assert search_response.results[1].ranking_details["task_recall_detail"]["matched_fields"] == [
-        "embedding_similarity"
-    ]
+    assert search_response.results[1].ranking_details["task_recall_detail"][
+        "matched_fields"
+    ] == ["embedding_similarity"]
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_type"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "memory_item_type"
+        ]
         == "episode_note"
     )
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "memory_item_provenance"
+        ]
         == "episode"
     )
     assert (
@@ -524,19 +561,32 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         ]
     )
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["workspace_constrained"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "workspace_constrained"
+        ]
         is True
     )
     assert search_response.details["task_recall_context_present"] is True
-    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
+    assert search_response.details[
+        "task_recall_latest_considered_workflow_instance_id"
+    ] == str(workflow_id)
+    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(
         workflow_id
     )
-    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(workflow_id)
     assert search_response.details["task_recall_selected_equals_latest"] is True
-    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is False
-    assert search_response.details["task_recall_comparison_summary_explanations_present"] is False
+    assert (
+        search_response.details["task_recall_latest_vs_selected_comparison_present"]
+        is False
+    )
+    assert (
+        search_response.details["task_recall_comparison_summary_explanations_present"]
+        is False
+    )
     assert search_response.details["task_recall_comparison_summary_explanations"] == []
-    assert search_response.details["task_recall_comparison_summary_explanations_present"] is False
+    assert (
+        search_response.details["task_recall_comparison_summary_explanations_present"]
+        is False
+    )
     assert search_response.details["task_recall_comparison_summary_explanations"] == []
     assert (
         search_response.results[1].ranking_details["task_recall_detail"][
@@ -551,7 +601,9 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         "selected_workflow_instance_id"
     ] == str(workflow_id)
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "selected_equals_latest"
+        ]
         is True
     )
     assert (
@@ -761,15 +813,20 @@ def test_memory_service_search_applies_selected_continuation_target_bonus() -> N
         assert search_response.results[0].score > search_response.results[1].score
         assert search_response.results[1].memory_id == other_memory_id
     assert search_response.details["task_recall_context_present"] is True
-    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
-        other_workflow_id
-    )
+    assert search_response.details[
+        "task_recall_latest_considered_workflow_instance_id"
+    ] == str(other_workflow_id)
     assert search_response.details["task_recall_selected_workflow_instance_id"] == str(
         selected_workflow_id
     )
     assert search_response.details["task_recall_selected_equals_latest"] is False
-    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is True
-    assert search_response.details["task_recall_latest_vs_selected_candidate_details"] == {
+    assert (
+        search_response.details["task_recall_latest_vs_selected_comparison_present"]
+        is True
+    )
+    assert search_response.details[
+        "task_recall_latest_vs_selected_candidate_details"
+    ] == {
         "latest_workflow_instance_id": str(other_workflow_id),
         "selected_workflow_instance_id": str(selected_workflow_id),
         "latest_considered": {
@@ -814,9 +871,14 @@ def test_memory_service_search_applies_selected_continuation_target_bonus() -> N
         is True
     )
     assert (
-        search_response.details["task_recall_latest_vs_selected_checkpoint_details_present"] is True
+        search_response.details[
+            "task_recall_latest_vs_selected_checkpoint_details_present"
+        ]
+        is True
     )
-    assert search_response.details["task_recall_latest_vs_selected_checkpoint_details"] == {
+    assert search_response.details[
+        "task_recall_latest_vs_selected_checkpoint_details"
+    ] == {
         "latest_workflow_instance_id": str(other_workflow_id),
         "selected_workflow_instance_id": str(selected_workflow_id),
         "latest_considered": {
@@ -851,7 +913,10 @@ def test_memory_service_search_applies_selected_continuation_target_bonus() -> N
         "same_checkpoint_details": False,
         "comparison_source": "memory_search_task_recall_context",
     }
-    assert search_response.details["task_recall_comparison_summary_explanations_present"] is True
+    assert (
+        search_response.details["task_recall_comparison_summary_explanations_present"]
+        is True
+    )
     assert search_response.details["task_recall_comparison_summary_explanations"] == [
         {
             "code": "search_selected_differs_from_latest",
@@ -888,7 +953,9 @@ def test_memory_service_search_applies_selected_continuation_target_bonus() -> N
         "selected_workflow_instance_id"
     ] == str(selected_workflow_id)
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_equals_latest"
+        ]
         is False
     )
     assert (
@@ -1031,7 +1098,8 @@ def test_memory_service_search_applies_selected_continuation_target_bonus() -> N
         == 0.5
     )
     assert {
-        reason["code"] for reason in search_response.results[0].ranking_details["reason_list"]
+        reason["code"]
+        for reason in search_response.results[0].ranking_details["reason_list"]
     } >= {
         "lexical_signal_present",
         "semantic_signal_absent",
@@ -1053,7 +1121,9 @@ def test_memory_service_search_applies_selected_continuation_target_bonus() -> N
         )
 
 
-def test_memory_service_search_surfaces_latest_vs_selected_task_recall_details() -> None:
+def test_memory_service_search_surfaces_latest_vs_selected_task_recall_details() -> (
+    None
+):
     primary_workflow_id = uuid4()
     detour_workflow_id = uuid4()
     older_background_workflow_id = uuid4()
@@ -1212,28 +1282,44 @@ def test_memory_service_search_surfaces_latest_vs_selected_task_recall_details()
     assert search_response.results
     assert search_response.results[0].memory_id == selected_memory_id
     assert search_response.details["task_recall_context_present"] is True
-    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
-        detour_workflow_id
-    )
+    assert search_response.details[
+        "task_recall_latest_considered_workflow_instance_id"
+    ] == str(detour_workflow_id)
     assert search_response.details["task_recall_selected_workflow_instance_id"] == str(
         primary_workflow_id
     )
     assert search_response.details["task_recall_selected_equals_latest"] is False
-    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is True
+    assert (
+        search_response.details["task_recall_latest_vs_selected_comparison_present"]
+        is True
+    )
 
-    latest_vs_selected = search_response.details["task_recall_latest_vs_selected_candidate_details"]
+    latest_vs_selected = search_response.details[
+        "task_recall_latest_vs_selected_candidate_details"
+    ]
     assert latest_vs_selected["latest_workflow_instance_id"] == str(detour_workflow_id)
-    assert latest_vs_selected["selected_workflow_instance_id"] == str(primary_workflow_id)
-    assert latest_vs_selected["comparison_source"] == "memory_search_task_recall_context"
+    assert latest_vs_selected["selected_workflow_instance_id"] == str(
+        primary_workflow_id
+    )
+    assert (
+        latest_vs_selected["comparison_source"] == "memory_search_task_recall_context"
+    )
     assert latest_vs_selected["latest_considered"]["workflow_instance_id"] == str(
         detour_workflow_id
     )
-    assert latest_vs_selected["selected"]["workflow_instance_id"] == str(primary_workflow_id)
+    assert latest_vs_selected["selected"]["workflow_instance_id"] == str(
+        primary_workflow_id
+    )
 
-    assert search_response.details["task_recall_comparison_summary_explanations_present"] is True
+    assert (
+        search_response.details["task_recall_comparison_summary_explanations_present"]
+        is True
+    )
     assert {
         explanation["code"]
-        for explanation in search_response.details["task_recall_comparison_summary_explanations"]
+        for explanation in search_response.details[
+            "task_recall_comparison_summary_explanations"
+        ]
     } == {
         "search_selected_differs_from_latest",
         "search_latest_and_selected_checkpoints_differ",
@@ -1248,7 +1334,9 @@ def test_memory_service_search_surfaces_latest_vs_selected_task_recall_details()
         "selected_workflow_instance_id"
     ] == str(primary_workflow_id)
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_equals_latest"
+        ]
         is False
     )
     assert (
@@ -1259,7 +1347,9 @@ def test_memory_service_search_surfaces_latest_vs_selected_task_recall_details()
     )
 
 
-def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:
+def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> (
+    None
+):
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()
     memory_item_repository = InMemoryMemoryItemRepository()
@@ -1396,8 +1486,13 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
     assert search_response.results[0].ranking_details["semantic_component"] == (
         search_response.results[0].semantic_score
     )
-    assert search_response.results[0].ranking_details["score_mode"] == ("semantic_only_discounted")
-    assert search_response.results[0].ranking_details["semantic_only_discount_applied"] is True
+    assert search_response.results[0].ranking_details["score_mode"] == (
+        "semantic_only_discounted"
+    )
+    assert (
+        search_response.results[0].ranking_details["semantic_only_discount_applied"]
+        is True
+    )
     assert search_response.results[0].ranking_details["reason_list"] == [
         {
             "code": "lexical_signal_absent",
@@ -1419,15 +1514,19 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
             "value": 0.75,
         },
     ]
-    assert search_response.results[0].ranking_details["task_recall_detail"]["matched_fields"] == [
-        "embedding_similarity"
-    ]
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "matched_fields"
+    ] == ["embedding_similarity"]
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_type"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "memory_item_type"
+        ]
         == "episode_note"
     )
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "memory_item_provenance"
+        ]
         == "episode"
     )
     assert (
@@ -1437,17 +1536,27 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
         ]
     )
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["workspace_constrained"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "workspace_constrained"
+        ]
         is True
     )
     assert search_response.details["task_recall_context_present"] is True
-    assert search_response.details["task_recall_latest_considered_workflow_instance_id"] == str(
+    assert search_response.details[
+        "task_recall_latest_considered_workflow_instance_id"
+    ] == str(workflow_id)
+    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(
         workflow_id
     )
-    assert search_response.details["task_recall_selected_workflow_instance_id"] == str(workflow_id)
     assert search_response.details["task_recall_selected_equals_latest"] is True
-    assert search_response.details["task_recall_latest_vs_selected_comparison_present"] is False
-    assert search_response.details["task_recall_comparison_summary_explanations_present"] is False
+    assert (
+        search_response.details["task_recall_latest_vs_selected_comparison_present"]
+        is False
+    )
+    assert (
+        search_response.details["task_recall_comparison_summary_explanations_present"]
+        is False
+    )
     assert search_response.details["task_recall_comparison_summary_explanations"] == []
     assert (
         search_response.results[0].ranking_details["task_recall_detail"][
@@ -1462,7 +1571,9 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
         "selected_workflow_instance_id"
     ] == str(workflow_id)
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["selected_equals_latest"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "selected_equals_latest"
+        ]
         is True
     )
     assert (
@@ -1553,8 +1664,13 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
     assert search_response.results[1].ranking_details["semantic_component"] == (
         search_response.results[1].semantic_score
     )
-    assert search_response.results[1].ranking_details["score_mode"] == ("semantic_only_discounted")
-    assert search_response.results[1].ranking_details["semantic_only_discount_applied"] is True
+    assert search_response.results[1].ranking_details["score_mode"] == (
+        "semantic_only_discounted"
+    )
+    assert (
+        search_response.results[1].ranking_details["semantic_only_discount_applied"]
+        is True
+    )
     assert search_response.results[1].ranking_details["reason_list"] == [
         {
             "code": "lexical_signal_absent",
@@ -1576,15 +1692,19 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
             "value": 0.75,
         },
     ]
-    assert search_response.results[1].ranking_details["task_recall_detail"]["matched_fields"] == [
-        "embedding_similarity"
-    ]
+    assert search_response.results[1].ranking_details["task_recall_detail"][
+        "matched_fields"
+    ] == ["embedding_similarity"]
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_type"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "memory_item_type"
+        ]
         == "episode_note"
     )
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "memory_item_provenance"
+        ]
         == "episode"
     )
     assert (
@@ -1594,7 +1714,9 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
         ]
     )
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["workspace_constrained"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "workspace_constrained"
+        ]
         is True
     )
     assert search_response.results[0].score == pytest.approx(0.75)

@@ -1,36 +1,19 @@
 from __future__ import annotations
 
-import asyncio
 import importlib
-import json
 import sys
-import types
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
-from ctxledger.runtime.errors import ServerBootstrapError
-from ctxledger.runtime.http_handlers import (
-    build_mcp_http_handler,
-    build_runtime_introspection_http_handler,
-    build_runtime_routes_http_handler,
-    build_runtime_tools_http_handler,
-    build_workflow_resume_http_handler,
-    parse_required_uuid_argument,
-    parse_workflow_resume_request_path,
-)
-from ctxledger.runtime.introspection import RuntimeIntrospection
 from ctxledger.runtime.server_responses import (
-    build_workflow_detail_resource_response,
     build_workflow_resume_response,
     build_workspace_resume_resource_response,
 )
-from ctxledger.server import CtxLedgerServer, create_server
-from ctxledger.workflow.service import ValidationError, WorkflowError
+from ctxledger.workflow.service import WorkflowError
 
 from ..support.coverage_targets_support import make_server, make_settings
-from ..support.server_test_support import FakeDatabaseHealthChecker
 
 
 def _load_http_app_module(monkeypatch: pytest.MonkeyPatch):
@@ -67,7 +50,9 @@ def test_build_workspace_resume_resource_response_uses_resume_result_branch() ->
         "build_workflow_resume_response"
     ]
 
-    def fake_build_workflow_resume_response(_server: object, workflow_id: object) -> object:
+    def fake_build_workflow_resume_response(
+        _server: object, workflow_id: object
+    ) -> object:
         assert workflow_id == workflow_instance_id
         return SimpleNamespace(
             status_code=200,
@@ -80,15 +65,15 @@ def test_build_workspace_resume_resource_response_uses_resume_result_branch() ->
             headers={"content-type": "application/json"},
         )
 
-    build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-        fake_build_workflow_resume_response
-    )
+    build_workspace_resume_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ] = fake_build_workflow_resume_response
     try:
         response = build_workspace_resume_resource_response(server, workspace_id)
     finally:
-        build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-            original_builder
-        )
+        build_workspace_resume_resource_response.__globals__[
+            "build_workflow_resume_response"
+        ] = original_builder
 
     assert response.status_code == 200
     assert response.payload == {
@@ -156,7 +141,9 @@ def test_build_workspace_resume_resource_response_returns_not_found_for_workspac
         "build_workflow_resume_response"
     ]
 
-    def fake_build_workflow_resume_response(_server: object, workflow_id: object) -> object:
+    def fake_build_workflow_resume_response(
+        _server: object, workflow_id: object
+    ) -> object:
         assert workflow_id == workflow_instance_id
         return SimpleNamespace(
             status_code=200,
@@ -169,15 +156,15 @@ def test_build_workspace_resume_resource_response_returns_not_found_for_workspac
             headers={"content-type": "application/json"},
         )
 
-    build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-        fake_build_workflow_resume_response
-    )
+    build_workspace_resume_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ] = fake_build_workflow_resume_response
     try:
         response = build_workspace_resume_resource_response(server, workspace_id)
     finally:
-        build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-            original_builder
-        )
+        build_workspace_resume_resource_response.__globals__[
+            "build_workflow_resume_response"
+        ] = original_builder
 
     assert response.status_code == 404
     assert response.payload == {
@@ -189,7 +176,9 @@ def test_build_workspace_resume_resource_response_returns_not_found_for_workspac
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workspace_resume_resource_response_uow_branch_returns_workspace_not_found() -> None:
+def test_build_workspace_resume_resource_response_uow_branch_returns_workspace_not_found() -> (
+    None
+):
     workspace_id = uuid4()
 
     class FakeUow:
@@ -259,13 +248,17 @@ def test_build_workflow_resume_response_returns_not_found_for_explicit_workflow_
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workspace_resume_resource_response_uow_branch_returns_no_workflow() -> None:
+def test_build_workspace_resume_resource_response_uow_branch_returns_no_workflow() -> (
+    None
+):
     workspace_id = uuid4()
 
     class FakeUow:
         def __init__(self) -> None:
             self.workspaces = SimpleNamespace(
-                get_by_id=lambda _workspace_id: SimpleNamespace(workspace_id=workspace_id)
+                get_by_id=lambda _workspace_id: SimpleNamespace(
+                    workspace_id=workspace_id
+                )
             )
             self.workflow_instances = SimpleNamespace(
                 get_running_by_workspace_id=lambda _workspace_id: None,
@@ -304,7 +297,9 @@ def test_build_workspace_resume_resource_response_uow_branch_uses_latest_when_ru
         def __init__(self) -> None:
             latest_workflow = SimpleNamespace(workflow_instance_id=workflow_instance_id)
             self.workspaces = SimpleNamespace(
-                get_by_id=lambda _workspace_id: SimpleNamespace(workspace_id=workspace_id)
+                get_by_id=lambda _workspace_id: SimpleNamespace(
+                    workspace_id=workspace_id
+                )
             )
             self.workflow_instances = SimpleNamespace(
                 get_running_by_workspace_id=lambda _workspace_id: None,
@@ -327,7 +322,9 @@ def test_build_workspace_resume_resource_response_uow_branch_uses_latest_when_ru
         "build_workflow_resume_response"
     ]
 
-    def fake_build_workflow_resume_response(_server: object, workflow_id: object) -> object:
+    def fake_build_workflow_resume_response(
+        _server: object, workflow_id: object
+    ) -> object:
         assert workflow_id == workflow_instance_id
         return SimpleNamespace(
             status_code=200,
@@ -335,27 +332,21 @@ def test_build_workspace_resume_resource_response_uow_branch_uses_latest_when_ru
             headers={"content-type": "application/json"},
         )
 
-    build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-        fake_build_workflow_resume_response
-    )
+    build_workspace_resume_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ] = fake_build_workflow_resume_response
     try:
         response = build_workspace_resume_resource_response(server, workspace_id)
     finally:
-        build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-            original_builder
-        )
+        build_workspace_resume_resource_response.__globals__[
+            "build_workflow_resume_response"
+        ] = original_builder
 
     assert response.status_code == 200
     assert response.payload == {
         "uri": f"workspace://{workspace_id}/resume",
         "resource": {
             "workflow_instance_id": str(workflow_instance_id),
-            "latest_checkpoint": {
-                "verify_target": "pytest -q tests/cli/test_cli_resume.py -k json",
-                "resume_hint": "Resume from JSON payload inspection",
-                "blocker_or_risk": "JSON serializer could omit new structured checkpoint fields",
-                "failure_guard": "Keep existing latest_checkpoint JSON shape stable",
-            },
         },
         "selection": {
             "strategy": "running_or_latest",
@@ -421,17 +412,25 @@ def test_build_workspace_resume_resource_response_uow_branch_uses_latest_when_ru
     assert response.headers == {"content-type": "application/json"}
 
 
-def test_build_workspace_resume_resource_response_uow_branch_prefers_running_workflow() -> None:
+def test_build_workspace_resume_resource_response_uow_branch_prefers_running_workflow() -> (
+    None
+):
     workspace_id = uuid4()
     running_workflow_instance_id = uuid4()
     latest_workflow_instance_id = uuid4()
 
     class FakeUow:
         def __init__(self) -> None:
-            running_workflow = SimpleNamespace(workflow_instance_id=running_workflow_instance_id)
-            latest_workflow = SimpleNamespace(workflow_instance_id=latest_workflow_instance_id)
+            running_workflow = SimpleNamespace(
+                workflow_instance_id=running_workflow_instance_id
+            )
+            latest_workflow = SimpleNamespace(
+                workflow_instance_id=latest_workflow_instance_id
+            )
             self.workspaces = SimpleNamespace(
-                get_by_id=lambda _workspace_id: SimpleNamespace(workspace_id=workspace_id)
+                get_by_id=lambda _workspace_id: SimpleNamespace(
+                    workspace_id=workspace_id
+                )
             )
             self.workflow_instances = SimpleNamespace(
                 get_running_by_workspace_id=lambda _workspace_id: running_workflow,
@@ -457,7 +456,9 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_running_wor
         "build_workflow_resume_response"
     ]
 
-    def fake_build_workflow_resume_response(_server: object, workflow_id: object) -> object:
+    def fake_build_workflow_resume_response(
+        _server: object, workflow_id: object
+    ) -> object:
         assert workflow_id == running_workflow_instance_id
         return SimpleNamespace(
             status_code=200,
@@ -465,27 +466,21 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_running_wor
             headers={"content-type": "application/json"},
         )
 
-    build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-        fake_build_workflow_resume_response
-    )
+    build_workspace_resume_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ] = fake_build_workflow_resume_response
     try:
         response = build_workspace_resume_resource_response(server, workspace_id)
     finally:
-        build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-            original_builder
-        )
+        build_workspace_resume_resource_response.__globals__[
+            "build_workflow_resume_response"
+        ] = original_builder
 
     assert response.status_code == 200
     assert response.payload == {
         "uri": f"workspace://{workspace_id}/resume",
         "resource": {
             "workflow_instance_id": str(running_workflow_instance_id),
-            "latest_checkpoint": {
-                "verify_target": "pytest -q tests/cli/test_cli_resume.py -k json",
-                "resume_hint": "Resume from JSON payload inspection",
-                "blocker_or_risk": "JSON serializer could omit new structured checkpoint fields",
-                "failure_guard": "Keep existing latest_checkpoint JSON shape stable",
-            },
         },
         "selection": {
             "strategy": "running_or_latest",
@@ -602,7 +597,9 @@ def test_build_workspace_resume_resource_response_uow_branch_surfaces_resumabili
                 checkpoint_json={},
             )
             self.workspaces = SimpleNamespace(
-                get_by_id=lambda _workspace_id: SimpleNamespace(workspace_id=workspace_id)
+                get_by_id=lambda _workspace_id: SimpleNamespace(
+                    workspace_id=workspace_id
+                )
             )
             self.workflow_instances = SimpleNamespace(
                 get_running_by_workspace_id=lambda _workspace_id: None,
@@ -610,7 +607,9 @@ def test_build_workspace_resume_resource_response_uow_branch_surfaces_resumabili
                 list_by_workspace_id=lambda _workspace_id, *, limit: (latest_workflow,),
             )
             self.workflow_checkpoints = SimpleNamespace(
-                get_latest_by_workflow_id=lambda _workflow_instance_id: latest_checkpoint,
+                get_latest_by_workflow_id=lambda _workflow_instance_id: (
+                    latest_checkpoint
+                ),
             )
 
         def __enter__(self) -> "FakeUow":
@@ -625,7 +624,9 @@ def test_build_workspace_resume_resource_response_uow_branch_surfaces_resumabili
         "build_workflow_resume_response"
     ]
 
-    def fake_build_workflow_resume_response(_server: object, workflow_id: object) -> object:
+    def fake_build_workflow_resume_response(
+        _server: object, workflow_id: object
+    ) -> object:
         assert workflow_id == workflow_instance_id
         return SimpleNamespace(
             status_code=200,
@@ -633,15 +634,15 @@ def test_build_workspace_resume_resource_response_uow_branch_surfaces_resumabili
             headers={"content-type": "application/json"},
         )
 
-    build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-        fake_build_workflow_resume_response
-    )
+    build_workspace_resume_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ] = fake_build_workflow_resume_response
     try:
         response = build_workspace_resume_resource_response(server, workspace_id)
     finally:
-        build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-            original_builder
-        )
+        build_workspace_resume_resource_response.__globals__[
+            "build_workflow_resume_response"
+        ] = original_builder
 
     assert response.status_code == 200
     assert response.payload == {
@@ -750,11 +751,15 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_non_termina
                 status="running",
             )
             self.workspaces = SimpleNamespace(
-                get_by_id=lambda _workspace_id: SimpleNamespace(workspace_id=workspace_id)
+                get_by_id=lambda _workspace_id: SimpleNamespace(
+                    workspace_id=workspace_id
+                )
             )
             self.workflow_instances = SimpleNamespace(
                 get_running_by_workspace_id=lambda _workspace_id: None,
-                get_latest_by_workspace_id=lambda _workspace_id: latest_terminal_workflow,
+                get_latest_by_workspace_id=lambda _workspace_id: (
+                    latest_terminal_workflow
+                ),
                 list_by_workspace_id=lambda _workspace_id, *, limit: (
                     latest_terminal_workflow,
                     older_non_terminal_workflow,
@@ -776,23 +781,27 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_non_termina
         "build_workflow_resume_response"
     ]
 
-    def fake_build_workflow_resume_response(_server: object, workflow_id: object) -> object:
+    def fake_build_workflow_resume_response(
+        _server: object, workflow_id: object
+    ) -> object:
         assert workflow_id == older_non_terminal_workflow_instance_id
         return SimpleNamespace(
             status_code=200,
-            payload={"workflow_instance_id": str(older_non_terminal_workflow_instance_id)},
+            payload={
+                "workflow_instance_id": str(older_non_terminal_workflow_instance_id)
+            },
             headers={"content-type": "application/json"},
         )
 
-    build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-        fake_build_workflow_resume_response
-    )
+    build_workspace_resume_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ] = fake_build_workflow_resume_response
     try:
         response = build_workspace_resume_resource_response(server, workspace_id)
     finally:
-        build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-            original_builder
-        )
+        build_workspace_resume_resource_response.__globals__[
+            "build_workflow_resume_response"
+        ] = original_builder
 
     assert response.status_code == 200
     assert response.payload == {
@@ -803,7 +812,9 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_non_termina
         "selection": {
             "strategy": "running_or_latest",
             "candidate_count": 2,
-            "selected_workflow_instance_id": str(older_non_terminal_workflow_instance_id),
+            "selected_workflow_instance_id": str(
+                older_non_terminal_workflow_instance_id
+            ),
             "running_workflow_instance_id": None,
             "latest_workflow_instance_id": str(latest_terminal_workflow_instance_id),
             "selected_reason": "selected non-terminal workflow candidate instead of latest terminal workflow",
@@ -864,7 +875,9 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_non_termina
                     "selected": False,
                 },
                 {
-                    "workflow_instance_id": str(older_non_terminal_workflow_instance_id),
+                    "workflow_instance_id": str(
+                        older_non_terminal_workflow_instance_id
+                    ),
                     "is_latest": False,
                     "is_running": False,
                     "workflow_terminal": False,
@@ -919,7 +932,9 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_non_detour_
                 ticket_id="TASK-PRIMARY-1",
             )
             self.workspaces = SimpleNamespace(
-                get_by_id=lambda _workspace_id: SimpleNamespace(workspace_id=workspace_id)
+                get_by_id=lambda _workspace_id: SimpleNamespace(
+                    workspace_id=workspace_id
+                )
             )
             self.workflow_instances = SimpleNamespace(
                 get_running_by_workspace_id=lambda _workspace_id: None,
@@ -956,7 +971,9 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_non_detour_
         "build_workflow_resume_response"
     ]
 
-    def fake_build_workflow_resume_response(_server: object, workflow_id: object) -> object:
+    def fake_build_workflow_resume_response(
+        _server: object, workflow_id: object
+    ) -> object:
         assert workflow_id == mainline_workflow_instance_id
         return SimpleNamespace(
             status_code=200,
@@ -964,15 +981,15 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_non_detour_
             headers={"content-type": "application/json"},
         )
 
-    build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-        fake_build_workflow_resume_response
-    )
+    build_workspace_resume_resource_response.__globals__[
+        "build_workflow_resume_response"
+    ] = fake_build_workflow_resume_response
     try:
         response = build_workspace_resume_resource_response(server, workspace_id)
     finally:
-        build_workspace_resume_resource_response.__globals__["build_workflow_resume_response"] = (
-            original_builder
-        )
+        build_workspace_resume_resource_response.__globals__[
+            "build_workflow_resume_response"
+        ] = original_builder
 
     assert response.status_code == 200
     assert response.payload == {

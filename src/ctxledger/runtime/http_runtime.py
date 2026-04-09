@@ -36,7 +36,7 @@ from ..mcp.tool_schemas import (
     WORKSPACE_REGISTER_TOOL_SCHEMA,
     McpToolSchema,
 )
-from ..memory.service import MemoryService, MemoryServiceError
+from ..memory.service import MemoryServiceError
 from .file_work_automation import (
     extract_file_work_metadata,
     record_file_work_automation,

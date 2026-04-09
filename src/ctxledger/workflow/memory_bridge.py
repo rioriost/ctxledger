@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Workflow-to-memory bridge helpers.
 
 Execution-boundary note:
@@ -17,14 +15,16 @@ Execution-boundary note:
   being materialized into durable storage.
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID, uuid4
 
-from ..config import EmbeddingExecutionMode, EmbeddingProvider, get_settings
+from ..config import EmbeddingExecutionMode, get_settings
 from ..memory.embeddings import (
     EmbeddingGenerationError,
     EmbeddingGenerator,
@@ -54,8 +54,8 @@ class EpisodeRecord:
     attempt_id: UUID | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     status: str = "recorded"
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -67,8 +67,8 @@ class MemoryItemRecord:
     provenance: str = "episode"
     content: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -78,7 +78,7 @@ class MemoryEmbeddingRecord:
     embedding_model: str
     embedding: tuple[float, ...] = ()
     content_hash: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -88,7 +88,7 @@ class MemoryRelationRecord:
     target_memory_id: UUID
     relation_type: str
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True, frozen=True)
@@ -232,7 +232,8 @@ class WorkflowMemoryBridge:
                 #   durable database state.
                 if (
                     settings.enabled
-                    and settings.execution_mode is not EmbeddingExecutionMode.POSTGRES_AZURE_AI
+                    and settings.execution_mode
+                    is not EmbeddingExecutionMode.POSTGRES_AZURE_AI
                 ):
                     self.embedding_generator = build_embedding_generator(settings)
                 else:
@@ -255,7 +256,9 @@ class WorkflowMemoryBridge:
             extra={
                 "workflow_instance_id": str(workflow.workflow_instance_id),
                 "attempt_id": str(attempt.attempt_id),
-                "workflow_status": str(getattr(workflow.status, "value", workflow.status)),
+                "workflow_status": str(
+                    getattr(workflow.status, "value", workflow.status)
+                ),
                 "attempt_status": str(getattr(attempt.status, "value", attempt.status)),
                 "has_latest_checkpoint": latest_checkpoint is not None,
                 "has_completion_summary": self._normalize_text(summary) is not None,
@@ -362,7 +365,7 @@ class WorkflowMemoryBridge:
                 }
             )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         logger.info(
             "workflow completion auto-memory creating episode",
             extra={
@@ -447,9 +450,13 @@ class WorkflowMemoryBridge:
             "attempted": True,
             "status": "recorded" if promoted_memory_items else "skipped",
             "created_count": len(promoted_memory_items),
-            "created_memory_ids": [str(item.memory_id) for item in promoted_memory_items],
+            "created_memory_ids": [
+                str(item.memory_id) for item in promoted_memory_items
+            ],
             "created_types": [item.type for item in promoted_memory_items],
-            "skipped_reason": None if promoted_memory_items else "no_promotable_completion_fields",
+            "skipped_reason": None
+            if promoted_memory_items
+            else "no_promotable_completion_fields",
         }
 
         relation_records = self._create_supports_relations(
@@ -465,7 +472,9 @@ class WorkflowMemoryBridge:
                 "recorded"
                 if relation_records
                 else (
-                    "skipped" if self.memory_relation_repository is not None else "not_configured"
+                    "skipped"
+                    if self.memory_relation_repository is not None
+                    else "not_configured"
                 )
             ),
             "created_count": len(relation_records),
@@ -493,7 +502,9 @@ class WorkflowMemoryBridge:
         stage_details["embedding"] = {
             "attempted": True,
             "status": embedding_details.get("embedding_persistence_status"),
-            "skipped_reason": embedding_details.get("embedding_generation_skipped_reason"),
+            "skipped_reason": embedding_details.get(
+                "embedding_generation_skipped_reason"
+            ),
             "provider": embedding_details.get("embedding_provider"),
             "model": embedding_details.get("embedding_model"),
         }
@@ -549,7 +560,9 @@ class WorkflowMemoryBridge:
             "auto_memory_recorded": True,
             "episode_id": str(episode.episode_id),
             "memory_item_id": str(memory_item.memory_id),
-            "promoted_memory_item_ids": [str(item.memory_id) for item in promoted_memory_items],
+            "promoted_memory_item_ids": [
+                str(item.memory_id) for item in promoted_memory_items
+            ],
             "promoted_memory_item_count": len(promoted_memory_items),
             "memory_relation_count": len(relation_records),
             "stage_details": stage_details,
@@ -581,7 +594,8 @@ class WorkflowMemoryBridge:
                 "attempt_id": str(attempt.attempt_id),
                 "checkpoint_id": str(checkpoint.checkpoint_id),
                 "step_name": checkpoint.step_name,
-                "has_checkpoint_summary": self._normalize_text(checkpoint.summary) is not None,
+                "has_checkpoint_summary": self._normalize_text(checkpoint.summary)
+                is not None,
             },
         )
         should_record, skipped_reason = self._checkpoint_auto_memory_gating_decision(
@@ -609,7 +623,9 @@ class WorkflowMemoryBridge:
         stage_details["summary_selection"] = {
             "attempted": True,
             "status": "built" if memory_summary is not None else "skipped",
-            "skipped_reason": None if memory_summary is not None else "no_checkpoint_memory_source",
+            "skipped_reason": None
+            if memory_summary is not None
+            else "no_checkpoint_memory_source",
         }
         if memory_summary is None:
             return None
@@ -641,7 +657,7 @@ class WorkflowMemoryBridge:
                 }
             )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         episode = self.episode_repository.create(
             EpisodeRecord(
                 episode_id=uuid4(),
@@ -693,9 +709,13 @@ class WorkflowMemoryBridge:
             "attempted": True,
             "status": "recorded" if promoted_memory_items else "skipped",
             "created_count": len(promoted_memory_items),
-            "created_memory_ids": [str(item.memory_id) for item in promoted_memory_items],
+            "created_memory_ids": [
+                str(item.memory_id) for item in promoted_memory_items
+            ],
             "created_types": [item.type for item in promoted_memory_items],
-            "skipped_reason": None if promoted_memory_items else "no_promotable_checkpoint_fields",
+            "skipped_reason": None
+            if promoted_memory_items
+            else "no_promotable_checkpoint_fields",
         }
 
         relation_records = self._create_supports_relations(
@@ -711,7 +731,9 @@ class WorkflowMemoryBridge:
                 "recorded"
                 if relation_records
                 else (
-                    "skipped" if self.memory_relation_repository is not None else "not_configured"
+                    "skipped"
+                    if self.memory_relation_repository is not None
+                    else "not_configured"
                 )
             ),
             "created_count": len(relation_records),
@@ -729,7 +751,9 @@ class WorkflowMemoryBridge:
         stage_details["embedding"] = {
             "attempted": True,
             "status": embedding_details.get("embedding_persistence_status"),
-            "skipped_reason": embedding_details.get("embedding_generation_skipped_reason"),
+            "skipped_reason": embedding_details.get(
+                "embedding_generation_skipped_reason"
+            ),
             "provider": embedding_details.get("embedding_provider"),
             "model": embedding_details.get("embedding_model"),
         }
@@ -738,7 +762,9 @@ class WorkflowMemoryBridge:
             "auto_memory_recorded": True,
             "episode_id": str(episode.episode_id),
             "memory_item_id": str(memory_item.memory_id),
-            "promoted_memory_item_ids": [str(item.memory_id) for item in promoted_memory_items],
+            "promoted_memory_item_ids": [
+                str(item.memory_id) for item in promoted_memory_items
+            ],
             "promoted_memory_item_count": len(promoted_memory_items),
             "memory_relation_count": len(relation_records),
             "stage_details": stage_details,
@@ -801,7 +827,8 @@ class WorkflowMemoryBridge:
             "open_question",
         )
         has_signal = any(
-            isinstance(checkpoint_payload.get(key), str) and checkpoint_payload.get(key, "").strip()
+            isinstance(checkpoint_payload.get(key), str)
+            and checkpoint_payload.get(key, "").strip()
             for key in heuristic_signals
         )
         if has_signal:
@@ -834,7 +861,8 @@ class WorkflowMemoryBridge:
             "open_question",
         )
         has_signal = any(
-            isinstance(checkpoint_payload.get(key), str) and checkpoint_payload.get(key, "").strip()
+            isinstance(checkpoint_payload.get(key), str)
+            and checkpoint_payload.get(key, "").strip()
             for key in heuristic_signals
         )
         if has_signal:
@@ -877,7 +905,8 @@ class WorkflowMemoryBridge:
             if not (
                 isinstance(prior_step_name, str)
                 and prior_step_name.strip() == step_name
-                and prior_episode.metadata.get("memory_origin") == "workflow_checkpoint_auto"
+                and prior_episode.metadata.get("memory_origin")
+                == "workflow_checkpoint_auto"
             ):
                 continue
 
@@ -944,7 +973,8 @@ class WorkflowMemoryBridge:
             if not (
                 isinstance(prior_step_name, str)
                 and prior_step_name.strip() == step_name
-                and prior_episode.metadata.get("memory_origin") == "workflow_complete_auto"
+                and prior_episode.metadata.get("memory_origin")
+                == "workflow_complete_auto"
             ):
                 continue
 
@@ -984,7 +1014,9 @@ class WorkflowMemoryBridge:
         if not hasattr(self.episode_repository, "list_by_workflow_id"):
             return ()
 
-        list_by_workflow_id = getattr(self.episode_repository, "list_by_workflow_id", None)
+        list_by_workflow_id = getattr(
+            self.episode_repository, "list_by_workflow_id", None
+        )
         if not callable(list_by_workflow_id):
             return ()
 
@@ -1012,7 +1044,9 @@ class WorkflowMemoryBridge:
         if not hasattr(self.episode_repository, "list_by_workflow_id"):
             return ()
 
-        list_by_workflow_id = getattr(self.episode_repository, "list_by_workflow_id", None)
+        list_by_workflow_id = getattr(
+            self.episode_repository, "list_by_workflow_id", None
+        )
         if not callable(list_by_workflow_id):
             return ()
 
@@ -1034,7 +1068,7 @@ class WorkflowMemoryBridge:
         )
 
     def _is_within_near_duplicate_window(self, episode: EpisodeRecord) -> bool:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return (now - episode.created_at) <= _NEAR_DUPLICATE_LOOKBACK_WINDOW
 
     def _summary_token_similarity(
@@ -1052,7 +1086,9 @@ class WorkflowMemoryBridge:
         meaningful_left_tokens = left_tokens - _SUMMARY_SIMILARITY_IGNORED_TOKENS
         meaningful_right_tokens = right_tokens - _SUMMARY_SIMILARITY_IGNORED_TOKENS
 
-        comparison_left_tokens = meaningful_left_tokens if meaningful_left_tokens else left_tokens
+        comparison_left_tokens = (
+            meaningful_left_tokens if meaningful_left_tokens else left_tokens
+        )
         comparison_right_tokens = (
             meaningful_right_tokens if meaningful_right_tokens else right_tokens
         )
@@ -1112,16 +1148,21 @@ class WorkflowMemoryBridge:
         prior_fields: dict[str, str],
     ) -> bool:
         return (
-            current_fields.get("current_objective") == prior_fields.get("current_objective")
+            current_fields.get("current_objective")
+            == prior_fields.get("current_objective")
             and current_fields.get("next_intended_action")
             == prior_fields.get("next_intended_action")
             and current_fields.get("root_cause") == prior_fields.get("root_cause")
-            and current_fields.get("recovery_pattern") == prior_fields.get("recovery_pattern")
+            and current_fields.get("recovery_pattern")
+            == prior_fields.get("recovery_pattern")
             and current_fields.get("what_remains") == prior_fields.get("what_remains")
             and current_fields.get("verify_status") == prior_fields.get("verify_status")
-            and current_fields.get("workflow_status") == prior_fields.get("workflow_status")
-            and current_fields.get("attempt_status") == prior_fields.get("attempt_status")
-            and current_fields.get("failure_reason") == prior_fields.get("failure_reason")
+            and current_fields.get("workflow_status")
+            == prior_fields.get("workflow_status")
+            and current_fields.get("attempt_status")
+            == prior_fields.get("attempt_status")
+            and current_fields.get("failure_reason")
+            == prior_fields.get("failure_reason")
         )
 
     def _weighted_closeout_similarity(
@@ -1219,7 +1260,9 @@ class WorkflowMemoryBridge:
         ):
             return None
 
-        lines: list[str] = [f"Workflow completed with status `{workflow.status.value}`."]
+        lines: list[str] = [
+            f"Workflow completed with status `{workflow.status.value}`."
+        ]
 
         if summary_text is not None:
             lines.append(f"Completion summary: {summary_text}")
@@ -1277,7 +1320,9 @@ class WorkflowMemoryBridge:
             current_objective = self._checkpoint_current_objective(latest_checkpoint)
             if current_objective is not None:
                 metadata["current_objective"] = current_objective
-            next_intended_action = self._checkpoint_next_intended_action(latest_checkpoint)
+            next_intended_action = self._checkpoint_next_intended_action(
+                latest_checkpoint
+            )
             if next_intended_action is not None:
                 metadata["next_intended_action"] = next_intended_action
             root_cause = self._checkpoint_root_cause(latest_checkpoint)
@@ -2043,12 +2088,17 @@ class WorkflowMemoryBridge:
 
         checkpoint_payload = (
             latest_checkpoint.checkpoint_json
-            if latest_checkpoint is not None and isinstance(latest_checkpoint.checkpoint_json, dict)
+            if latest_checkpoint is not None
+            and isinstance(latest_checkpoint.checkpoint_json, dict)
             else {}
         )
-        summary_build_requested = checkpoint_payload.get("build_episode_summary") is True
+        summary_build_requested = (
+            checkpoint_payload.get("build_episode_summary") is True
+        )
         summary_build_trigger = (
-            "latest_checkpoint.build_episode_summary_true" if summary_build_requested else None
+            "latest_checkpoint.build_episode_summary_true"
+            if summary_build_requested
+            else None
         )
 
         if not summary_build_requested:
@@ -2085,24 +2135,40 @@ class WorkflowMemoryBridge:
                         "remember_path_memory_origins": sorted(
                             {
                                 str(candidate_memory_item.metadata.get("memory_origin"))
-                                for candidate_memory_item in (memory_item, *promoted_memory_items)
+                                for candidate_memory_item in (
+                                    memory_item,
+                                    *promoted_memory_items,
+                                )
                                 if isinstance(
                                     candidate_memory_item.metadata.get("memory_origin"),
                                     str,
                                 )
-                                and str(candidate_memory_item.metadata.get("memory_origin")).strip()
+                                and str(
+                                    candidate_memory_item.metadata.get("memory_origin")
+                                ).strip()
                             }
                         ),
                         "remember_path_promotion_fields": sorted(
                             {
-                                str(candidate_memory_item.metadata.get("promotion_field"))
-                                for candidate_memory_item in (memory_item, *promoted_memory_items)
+                                str(
+                                    candidate_memory_item.metadata.get(
+                                        "promotion_field"
+                                    )
+                                )
+                                for candidate_memory_item in (
+                                    memory_item,
+                                    *promoted_memory_items,
+                                )
                                 if isinstance(
-                                    candidate_memory_item.metadata.get("promotion_field"),
+                                    candidate_memory_item.metadata.get(
+                                        "promotion_field"
+                                    ),
                                     str,
                                 )
                                 and str(
-                                    candidate_memory_item.metadata.get("promotion_field")
+                                    candidate_memory_item.metadata.get(
+                                        "promotion_field"
+                                    )
                                 ).strip()
                             }
                         ),
@@ -2179,7 +2245,9 @@ class WorkflowMemoryBridge:
         merged["summary_build_succeeded"] = bool(
             summary_build.get("summary_build_succeeded", False)
         )
-        merged["summary_build_skipped_reason"] = summary_build.get("summary_build_skipped_reason")
+        merged["summary_build_skipped_reason"] = summary_build.get(
+            "summary_build_skipped_reason"
+        )
         return merged
 
     def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
@@ -2238,7 +2306,9 @@ class WorkflowMemoryBridge:
                     },
                 }
 
-            content_hash = hashlib.sha256(memory_item.content.encode("utf-8")).hexdigest()
+            content_hash = hashlib.sha256(
+                memory_item.content.encode("utf-8")
+            ).hexdigest()
 
             try:
                 stored = self.memory_embedding_repository.create_via_postgres_azure_ai(

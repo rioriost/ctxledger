@@ -37,6 +37,19 @@ from ctxledger.memory.service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def patch_embedding_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        MemoryService,
+        "_load_embedding_settings",
+        lambda self: SimpleNamespace(
+            execution_mode="app_generated",
+            azure_openai_embedding_deployment=None,
+            dimensions=None,
+        ),
+    )
+
+
 def test_memory_service_records_episodes_and_returns_search_results() -> None:
     workflow_id = uuid4()
     attempt_id = uuid4()
@@ -109,10 +122,16 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     assert memory_item_repository.memory_items[0].workspace_id == UUID(
         "00000000-0000-0000-0000-000000000001"
     )
-    assert memory_item_repository.memory_items[0].episode_id == remember_response.episode.episode_id
+    assert (
+        memory_item_repository.memory_items[0].episode_id
+        == remember_response.episode.episode_id
+    )
     assert memory_item_repository.memory_items[0].type == "episode_note"
     assert memory_item_repository.memory_items[0].provenance == "episode"
-    assert memory_item_repository.memory_items[0].content == "Episode summary with relevant context"
+    assert (
+        memory_item_repository.memory_items[0].content
+        == "Episode summary with relevant context"
+    )
     assert memory_item_repository.memory_items[0].metadata == {
         "kind": "checkpoint",
         "topic": "relevant context",
@@ -134,8 +153,13 @@ def test_memory_service_records_episodes_and_returns_search_results() -> None:
     )
     assert search_response.details["results_returned"] == 1
     assert len(search_response.results) == 1
-    assert search_response.results[0].memory_id == memory_item_repository.memory_items[0].memory_id
-    assert search_response.results[0].workspace_id == UUID("00000000-0000-0000-0000-000000000001")
+    assert (
+        search_response.results[0].memory_id
+        == memory_item_repository.memory_items[0].memory_id
+    )
+    assert search_response.results[0].workspace_id == UUID(
+        "00000000-0000-0000-0000-000000000001"
+    )
     assert search_response.results[0].episode_id == remember_response.episode.episode_id
     assert search_response.results[0].workflow_instance_id is None
     assert search_response.results[0].attempt_id is None
@@ -274,7 +298,10 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
     )
     assert search_response.results[0].ranking_details["semantic_component"] == 0.0
     assert search_response.results[0].ranking_details["score_mode"] == "lexical_only"
-    assert search_response.results[0].ranking_details["semantic_only_discount_applied"] is False
+    assert (
+        search_response.results[0].ranking_details["semantic_only_discount_applied"]
+        is False
+    )
     assert search_response.results[0].ranking_details["reason_list"] == [
         {
             "code": "lexical_signal_present",
@@ -291,15 +318,19 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
             "message": "the result ranked using lexical evidence only",
         },
     ]
-    assert search_response.results[0].ranking_details["task_recall_detail"]["matched_fields"] == [
-        "content"
-    ]
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "matched_fields"
+    ] == ["content"]
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_type"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "memory_item_type"
+        ]
         == "episode_note"
     )
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "memory_item_provenance"
+        ]
         == "episode"
     )
     assert (
@@ -309,7 +340,9 @@ def test_memory_service_hybrid_ranking_prefers_lexical_evidence() -> None:
         ]
     )
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["workspace_constrained"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "workspace_constrained"
+        ]
         is True
     )
     assert search_response.results[0].score > search_response.results[1].score
@@ -415,7 +448,9 @@ def test_memory_search_ranking_details_include_remember_path_explainability_for_
     assert len(response.results) >= 1
 
     next_action_result = next(
-        result for result in response.results if result.memory_id == next_action_memory_id
+        result
+        for result in response.results
+        if result.memory_id == next_action_memory_id
     )
     assert next_action_result.ranking_details["remember_path_detail"] == {
         "memory_origin": "workflow_checkpoint_auto",
@@ -450,7 +485,9 @@ def test_memory_search_ranking_details_include_remember_path_explainability_for_
     }
 
 
-def test_memory_search_ranking_details_include_completion_origin_explainability() -> None:
+def test_memory_search_ranking_details_include_completion_origin_explainability() -> (
+    None
+):
     workspace_id = UUID("00000000-0000-0000-0000-0000000000bb")
     memory_id = uuid4()
     created_at = datetime(2024, 3, 1, tzinfo=UTC)
@@ -597,22 +634,26 @@ def test_memory_search_prefers_completion_memory_over_checkpoint_memory_when_lex
         checkpoint_memory_id,
     ]
     assert response.results[0].lexical_score == response.results[1].lexical_score
-    assert response.results[0].semantic_score == response.results[1].semantic_score == 0.0
+    assert (
+        response.results[0].semantic_score == response.results[1].semantic_score == 0.0
+    )
     assert response.results[0].ranking_details["score_mode"] == "lexical_only"
     assert response.results[1].ranking_details["score_mode"] == "lexical_only"
     assert response.results[0].ranking_details["reason_list"][-1] == {
         "code": "workflow_complete_auto_tiebreak",
         "message": "completion-origin memory was preferred over checkpoint-origin memory when lexical evidence tied",
     }
-    assert response.results[0].ranking_details["remember_path_detail"]["memory_origin"] == (
-        "workflow_complete_auto"
-    )
-    assert response.results[1].ranking_details["remember_path_detail"]["memory_origin"] == (
-        "workflow_checkpoint_auto"
-    )
+    assert response.results[0].ranking_details["remember_path_detail"][
+        "memory_origin"
+    ] == ("workflow_complete_auto")
+    assert response.results[1].ranking_details["remember_path_detail"][
+        "memory_origin"
+    ] == ("workflow_checkpoint_auto")
 
 
-def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> None:
+def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores() -> (
+    None
+):
     workflow_id = uuid4()
     episode_repository = InMemoryEpisodeRepository()
     memory_item_repository = InMemoryMemoryItemRepository()
@@ -749,8 +790,13 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
     assert search_response.results[0].ranking_details["semantic_component"] == (
         search_response.results[0].semantic_score
     )
-    assert search_response.results[0].ranking_details["score_mode"] == ("semantic_only_discounted")
-    assert search_response.results[0].ranking_details["semantic_only_discount_applied"] is True
+    assert search_response.results[0].ranking_details["score_mode"] == (
+        "semantic_only_discounted"
+    )
+    assert (
+        search_response.results[0].ranking_details["semantic_only_discount_applied"]
+        is True
+    )
     assert search_response.results[0].ranking_details["reason_list"] == [
         {
             "code": "lexical_signal_absent",
@@ -772,15 +818,19 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
             "value": 0.75,
         },
     ]
-    assert search_response.results[0].ranking_details["task_recall_detail"]["matched_fields"] == [
-        "embedding_similarity"
-    ]
+    assert search_response.results[0].ranking_details["task_recall_detail"][
+        "matched_fields"
+    ] == ["embedding_similarity"]
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_type"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "memory_item_type"
+        ]
         == "episode_note"
     )
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "memory_item_provenance"
+        ]
         == "episode"
     )
     assert (
@@ -790,15 +840,22 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
         ]
     )
     assert (
-        search_response.results[0].ranking_details["task_recall_detail"]["workspace_constrained"]
+        search_response.results[0].ranking_details["task_recall_detail"][
+            "workspace_constrained"
+        ]
         is True
     )
     assert search_response.results[1].ranking_details["lexical_component"] == 0.0
     assert search_response.results[1].ranking_details["semantic_component"] == (
         search_response.results[1].semantic_score
     )
-    assert search_response.results[1].ranking_details["score_mode"] == ("semantic_only_discounted")
-    assert search_response.results[1].ranking_details["semantic_only_discount_applied"] is True
+    assert search_response.results[1].ranking_details["score_mode"] == (
+        "semantic_only_discounted"
+    )
+    assert (
+        search_response.results[1].ranking_details["semantic_only_discount_applied"]
+        is True
+    )
     assert search_response.results[1].ranking_details["reason_list"] == [
         {
             "code": "lexical_signal_absent",
@@ -820,15 +877,19 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
             "value": 0.75,
         },
     ]
-    assert search_response.results[1].ranking_details["task_recall_detail"]["matched_fields"] == [
-        "embedding_similarity"
-    ]
+    assert search_response.results[1].ranking_details["task_recall_detail"][
+        "matched_fields"
+    ] == ["embedding_similarity"]
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_type"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "memory_item_type"
+        ]
         == "episode_note"
     )
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["memory_item_provenance"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "memory_item_provenance"
+        ]
         == "episode"
     )
     assert (
@@ -838,14 +899,18 @@ def test_memory_service_hybrid_ranking_uses_similarity_gap_for_semantic_scores()
         ]
     )
     assert (
-        search_response.results[1].ranking_details["task_recall_detail"]["workspace_constrained"]
+        search_response.results[1].ranking_details["task_recall_detail"][
+            "workspace_constrained"
+        ]
         is True
     )
     assert search_response.results[0].score == pytest.approx(0.75)
     assert search_response.results[1].score == pytest.approx(0.29296875)
 
 
-def test_memory_service_search_records_semantic_generation_skip_reason_after_failure() -> None:
+def test_memory_service_search_records_semantic_generation_skip_reason_after_failure() -> (
+    None
+):
     class FailingEmbeddingGenerator:
         def generate(self, request: EmbeddingRequest) -> EmbeddingResult:
             raise EmbeddingGenerationError(

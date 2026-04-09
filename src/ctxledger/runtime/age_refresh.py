@@ -114,7 +114,9 @@ def refresh_age_summary_graph(
                     {
                         "memory_summary_id": str(raw_memory_summary_id),
                         "workspace_id": str(raw_workspace_id),
-                        "episode_id": (str(raw_episode_id) if raw_episode_id is not None else None),
+                        "episode_id": (
+                            str(raw_episode_id) if raw_episode_id is not None else None
+                        ),
                         "summary_kind": str(raw_summary_kind),
                     },
                     separators=(",", ":"),
@@ -209,7 +211,10 @@ def refresh_age_summary_graph(
                 raw_summary_node_count = (
                     summary_node_count_row[0]
                     if isinstance(summary_node_count_row, tuple)
-                    else summary_node_count_row["node_count"]
+                    else summary_node_count_row.get(
+                        "node_count",
+                        summary_node_count_row["count"],
+                    )
                 )
                 summary_node_count = int(str(raw_summary_node_count).strip('"'))
 
@@ -230,7 +235,10 @@ def refresh_age_summary_graph(
                 raw_membership_edge_count = (
                     membership_edge_count_row[0]
                     if isinstance(membership_edge_count_row, tuple)
-                    else membership_edge_count_row["edge_count"]
+                    else membership_edge_count_row.get(
+                        "edge_count",
+                        membership_edge_count_row["count"],
+                    )
                 )
                 membership_edge_count = int(str(raw_membership_edge_count).strip('"'))
 

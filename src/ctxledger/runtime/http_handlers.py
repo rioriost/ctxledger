@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-from urllib.parse import parse_qs, urlparse
 
 from ..mcp.rpc import handle_mcp_rpc_request
 from ..mcp.streamable_http import (
@@ -17,6 +16,7 @@ _DEBUG_TOOLS_ROUTE = "debug/tools"
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from ..runtime.types import McpToolResponse
     from .protocols import HttpHandlerFactoryServer, McpRuntimeProtocol
     from .types import (
         McpHttpResponse,
@@ -73,8 +73,7 @@ def build_workflow_resume_http_handler(
                 status_code=404,
                 code="not_found",
                 message=(
-                    "workflow resume endpoint requires "
-                    "/workflow-resume/{workflow_instance_id}"
+                    "workflow resume endpoint requires /workflow-resume/{workflow_instance_id}"
                 ),
             )
 

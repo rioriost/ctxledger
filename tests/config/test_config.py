@@ -8,9 +8,11 @@ import pytest
 
 from ctxledger.config import (
     AppSettings,
+    AzureOpenAIAuthMode,
     ConfigError,
     DatabaseSettings,
     DebugSettings,
+    EmbeddingExecutionMode,
     EmbeddingProvider,
     EmbeddingSettings,
     HttpSettings,
@@ -144,7 +146,9 @@ def test_non_integer_port_raises_config_error(clean_ctxledger_env: None) -> None
 
 def test_invalid_port_raises_config_error(clean_ctxledger_env: None) -> None:
     with patched_env(**minimum_valid_env(CTXLEDGER_PORT="70000")):
-        with pytest.raises(ConfigError, match="CTXLEDGER_PORT must be between 1 and 65535"):
+        with pytest.raises(
+            ConfigError, match="CTXLEDGER_PORT must be between 1 and 65535"
+        ):
             load_settings()
 
 
@@ -314,7 +318,10 @@ def test_parse_log_level_returns_default_when_missing(
     clean_ctxledger_env: None,
 ) -> None:
     with patched_env(CTXLEDGER_LOG_LEVEL=None):
-        assert _parse_log_level("CTXLEDGER_LOG_LEVEL", LogLevel.WARNING) is LogLevel.WARNING
+        assert (
+            _parse_log_level("CTXLEDGER_LOG_LEVEL", LogLevel.WARNING)
+            is LogLevel.WARNING
+        )
 
 
 def test_format_expected_values_supports_non_collection_object() -> None:
@@ -390,11 +397,17 @@ def test_app_settings_validate_rejects_empty_host() -> None:
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
             provider=EmbeddingProvider.DISABLED,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=None,
             enabled=False,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         ),
     )
 
@@ -423,11 +436,17 @@ def test_app_settings_validate_rejects_empty_http_path() -> None:
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
             provider=EmbeddingProvider.DISABLED,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=None,
             enabled=False,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         ),
     )
 
@@ -456,22 +475,30 @@ def test_app_settings_validate_requires_embedding_model_when_enabled() -> None:
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
             provider=EmbeddingProvider.OPENAI,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=None,
             enabled=True,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         ),
     )
 
     with pytest.raises(
         ConfigError,
-        match="OPENAI_API_KEY is required for the selected embedding provider",
+        match="OPENAI_API_KEY is required only for legacy app-generated external embedding providers",
     ):
         settings.validate()
 
 
-def test_app_settings_validate_requires_api_key_for_external_embedding_provider() -> None:
+def test_app_settings_validate_requires_api_key_for_external_embedding_provider() -> (
+    None
+):
     settings = AppSettings(
         app_name="ctxledger",
         app_version="0.9.0",
@@ -492,11 +519,17 @@ def test_app_settings_validate_requires_api_key_for_external_embedding_provider(
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
             provider=EmbeddingProvider.OPENAI,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="",
-            api_key="secret",
+            api_key=None,
             base_url=None,
             dimensions=None,
             enabled=True,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         ),
     )
 
@@ -507,7 +540,9 @@ def test_app_settings_validate_requires_api_key_for_external_embedding_provider(
         settings.validate()
 
 
-def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provider() -> None:
+def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provider() -> (
+    None
+):
     settings = AppSettings(
         app_name="ctxledger",
         app_version="0.9.0",
@@ -528,11 +563,17 @@ def test_app_settings_validate_requires_base_url_for_custom_http_embedding_provi
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
             provider=EmbeddingProvider.CUSTOM_HTTP,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="text-embedding-3-small",
             api_key="secret",
             base_url=None,
             dimensions=None,
             enabled=True,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         ),
     )
 
@@ -564,11 +605,17 @@ def test_app_settings_validate_rejects_non_positive_embedding_dimensions() -> No
         logging=LoggingSettings(level=LogLevel.INFO, structured=True),
         embedding=EmbeddingSettings(
             provider=EmbeddingProvider.LOCAL_STUB,
+            execution_mode=EmbeddingExecutionMode.APP_GENERATED,
             model="text-embedding-3-small",
             api_key=None,
             base_url=None,
             dimensions=0,
             enabled=True,
+            azure_openai_endpoint=None,
+            azure_openai_embedding_deployment=None,
+            azure_openai_auth_mode=AzureOpenAIAuthMode.AUTO,
+            azure_openai_subscription_key=None,
+            azure_openai_api_version=None,
         ),
     )
 
