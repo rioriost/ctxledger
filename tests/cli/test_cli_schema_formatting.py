@@ -122,6 +122,7 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
         completion_summary_build_request_count=0,
         completion_summary_build_attempted_count=0,
         completion_summary_build_success_count=0,
+        completion_summary_build_status_counts={},
         completion_summary_build_skipped_reason_counts={},
         latest_episode_created_at=None,
         latest_memory_item_created_at=None,
@@ -141,8 +142,9 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
     assert "- request_count: 0" in rendered
     assert "- attempted_count: 0" in rendered
     assert "- success_count: 0" in rendered
+    assert "- status_counts:" in rendered
     assert "- skipped_reason_counts:" in rendered
-    assert "  - none" in rendered
+    assert rendered.count("  - none") >= 2
     assert "Memory item provenance:" in rendered
     assert "- none" in rendered
     assert "- memory_relation_created_at: None" in rendered
@@ -198,6 +200,10 @@ def test_format_memory_stats_text_renders_values() -> None:
         completion_summary_build_request_rate_base=5,
         completion_summary_build_attempted_rate_base=4,
         completion_summary_build_success_rate_base=3,
+        completion_summary_build_status_counts={
+            "built": 2,
+            "skipped": 1,
+        },
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
@@ -231,6 +237,9 @@ def test_format_memory_stats_text_renders_values() -> None:
     assert "- attempted_rate_base: 4" in rendered
     assert "- success_rate: 0.667" in rendered
     assert "- success_rate_base: 3" in rendered
+    assert "- status_counts:" in rendered
+    assert "  - built: 2" in rendered
+    assert "  - skipped: 1" in rendered
     assert "- skipped_reason_counts:" in rendered
     assert "  - summary_build_failed: 1" in rendered
     assert "  - workflow_summary_build_not_requested: 1" in rendered

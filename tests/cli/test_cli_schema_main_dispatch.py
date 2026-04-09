@@ -811,6 +811,10 @@ def test_stats_renders_json_output_and_closes_pool(
         completion_summary_build_request_rate_base=10,
         completion_summary_build_attempted_rate_base=10,
         completion_summary_build_success_rate_base=10,
+        completion_summary_build_status_counts={
+            "built": 3,
+            "skipped": 6,
+        },
         memory_summary_count=13,
         memory_summary_membership_count=14,
         age_summary_graph_ready_count=15,
@@ -878,6 +882,10 @@ def test_stats_renders_json_output_and_closes_pool(
     assert payload["completion_summary_build_request_rate_base"] == 10
     assert payload["completion_summary_build_attempted_rate_base"] == 10
     assert payload["completion_summary_build_success_rate_base"] == 10
+    assert payload["completion_summary_build_status_counts"] == {
+        "built": 3,
+        "skipped": 6,
+    }
     assert payload["memory_summary_count"] == 13
     assert payload["memory_summary_membership_count"] == 14
     assert payload["age_summary_graph_ready_count"] == 15
@@ -962,6 +970,10 @@ def test_memory_stats_renders_text_output_and_closes_pool(
         completion_summary_build_request_rate_base=4,
         completion_summary_build_attempted_rate_base=4,
         completion_summary_build_success_rate_base=4,
+        completion_summary_build_status_counts={
+            "built": 2,
+            "skipped": 1,
+        },
         memory_summary_count=7,
         memory_summary_membership_count=8,
         age_summary_graph_ready_count=1,
@@ -1016,6 +1028,9 @@ def test_memory_stats_renders_text_output_and_closes_pool(
     assert "- request_rate_base: 4" in captured.out
     assert "- attempted_rate_base: 4" in captured.out
     assert "- success_rate_base: 4" in captured.out
+    assert "- status_counts:" in captured.out
+    assert "  - built: 2" in captured.out
+    assert "  - skipped: 1" in captured.out
     assert "- memory_summaries: 7" in captured.out
     assert "- memory_summary_memberships: 8" in captured.out
     assert "- age_summary_graph_ready: 1" in captured.out

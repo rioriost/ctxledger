@@ -614,6 +614,7 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
         completion_summary_build_request_rate_base=3,
         completion_summary_build_attempted_rate_base=3,
         completion_summary_build_success_rate_base=0,
+        completion_summary_build_status_counts={},
         completion_summary_build_skipped_reason_counts={},
     )
 
@@ -644,6 +645,7 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
                     "summary_build_requested": True,
                     "summary_build_attempted": True,
                     "summary_build_succeeded": True,
+                    "summary_build_status": "built",
                 },
             ),
             SimpleNamespace(
@@ -653,6 +655,7 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
                     "summary_build_requested": True,
                     "summary_build_attempted": True,
                     "summary_build_succeeded": False,
+                    "summary_build_status": "failed",
                     "summary_build_skipped_reason": "summary_build_failed",
                 },
             ),
@@ -665,6 +668,7 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
                     "summary_build_requested": True,
                     "summary_build_attempted": True,
                     "summary_build_succeeded": True,
+                    "summary_build_status": "built",
                 },
             ),
             SimpleNamespace(
@@ -674,6 +678,7 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
                     "summary_build_requested": False,
                     "summary_build_attempted": False,
                     "summary_build_succeeded": False,
+                    "summary_build_status": "skipped",
                     "summary_build_skipped_reason": "workflow_summary_build_not_requested",
                 },
             ),
@@ -768,6 +773,11 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
     assert stats.completion_summary_build_request_rate_base == 4
     assert stats.completion_summary_build_attempted_rate_base == 4
     assert stats.completion_summary_build_success_rate_base == 2
+    assert stats.completion_summary_build_status_counts == {
+        "built": 1,
+        "failed": 1,
+        "skipped": 1,
+    }
 
 
 def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
@@ -786,6 +796,7 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
                     "summary_build_requested": True,
                     "summary_build_attempted": True,
                     "summary_build_succeeded": True,
+                    "summary_build_status": "built",
                 },
             ),
             SimpleNamespace(
@@ -795,6 +806,7 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
                     "summary_build_requested": True,
                     "summary_build_attempted": True,
                     "summary_build_succeeded": False,
+                    "summary_build_status": "failed",
                     "summary_build_skipped_reason": "summary_build_failed",
                 },
             ),
@@ -807,6 +819,7 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
                     "summary_build_requested": True,
                     "summary_build_attempted": True,
                     "summary_build_succeeded": True,
+                    "summary_build_status": "built",
                 },
             ),
             SimpleNamespace(
@@ -816,6 +829,7 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
                     "summary_build_requested": False,
                     "summary_build_attempted": False,
                     "summary_build_succeeded": False,
+                    "summary_build_status": "skipped",
                     "summary_build_skipped_reason": "workflow_summary_build_not_requested",
                 },
             ),
@@ -888,6 +902,11 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
     assert stats.completion_summary_build_request_rate_base == 4
     assert stats.completion_summary_build_attempted_rate_base == 4
     assert stats.completion_summary_build_success_rate_base == 2
+    assert stats.completion_summary_build_status_counts == {
+        "built": 1,
+        "failed": 1,
+        "skipped": 1,
+    }
 
 
 def test_get_memory_stats_collects_relation_and_provenance_information() -> None:

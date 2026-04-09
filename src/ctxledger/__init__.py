@@ -745,6 +745,20 @@ def _format_stats_text(stats: object) -> str:
         f"- request_count: {getattr(stats, 'completion_summary_build_request_count', 0)}",
         f"- attempted_count: {getattr(stats, 'completion_summary_build_attempted_count', 0)}",
         f"- success_count: {getattr(stats, 'completion_summary_build_success_count', 0)}",
+        "- status_counts:",
+        *(
+            [
+                f"  - {status}: {count}"
+                for status, count in sorted(
+                    getattr(
+                        stats,
+                        "completion_summary_build_status_counts",
+                        {},
+                    ).items()
+                )
+            ]
+            or ["  - none"]
+        ),
         f"- request_rate: {getattr(stats, 'completion_summary_build_request_rate', 0.0):.3f}",
         f"- request_rate_base: {getattr(stats, 'completion_summary_build_request_rate_base', 0)}",
         f"- attempted_rate: {getattr(stats, 'completion_summary_build_attempted_rate', 0.0):.3f}",
@@ -916,6 +930,11 @@ def _stats(args: argparse.Namespace) -> int:
                         "completion_summary_build_success_rate_base",
                         0,
                     ),
+                    "completion_summary_build_status_counts": getattr(
+                        stats,
+                        "completion_summary_build_status_counts",
+                        {},
+                    ),
                     "completion_summary_build_skipped_reason_counts": getattr(
                         stats,
                         "completion_summary_build_skipped_reason_counts",
@@ -1060,6 +1079,20 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- request_count: {getattr(stats, 'completion_summary_build_request_count', 0)}",
         f"- attempted_count: {getattr(stats, 'completion_summary_build_attempted_count', 0)}",
         f"- success_count: {getattr(stats, 'completion_summary_build_success_count', 0)}",
+        "- status_counts:",
+        *(
+            [
+                f"  - {status}: {count}"
+                for status, count in sorted(
+                    getattr(
+                        stats,
+                        "completion_summary_build_status_counts",
+                        {},
+                    ).items()
+                )
+            ]
+            or ["  - none"]
+        ),
         f"- request_rate: {getattr(stats, 'completion_summary_build_request_rate', 0.0):.3f}",
         f"- request_rate_base: {getattr(stats, 'completion_summary_build_request_rate_base', 0)}",
         f"- attempted_rate: {getattr(stats, 'completion_summary_build_attempted_rate', 0.0):.3f}",
@@ -1296,6 +1329,11 @@ def _memory_stats(args: argparse.Namespace) -> int:
                         stats,
                         "completion_summary_build_success_rate_base",
                         0,
+                    ),
+                    "completion_summary_build_status_counts": getattr(
+                        stats,
+                        "completion_summary_build_status_counts",
+                        {},
                     ),
                     "completion_summary_build_skipped_reason_counts": getattr(
                         stats,

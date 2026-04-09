@@ -300,6 +300,7 @@ class WorkflowStats:
     completion_summary_build_request_count: int = 0
     completion_summary_build_attempted_count: int = 0
     completion_summary_build_success_count: int = 0
+    completion_summary_build_status_counts: dict[str, int] = field(default_factory=dict)
     completion_summary_build_request_rate_base: int = 0
     completion_summary_build_attempted_rate_base: int = 0
     completion_summary_build_success_rate_base: int = 0
@@ -340,6 +341,7 @@ class MemoryStats:
     completion_summary_build_request_count: int = 0
     completion_summary_build_attempted_count: int = 0
     completion_summary_build_success_count: int = 0
+    completion_summary_build_status_counts: dict[str, int] = field(default_factory=dict)
     completion_summary_build_request_rate_base: int = 0
     completion_summary_build_attempted_rate_base: int = 0
     completion_summary_build_success_rate_base: int = 0
@@ -673,6 +675,7 @@ class WorkflowService:
                 completion_summary_build_request_count,
                 completion_summary_build_attempted_count,
                 completion_summary_build_success_count,
+                completion_summary_build_status_counts,
                 completion_summary_build_skipped_reason_counts,
             ) = self._count_completion_summary_build_outcomes(uow)
             completion_summary_build_request_rate_base = memory_item_provenance_counts.get(
@@ -841,6 +844,7 @@ class WorkflowService:
                 completion_summary_build_request_rate=(completion_summary_build_request_rate),
                 completion_summary_build_attempted_rate=(completion_summary_build_attempted_rate),
                 completion_summary_build_success_rate=(completion_summary_build_success_rate),
+                completion_summary_build_status_counts=(completion_summary_build_status_counts),
                 completion_summary_build_skipped_reason_counts=(
                     completion_summary_build_skipped_reason_counts
                 ),
@@ -911,6 +915,7 @@ class WorkflowService:
                 completion_summary_build_request_count,
                 completion_summary_build_attempted_count,
                 completion_summary_build_success_count,
+                completion_summary_build_status_counts,
                 completion_summary_build_skipped_reason_counts,
             ) = self._count_completion_summary_build_outcomes(uow)
             completion_summary_build_request_rate_base = memory_item_provenance_counts.get(
@@ -988,6 +993,7 @@ class WorkflowService:
                 completion_summary_build_request_rate=(completion_summary_build_request_rate),
                 completion_summary_build_attempted_rate=(completion_summary_build_attempted_rate),
                 completion_summary_build_success_rate=(completion_summary_build_success_rate),
+                completion_summary_build_status_counts=(completion_summary_build_status_counts),
                 completion_summary_build_skipped_reason_counts=(
                     completion_summary_build_skipped_reason_counts
                 ),
@@ -2243,11 +2249,12 @@ class WorkflowService:
                 records = tuple(collected_records)
 
         if records is None:
-            return 0, 0, 0, {}
+            return 0, 0, 0, {}, {}
 
         request_count = 0
         attempted_count = 0
         success_count = 0
+        status_counts: dict[str, int] = {}
         skipped_reason_counts: dict[str, int] = {}
 
         for memory_item in records:
@@ -2264,6 +2271,10 @@ class WorkflowService:
             if bool(metadata.get("summary_build_succeeded", False)):
                 success_count += 1
 
+            summary_build_status = metadata.get("summary_build_status")
+            if isinstance(summary_build_status, str) and summary_build_status.strip():
+                status_counts[summary_build_status] = status_counts.get(summary_build_status, 0) + 1
+
             skipped_reason = metadata.get("summary_build_skipped_reason")
             if isinstance(skipped_reason, str) and skipped_reason.strip():
                 skipped_reason_counts[skipped_reason] = (
@@ -2274,6 +2285,7 @@ class WorkflowService:
             request_count,
             attempted_count,
             success_count,
+            status_counts,
             skipped_reason_counts,
         )
 
