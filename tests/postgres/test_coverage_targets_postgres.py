@@ -7,7 +7,6 @@ from uuid import uuid4
 import pytest
 
 from ctxledger.db.postgres import (
-    PostgresDatabaseHealthChecker,
     PostgresMemoryEmbeddingRepository,
     PostgresMemoryEpisodeRepository,
     PostgresMemoryItemRepository,
@@ -18,7 +17,6 @@ from ctxledger.db.postgres import (
     PostgresWorkflowInstanceRepository,
     PostgresWorkspaceRepository,
 )
-from ctxledger.memory.types import MemoryRelationRecord
 from ctxledger.workflow.service import (
     PersistenceError,
     VerifyStatus,

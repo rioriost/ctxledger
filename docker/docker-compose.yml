@@ -30,7 +30,10 @@ services:
       start_period: 5s
 
   ctxledger:
-    image: python:3.14-slim
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ctxledger:local
     container_name: ctxledger-server
     restart: unless-stopped
     depends_on:
@@ -55,12 +58,18 @@ services:
       CTXLEDGER_DB_AGE_ENABLED: "true"
       CTXLEDGER_DB_AGE_GRAPH_NAME: ctxledger_memory
       PYTHONPATH: /app/src
+      PATH: /root/.local/bin:/opt/ctxledger-venv/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
     working_dir: /app
     command:
       [
-        "sh",
-        "-lc",
-        "python -m pip install --upgrade pip && python -m pip install -e . && uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080",
+        "/opt/ctxledger-venv/bin/python",
+        "-m",
+        "uvicorn",
+        "ctxledger.http_app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
       ]
     expose:
       - "8080"

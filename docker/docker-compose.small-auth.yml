@@ -1,4 +1,52 @@
 services:
+  ctxledger-private-init:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ctxledger:local
+    container_name: ctxledger-server-private-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CTXLEDGER_APP_NAME: ctxledger
+      CTXLEDGER_APP_VERSION: 0.9.0
+      CTXLEDGER_ENV: docker
+      CTXLEDGER_DATABASE_URL: postgresql://ctxledger:ctxledger@postgres:5432/ctxledger
+      CTXLEDGER_TRANSPORT: http
+      CTXLEDGER_ENABLE_HTTP: "true"
+      CTXLEDGER_HOST: 0.0.0.0
+      CTXLEDGER_PORT: 8080
+      CTXLEDGER_HTTP_PATH: /mcp
+      CTXLEDGER_ENABLE_DEBUG_ENDPOINTS: "true"
+      CTXLEDGER_LOG_LEVEL: info
+      CTXLEDGER_LOG_STRUCTURED: "true"
+      CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS: 5
+      CTXLEDGER_DB_AGE_ENABLED: "true"
+      CTXLEDGER_DB_AGE_GRAPH_NAME: ctxledger_memory
+      CTXLEDGER_EMBEDDING_ENABLED: "true"
+      CTXLEDGER_EMBEDDING_PROVIDER: ${CTXLEDGER_EMBEDDING_PROVIDER:-local_stub}
+      CTXLEDGER_EMBEDDING_MODEL: ${OPENAI_MODEL:-text-embedding-3-small}
+      CTXLEDGER_EMBEDDING_DIMENSIONS: ${CTXLEDGER_EMBEDDING_DIMENSIONS:-1536}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CTXLEDGER_GRAFANA_POSTGRES_HOST: ${CTXLEDGER_GRAFANA_POSTGRES_HOST:-postgres:5432}
+      CTXLEDGER_GRAFANA_POSTGRES_DB: ${CTXLEDGER_GRAFANA_POSTGRES_DB:-ctxledger}
+      CTXLEDGER_GRAFANA_POSTGRES_USER: ${CTXLEDGER_GRAFANA_POSTGRES_USER:-ctxledger_grafana}
+      CTXLEDGER_GRAFANA_POSTGRES_PASSWORD: ${CTXLEDGER_GRAFANA_POSTGRES_PASSWORD}
+      CTXLEDGER_GRAFANA_POSTGRES_SSLMODE: ${CTXLEDGER_GRAFANA_POSTGRES_SSLMODE:-disable}
+      PYTHONPATH: /app/src
+      PATH: /root/.local/bin:/opt/ctxledger-venv/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+    working_dir: /app
+    command:
+      [
+        "sh",
+        "-lc",
+        "/opt/ctxledger-venv/bin/python -m ctxledger.__init__ apply-schema && /opt/ctxledger-venv/bin/python scripts/ensure_age_extension.py --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger && /opt/ctxledger-venv/bin/python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory && (/opt/ctxledger-venv/bin/python scripts/setup_grafana_observability.py || echo 'Skipping Grafana observability setup because Grafana DB credentials are not configured')",
+      ]
+    volumes:
+      - ..:/app
+
   traefik:
     image: traefik:v3.1
     container_name: ctxledger-traefik
@@ -44,7 +92,7 @@ services:
       [
         "sh",
         "-lc",
-        "python -m pip install --upgrade pip && python -m pip install fastapi 'uvicorn[standard]' && uvicorn auth_small_app:app --app-dir /app/src --host 0.0.0.0 --port 8090",
+        "python -m pip install --upgrade uv && rm -rf /tmp/auth-small-venv && uv venv /tmp/auth-small-venv && VIRTUAL_ENV=/tmp/auth-small-venv PATH=/tmp/auth-small-venv/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin uv pip install fastapi 'uvicorn[standard]' && /tmp/auth-small-venv/bin/python -m uvicorn auth_small_app:app --app-dir /app/src --host 0.0.0.0 --port 8090",
       ]
     expose:
       - "8090"
@@ -68,6 +116,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      ctxledger-private-init:
+        condition: service_completed_successfully
     environment:
       GF_SECURITY_ADMIN_USER: ${CTXLEDGER_GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${CTXLEDGER_GRAFANA_ADMIN_PASSWORD:-ctxledger-grafana-change-me}
@@ -110,7 +160,10 @@ services:
       - disabled
 
   ctxledger-private:
-    image: python:3.14-slim
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ctxledger:local
     container_name: ctxledger-server-private
     restart: unless-stopped
     depends_on:
@@ -143,12 +196,18 @@ services:
       CTXLEDGER_GRAFANA_POSTGRES_PASSWORD: ${CTXLEDGER_GRAFANA_POSTGRES_PASSWORD}
       CTXLEDGER_GRAFANA_POSTGRES_SSLMODE: ${CTXLEDGER_GRAFANA_POSTGRES_SSLMODE:-disable}
       PYTHONPATH: /app/src
+      PATH: /root/.local/bin:/opt/ctxledger-venv/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
     working_dir: /app
     command:
       [
-        "sh",
-        "-lc",
-        "python -m pip install --upgrade pip && python -m pip install -e . && python -m ctxledger.__init__ apply-schema && python scripts/ensure_age_extension.py --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger && python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory && (python scripts/setup_grafana_observability.py || echo 'Skipping Grafana observability setup because Grafana DB credentials are not configured') && uvicorn ctxledger.http_app:app --host 0.0.0.0 --port 8080",
+        "/opt/ctxledger-venv/bin/python",
+        "-m",
+        "uvicorn",
+        "ctxledger.http_app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
       ]
     expose:
       - "8080"
