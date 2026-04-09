@@ -609,6 +609,8 @@ This should remain a bounded refinement release for the ruleset.
 
 ## 10. Recommended implementation order
 
+This implementation order has now been completed at the policy-file level.
+
 The `.rules` revision should be implemented in this order.
 
 ### Step 1
@@ -657,3 +659,9 @@ better durable records.
 discipline rules, while tightening structured checkpoint expectations,
 strengthening summary-build induction, clarifying interaction promotion, and
 expanding observability from raw volume into agent-quality and hygiene signals.
+
+### Outcome note
+
+This proposal is now historical planning context.
+The canonical `.rules` file is already version `v1.1`, and the corresponding
+policy updates were committed in `19403cd`.

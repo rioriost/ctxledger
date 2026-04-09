@@ -484,8 +484,16 @@ agent operating model is improving and where linkage or hygiene gaps remain.
 Update `.rules` so they better reflect the runtime and the evidence from actual
 usage.
 
+### Status
+Applied and committed.
+
+The canonical `.rules` file is already at `v1.1`, and the related policy
+updates were committed as:
+
+- `19403cd` — `Tighten v1.1 repository rules policy`
+
 ### Candidate rule changes
-Potential changes include:
+Applied changes include:
 
 - stronger preference or requirement for structured checkpoint fields
 - explicit emphasis on `next_narrow_action`
@@ -502,6 +510,11 @@ Potential changes include:
 ### Expected result
 The rules should more directly induce the kinds of durable records that the
 runtime can best store, summarize, link, observe, and reuse.
+
+### Outcome
+This phase is now complete at the policy-document level.
+Remaining `1.1.0` work is runtime, observability, and operator-documentation
+follow-through.
 
 ---
 
@@ -652,13 +665,16 @@ and later knowledge promotion.
 - reduce prose-only expectations where structure is available
 - improve induction of high-value agent behavior
 
+### Status
+Core policy patch applied and committed in `19403cd`.
+
 ### Candidate slices
-- strengthen checkpoint structure guidance
-- add explicit `next_narrow_action` guidance
-- add explicit `verify_target` guidance
-- add summary-promotion guidance
-- add agent-quality observability guidance
-- clarify interaction-promotion posture
+- strengthen checkpoint structure guidance — done
+- add explicit `next_narrow_action` guidance — done
+- add explicit `verify_target` guidance — done
+- add summary-promotion guidance — done
+- add agent-quality observability guidance — done
+- clarify interaction-promotion posture — done
 
 ---
 

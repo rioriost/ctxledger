@@ -1,4 +1,4 @@
-RULESET ctxledger_repository_rules_v1
+RULESET ctxledger_repository_rules_v1.1
 
 SECTION language
 RULE default_language

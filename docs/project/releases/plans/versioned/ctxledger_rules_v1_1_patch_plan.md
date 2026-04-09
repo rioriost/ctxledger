@@ -2,8 +2,17 @@
 
 ## Purpose
 
-This document defines a concrete patch plan for updating the current repository
-`.rules` file toward the proposed `v1.1` posture.
+This document defines a concrete patch plan for the policy updates that brought
+the current repository `.rules` file to `v1.1`.
+
+### Status
+
+Applied and committed.
+
+The canonical `.rules` file is already at `v1.1`, and the corresponding policy
+updates were committed as:
+
+- `19403cd` — `Tighten v1.1 repository rules policy`
 
 It is not the final replacement rules text.
 It is a **change plan against the current file**.
