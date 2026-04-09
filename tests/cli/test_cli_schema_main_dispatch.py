@@ -636,6 +636,13 @@ def test_format_stats_text_renders_values() -> None:
             "checkpoint_count": 14,
         },
         summary_backlog_count=0,
+        completion_summary_build_request_count=29,
+        completion_summary_build_attempted_count=30,
+        completion_summary_build_success_count=31,
+        completion_summary_build_skipped_reason_counts={
+            "workflow_summary_build_not_requested": 12,
+            "summary_build_failed": 1,
+        },
         memory_summary_count=23,
         memory_summary_membership_count=24,
         age_summary_graph_ready_count=25,
@@ -675,6 +682,14 @@ def test_format_stats_text_renders_values() -> None:
     assert "- age_summary_graph_stale: 26" in rendered
     assert "- age_summary_graph_degraded: 27" in rendered
     assert "- age_summary_graph_unknown: 28" in rendered
+    assert "Completion summary build observability:" in rendered
+    assert "- request_count: 29" in rendered
+    assert "- attempted_count: 30" in rendered
+    assert "- success_count: 31" in rendered
+    assert (
+        "- skipped_reason_counts: {'workflow_summary_build_not_requested': 12, 'summary_build_failed': 1}"
+        in rendered
+    )
     assert "- derived_memory_item_state: canonical_only" in rendered
     assert (
         "- derived_memory_item_reason: canonical summary state exists but derived memory items are not materialized"
@@ -691,7 +706,7 @@ def test_format_stats_text_renders_values() -> None:
     assert "- recovery_pattern: 6" in rendered
     assert "- what_remains: 7" in rendered
     assert "- checkpoints: 14" in rendered
-    assert "- summary_backlog: 0" in rendered
+    assert "- summary_backlog_count: 0" in rendered
     assert "2024-10-01 00:00:00+00:00" in rendered
     assert "2024-10-06 00:00:00+00:00" in rendered
     assert "- workflow_updated_at: 2024-10-01 00:00:00+00:00" in rendered
@@ -784,6 +799,13 @@ def test_stats_renders_json_output_and_closes_pool(
             "checkpoint_count": 5,
         },
         summary_backlog_count=0,
+        completion_summary_build_request_count=6,
+        completion_summary_build_attempted_count=4,
+        completion_summary_build_success_count=3,
+        completion_summary_build_skipped_reason_counts={
+            "workflow_summary_build_not_requested": 2,
+            "summary_build_failed": 1,
+        },
         memory_summary_count=13,
         memory_summary_membership_count=14,
         age_summary_graph_ready_count=15,
@@ -838,6 +860,13 @@ def test_stats_renders_json_output_and_closes_pool(
         "checkpoint_count": 5,
     }
     assert payload["summary_backlog_count"] == 0
+    assert payload["completion_summary_build_request_count"] == 6
+    assert payload["completion_summary_build_attempted_count"] == 4
+    assert payload["completion_summary_build_success_count"] == 3
+    assert payload["completion_summary_build_skipped_reason_counts"] == {
+        "workflow_summary_build_not_requested": 2,
+        "summary_build_failed": 1,
+    }
     assert payload["memory_summary_count"] == 13
     assert payload["memory_summary_membership_count"] == 14
     assert payload["age_summary_graph_ready_count"] == 15

@@ -70,6 +70,13 @@ def test_main_stats_renders_text_output(
         age_summary_graph_stale_count=0,
         age_summary_graph_degraded_count=0,
         age_summary_graph_unknown_count=0,
+        completion_summary_build_request_count=3,
+        completion_summary_build_attempted_count=2,
+        completion_summary_build_success_count=1,
+        completion_summary_build_skipped_reason_counts={
+            "summary_build_failed": 1,
+            "workflow_summary_build_not_requested": 2,
+        },
         latest_workflow_updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_checkpoint_created_at=datetime(2026, 3, 15, 9, 1, 0, tzinfo=UTC),
         latest_verify_report_created_at=datetime(2026, 3, 15, 9, 2, 0, tzinfo=UTC),
@@ -133,6 +140,14 @@ def test_main_stats_renders_text_output(
     assert "- age_summary_graph_stale: 0" in captured.out
     assert "- age_summary_graph_degraded: 0" in captured.out
     assert "- age_summary_graph_unknown: 0" in captured.out
+    assert "Completion summary build observability:" in captured.out
+    assert "- request_count: 3" in captured.out
+    assert "- attempted_count: 2" in captured.out
+    assert "- success_count: 1" in captured.out
+    assert (
+        "- skipped_reason_counts: {'summary_build_failed': 1, 'workflow_summary_build_not_requested': 2}"
+        in captured.out
+    )
     assert "Derived memory state:" in captured.out
     assert "- derived_memory_item_state: canonical_only" in captured.out
     assert (
@@ -206,6 +221,13 @@ def test_main_stats_renders_json_output(
         age_summary_graph_stale_count=0,
         age_summary_graph_degraded_count=0,
         age_summary_graph_unknown_count=0,
+        completion_summary_build_request_count=4,
+        completion_summary_build_attempted_count=3,
+        completion_summary_build_success_count=2,
+        completion_summary_build_skipped_reason_counts={
+            "summary_build_failed": 1,
+            "workflow_summary_build_not_requested": 1,
+        },
         latest_workflow_updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_checkpoint_created_at=None,
         latest_verify_report_created_at=None,
@@ -242,6 +264,13 @@ def test_main_stats_renders_json_output(
         "checkpoint_auto_memory_recorded_count": 0,
         "checkpoint_auto_memory_skipped_count": 0,
         "checkpoint_count": 5,
+        "completion_summary_build_attempted_count": 3,
+        "completion_summary_build_request_count": 4,
+        "completion_summary_build_skipped_reason_counts": {
+            "summary_build_failed": 1,
+            "workflow_summary_build_not_requested": 1,
+        },
+        "completion_summary_build_success_count": 2,
         "derived_memory_graph_status": "graph_ready",
         "derived_memory_item_count": 0,
         "derived_memory_item_reason": "canonical summary state exists but derived memory items are not materialized",
@@ -259,6 +288,8 @@ def test_main_stats_renders_json_output(
         "memory_item_count": 4,
         "memory_summary_count": 2,
         "memory_summary_membership_count": 5,
+        "structured_checkpoint_coverage": {},
+        "summary_backlog_count": 0,
         "verify_status_counts": {
             "failed": 0,
             "passed": 2,

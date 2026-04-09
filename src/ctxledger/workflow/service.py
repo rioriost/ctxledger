@@ -297,6 +297,10 @@ class WorkflowStats:
     latest_episode_created_at: datetime | None = None
     latest_memory_item_created_at: datetime | None = None
     latest_memory_embedding_created_at: datetime | None = None
+    completion_summary_build_request_count: int = 0
+    completion_summary_build_attempted_count: int = 0
+    completion_summary_build_success_count: int = 0
+    completion_summary_build_skipped_reason_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(slots=True, frozen=True)
@@ -649,6 +653,12 @@ class WorkflowService:
                 uow,
                 checkpoint_count=checkpoint_count,
             )
+            (
+                completion_summary_build_request_count,
+                completion_summary_build_attempted_count,
+                completion_summary_build_success_count,
+                completion_summary_build_skipped_reason_counts,
+            ) = self._count_completion_summary_build_outcomes(uow)
 
             derived_memory_item_count = memory_item_provenance_counts.get("derived", 0)
             age_summary_graph_ready_count = 1 if memory_summary_membership_count > 0 else 0
@@ -781,6 +791,12 @@ class WorkflowService:
                 latest_episode_created_at=latest_episode_created_at,
                 latest_memory_item_created_at=latest_memory_item_created_at,
                 latest_memory_embedding_created_at=latest_memory_embedding_created_at,
+                completion_summary_build_request_count=(completion_summary_build_request_count),
+                completion_summary_build_attempted_count=(completion_summary_build_attempted_count),
+                completion_summary_build_success_count=(completion_summary_build_success_count),
+                completion_summary_build_skipped_reason_counts=(
+                    completion_summary_build_skipped_reason_counts
+                ),
             )
 
     def get_memory_stats(self) -> MemoryStats:
@@ -2096,6 +2112,80 @@ class WorkflowService:
                     coverage[field_name] += 1
 
         return coverage
+
+    def _count_completion_summary_build_outcomes(
+        self,
+        uow: UnitOfWork,
+    ) -> tuple[int, int, int, dict[str, int]]:
+        repository = getattr(uow, "memory_items", None)
+        if repository is None:
+            return 0, 0, 0, {}
+
+        records: tuple[MemoryItem, ...] | None = None
+
+        records_by_id = getattr(repository, "_records_by_id", None)
+        if records_by_id is None:
+            values_by_id = getattr(repository, "_values_by_id", None)
+            if isinstance(values_by_id, dict):
+                records_by_id = values_by_id
+
+        if isinstance(records_by_id, dict):
+            records = tuple(records_by_id.values())
+        else:
+            list_by_workspace_id = getattr(repository, "list_by_workspace_id", None)
+            workspaces = getattr(uow, "workspaces", None)
+            list_workspaces = (
+                getattr(workspaces, "list_all", None) if workspaces is not None else None
+            )
+            if callable(list_by_workspace_id) and callable(list_workspaces):
+                collected_records: list[MemoryItem] = []
+                seen_memory_ids: set[UUID] = set()
+                for workspace in list_workspaces(limit=1000):
+                    workspace_id = getattr(workspace, "workspace_id", None)
+                    if workspace_id is None:
+                        continue
+                    for memory_item in list_by_workspace_id(workspace_id, limit=10000):
+                        memory_id = getattr(memory_item, "memory_id", None)
+                        if memory_id in seen_memory_ids:
+                            continue
+                        seen_memory_ids.add(memory_id)
+                        collected_records.append(memory_item)
+                records = tuple(collected_records)
+
+        if records is None:
+            return 0, 0, 0, {}
+
+        request_count = 0
+        attempted_count = 0
+        success_count = 0
+        skipped_reason_counts: dict[str, int] = {}
+
+        for memory_item in records:
+            if getattr(memory_item, "provenance", None) != "workflow_complete_auto":
+                continue
+            metadata = getattr(memory_item, "metadata", None)
+            if not isinstance(metadata, dict):
+                continue
+
+            if bool(metadata.get("summary_build_requested", False)):
+                request_count += 1
+            if bool(metadata.get("summary_build_attempted", False)):
+                attempted_count += 1
+            if bool(metadata.get("summary_build_succeeded", False)):
+                success_count += 1
+
+            skipped_reason = metadata.get("summary_build_skipped_reason")
+            if isinstance(skipped_reason, str) and skipped_reason.strip():
+                skipped_reason_counts[skipped_reason] = (
+                    skipped_reason_counts.get(skipped_reason, 0) + 1
+                )
+
+        return (
+            request_count,
+            attempted_count,
+            success_count,
+            skipped_reason_counts,
+        )
 
     def _count_memory_items_with_file_work_metadata(self, uow: Any) -> int:
         memory_items = getattr(uow, "memory_items", None)
