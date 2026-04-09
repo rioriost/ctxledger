@@ -782,6 +782,7 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
     }
     assert stats.completion_summary_build_status_total_count == 3
     assert stats.completion_summary_build_skipped_reason_total_count == 2
+    assert stats.completion_summary_build_attempted_minus_status_total_count == 0
 
 
 def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
@@ -913,6 +914,7 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
     }
     assert stats.completion_summary_build_status_total_count == 3
     assert stats.completion_summary_build_skipped_reason_total_count == 2
+    assert stats.completion_summary_build_attempted_minus_status_total_count == 0
 
 
 def test_get_memory_stats_collects_relation_and_provenance_information() -> None:

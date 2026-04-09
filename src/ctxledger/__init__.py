@@ -746,6 +746,7 @@ def _format_stats_text(stats: object) -> str:
         f"- attempted_count: {getattr(stats, 'completion_summary_build_attempted_count', 0)}",
         f"- success_count: {getattr(stats, 'completion_summary_build_success_count', 0)}",
         f"- status_total: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
+        f"- attempted_minus_status_total_count: {getattr(stats, 'completion_summary_build_attempted_count', 0) - sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
         f"- skipped_reason_total: {sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
         "- status_counts:",
         *(
@@ -942,6 +943,10 @@ def _stats(args: argparse.Namespace) -> int:
                         "completion_summary_build_status_total_count",
                         0,
                     ),
+                    "completion_summary_build_attempted_minus_status_total_count": (
+                        getattr(stats, "completion_summary_build_attempted_count", 0)
+                        - getattr(stats, "completion_summary_build_status_total_count", 0)
+                    ),
                     "completion_summary_build_skipped_reason_counts": getattr(
                         stats,
                         "completion_summary_build_skipped_reason_counts",
@@ -1092,6 +1097,7 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- attempted_count: {getattr(stats, 'completion_summary_build_attempted_count', 0)}",
         f"- success_count: {getattr(stats, 'completion_summary_build_success_count', 0)}",
         f"- status_total: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
+        f"- attempted_minus_status_total_count: {getattr(stats, 'completion_summary_build_attempted_count', 0) - sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
         f"- skipped_reason_total: {sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
         "- status_counts:",
         *(
@@ -1353,6 +1359,10 @@ def _memory_stats(args: argparse.Namespace) -> int:
                         stats,
                         "completion_summary_build_status_total_count",
                         0,
+                    ),
+                    "completion_summary_build_attempted_minus_status_total_count": (
+                        getattr(stats, "completion_summary_build_attempted_count", 0)
+                        - getattr(stats, "completion_summary_build_status_total_count", 0)
                     ),
                     "completion_summary_build_skipped_reason_counts": getattr(
                         stats,
