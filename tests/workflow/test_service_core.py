@@ -609,6 +609,9 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
         completion_summary_build_attempted_count=0,
         completion_summary_build_success_count=0,
         completion_summary_build_skipped_reason_counts={},
+        completion_summary_build_request_rate=0.0,
+        completion_summary_build_attempted_rate=0.0,
+        completion_summary_build_success_rate=0.0,
     )
 
     memory_stats = service.get_memory_stats()
@@ -756,6 +759,9 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
         "summary_build_failed": 1,
         "workflow_summary_build_not_requested": 1,
     }
+    assert stats.completion_summary_build_request_rate == 0.5
+    assert stats.completion_summary_build_attempted_rate == 0.5
+    assert stats.completion_summary_build_success_rate == 0.5
 
 
 def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
@@ -870,6 +876,9 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
         "summary_build_failed": 1,
         "workflow_summary_build_not_requested": 1,
     }
+    assert stats.completion_summary_build_request_rate == 0.5
+    assert stats.completion_summary_build_attempted_rate == 0.5
+    assert stats.completion_summary_build_success_rate == 0.5
 
 
 def test_get_memory_stats_collects_relation_and_provenance_information() -> None:

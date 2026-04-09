@@ -300,6 +300,9 @@ class WorkflowStats:
     completion_summary_build_request_count: int = 0
     completion_summary_build_attempted_count: int = 0
     completion_summary_build_success_count: int = 0
+    completion_summary_build_request_rate: float = 0.0
+    completion_summary_build_attempted_rate: float = 0.0
+    completion_summary_build_success_rate: float = 0.0
     completion_summary_build_skipped_reason_counts: dict[str, int] = field(default_factory=dict)
 
 
@@ -334,6 +337,9 @@ class MemoryStats:
     completion_summary_build_request_count: int = 0
     completion_summary_build_attempted_count: int = 0
     completion_summary_build_success_count: int = 0
+    completion_summary_build_request_rate: float = 0.0
+    completion_summary_build_attempted_rate: float = 0.0
+    completion_summary_build_success_rate: float = 0.0
     completion_summary_build_skipped_reason_counts: dict[str, int] = field(default_factory=dict)
 
 
@@ -663,6 +669,18 @@ class WorkflowService:
                 completion_summary_build_success_count,
                 completion_summary_build_skipped_reason_counts,
             ) = self._count_completion_summary_build_outcomes(uow)
+            completion_summary_build_request_rate = self._safe_ratio(
+                completion_summary_build_request_count,
+                memory_item_provenance_counts.get("workflow_complete_auto", 0),
+            )
+            completion_summary_build_attempted_rate = self._safe_ratio(
+                completion_summary_build_attempted_count,
+                memory_item_provenance_counts.get("workflow_complete_auto", 0),
+            )
+            completion_summary_build_success_rate = self._safe_ratio(
+                completion_summary_build_success_count,
+                completion_summary_build_attempted_count,
+            )
 
             derived_memory_item_count = memory_item_provenance_counts.get("derived", 0)
             age_summary_graph_ready_count = 1 if memory_summary_membership_count > 0 else 0
@@ -798,6 +816,9 @@ class WorkflowService:
                 completion_summary_build_request_count=(completion_summary_build_request_count),
                 completion_summary_build_attempted_count=(completion_summary_build_attempted_count),
                 completion_summary_build_success_count=(completion_summary_build_success_count),
+                completion_summary_build_request_rate=(completion_summary_build_request_rate),
+                completion_summary_build_attempted_rate=(completion_summary_build_attempted_rate),
+                completion_summary_build_success_rate=(completion_summary_build_success_rate),
                 completion_summary_build_skipped_reason_counts=(
                     completion_summary_build_skipped_reason_counts
                 ),
@@ -870,6 +891,18 @@ class WorkflowService:
                 completion_summary_build_success_count,
                 completion_summary_build_skipped_reason_counts,
             ) = self._count_completion_summary_build_outcomes(uow)
+            completion_summary_build_request_rate = self._safe_ratio(
+                completion_summary_build_request_count,
+                memory_item_provenance_counts.get("workflow_complete_auto", 0),
+            )
+            completion_summary_build_attempted_rate = self._safe_ratio(
+                completion_summary_build_attempted_count,
+                memory_item_provenance_counts.get("workflow_complete_auto", 0),
+            )
+            completion_summary_build_success_rate = self._safe_ratio(
+                completion_summary_build_success_count,
+                completion_summary_build_attempted_count,
+            )
 
             return MemoryStats(
                 episode_count=episode_count,
@@ -914,6 +947,9 @@ class WorkflowService:
                 completion_summary_build_request_count=(completion_summary_build_request_count),
                 completion_summary_build_attempted_count=(completion_summary_build_attempted_count),
                 completion_summary_build_success_count=(completion_summary_build_success_count),
+                completion_summary_build_request_rate=(completion_summary_build_request_rate),
+                completion_summary_build_attempted_rate=(completion_summary_build_attempted_rate),
+                completion_summary_build_success_rate=(completion_summary_build_success_rate),
                 completion_summary_build_skipped_reason_counts=(
                     completion_summary_build_skipped_reason_counts
                 ),
@@ -2202,6 +2238,12 @@ class WorkflowService:
             success_count,
             skipped_reason_counts,
         )
+
+    @staticmethod
+    def _safe_ratio(numerator: int, denominator: int) -> float:
+        if denominator <= 0:
+            return 0.0
+        return numerator / denominator
 
     def _count_memory_items_with_file_work_metadata(self, uow: Any) -> int:
         memory_items = getattr(uow, "memory_items", None)

@@ -199,6 +199,9 @@ def test_format_memory_stats_text_renders_values() -> None:
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
         },
+        completion_summary_build_request_rate=0.8,
+        completion_summary_build_attempted_rate=0.75,
+        completion_summary_build_success_rate=2 / 3,
         latest_episode_created_at=datetime(2026, 3, 17, 12, 0, 0, tzinfo=UTC),
         latest_memory_item_created_at=datetime(2026, 3, 17, 12, 1, 0, tzinfo=UTC),
         latest_memory_embedding_created_at=datetime(2026, 3, 17, 12, 2, 0, tzinfo=UTC),
@@ -219,6 +222,9 @@ def test_format_memory_stats_text_renders_values() -> None:
     assert "- request_count: 4" in rendered
     assert "- attempted_count: 3" in rendered
     assert "- success_count: 2" in rendered
+    assert "- request_rate: 0.800" in rendered
+    assert "- attempted_rate: 0.750" in rendered
+    assert "- success_rate: 0.667" in rendered
     assert "- skipped_reason_counts:" in rendered
     assert "  - summary_build_failed: 1" in rendered
     assert "  - workflow_summary_build_not_requested: 1" in rendered

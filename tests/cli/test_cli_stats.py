@@ -73,6 +73,9 @@ def test_main_stats_renders_text_output(
         completion_summary_build_request_count=3,
         completion_summary_build_attempted_count=2,
         completion_summary_build_success_count=1,
+        completion_summary_build_request_rate=0.75,
+        completion_summary_build_attempted_rate=0.5,
+        completion_summary_build_success_rate=0.25,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 2,
@@ -144,6 +147,9 @@ def test_main_stats_renders_text_output(
     assert "- request_count: 3" in captured.out
     assert "- attempted_count: 2" in captured.out
     assert "- success_count: 1" in captured.out
+    assert "- request_rate: 0.750" in captured.out
+    assert "- attempted_rate: 0.500" in captured.out
+    assert "- success_rate: 0.250" in captured.out
     assert "- skipped_reason_counts:" in captured.out
     assert "  - summary_build_failed: 1" in captured.out
     assert "  - workflow_summary_build_not_requested: 2" in captured.out
@@ -223,6 +229,9 @@ def test_main_stats_renders_json_output(
         completion_summary_build_request_count=4,
         completion_summary_build_attempted_count=3,
         completion_summary_build_success_count=2,
+        completion_summary_build_request_rate=1.0,
+        completion_summary_build_attempted_rate=0.75,
+        completion_summary_build_success_rate=0.5,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
@@ -265,11 +274,14 @@ def test_main_stats_renders_json_output(
         "checkpoint_count": 5,
         "completion_summary_build_attempted_count": 3,
         "completion_summary_build_request_count": 4,
+        "completion_summary_build_request_rate": 1.0,
+        "completion_summary_build_attempted_rate": 0.75,
         "completion_summary_build_skipped_reason_counts": {
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
         },
         "completion_summary_build_success_count": 2,
+        "completion_summary_build_success_rate": 0.5,
         "derived_memory_graph_status": "graph_ready",
         "derived_memory_item_count": 0,
         "derived_memory_item_reason": "canonical summary state exists but derived memory items are not materialized",
@@ -346,6 +358,9 @@ def test_main_memory_stats_renders_text_output(
         completion_summary_build_request_count=3,
         completion_summary_build_attempted_count=2,
         completion_summary_build_success_count=1,
+        completion_summary_build_request_rate=0.75,
+        completion_summary_build_attempted_rate=0.5,
+        completion_summary_build_success_rate=0.25,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 2,
@@ -411,6 +426,9 @@ def test_main_memory_stats_renders_text_output(
     assert "- request_count: 3" in captured.out
     assert "- attempted_count: 2" in captured.out
     assert "- success_count: 1" in captured.out
+    assert "- request_rate: 0.750" in captured.out
+    assert "- attempted_rate: 0.500" in captured.out
+    assert "- success_rate: 0.250" in captured.out
     assert "- skipped_reason_counts:" in captured.out
     assert "  - summary_build_failed: 1" in captured.out
     assert "  - workflow_summary_build_not_requested: 2" in captured.out
@@ -554,6 +572,9 @@ def test_main_memory_stats_renders_json_output(
         completion_summary_build_request_count=4,
         completion_summary_build_attempted_count=3,
         completion_summary_build_success_count=2,
+        completion_summary_build_request_rate=1.0,
+        completion_summary_build_attempted_rate=0.75,
+        completion_summary_build_success_rate=0.5,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
@@ -621,6 +642,9 @@ def test_main_memory_stats_renders_json_output(
         "completion_summary_build_request_count": 4,
         "completion_summary_build_attempted_count": 3,
         "completion_summary_build_success_count": 2,
+        "completion_summary_build_request_rate": 1.0,
+        "completion_summary_build_attempted_rate": 0.75,
+        "completion_summary_build_success_rate": 0.5,
         "completion_summary_build_skipped_reason_counts": {
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,

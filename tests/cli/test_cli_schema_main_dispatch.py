@@ -805,6 +805,9 @@ def test_stats_renders_json_output_and_closes_pool(
             "workflow_summary_build_not_requested": 2,
             "summary_build_failed": 1,
         },
+        completion_summary_build_request_rate=0.6,
+        completion_summary_build_attempted_rate=0.4,
+        completion_summary_build_success_rate=0.3,
         memory_summary_count=13,
         memory_summary_membership_count=14,
         age_summary_graph_ready_count=15,
@@ -866,6 +869,9 @@ def test_stats_renders_json_output_and_closes_pool(
         "workflow_summary_build_not_requested": 2,
         "summary_build_failed": 1,
     }
+    assert payload["completion_summary_build_request_rate"] == 0.6
+    assert payload["completion_summary_build_attempted_rate"] == 0.4
+    assert payload["completion_summary_build_success_rate"] == 0.3
     assert payload["memory_summary_count"] == 13
     assert payload["memory_summary_membership_count"] == 14
     assert payload["age_summary_graph_ready_count"] == 15
@@ -944,6 +950,9 @@ def test_memory_stats_renders_text_output_and_closes_pool(
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
         },
+        completion_summary_build_request_rate=1.0,
+        completion_summary_build_attempted_rate=0.75,
+        completion_summary_build_success_rate=0.5,
         memory_summary_count=7,
         memory_summary_membership_count=8,
         age_summary_graph_ready_count=1,
@@ -992,6 +1001,9 @@ def test_memory_stats_renders_text_output_and_closes_pool(
     assert "- skipped_reason_counts:" in captured.out
     assert "  - summary_build_failed: 1" in captured.out
     assert "  - workflow_summary_build_not_requested: 1" in captured.out
+    assert "- request_rate: 1.000" in captured.out
+    assert "- attempted_rate: 0.750" in captured.out
+    assert "- success_rate: 0.500" in captured.out
     assert "- memory_summaries: 7" in captured.out
     assert "- memory_summary_memberships: 8" in captured.out
     assert "- age_summary_graph_ready: 1" in captured.out
