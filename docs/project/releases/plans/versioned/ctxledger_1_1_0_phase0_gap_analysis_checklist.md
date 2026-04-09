@@ -1,0 +1,1887 @@
+# `ctxledger` `1.1.0` Phase 0 Gap Analysis Checklist
+
+## 1. Purpose
+
+This checklist is the required execution companion for Phase 0 of the
+`1.1.0` implementation plan.
+
+Use it to compare:
+
+1. intended `1.0.0` behavior
+2. current `1.0.x` implementation behavior
+3. observed PostgreSQL-backed usage outcomes
+
+The goal is to prevent `1.1.0` from planning work that is already implemented,
+misdiagnosed, or better solved in a different layer.
+
+This checklist should be completed before final `1.1.0` scope lock.
+
+---
+
+## 2. Expected outputs
+
+Phase 0 should produce all of the following:
+
+- a `1.0.0` intent vs current implementation matrix
+- a runtime vs `.rules` alignment matrix
+- a PostgreSQL evidence summary for the highest-value mismatches
+- a narrowed `1.1.0` scope recommendation
+- an explicit defer list for items outside bounded `1.1.0`
+- a short closeout note summarizing what changed in the plan after the analysis
+
+---
+
+## 3. Working method
+
+For each checklist item, classify the result as one of:
+
+- `implemented_and_used`
+- `implemented_but_weakly_used`
+- `implemented_but_weakly_surfaced`
+- `partially_implemented`
+- `planned_but_not_implemented`
+- `not_planned_in_1.0.0`
+- `unclear_needs_followup`
+
+When useful, also classify the primary gap source as:
+
+- `runtime_structure_gap`
+- `rules_induction_gap`
+- `observability_gap`
+- `retrieval_gap`
+- `operator_usage_gap`
+- `documentation_gap`
+
+---
+
+## 4. Source set to inspect
+
+Complete the checklist using evidence from these source classes.
+
+### 4.1 `1.0.0` intent sources
+- `docs/project/releases/plans/versioned/large_deployment_pattern_1_0_0_plan.md`
+- `docs/project/releases/plans/versioned/1.0.0_large_deployment_acceptance_checklist.md`
+- `docs/project/releases/1.0.1_closeout.md`
+- current product/reference docs that still describe canonical behavior
+- schema and API surfaces that were part of the `1.0.x` line
+
+### 4.2 Current implementation sources
+- schema definitions
+- runtime service and repository behavior
+- CLI behavior
+- HTTP/debug/observability surfaces
+- Grafana and SQL observability assets
+- current `.rules`
+
+### 4.3 Usage evidence sources
+- PostgreSQL counts and distributions
+- representative episodes
+- representative memory items
+- summary and membership volume
+- resume/retry/fallback evidence
+- interaction and file-work evidence
+
+---
+
+## 5. Checklist
+
+## 5.1 `1.0.0` release intent baseline
+
+- [x] Identify the primary `1.0.0` milestone promise in release-planning docs.
+  - Initial finding:
+    - `1.0.0` was primarily a **large Azure deployment milestone**
+    - the main promise was a credible, bounded, one-command `azd up` large deployment pattern
+    - it was not primarily framed as an agent-quality, memory-distillation, or `.rules`-alignment milestone
+  - Evidence:
+    - `large_deployment_pattern_1_0_0_plan.md`
+    - `1.0.0_large_deployment_acceptance_checklist.md`
+  - Classification:
+    - `implemented_and_used` for release framing
+- [x] Record what `1.0.0` explicitly treated as canonical truth.
+  - Initial finding:
+    - PostgreSQL was explicitly treated as canonical
+    - workflow control state remained canonical
+    - relational memory and canonical summaries remained canonical-first
+  - Evidence:
+    - `large_deployment_pattern_1_0_0_plan.md`
+    - `memory-model.md`
+    - `specification.md`
+    - `1.0.1_closeout.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Record what `1.0.0` explicitly treated as derived or degradable.
+  - Initial finding:
+    - Apache AGE and graph-oriented structures were explicitly bounded, derived, and degradable
+    - observability fields were operator signals rather than replacement truth
+    - retrieval helpers, summaries, embeddings, and grouped retrieval views were downstream of canonical records
+  - Evidence:
+    - `large_deployment_pattern_1_0_0_plan.md`
+    - `memory-model.md`
+    - `specification.md`
+    - `1.0.1_closeout.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Record what `1.0.0` promised for workflow tracking.
+  - Initial finding:
+    - durable workflow tracking was already part of the product posture
+    - the workflow model promised canonical workflow state in PostgreSQL, resumable checkpoints, attempts, verify reports, and terminal workflow discipline
+    - this appears to be a carried-forward product baseline rather than the main new `1.0.0` milestone promise
+  - Evidence:
+    - `workflow-model.md`
+    - `specification.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Record what `1.0.0` promised for resumability.
+  - Initial finding:
+    - resumable execution and restart-safe continuation were part of the workflow model
+    - checkpoints were intended to capture enough structured state for safe continuation
+    - exact resume truth was separated from broader memory recall
+    - this was product-level posture, not the main Azure milestone delta
+  - Evidence:
+    - `workflow-model.md`
+    - `memory-model.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Record what `1.0.0` promised for memory capture.
+  - Initial finding:
+    - `1.0.0` preserved PostgreSQL-backed episodic and semantic memory posture
+    - memory remained layered, with workflow state separate from reusable memory
+    - the large deployment plan emphasized preserving `pgvector`, Apache AGE, and Azure-side AI integration rather than redefining memory capture semantics
+  - Evidence:
+    - `memory-model.md`
+    - `specification.md`
+    - `large_deployment_pattern_1_0_0_plan.md`
+  - Classification:
+    - `implemented_and_used`
+- [ ] Record what `1.0.0` promised for summary behavior.
+- [x] Record what `1.0.0` promised for observability.
+  - Initial finding:
+    - `1.0.0` promised adequate runtime observability and operational diagnosis for the Azure large pattern
+    - observability was framed operationally: deployment health, runtime diagnosis, Grafana posture, and release-readiness alignment
+    - richer canonical-summary and derived-state observability was materially strengthened in `1.0.1`
+  - Evidence:
+    - `1.0.0_large_deployment_acceptance_checklist.md`
+    - `1.0.1_closeout.md`
+  - Classification:
+    - `implemented_but_weakly_surfaced` for the `1.0.0` baseline alone
+  - Primary gap source:
+    - `observability_gap`
+- [x] Record what `1.0.0` did not try to solve.
+  - Initial finding:
+    - `1.0.0` explicitly did not try to solve:
+      - full application-layer multi-tenancy
+      - per-user authorization inside `ctxledger`
+      - tenant-aware ownership models
+      - final identity architecture
+      - final gateway decision for all future deployments
+      - zero-downtime migrations for every schema change
+      - globally distributed deployment
+      - complete autoscaling tuning for every workload shape
+      - a complete redesign of the embedding architecture
+    - this confirms that many agent-quality and memory-distillation concerns were not the primary `1.0.0` target
+  - Evidence:
+    - `large_deployment_pattern_1_0_0_plan.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Note any `1.0.1` changes that materially affect the `1.0.0` baseline.
+  - Initial finding:
+    - `1.0.1` materially strengthened the post-`1.0.0` baseline by adding:
+      - restart-time AGE refresh hardening
+      - natural automatic file-work recording
+      - repaired `memory-stats`
+      - explicit derived-memory observability fields and state/reason readings
+    - this means Phase 0 should compare `1.1.0` not only against original `1.0.0` intent, but against the effective `1.0.x` baseline after `1.0.1`
+  - Evidence:
+    - `1.0.1_closeout.md`
+  - Classification:
+    - `implemented_and_used`
+
+### Output notes
+- [x] Write a short baseline summary for `1.0.0` intent.
+  - Baseline summary:
+    - `1.0.0` was primarily a bounded Azure large deployment milestone that preserved PostgreSQL as canonical truth, kept graph and derived layers subordinate, and carried forward durable workflow plus memory behavior into a cloud-ready operating model.
+    - It was not primarily a milestone for structured checkpoint quality, memory distillation quality, or `.rules`-to-runtime alignment.
+- [x] Mark any areas where `1.0.0` intent is ambiguous.
+  - Initial ambiguities:
+    - summary behavior is not yet fully baselined in this checklist section
+    - the exact boundary between carried-forward product behavior and `1.0.0`-specific milestone promises still needs a tighter matrix
+    - observability intent for agent-quality signals appears under-specified in `1.0.0` and strengthened only later in `1.0.1`
+
+---
+
+## 5.2 Workflow and checkpoint structure
+
+- [x] List the workflow lifecycle operations available in `1.0.x`.
+  - Initial finding:
+    - the core workflow lifecycle operations available in the documented MCP surface are:
+      - `workspace_register`
+      - `workflow_start`
+      - `workflow_checkpoint`
+      - `workflow_resume`
+      - `workflow_complete`
+    - product docs also frame verify reports, attempts, and checkpoints as first-class workflow entities
+  - Evidence:
+    - `docs/project/product/mcp-api.md`
+    - `docs/project/product/workflow-model.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm what identifiers each workflow operation requires and returns.
+  - Initial finding:
+    - `workspace_register`
+      - requires:
+        - `repo_url`
+        - `canonical_path`
+        - `default_branch`
+      - returns:
+        - `workspace_id`
+        - workspace metadata
+    - `workflow_start`
+      - requires:
+        - `workspace_id`
+        - `ticket_id`
+      - returns:
+        - `workflow_instance_id`
+        - `attempt_id`
+        - workflow and attempt status fields
+    - `workflow_checkpoint`
+      - requires:
+        - `workflow_instance_id`
+        - `attempt_id`
+        - `step_name`
+      - returns:
+        - `checkpoint_id`
+        - `workflow_instance_id`
+        - `attempt_id`
+        - `created_at`
+        - optional latest verify status
+    - `workflow_resume`
+      - requires:
+        - `workflow_instance_id`
+      - returns:
+        - composite resume view including workspace, workflow, attempt, latest checkpoint, and latest verify report
+    - `workflow_complete`
+      - requires:
+        - `workflow_instance_id`
+        - `attempt_id`
+        - `workflow_status`
+      - returns:
+        - terminal workflow and attempt closeout state
+  - Evidence:
+    - `docs/project/product/mcp-api.md`
+    - `docs/project/product/workflow-model.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm what checkpoint fields are structurally supported today.
+  - Initial finding:
+    - structurally supported checkpoint inputs today are:
+      - `workflow_instance_id`
+      - `attempt_id`
+      - `step_name`
+      - `summary`
+      - `checkpoint_json`
+      - `verify_status`
+      - `verify_report`
+    - canonical checkpoint storage is:
+      - `step_name`
+      - `summary`
+      - `checkpoint_json`
+      - `created_at`
+    - canonical verification evidence is stored separately in `verify_reports`
+  - Evidence:
+    - `schemas/postgres.sql`
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - `docs/project/product/mcp-api.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm which checkpoint fields are only available as prose summary text.
+  - Initial finding:
+    - the runtime structurally recognizes `checkpoint_json`, but current observed checkpoint usage shows the following high-value fields are not materially populated in structured form:
+      - `current_objective`
+      - `next_intended_action`
+      - `root_cause`
+      - `recovery_pattern`
+      - `what_remains`
+      - `verify_target`
+      - `resume_hint`
+      - `failure_guard`
+    - these concepts currently appear primarily in prose summaries when they appear at all
+  - Evidence:
+    - `schemas/postgres.sql`
+    - `src/ctxledger/memory/repositories.py`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `rules_induction_gap`
+- [x] Confirm whether `current_objective` is structurally stored.
+  - Initial finding:
+    - `current_objective` is structurally supported through `checkpoint_json`
+    - retrieval code explicitly reads `latest_checkpoint_current_objective`
+    - observed PostgreSQL usage currently shows zero populated rows for this field
+  - Evidence:
+    - `schemas/postgres.sql`
+    - `src/ctxledger/memory/repositories.py`
+    - `src/ctxledger/memory/service_core.py`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `rules_induction_gap`
+- [x] Confirm whether `next_intended_action` is structurally stored.
+  - Initial finding:
+    - `next_intended_action` is structurally supported through `checkpoint_json`
+    - retrieval code explicitly reads and surfaces it in task-recall logic
+    - observed PostgreSQL usage currently shows zero populated rows for this field
+  - Evidence:
+    - `schemas/postgres.sql`
+    - `src/ctxledger/memory/repositories.py`
+    - `src/ctxledger/memory/service_core.py`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `rules_induction_gap`
+- [x] Confirm whether `verify_status` is structurally stored.
+  - Initial finding:
+    - `verify_status` is structurally supported and materially used
+    - it is not stored inside `checkpoint_json`; it is persisted canonically through `verify_reports`
+    - `workflow_checkpoint` can also accept a structured `verify_report`
+  - Evidence:
+    - `schemas/postgres.sql`
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - `docs/project/product/mcp-api.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether `root_cause` is structurally stored.
+  - Initial finding:
+    - `root_cause` is not surfaced as a first-class checkpoint field in the current MCP schema
+    - it could be carried inside `checkpoint_json`, but observed PostgreSQL usage currently shows zero populated rows for this key
+  - Evidence:
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Confirm whether `recovery_pattern` is structurally stored.
+  - Initial finding:
+    - `recovery_pattern` is not surfaced as a first-class checkpoint field in the current MCP schema
+    - it could be carried inside `checkpoint_json`, but observed PostgreSQL usage currently shows zero populated rows for this key
+  - Evidence:
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Confirm whether `what_remains` is structurally stored.
+  - Initial finding:
+    - `what_remains` is not surfaced as a first-class checkpoint field in the current MCP schema
+    - it could be carried inside `checkpoint_json`, but observed PostgreSQL usage currently shows zero populated rows for this key
+  - Evidence:
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Confirm whether `verify_target` exists structurally or only in prose.
+  - Initial finding:
+    - `verify_target` does not exist as a first-class checkpoint field in the current MCP schema
+    - it could theoretically be carried inside `checkpoint_json`, but observed PostgreSQL usage currently shows zero populated rows for this key
+    - in practice it is prose-only when present
+  - Evidence:
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Confirm whether `resume_hint` exists structurally or only in prose.
+  - Initial finding:
+    - `resume_hint` does not exist as a first-class checkpoint field in the current MCP schema
+    - it could theoretically be carried inside `checkpoint_json`, but observed PostgreSQL usage currently shows zero populated rows for this key
+    - in practice resume guidance is mostly surfaced through prose summaries and resume views rather than checkpoint structure
+  - Evidence:
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - `docs/project/product/mcp-api.md`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Confirm whether `failure_guard` exists structurally or only in prose.
+  - Initial finding:
+    - `failure_guard` does not exist as a first-class checkpoint field in the current MCP schema
+    - it could theoretically be carried inside `checkpoint_json`, but observed PostgreSQL usage currently shows zero populated rows for this key
+    - in practice it is prose-only when present
+  - Evidence:
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Check how these fields are surfaced in retrieval and observability.
+  - Initial finding:
+    - retrieval currently gives special treatment only to:
+      - `current_objective`
+      - `next_intended_action`
+    - these are surfaced through workflow freshness signals and task-recall logic
+    - the other high-value fields are not visibly surfaced as first-class retrieval signals
+    - observability surfaces currently emphasize counts and latest timestamps rather than structured checkpoint coverage
+  - Evidence:
+    - `src/ctxledger/memory/repositories.py`
+    - `src/ctxledger/memory/service_core.py`
+    - current `stats` and `memory-stats` behavior
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Compare supported structure against `.rules` checkpoint expectations.
+  - Initial finding:
+    - `.rules` expects checkpoint content to include:
+      - what changed
+      - what was learned
+      - what remains
+      - next intended action
+      - verification status
+      - blocker or risk
+    - `.rules` also prefers structured checkpoint fields for:
+      - current objective
+      - next intended action
+      - root cause
+      - recovery pattern
+      - what remains
+      - verify status
+    - current runtime strongly supports:
+      - `verify_status`
+      - generic `checkpoint_json`
+    - current runtime partially supports:
+      - `current_objective`
+      - `next_intended_action`
+    - current runtime does not strongly surface or induce the rest as first-class structured fields
+  - Evidence:
+    - `.rules`
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - `schemas/postgres.sql`
+    - PostgreSQL query results over `workflow_checkpoints.checkpoint_json`
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `runtime_structure_gap`
+
+### Gap classification
+- [x] Mark which high-value checkpoint fields are missing entirely.
+  - Initial finding:
+    - missing as first-class structured checkpoint fields:
+      - `root_cause`
+      - `recovery_pattern`
+      - `what_remains`
+      - `verify_target`
+      - `resume_hint`
+      - `failure_guard`
+      - explicit `blocker_or_risk`
+      - explicit `what_changed`
+      - explicit `what_was_learned`
+- [x] Mark which high-value checkpoint fields exist but are weakly surfaced.
+  - Initial finding:
+    - exist but are weakly surfaced:
+      - `current_objective`
+      - `next_intended_action`
+    - `verify_status` is structurally strong, but its linkage to named verification targets remains weak
+- [x] Mark which high-value checkpoint fields are induced by `.rules` but not enforced by runtime structure.
+  - Initial finding:
+    - `.rules` induces but runtime does not strongly enforce:
+      - `what_changed`
+      - `what_was_learned`
+      - `what_remains`
+      - `next_intended_action` as a consistently populated structured field
+      - `root_cause`
+      - `recovery_pattern`
+      - `blocker_or_risk`
+      - `verify_target`
+      - `resume_hint`
+      - `failure_guard`
+
+---
+
+## 5.3 Summary and distillation behavior
+
+- [x] Identify all canonical summary-related tables and repositories.
+  - Initial finding:
+    - canonical summary persistence exists through:
+      - `memory_summaries`
+      - `memory_summary_memberships`
+    - the runtime also has dedicated summary repositories and membership repositories for both in-memory and PostgreSQL-backed paths
+    - explicit summary building is implemented through the memory service and episode summary builder
+  - Evidence:
+    - `schemas/postgres.sql`
+    - `src/ctxledger/memory/service.py`
+    - `src/ctxledger/memory/service_core_summary.py`
+    - `src/ctxledger/db/__init__.py`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm current summary creation paths.
+  - Initial finding:
+    - there are two current summary creation paths:
+      - explicit episode-scoped build through `ctxledger build-episode-summary`
+      - workflow-completion-gated auto build through the workflow memory bridge when the latest checkpoint explicitly requests summary build
+    - both paths converge on the same canonical episode summary builder rather than using competing write paths
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - `src/ctxledger/memory/service_core_summary.py`
+    - `src/ctxledger/workflow/memory_bridge.py`
+    - `docs/memory/runbooks/summary_build_runbook.md`
+  - Classification:
+    - `implemented_but_weakly_used`
+- [x] Confirm whether summary creation is explicit, automatic, or mixed.
+  - Initial finding:
+    - summary creation is mixed in implementation shape, but explicit in practical usage
+    - explicit build is the primary operator path
+    - automatic build exists only as a narrow workflow-completion-gated path
+    - the auto path is not default-on in practice because it requires an explicit checkpoint flag
+  - Evidence:
+    - `docs/memory/runbooks/summary_build_runbook.md`
+    - `src/ctxledger/workflow/memory_bridge.py`
+    - `src/ctxledger/db/postgres_memory.py`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `operator_usage_gap`
+- [x] Confirm what triggers summary build today.
+  - Initial finding:
+    - explicit trigger:
+      - `ctxledger build-episode-summary --episode-id ...`
+    - gated automatic trigger:
+      - latest checkpoint payload contains `build_episode_summary = true`
+      - workflow completion auto-memory then orchestrates the build
+    - ordinary retrieval does not trigger summary creation
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - `src/ctxledger/db/postgres_memory.py`
+    - `docs/memory/design/workflow_summary_automation_direction.md`
+    - `docs/memory/runbooks/summary_build_runbook.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether summary build is checkpoint-gated.
+  - Initial finding:
+    - yes for the automatic path
+    - the request field is `latest_checkpoint.checkpoint_json.build_episode_summary`
+    - the trigger is intentionally explicit rather than implicit
+  - Evidence:
+    - `src/ctxledger/db/postgres_memory.py`
+    - `src/ctxledger/__init__.py`
+    - `docs/memory/runbooks/summary_build_runbook.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether summary build is workflow-completion-gated.
+  - Initial finding:
+    - yes for the automatic path
+    - the current automation model is workflow-completion-gated rather than checkpoint-time or retrieval-time
+    - this was intentionally chosen to keep summary generation narrow and understandable
+  - Evidence:
+    - `docs/memory/design/workflow_summary_automation_direction.md`
+    - `docs/memory/runbooks/summary_build_runbook.md`
+    - `src/ctxledger/workflow/memory_bridge.py`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether summary build is non-fatal by design.
+  - Initial finding:
+    - yes
+    - the current automation policy explicitly treats summary build as non-fatal
+    - this preserves workflow completion memory behavior even when summary build is skipped or fails
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - `src/ctxledger/runtime/server_responses.py`
+    - `docs/memory/design/workflow_summary_automation_direction.md`
+    - `docs/memory/runbooks/summary_build_runbook.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm how summary memberships are recorded.
+  - Initial finding:
+    - memberships are recorded canonically in `memory_summary_memberships`
+    - one membership row is created per included child memory item
+    - membership order is preserved
+    - the current builder writes membership metadata identifying the minimal episode summary builder and episode build scope
+  - Evidence:
+    - `schemas/postgres.sql`
+    - `src/ctxledger/memory/service_core_summary.py`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm how summary-first retrieval works today.
+  - Initial finding:
+    - summary-first retrieval is implemented as a grouped retrieval mode in `memory_get_context`
+    - canonical summaries are treated as the primary summary-first path
+    - summary-first remains relational-first, with graph-backed support treated as auxiliary and degradable
+  - Evidence:
+    - `docs/memory/design/minimal_summary_write_build_path.md`
+    - `docs/memory/runbooks/summary_build_runbook.md`
+    - current memory retrieval design and decision docs
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `retrieval_gap`
+- [x] Confirm how summary-only retrieval is represented.
+  - Initial finding:
+    - summary-only retrieval is represented as a distinct summary-first mode rather than being collapsed into auxiliary-only output
+    - the design explicitly preserves the distinction between summary-only primary output and auxiliary context
+  - Evidence:
+    - `docs/memory/decisions/episode_less_summary_first_decision.md`
+    - `.rules`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `documentation_gap`
+- [x] Confirm how summary-plus-episode retrieval is represented.
+  - Initial finding:
+    - summary-plus-episode retrieval is represented as the primary grouped hierarchy chain when summary-first selection is active
+    - the intended reading is summary group first, then episode-scoped grouped surface
+  - Evidence:
+    - `docs/memory/decisions/auxiliary_groups_top_level_sibling_decision.md`
+    - `docs/memory/decisions/first_memory_get_context_hierarchical_improvement_decision.md`
+    - `.rules`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `documentation_gap`
+- [x] Compare intended summary behavior with observed summary volume.
+  - Initial finding:
+    - intended behavior supports explicit build plus narrow gated automation
+    - observed volume is extremely low relative to raw memory:
+      - `memory_summaries = 1`
+      - `memory_summary_memberships = 1`
+      - `workflow_checkpoints = 2945`
+      - `episodes` and `memory_items` are orders of magnitude larger
+    - this means summary support exists structurally, but operational production is negligible
+  - Evidence:
+    - PostgreSQL counts
+    - `docs/memory/design/minimal_summary_write_build_path.md`
+    - `docs/memory/design/workflow_summary_automation_direction.md`
+    - `docs/memory/runbooks/summary_build_runbook.md`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `operator_usage_gap`
+- [x] Identify the most likely reason summary volume is low.
+  - Initial finding:
+    - the main reason appears to be policy and usage, not absence of schema
+    - the explicit builder exists, but requires deliberate operator invocation
+    - the automatic path is gated by `build_episode_summary = true`
+    - observed PostgreSQL usage currently shows zero checkpoints requesting summary build
+    - this strongly suggests the main bottleneck is build policy and induction, with retrieval surfacing as a secondary factor
+  - Evidence:
+    - PostgreSQL count showing `checkpoints_requesting_summary_build = 0`
+    - `src/ctxledger/db/postgres_memory.py`
+    - `docs/memory/runbooks/summary_build_runbook.md`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `rules_induction_gap`
+
+### Usage evidence checks
+- [x] Record current counts for summaries and summary memberships.
+  - Initial finding:
+    - `memory_summaries = 1`
+    - `memory_summary_memberships = 1`
+- [x] Record whether summary volume is proportionate to checkpoint volume.
+  - Initial finding:
+    - no
+    - summary volume is grossly disproportionate to checkpoint volume
+    - there is roughly one summary for thousands of checkpoints
+- [x] Record whether summary volume is proportionate to episode volume.
+  - Initial finding:
+    - no
+    - summary volume is grossly disproportionate to episode volume
+    - there is roughly one summary for thousands of episodes
+- [x] Identify whether the main bottleneck is build policy, runtime automation, or usage pattern.
+  - Initial finding:
+    - primary bottleneck:
+      - build policy and usage pattern
+    - secondary bottleneck:
+      - weak induction from `.rules`
+    - tertiary bottleneck:
+      - summary-first retrieval and operator ergonomics are present but not strong enough to create habitual use
+
+---
+
+## 5.4 Interaction capture and reuse
+
+- [x] Confirm the intended interaction capture boundary in current design docs.
+  - Initial finding:
+    - the intended interaction capture boundary is automatic and transport-adjacent
+    - capture is intended at:
+      - MCP tool boundaries
+      - HTTP request/response boundaries for meaningful agent-visible work
+    - the design is explicitly bounded:
+      - not a universal chat archive
+      - not a replacement for canonical workflow truth
+      - not unconstrained transport logging
+    - interaction memory is intended to support:
+      - resumability
+      - bounded historical recall
+      - failure-pattern reuse
+      - file-work intent recall
+  - Evidence:
+    - `docs/memory/design/interaction_capture_boundary_design.md`
+    - `docs/memory/design/interaction_memory_contract.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm how interaction request items are stored.
+  - Initial finding:
+    - interaction requests are stored as `memory_items` with:
+      - `type = interaction_request`
+      - durable `content`
+      - metadata including transport, tool name, and arguments when available
+    - the current HTTP runtime persists request-side interaction memory through a workflow-backed memory service
+  - Evidence:
+    - `src/ctxledger/runtime/http_runtime.py`
+    - PostgreSQL `memory_items`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm how interaction response items are stored.
+  - Initial finding:
+    - interaction responses are stored as `memory_items` with:
+      - `type = interaction_response`
+      - durable `content`
+      - metadata including transport, tool name, and result payload when available
+    - request and response are persisted as a pair through the same boundary path
+  - Evidence:
+    - `src/ctxledger/runtime/http_runtime.py`
+    - PostgreSQL `memory_items`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether interaction items carry `workspace_id`.
+  - Initial finding:
+    - interaction items can carry `workspace_id`
+    - in observed PostgreSQL usage:
+      - `interaction_request`: `7206/7663` have `workspace_id`
+      - `interaction_response`: `7206/7663` have `workspace_id`
+    - this means workspace linkage is common but not complete
+  - Evidence:
+    - `src/ctxledger/runtime/http_runtime.py`
+    - PostgreSQL counts over `memory_items`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Confirm whether interaction items carry `episode_id`.
+  - Initial finding:
+    - interaction items do not currently carry `episode_id` in observed usage
+    - PostgreSQL evidence shows:
+      - `interaction_request`: `0/7663` with `episode_id`
+      - `interaction_response`: `0/7663` with `episode_id`
+    - this is the clearest linkage gap in the current interaction-memory model
+  - Evidence:
+    - PostgreSQL counts over `memory_items`
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Confirm whether interaction items are linked to workflow context.
+  - Initial finding:
+    - interaction items are linked to workflow context weakly and indirectly
+    - the persistence path accepts `workflow_instance_id`, but current stored interaction metadata does not expose first-class workflow linkage fields in a durable, query-friendly way
+    - observed metadata shows workflow identifiers nested inside captured argument payloads rather than promoted into stable top-level linkage fields
+  - Evidence:
+    - `src/ctxledger/runtime/http_runtime.py`
+    - representative PostgreSQL interaction metadata
+    - PostgreSQL counts showing zero interaction items with explicit `workflow_instance_id` metadata keys
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `retrieval_gap`
+- [x] Confirm whether interaction items are linked to summaries.
+  - Initial finding:
+    - there is no meaningful observed linkage from interaction items to summaries
+    - summary production is negligible overall, and interaction items are not currently being promoted into summary memberships in practice
+  - Evidence:
+    - PostgreSQL summary counts
+    - PostgreSQL interaction counts
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `operator_usage_gap`
+- [x] Confirm whether interaction items are retrievable through normal memory context paths.
+  - Initial finding:
+    - yes, interaction items participate in normal memory retrieval paths
+    - however, they appear to receive lower priority than stronger memory types
+    - this means they are retrievable, but not strongly shaped into high-value context by default
+  - Evidence:
+    - `src/ctxledger/memory/service_core.py`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `retrieval_gap`
+- [x] Confirm whether interaction items are treated as primary or auxiliary in practice.
+  - Initial finding:
+    - in design posture, interaction memory is durable and important but subordinate to canonical workflow truth
+    - in retrieval behavior, interaction items appear to be treated as lower-priority support context rather than the strongest primary memory surface
+    - in storage volume, interaction items dominate memory volume even though they are not the strongest reuse surface
+  - Evidence:
+    - `docs/memory/design/interaction_capture_boundary_design.md`
+    - `docs/memory/design/interaction_memory_contract.md`
+    - `src/ctxledger/memory/service_core.py`
+    - PostgreSQL counts over `memory_items`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `retrieval_gap`
+- [x] Compare intended interaction capture posture with actual stored volume.
+  - Initial finding:
+    - intended posture is bounded, explainable, and reuse-oriented
+    - actual stored volume is very large:
+      - `interaction_request = 7663`
+      - `interaction_response = 7663`
+      - total interaction items = `15326`
+    - this means interaction capture is materially active
+    - but the linkage and promotion model is weaker than the storage volume suggests
+    - the current system is good at capturing interaction traces, but weaker at turning them into episode-linked or summary-linked reusable knowledge
+  - Evidence:
+    - design docs
+    - PostgreSQL counts over `memory_items`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `rules_induction_gap`
+
+### Usage evidence checks
+- [x] Record current interaction request count.
+  - Initial finding:
+    - `interaction_request = 7663`
+- [x] Record current interaction response count.
+  - Initial finding:
+    - `interaction_response = 7663`
+- [x] Record how many interaction items are episode-linked.
+  - Initial finding:
+    - `0`
+    - all observed interaction items currently have `episode_id IS NULL`
+- [x] Record whether interaction items dominate memory volume.
+  - Initial finding:
+    - yes
+    - interaction items are the largest memory category by count
+    - combined interaction volume is `15326`, which is a majority share of current `memory_items`
+- [x] Identify the highest-value missing interaction linkage.
+  - Initial finding:
+    - the highest-value missing linkage is:
+      - durable episode linkage for interaction items
+    - the next most important missing linkage is:
+      - explicit workflow-context linkage promoted into stable metadata fields rather than remaining buried inside captured argument payloads
+
+---
+
+## 5.5 Resumability, retry, and fallback behavior
+
+- [x] Confirm the intended resumability posture in product docs and `.rules`.
+  - Initial finding:
+    - the intended posture is strongly resumability-first
+    - product docs define:
+      - canonical workflow state in PostgreSQL
+      - composite resume views rather than raw row reads
+      - checkpoints as resume snapshots
+      - partial resume with warnings and inconsistency reporting
+      - retry-capable architecture with intentionally minimal bounded retry support
+    - `.rules` further strengthens this by preferring:
+      - resume existing workflow before starting new
+      - canonical session recovery
+      - explicit degraded-state awareness
+      - no silent untracked continuation
+  - Evidence:
+    - `docs/project/product/workflow-model.md`
+    - `docs/project/product/architecture.md`
+    - `docs/project/product/mcp-api.md`
+    - `.rules`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm current runtime support for workflow resume.
+  - Initial finding:
+    - runtime support for workflow resume is implemented and first-class
+    - `workflow_resume` returns a composite resume view including:
+      - workspace
+      - workflow
+      - attempt
+      - latest checkpoint
+      - latest verify report
+      - `resumable_status`
+      - `next_hint`
+      - `warnings`
+    - the runtime explicitly models:
+      - `resumable`
+      - `terminal`
+      - `blocked`
+      - `inconsistent`
+  - Evidence:
+    - `src/ctxledger/workflow/service.py`
+    - `src/ctxledger/runtime/serializers.py`
+    - `docs/project/product/mcp-api.md`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm current runtime support for retry-aware behavior.
+  - Initial finding:
+    - retry-aware architecture exists, but bounded retry behavior remains intentionally minimal
+    - the model supports:
+      - multiple attempts over time
+      - attempt ordering through `attempt_number`
+      - retry-related projection failure lifecycle with `retry_count`
+    - there is still no first-class general `workflow_retry` operation in the current surface
+  - Evidence:
+    - `docs/project/product/workflow-model.md`
+    - `docs/project/product/architecture.md`
+    - `docs/project/product/mcp-api.md`
+    - `src/ctxledger/workflow/service.py`
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Confirm current runtime support for resume hints.
+  - Initial finding:
+    - runtime support for resume hints exists at the assembled resume-view level through `next_hint`
+    - product docs also describe agent-facing resume instructions as valid checkpoint content
+    - however, structured checkpoint-level `resume_hint` storage is not materially used in observed data
+  - Evidence:
+    - `src/ctxledger/workflow/service.py`
+    - `src/ctxledger/runtime/serializers.py`
+    - `docs/project/product/workflow-model.md`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Confirm current runtime support for failure reasons.
+  - Initial finding:
+    - failure reasons are structurally supported on workflow attempts and workflow completion input
+    - completion auto-memory also knows how to extract and promote `failure_reason`
+    - observed usage is very sparse:
+      - only one attempt currently has a non-null `failure_reason`
+      - the `failures` table currently has zero rows
+  - Evidence:
+    - `src/ctxledger/workflow/service.py`
+    - `src/ctxledger/workflow/memory_bridge.py`
+    - PostgreSQL counts over `workflow_attempts` and `failures`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `operator_usage_gap`
+- [x] Confirm current runtime support for explicit degraded-state awareness.
+  - Initial finding:
+    - explicit degraded-state awareness exists in two main forms:
+      - resume warnings and `resumable_status` classifications
+      - derived-memory and graph observability states such as degraded, stale, and unknown
+    - product docs explicitly prefer returning useful data with warnings rather than failing closed on every inconsistency
+  - Evidence:
+    - `src/ctxledger/workflow/service.py`
+    - `src/ctxledger/runtime/serializers.py`
+    - `docs/project/product/mcp-api.md`
+    - `src/ctxledger/__init__.py`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether silent new-run fallback is prevented by runtime behavior, `.rules`, or both.
+  - Initial finding:
+    - prevention is stronger in `.rules` than in runtime structure
+    - `.rules` explicitly forbids guessing workflow identity and forbids silently starting untracked work when canonical recovery should happen
+    - runtime behavior supports explicit resume and explicit workflow start, but the no-silent-fallback posture is not surfaced as a dedicated first-class runtime metric or explicit enforcement artifact
+  - Evidence:
+    - `.rules`
+    - `docs/project/product/workflow-model.md`
+    - `docs/project/product/architecture.md`
+    - current runtime surface
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `rules_induction_gap`
+- [x] Confirm what resume-related metrics exist today.
+  - Initial finding:
+    - current resume-related surfaced fields include:
+      - `resumable_status`
+      - `next_hint`
+      - `warnings`
+      - latest checkpoint and verify timestamps
+    - these are useful resume-view outputs, but not aggregate quality metrics
+    - there are no dedicated aggregate counters for:
+      - resume attempts
+      - resume successes
+      - resume failures
+  - Evidence:
+    - `src/ctxledger/workflow/service.py`
+    - `src/ctxledger/runtime/serializers.py`
+    - `docs/project/product/mcp-api.md`
+    - `src/ctxledger/__init__.py`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Confirm what retry-related metrics exist today.
+  - Initial finding:
+    - retry-related metrics exist mainly in the projection failure lifecycle surface through `retry_count`
+    - there are no broad workflow-level retry quality counters in current stats surfaces
+    - retry remains visible in narrow failure/operator contexts rather than as a general workflow-quality metric
+  - Evidence:
+    - `docs/project/product/mcp-api.md`
+    - `src/ctxledger/__init__.py`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Confirm what fallback-prevention metrics exist today.
+  - Initial finding:
+    - there are no dedicated fallback-prevention metrics visible today
+    - no current aggregate metric directly answers:
+      - how often silent fallback was prevented
+      - how often degraded continuation was chosen explicitly
+      - how often resume recovery failed before a new workflow was started
+  - Evidence:
+    - current stats and memory-stats surfaces
+    - current product docs and runtime surfaces
+  - Classification:
+    - `planned_but_not_implemented`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Compare intended resumability posture with actual observability.
+  - Initial finding:
+    - intended posture is strong and explicit
+    - actual observability is only partially aligned
+    - the system can represent resumability state well for one workflow at a time
+    - but it does not yet measure resumability quality well across the corpus
+    - observed PostgreSQL evidence shows many resume-related episodes, but structured resume fields remain mostly unpopulated:
+      - `resume_related_episodes = 454`
+      - `checkpoints_with_resume_hint = 0`
+      - `checkpoints_with_recovery_pattern = 0`
+      - `checkpoints_with_root_cause = 0`
+    - this means resumability is happening in prose and behavior, but not yet strongly in structured observability
+  - Evidence:
+    - PostgreSQL counts over `episodes` and `workflow_checkpoints`
+    - `src/ctxledger/workflow/service.py`
+    - `src/ctxledger/runtime/serializers.py`
+    - `.rules`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+
+### Usage evidence checks
+- [x] Record representative resume-related episodes.
+  - Initial finding:
+    - representative stored episodes repeatedly mention:
+      - resume-path validation
+      - validation continuation after resume
+      - interrupted run resume
+      - fallback coverage
+      - retry limit rejection
+      - no-builder or missing-artifact fallback behavior
+- [x] Record representative retry-limit or fallback-prevention evidence.
+  - Initial finding:
+    - representative evidence includes:
+      - interrupted run resume tests covering retry limit rejection
+      - fallback coverage for tightened activation gates
+      - explicit notes about no silent new-run fallback in prior mined episodes
+      - projection failure lifecycle surfaces with `retry_count`
+- [x] Identify which resumability outcomes are happening but not measured.
+  - Initial finding:
+    - happening but not measured well:
+      - resume attempt volume
+      - resume success rate
+      - resume failure rate
+      - fallback-prevention rate
+      - degraded continuation rate
+      - structured resume-hint coverage
+      - recovery-pattern capture coverage
+- [x] Identify which resumability outcomes are measured but hard to interpret.
+  - Initial finding:
+    - measured but still hard to interpret globally:
+      - `resumable_status` because it is per-resume-view rather than aggregate
+      - `warnings` because they are useful locally but not summarized as quality metrics
+      - projection `retry_count` because it is narrow and not a full workflow retry-quality signal
+
+---
+
+## 5.6 Observability and operator signals
+
+- [x] List current CLI observability surfaces relevant to workflow and memory quality.
+  - Initial finding:
+    - current CLI observability surfaces include:
+      - `stats`
+      - `memory-stats`
+      - `workflows`
+      - `failures`
+      - `age-graph-readiness`
+      - `resume-workflow`
+    - these surfaces cover workflow status, memory volume, failure lifecycle, derived graph readiness, and per-workflow resumability inspection
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - current CLI help output
+  - Classification:
+    - `implemented_and_used`
+- [x] List current SQL/Grafana observability surfaces relevant to workflow and memory quality.
+  - Initial finding:
+    - current Grafana dashboards include:
+      - `runtime_overview.json`
+      - `failure_overview.json`
+      - `memory_overview.json`
+    - these dashboards read from observability SQL views such as:
+      - `observability.workflow_overview`
+      - `observability.memory_overview`
+      - `observability.runtime_activity_timeline`
+      - `observability.failure_recent_summary`
+    - the current SQL/Grafana posture is strong for runtime, failure, and memory volume visibility
+  - Evidence:
+    - `docker/grafana/dashboards/runtime_overview.json`
+    - `docker/grafana/dashboards/failure_overview.json`
+    - `docker/grafana/dashboards/memory_overview.json`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm which metrics exist for:
+  - [x] workflow counts
+    - Initial finding:
+      - yes
+      - CLI and Grafana expose workflow counts and workflow status counts
+  - [x] checkpoint counts
+    - Initial finding:
+      - yes
+      - CLI `stats` exposes checkpoint count
+  - [x] episode counts
+    - Initial finding:
+      - yes
+      - CLI and Grafana expose episode count
+  - [x] memory item counts
+    - Initial finding:
+      - yes
+      - CLI and Grafana expose memory item count
+  - [x] summary counts
+    - Initial finding:
+      - yes
+      - CLI exposes `memory_summary_count`
+      - Grafana memory dashboard includes summary-related panels
+  - [x] summary membership counts
+    - Initial finding:
+      - yes
+      - CLI exposes `memory_summary_membership_count`
+  - [x] derived-memory state
+    - Initial finding:
+      - yes
+      - CLI exposes:
+        - `derived_memory_item_state`
+        - `derived_memory_item_reason`
+        - `derived_memory_graph_status`
+        - AGE readiness counts
+  - [x] interaction memory counts
+    - Initial finding:
+      - yes
+      - CLI exposes `interaction_memory_item_count`
+  - [x] file-work memory counts
+    - Initial finding:
+      - yes
+      - CLI exposes `file_work_memory_item_count`
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - Grafana dashboard definitions
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether structured checkpoint coverage is observable.
+  - Initial finding:
+    - no
+    - current observability surfaces expose checkpoint counts and latest checkpoint timestamps, but not structured checkpoint coverage
+    - there is no current metric for:
+      - checkpoints with `current_objective`
+      - checkpoints with `next_intended_action`
+      - checkpoints with `root_cause`
+      - checkpoints with `recovery_pattern`
+      - checkpoints with `what_remains`
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - current Grafana dashboards
+  - Classification:
+    - `planned_but_not_implemented`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Confirm whether summary backlog is observable.
+  - Initial finding:
+    - no
+    - current observability surfaces show summary counts, but not backlog-oriented signals such as:
+      - episodes without summaries
+      - checkpoints requesting summary build but not summarized
+      - summary build request rate versus summary build success rate
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - current Grafana dashboards
+  - Classification:
+    - `planned_but_not_implemented`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Confirm whether unlinked interaction volume is observable.
+  - Initial finding:
+    - no as a first-class operator metric
+    - interaction volume is visible through `interaction_memory_item_count`
+    - but unlinked interaction volume such as `episode_id IS NULL` is not surfaced directly
+    - PostgreSQL evidence shows this is a major blind spot because all current interaction items are unlinked from episodes
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - current Grafana dashboards
+    - PostgreSQL evidence summary
+  - Classification:
+    - `planned_but_not_implemented`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Confirm whether null-`workspace_id` memory volume is observable.
+  - Initial finding:
+    - no as a first-class operator metric
+    - current observability surfaces do not expose null-`workspace_id` memory counts
+    - PostgreSQL evidence shows this matters materially:
+      - `null_workspace_memory_items = 914`
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - current Grafana dashboards
+    - PostgreSQL evidence summary
+  - Classification:
+    - `planned_but_not_implemented`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Confirm whether resume-quality metrics are observable.
+  - Initial finding:
+    - only partially
+    - current surfaces expose per-workflow resume state through:
+      - `resumable_status`
+      - `next_hint`
+      - `warnings`
+    - but they do not expose aggregate resume-quality metrics such as:
+      - resume attempt count
+      - resume success count
+      - resume failure count
+      - fallback-prevention count
+      - degraded continuation count
+  - Evidence:
+    - `src/ctxledger/runtime/serializers.py`
+    - `src/ctxledger/__init__.py`
+    - `docs/project/product/mcp-api.md`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Identify ambiguous operator readings that still need explicit state/reason fields.
+  - Initial finding:
+    - the current system already improved derived-memory ambiguity through explicit state/reason fields
+    - remaining ambiguous operator readings include:
+      - high interaction volume without linkage quality visibility
+      - summary counts without summary backlog visibility
+      - checkpoint counts without structured checkpoint quality visibility
+      - resume-view availability without aggregate resume-quality visibility
+      - memory volume without null-`workspace_id` hygiene visibility
+  - Evidence:
+    - `src/ctxledger/__init__.py`
+    - current Grafana dashboards
+    - PostgreSQL evidence summary
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+
+### Gap classification
+- [x] Mark which missing metrics are most important for `1.1.0`.
+  - Initial finding:
+    - most important missing metrics:
+      - structured checkpoint coverage
+      - summary backlog
+      - unlinked interaction volume
+      - null-`workspace_id` memory volume
+      - aggregate resume success/failure metrics
+      - fallback-prevention metrics
+- [x] Mark which existing metrics are present but not actionable enough.
+  - Initial finding:
+    - present but not actionable enough:
+      - raw interaction memory count
+      - raw summary count
+      - raw checkpoint count
+      - per-resume-view `resumable_status`
+      - projection `retry_count` outside broader workflow retry-quality context
+
+---
+
+## 5.7 Memory hygiene and canonicality
+
+- [x] Confirm current constraints around `workspace_id` on memory items.
+  - Initial finding:
+    - `memory_items.workspace_id` is nullable in the canonical schema
+    - this means workspace linkage is allowed but not enforced for every memory item
+    - by contrast, `memory_summaries.workspace_id` is required
+    - the current schema therefore permits memory hygiene drift at the memory-item layer even while keeping summary ownership stricter
+  - Evidence:
+    - `schemas/postgres.sql`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm which memory item classes may legally omit `workspace_id`.
+  - Initial finding:
+    - the schema allows any memory item class to omit `workspace_id`
+    - in practice, the most visible null-`workspace_id` cases appear to come from interaction memory
+    - this is consistent with the current interaction capture path, which can persist interaction memory even when workspace scope extraction is incomplete
+  - Evidence:
+    - `schemas/postgres.sql`
+    - runtime interaction capture behavior
+    - PostgreSQL evidence summary
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Record current null-`workspace_id` volume.
+  - Initial finding:
+    - current null-`workspace_id` volume is:
+      - `914 / 23520` memory items
+    - this is large enough to matter for resumability, filtering, and historical analysis
+  - Evidence:
+    - PostgreSQL counts over `memory_items`
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Confirm current provenance categories.
+  - Initial finding:
+    - current observed provenance categories are:
+      - `interaction`
+      - `workflow_checkpoint_auto`
+      - `episode`
+      - `workflow_complete_auto`
+    - provenance is therefore present and queryable as a first-level classification
+  - Evidence:
+    - PostgreSQL counts over `memory_items`
+    - `src/ctxledger/workflow/service.py`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether provenance is sufficiently specific for analysis.
+  - Initial finding:
+    - provenance is useful, but not sufficiently specific on its own for the current `1.1.0` questions
+    - for example:
+      - `interaction` is too broad to distinguish well-linked versus weakly linked interaction memory
+      - `episode` does not by itself distinguish ordinary episode notes from file-work-derived notes
+      - `workflow_checkpoint_auto` does not reveal structured checkpoint quality
+    - metadata fields such as `memory_origin`, `interaction_kind`, `file_path`, and `purpose` improve analysis, but they are not surfaced as first-class hygiene metrics
+  - Evidence:
+    - PostgreSQL provenance counts
+    - representative memory item metadata
+    - `src/ctxledger/workflow/service.py`
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Confirm whether file-work records are consistently scoped to workflow context.
+  - Initial finding:
+    - file-work recording is designed to be workflow-scoped and the contract explicitly expects workflow linkage
+    - the current file-work tool schema requires `workflow_instance_id`
+    - automatic file-work recording also operates in workflow-aware runtime paths
+    - representative stored file-work records preserve file identity and purpose metadata well
+    - this is one of the stronger hygiene areas in the current system
+  - Evidence:
+    - `docs/memory/design/file_work_metadata_contract.md`
+    - `src/ctxledger/mcp/tool_handlers.py`
+    - `src/ctxledger/mcp/tool_schemas.py`
+    - representative PostgreSQL file-work records
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether file-work records preserve purpose and operation detail.
+  - Initial finding:
+    - yes
+    - representative file-work records preserve:
+      - `file_path`
+      - `file_name`
+      - `file_operation`
+      - `purpose`
+      - `memory_origin = file_work_record`
+    - this makes file-work memory materially more reusable than generic interaction memory
+  - Evidence:
+    - representative PostgreSQL file-work records
+    - `src/ctxledger/mcp/tool_handlers.py`
+  - Classification:
+    - `implemented_and_used`
+- [x] Confirm whether missing file-work records can be detected.
+  - Initial finding:
+    - partially
+    - the runtime can count memory items with file-work metadata and exposes `file_work_memory_item_count`
+    - repository code also supports counting memory items with any file-work metadata
+    - however, there is no direct operator-facing metric for:
+      - expected file-touching events without corresponding file-work records
+      - file-touching workflows missing file-work memory
+    - detection is therefore indirect rather than explicit
+  - Evidence:
+    - `src/ctxledger/workflow/service.py`
+    - `src/ctxledger/db/postgres_memory.py`
+    - current CLI observability surfaces
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Confirm whether orphaned or weakly linked memory can be audited today.
+  - Initial finding:
+    - only partially
+    - the current system can expose raw counts and provenance distributions
+    - but it does not yet provide first-class operator metrics or dedicated audit surfaces for:
+      - null-`workspace_id` memory
+      - unlinked interaction memory
+      - weakly linked memory by missing episode/workflow context
+    - these audits are currently possible through direct database inspection, not through strong built-in operator surfaces
+  - Evidence:
+    - current CLI and Grafana observability surfaces
+    - PostgreSQL evidence summary
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+
+### Usage evidence checks
+- [x] Record representative null-`workspace_id` cases.
+  - Initial finding:
+    - representative null-`workspace_id` cases are dominated by interaction memory
+    - current evidence shows:
+      - `914` interaction memory items without `workspace_id`
+      - interaction memory is also the main source of weak linkage overall
+- [x] Record representative file-work records.
+  - Initial finding:
+    - representative file-work records preserve strong bounded metadata such as:
+      - `file_path`
+      - `file_name`
+      - `file_operation`
+      - `purpose`
+      - `memory_origin = file_work_record`
+    - recent examples include both repository test files and this Phase 0 checklist document itself
+- [x] Identify the highest-value hygiene issue for `1.1.0`.
+  - Initial finding:
+    - the highest-value hygiene issue is:
+      - null-`workspace_id` and weakly linked interaction memory
+    - the next most important hygiene issue is:
+      - lack of first-class audit visibility for weak linkage and missing expected file-work coverage
+
+---
+
+## 5.8 `.rules` to runtime alignment
+
+- [x] Review `.rules` clauses for workflow tracking.
+  - Initial finding:
+    - workflow tracking clauses are among the strongest current alignments between policy and runtime
+    - `.rules` requires:
+      - workspace registration before tracked work
+      - begin or resume workflow for every session
+      - canonical tracking for user request handling
+      - literal workflow identifier handling
+    - runtime structure strongly supports this through:
+      - `workspace_register`
+      - `workflow_start`
+      - `workflow_resume`
+      - `workflow_checkpoint`
+      - `workflow_complete`
+    - observed PostgreSQL usage shows these operations are materially used
+  - Evidence:
+    - `.rules`
+    - current workflow tool surface
+    - PostgreSQL workflow and checkpoint volume
+  - Classification:
+    - `implemented_and_used`
+- [x] Review `.rules` clauses for checkpoint discipline.
+  - Initial finding:
+    - checkpoint discipline is strongly induced at the behavioral level
+    - observed data shows heavy checkpoint usage and repeated planning, validation, and documentation checkpoints
+    - however, the runtime mainly enforces checkpoint existence and identity correctness, not the richer semantic content expected by `.rules`
+  - Evidence:
+    - `.rules`
+    - current checkpoint tool surface
+    - PostgreSQL checkpoint volume and representative checkpoint summaries
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `runtime_structure_gap`
+- [x] Review `.rules` clauses for structured checkpoint content.
+  - Initial finding:
+    - this is one of the clearest policy-to-runtime gaps
+    - `.rules` prefers structured checkpoint fields for:
+      - `current_objective`
+      - `next_intended_action`
+      - `root_cause`
+      - `recovery_pattern`
+      - `what_remains`
+      - `verify_status`
+    - runtime strongly supports:
+      - generic `checkpoint_json`
+      - `verify_status`
+    - runtime partially supports:
+      - `current_objective`
+      - `next_intended_action`
+    - observed PostgreSQL usage shows zero populated rows for:
+      - `current_objective`
+      - `next_intended_action`
+      - `root_cause`
+      - `recovery_pattern`
+      - `what_remains`
+    - this means the rule intent is clear, but the runtime and usage pattern do not yet make these fields habitual or first-class enough
+  - Evidence:
+    - `.rules`
+    - current checkpoint schema and retrieval behavior
+    - PostgreSQL checkpoint field counts
+  - Classification:
+    - `partially_implemented`
+  - Primary gap source:
+    - `rules_induction_gap`
+- [x] Review `.rules` clauses for memory usage.
+  - Initial finding:
+    - memory usage rules are directionally aligned with runtime capabilities, but not fully realized in practice
+    - `.rules` correctly distinguishes:
+      - canonical workflow truth
+      - auxiliary memory
+      - summary-first reading
+      - explicit high-signal episode recording
+      - file-work as required restoration material
+    - runtime supports these concepts materially
+    - observed usage shows the biggest gaps are:
+      - low summary production
+      - weak interaction linkage
+      - sparse explicit high-signal structured fields
+  - Evidence:
+    - `.rules`
+    - current memory model and retrieval behavior
+    - PostgreSQL memory counts and linkage evidence
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `rules_induction_gap`
+- [x] Review `.rules` clauses for summary build policy.
+  - Initial finding:
+    - summary build policy is conceptually aligned with runtime behavior
+    - `.rules` correctly reads summary automation as:
+      - explicit
+      - checkpoint-gated
+      - non-fatal
+    - runtime implements exactly that posture
+    - observed usage shows the policy is too weakly induced in practice:
+      - `build_episode_summary` is never requested in observed checkpoints
+      - summary volume remains negligible
+  - Evidence:
+    - `.rules`
+    - current summary build implementation
+    - PostgreSQL checkpoint and summary counts
+  - Classification:
+    - `implemented_but_weakly_used`
+  - Primary gap source:
+    - `rules_induction_gap`
+- [x] Review `.rules` clauses for observability checks.
+  - Initial finding:
+    - observability rules are partially aligned
+    - `.rules` already requires checking:
+      - `stats`
+      - `memory-stats`
+      - `age-graph-readiness`
+    - runtime provides those surfaces
+    - however, the current observability rules do not yet require the most important `1.1.0` agent-quality signals:
+      - structured checkpoint coverage
+      - summary backlog
+      - unlinked interaction volume
+      - null-`workspace_id` memory volume
+      - aggregate resume and fallback quality metrics
+  - Evidence:
+    - `.rules`
+    - current CLI and Grafana observability surfaces
+    - PostgreSQL evidence summary
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+  - Primary gap source:
+    - `observability_gap`
+- [x] Review `.rules` clauses for file-work recording.
+  - Initial finding:
+    - file-work recording is one of the strongest current alignments
+    - `.rules` requires file-work recording for file-touching work and expects workflow-scoped context plus purpose preservation
+    - runtime supports both explicit and automatic file-work recording
+    - observed PostgreSQL file-work records preserve:
+      - `file_path`
+      - `file_name`
+      - `file_operation`
+      - `purpose`
+      - `memory_origin = file_work_record`
+    - this is a strong example of policy and runtime reinforcing each other successfully
+  - Evidence:
+    - `.rules`
+    - current file-work runtime behavior
+    - representative PostgreSQL file-work records
+  - Classification:
+    - `implemented_and_used`
+- [x] Review `.rules` clauses for response style only if they affect durable memory quality.
+  - Initial finding:
+    - response-style rules matter indirectly for durable memory quality
+    - concise, structured, non-redundant responses likely help keep interaction memory bounded and more reusable
+    - however, the main `1.1.0` gaps are not response-style gaps
+    - the larger issues are linkage, structure, induction, and observability
+  - Evidence:
+    - `.rules`
+    - observed interaction-memory volume and linkage gaps
+  - Classification:
+    - `implemented_but_weakly_surfaced`
+
+### Alignment checks
+- [x] Mark which `.rules` clauses are strongly supported by runtime structure.
+  - Initial finding:
+    - strongly supported clauses include:
+      - workflow tracking and identifier discipline
+      - canonical-first posture
+      - workflow completion discipline
+      - explicit summary automation policy as checkpoint-gated and non-fatal
+      - file-work recording requirements
+      - summary truth-boundary rules
+      - memory route interpretation rules
+- [x] Mark which `.rules` clauses are only advisory in practice.
+  - Initial finding:
+    - mostly advisory in practice:
+      - structured checkpoint content expectations
+      - explicit `next_intended_action` as structured data
+      - explicit `current_objective` as structured data
+      - `root_cause`
+      - `recovery_pattern`
+      - `what_remains`
+      - summary build requesting behavior
+      - agent-quality observability reading beyond current basic surfaces
+- [x] Mark which runtime capabilities exist but are not strongly induced by `.rules`.
+  - Initial finding:
+    - runtime capabilities that exist but are not strongly induced enough include:
+      - structured checkpoint payload population beyond prose summaries
+      - explicit summary build requests
+      - summary-first retrieval as a practical operating habit
+      - stronger workflow-context linkage for interaction memory
+      - hygiene-oriented auditing of weak linkage and null workspace memory
+- [x] Mark which `.rules` clauses should be tightened.
+  - Initial finding:
+    - likely tighten:
+      - structured checkpoint content rules
+      - explicit `next_narrow_action` / `next_intended_action` recording
+      - verify-target recording
+      - summary build requesting guidance for high-signal closeout paths
+      - observability rules for agent-quality and hygiene metrics
+- [x] Mark which `.rules` clauses should be clarified.
+  - Initial finding:
+    - likely clarify:
+      - when to prefer prose versus structured checkpoint fields
+      - when interaction memory should be promoted into higher-signal durable knowledge
+      - when summary build should be requested explicitly
+      - how to interpret observability counts as quality signals rather than only volume signals
+- [x] Mark which `.rules` clauses should be split into narrower rules.
+  - Initial finding:
+    - likely split:
+      - checkpoint content into:
+        - required structured fields
+        - recommended prose context
+      - observability validation into:
+        - baseline operator checks
+        - agent-quality checks
+        - hygiene checks
+      - memory usage into:
+        - summary promotion policy
+        - interaction promotion policy
+        - file-work restoration policy
+- [x] Mark which `.rules` clauses should remain unchanged.
+  - Initial finding:
+    - likely remain unchanged:
+      - canonical system-of-record posture
+      - local-notes-are-auxiliary posture
+      - resume-safely identifier discipline
+      - completion guard and completion discipline
+      - summary truth-boundary rules
+      - route interpretation rules
+      - file-work required-for-context-restoration posture
+
+---
+
+## 5.9 PostgreSQL evidence summary
+
+- [x] Record current counts for:
+  - [x] episodes
+    - Initial finding:
+      - `episodes = 5410`
+  - [x] memory items
+    - Initial finding:
+      - `memory_items = 23520`
+  - [x] summaries
+    - Initial finding:
+      - `memory_summaries = 1`
+  - [x] summary memberships
+    - Initial finding:
+      - `memory_summary_memberships = 1`
+  - [x] relations
+    - Initial finding:
+      - `memory_relations = 2709`
+  - [x] interaction requests
+    - Initial finding:
+      - `interaction_request = 7663`
+  - [x] interaction responses
+    - Initial finding:
+      - `interaction_response = 7663`
+  - [x] checkpoint notes
+    - Initial finding:
+      - `workflow_checkpoint_note = 2730`
+  - [x] verification outcomes
+    - Initial finding:
+      - `workflow_verification_outcome = 2708`
+  - [x] episode notes
+    - Initial finding:
+      - `episode_note = 2629`
+- [x] Record representative daily volume patterns if useful.
+  - Initial finding:
+    - daily volume is bursty rather than flat
+    - representative recent peaks include:
+      - `2026-04-06`: `1662` episodes, `7387` memory items, `825` relations
+      - `2026-04-08`: `1150` episodes, `5225` memory items, `541` relations
+      - `2026-04-02`: `1075` episodes, `4317` memory items, `530` relations
+    - this suggests the corpus is shaped by concentrated work sessions and active automation rather than slow uniform accumulation
+- [x] Record representative successful checkpoint patterns.
+  - Initial finding:
+    - representative successful checkpoint patterns repeatedly include:
+      - narrow next-step framing
+      - explicit targeted validation
+      - additive implementation slices
+      - integration or E2E confirmation
+    - representative examples include:
+      - Swift E2E slice with explicit persisted-state and prompt-wiring assertions
+      - review hardening slices with focused integration coverage
+      - validation executor slices with targeted unit and integration tests
+- [x] Record representative verification-linked patterns.
+  - Initial finding:
+    - verification-linked patterns repeatedly mention:
+      - `Diagnostics are clean`
+      - `passes with --no-cov`
+      - targeted integration suites
+      - workflow-level validation payload forwarding
+    - the strongest reusable pattern is:
+      - implementation slice + named verification target + passed outcome
+- [x] Record representative resume/retry patterns.
+  - Initial finding:
+    - representative resume/retry patterns include:
+      - interrupted run resume
+      - validation continuation after resume
+      - retry limit rejection
+      - fallback coverage for missing builder or missing planning artifacts
+      - explicit no-silent-fallback reasoning in prose
+    - these patterns are visible in episodes and checkpoint summaries, but not strongly in structured checkpoint fields
+- [x] Record representative orchestration-boundary patterns.
+  - Initial finding:
+    - representative orchestration-boundary patterns include:
+      - validation request payload forwarding
+      - phase handoff sequencing
+      - runtime injection and activation gating
+      - fallback coverage for missing handoff prerequisites
+    - these are among the highest-signal reusable patterns for AI-agent improvement because they validate state transition correctness rather than only local logic
+- [x] Record representative weak-signal or noisy patterns.
+  - Initial finding:
+    - the main weak-signal or noisy pattern is:
+      - very high interaction-memory volume with weak linkage
+    - representative evidence:
+      - `interaction_request + interaction_response = 15326`
+      - all observed interaction items have `episode_id IS NULL`
+      - `914` memory items have `workspace_id IS NULL`
+    - another weak-signal pattern is:
+      - summary support exists, but summary production is nearly absent
+- [x] Summarize the top 5 evidence-backed mismatches between intended posture and actual usage.
+  - Initial finding:
+    1. structured checkpoint intent is strong, but structured checkpoint population is near-zero in practice
+    2. summary build exists, but summary production is negligible because build requests are not being induced
+    3. interaction capture is strong, but interaction linkage to episodes and workflow context is weak
+    4. resumability behavior is strong, but resumability quality is not measured through aggregate metrics
+    5. observability is strong for volume and state, but weak for quality, hygiene, and linkage gaps
+
+---
+
+## 5.10 `1.1.0` scope lock recommendation
+
+- [x] Convert findings into a proposed `must_have` list for `1.1.0`.
+  - Initial finding:
+    1. structured checkpoint improvements
+    2. summary build induction and summary backlog visibility
+    3. interaction linkage improvements
+    4. aggregate resume and fallback quality observability
+    5. `.rules` alignment updates for structured checkpoint quality and summary promotion
+- [x] Convert findings into a `strongly_desirable` list for `1.1.0`.
+  - Initial finding:
+    1. null-`workspace_id` hygiene metrics and prevention
+    2. stronger workflow-context metadata promotion for interaction memory
+    3. first-class audit surfaces for weak linkage and missing expected file-work coverage
+    4. orchestration-boundary memory promotion patterns
+- [x] Convert findings into a `defer` list for post-`1.1.0`.
+  - Initial finding:
+    1. broad semantic interpretation of all interaction traffic
+    2. graph-first knowledge expansion beyond the current bounded derived posture
+    3. large unrelated architecture changes outside workflow, memory, observability, and `.rules` alignment
+- [x] For each proposed `1.1.0` slice, classify it as:
+  - [x] runtime change
+  - [x] `.rules` change
+  - [x] observability change
+  - [x] documentation/operator change
+  - [x] mixed change
+  - Initial finding:
+    - structured checkpoint improvements:
+      - `mixed change`
+    - summary build induction and backlog visibility:
+      - `mixed change`
+    - interaction linkage improvements:
+      - `runtime change`
+    - aggregate resume and fallback quality observability:
+      - `observability change`
+    - `.rules` alignment updates:
+      - `.rules` change`
+    - operator guidance for new metrics and summary policy:
+      - `documentation/operator change`
+- [x] Confirm that each `must_have` item is justified by both implementation evidence and usage evidence.
+  - Initial finding:
+    - yes
+    - each must-have item is supported by both:
+      - implementation evidence showing the current capability boundary
+      - PostgreSQL evidence showing the current usage gap or quality gap
+- [x] Confirm that no major `1.1.0` item is actually already complete in `1.0.x`.
+  - Initial finding:
+    - confirmed
+    - the main `1.1.0` items are not already complete in `1.0.x`
+    - several are partially implemented, but none of the major target outcomes are complete in practice
+- [x] Confirm that no major `1.1.0` item depends on a larger unrelated architecture change.
+  - Initial finding:
+    - confirmed
+    - the proposed `1.1.0` scope can be delivered as bounded additive work on:
+      - checkpoint structure
+      - summary induction
+      - interaction linkage
+      - observability
+      - `.rules`
+    - none of the must-have items require changing the canonical truth boundary or introducing a new architecture tier
+
+---
+
+## 6. Closeout template
+
+Use this short template when Phase 0 is complete.
+
+### Phase 0 closeout summary
+- `1.0.0` baseline reviewed: `yes`
+- current implementation reviewed: `yes`
+- PostgreSQL evidence reviewed: `yes`
+- runtime vs `.rules` alignment reviewed: `yes`
+
+### Top confirmed gaps
+1. Structured checkpoint intent is strong, but high-value structured checkpoint fields are near-zero in observed checkpoint payloads.
+2. Summary build exists, but summary production is negligible because explicit build requests are not being induced in practice.
+3. Interaction capture is strong, but interaction linkage to episodes and stable workflow context is weak.
+4. Resumability behavior is strong, but aggregate resume and fallback quality metrics are still missing.
+5. Observability is strong for volume and state, but weak for quality, hygiene, and linkage gaps.
+
+### `1.1.0` must-have scope after Phase 0
+1. Structured checkpoint improvements.
+2. Summary build induction and summary backlog visibility.
+3. Interaction linkage improvements.
+4. Aggregate resume and fallback observability improvements.
+5. `.rules` alignment updates for structured checkpoint quality and summary promotion.
+
+### Deferred out of `1.1.0`
+1. Broad semantic interpretation of all interaction traffic.
+2. Graph-first knowledge expansion beyond the current bounded derived posture.
+3. Large unrelated architecture changes outside workflow, memory, observability, and `.rules` alignment.
+
+### Plan changes required
+- [x] update `ctxledger_1_1_0_plan.md`
+- [ ] update companion docs if needed
+- [ ] record Phase 0 closeout note
+
+---
+
+## 7. Exit condition
+
+Phase 0 is complete only when:
+
+- the checklist is materially filled in
+- the main `1.1.0` themes are evidence-backed
+- the runtime vs `.rules` split is clearer than before
+- the milestone scope is narrowed rather than expanded
+- the resulting `1.1.0` plan is ready for bounded implementation slicing

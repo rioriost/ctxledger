@@ -1,4 +1,27 @@
-RULESET ctxledger_repository_rules_v1
+# `.rules` `v1.1` Draft for `ctxledger` `1.1.0`
+
+## Status
+
+This document is a **draft replacement text proposal** for the repository
+`.rules` file.
+
+It is intended to translate the `v1.1` revision proposal into concrete rule
+language that can later be reviewed, edited, and merged into the canonical
+repository ruleset.
+
+This draft is intentionally conservative:
+
+- preserve the strongest current rules
+- tighten the areas that were too advisory in practice
+- avoid changing the canonical truth boundary
+- avoid broad new policy unrelated to the completed Phase 0 findings
+
+---
+
+## Draft ruleset text
+
+```text
+RULESET ctxledger_repository_rules_v1_1_draft
 
 SECTION language
 RULE default_language
@@ -60,6 +83,41 @@ AFTER:
 - blocker_or_handoff
 - user_request_interpretation_or_scope_lock
 - documentation_slice_completion
+
+RULE checkpoint_required_structured_fields
+DO include_structured_checkpoint_fields_when_known:
+- current_objective
+- next_intended_action
+- verify_status
+- what_remains
+
+RULE checkpoint_preferred_structured_fields
+PREFER include_structured_checkpoint_fields_when_known:
+- root_cause
+- recovery_pattern
+- verify_target
+- resume_hint
+- blocker_or_risk
+- failure_guard
+- what_changed
+- what_was_learned
+
+RULE checkpoint_prose_context
+PREFER checkpoint_summary_prose_for:
+- rationale
+- tradeoffs
+- nuance
+- human_readable_context
+NEVER rely_on_prose_alone_when required_structured_checkpoint_fields_are_known
+
+RULE checkpoint_next_narrow_action
+DO record_one_next_intended_action_for_active_work_when_known
+PREFER one_executable_next_action_over_broad_future_intent
+PREFER one_narrow_slice_over_multi_step_future_listing
+
+RULE checkpoint_verify_target
+DO record_verify_target_when_validation_target_is_known
+PREFER named_test_or_suite_or_command_over_generic_validation_claim
 
 RULE checkpoint_content
 INCLUDE in_checkpoint_when_possible:
@@ -207,6 +265,10 @@ DO include_structured_checkpoint_fields_when_known:
 - recovery_pattern
 - what_remains
 - verify_status
+- verify_target
+- resume_hint
+- blocker_or_risk
+- failure_guard
 
 RULE prefer_high_signal_episodes
 PREFER fewer_higher_signal_memory_episodes_over_repetition
@@ -216,24 +278,70 @@ WHEN explicit_closeout_summary_is_needed
 DO set latest_checkpoint.checkpoint_json.build_episode_summary = true
 BEFORE workflow_complete
 
+RULE summary_build_high_signal_triggering
+PREFER request_summary_build_for:
+- high_signal_workflow_completion_with_passed_verification
+- repeated_checkpoint_theme_with_clear_reuse_value
+- high_signal_failure_and_recovery_lesson
+- closeout_with_reusable_process_lesson
+DO NOT request_summary_build_only_because_workflow_is_terminal
+
 RULE closeout_memory_fallback
 IF workflow_completion_auto_memory_is_skipped_or_insufficient
 THEN use memory_remember_episode_only_for_new_high_signal_knowledge
 
-RULE observability_validation
+RULE interaction_promotion_usage
+USE interaction_memory_for:
+- bounded_recall
+- resumability_support
+- historical_progress_lookup
+- file_work_intent_recall
+PREFER promote_high_signal_interaction_material_only_for:
+- root_cause_clarification
+- retry_decision
+- resume_decision
+- fallback_prevention_decision
+- user_correction_that_changes_execution_direction
+- orchestration_boundary_finding
+- file_work_intent_that_materially_affects_recovery
+DO NOT require_broad_semantic_interpretation_of_all_interaction_traffic
+
+RULE observability_baseline_checks
 AFTER deployment_or_runtime_behavior_change
 CHECK when_relevant:
 - stats
 - memory-stats
 - age-graph-readiness
 
+RULE observability_agent_quality_checks
+CHECK when_relevant:
+- structured_checkpoint_coverage
+- summary_build_request_rate
+- summary_build_success_visibility
+- summary_build_skip_visibility
+- aggregate_resume_success_visibility
+- aggregate_resume_failure_visibility
+- fallback_prevention_visibility
+
+RULE observability_hygiene_checks
+CHECK when_relevant:
+- summary_backlog
+- unlinked_interaction_volume
+- weak_linkage_visibility
+- null_workspace_memory_volume
+- missing_expected_file_work_coverage_when_detectable
+
 RULE observability_signal_reading
 READ as operator_signals_not_canonical_truth:
 - interaction_memory_item_count
 - file_work_memory_item_count
+- structured_checkpoint_coverage
+- summary_backlog
+- unlinked_interaction_volume
+- null_workspace_memory_volume
 
 RULE file_work_recording_required
-DO record file-touching work in ctxledger when the agent:
+DO record_file_touching_work_in_ctxledger_when_the_agent:
 - creates_a_file
 - modifies_a_file
 - overwrites_a_file
@@ -252,23 +360,23 @@ INCLUDE when known:
 - work_loop_context
 
 RULE file_work_recording_scope
-DO link file-work records to the active work loop
-DO preserve repository_relative_or_canonical_file_path_when_possible
-DO preserve why_the_file_was_touched_not_only_that_it_was_touched
-NEVER record file-work as detached_unscoped_notes_when workflow_context_is_available
+DO link_file_work_records_to_the_active_work_loop
+DO preserve_repository_relative_or_canonical_file_path_when_possible
+DO preserve_why_the_file_was_touched_not_only_that_it_was_touched
+NEVER record_file_work_as_detached_unscoped_notes_when workflow_context_is_available
 
 RULE file_work_recovery_usage
-DO use recorded file-work memory as context-restoration material for:
+DO use_recorded_file_work_memory_as_context_restoration_material_for:
 - resume
 - continue
 - work_loop_recovery
 - historical_file_work_lookup
-DO prefer file-work-linked durable memory over ad_hoc recollection when reconstructing agent work context
+DO prefer_file_work_linked_durable_memory_over_ad_hoc_recollection_when reconstructing_agent_work_context
 
 RULE file_work_required_for_context_restoration
-READ file-work memory as required_context_material_for_ai_agent_work_restoration
+READ file_work_memory_as_required_context_material_for_ai_agent_work_restoration
 WHEN file_touching_work_occurred
-DO treat missing_file_work_recording_as a resumability_gap_not_a_minor_observability_gap
+DO treat_missing_file_work_recording_as a_resumability_gap_not_a_minor_observability_gap
 
 RULE memory_episode_content
 WHEN recording_episode
@@ -301,6 +409,7 @@ DO treat_investigation_documentation_planning_and_explanation_work_as_trackable_
 RULE prefer_structure_over_prose
 WHEN structured_tool_fields_and_prose_both_exist
 PREFER structured_fields
+NEVER omit_required_structured_checkpoint_fields_only_because prose_summary_exists
 
 RULE parallelize_independent_operations
 PREFER parallel_execution_over_serial_execution
@@ -390,3 +499,79 @@ RULE actionability
 PREFER concrete_recommendation_over_broad_option_listing
 WHEN one_best_default_exists
 GIVE that_first
+```
+
+---
+
+## Draft change summary
+
+Compared with the current `v1` ruleset, this draft mainly changes these areas.
+
+### 1. Stronger checkpoint structure
+New or tightened rules:
+- `checkpoint_required_structured_fields`
+- `checkpoint_preferred_structured_fields`
+- `checkpoint_prose_context`
+- `checkpoint_next_narrow_action`
+- `checkpoint_verify_target`
+
+### 2. Stronger summary-build induction
+New or tightened rules:
+- `summary_build_high_signal_triggering`
+- expanded `completion_structured_fields`
+
+### 3. Stronger interaction promotion posture
+New rule:
+- `interaction_promotion_usage`
+
+### 4. Stronger observability split
+New rules:
+- `observability_baseline_checks`
+- `observability_agent_quality_checks`
+- `observability_hygiene_checks`
+
+### 5. Preserved strong areas
+Substantively preserved:
+- canonical posture
+- workflow identity discipline
+- completion discipline
+- summary truth boundary
+- file-work restoration posture
+
+---
+
+## Draft review questions
+
+Before adopting this draft as the canonical `.rules`, review these questions.
+
+### 1. Naming consistency
+Should `next_narrow_action` remain a prose concept while the structured field
+stays `next_intended_action`, or should the rules standardize on one term?
+
+### 2. Required vs preferred checkpoint fields
+Is the required set too strict for early `1.1.0`, or is it the right minimum?
+
+### 3. Summary-build induction threshold
+Are the proposed high-signal triggers specific enough to improve usage without
+causing overproduction?
+
+### 4. Observability scope
+Should hygiene checks be mandatory after every runtime change, or only when the
+change touches memory, linkage, or resumability behavior?
+
+### 5. Interaction promotion boundary
+Is the draft narrow enough to avoid accidental pressure toward broad semantic
+interpretation of all interaction traffic?
+
+---
+
+## Suggested next step
+
+Use this draft as the source text for a bounded repository `.rules` update,
+then validate the revision against:
+
+- structured checkpoint field population
+- summary build request usage
+- interaction linkage quality
+- resume and fallback observability
+- operator ability to read quality and hygiene gaps
