@@ -761,6 +761,27 @@ class PostgresWorkflowCheckpointRepository(WorkflowCheckpointRepository):
             row = cur.fetchone()
         return None if row is None else self._row_to_checkpoint(row)
 
+    def list_recent(self, *, limit: int) -> tuple[WorkflowCheckpoint, ...]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    checkpoint_id,
+                    workflow_instance_id,
+                    attempt_id,
+                    step_name,
+                    summary,
+                    checkpoint_json,
+                    created_at
+                FROM workflow_checkpoints
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+        return tuple(self._row_to_checkpoint(row) for row in rows)
+
     def create(self, checkpoint: WorkflowCheckpoint) -> WorkflowCheckpoint:
         with self._conn.cursor() as cur:
             cur.execute(

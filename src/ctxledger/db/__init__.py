@@ -245,6 +245,14 @@ class InMemoryWorkflowCheckpointRepository(WorkflowCheckpointRepository):
             key=lambda checkpoint: checkpoint.created_at,
         )
 
+    def list_recent(self, *, limit: int) -> tuple[WorkflowCheckpoint, ...]:
+        checkpoints = sorted(
+            self._checkpoints_by_id.values(),
+            key=lambda checkpoint: checkpoint.created_at,
+            reverse=True,
+        )
+        return tuple(checkpoints[:limit])
+
     def create(self, checkpoint: WorkflowCheckpoint) -> WorkflowCheckpoint:
         self._checkpoints_by_id[checkpoint.checkpoint_id] = checkpoint
         return checkpoint

@@ -285,6 +285,7 @@ class WorkflowStats:
     derived_memory_item_state: str = "unknown"
     derived_memory_item_reason: str | None = None
     derived_memory_graph_status: str | None = None
+    structured_checkpoint_coverage: dict[str, int] = field(default_factory=dict)
     age_summary_graph_ready_count: int = 0
     age_summary_graph_stale_count: int = 0
     age_summary_graph_degraded_count: int = 0
@@ -484,6 +485,9 @@ class WorkflowCheckpointRepository:
     def get_latest_by_attempt_id(self, attempt_id: UUID) -> WorkflowCheckpoint | None:
         raise NotImplementedError
 
+    def list_recent(self, *, limit: int) -> tuple[WorkflowCheckpoint, ...]:
+        raise NotImplementedError
+
     def create(self, checkpoint: WorkflowCheckpoint) -> WorkflowCheckpoint:
         raise NotImplementedError
 
@@ -640,6 +644,10 @@ class WorkflowService:
                 "memory_summary_memberships",
             )
             memory_item_provenance_counts = self._count_memory_item_provenance(uow)
+            structured_checkpoint_coverage = self._count_structured_checkpoint_coverage(
+                uow,
+                checkpoint_count=checkpoint_count,
+            )
 
             derived_memory_item_count = memory_item_provenance_counts.get("derived", 0)
             age_summary_graph_ready_count = 1 if memory_summary_membership_count > 0 else 0
@@ -759,6 +767,7 @@ class WorkflowService:
                 derived_memory_item_state=derived_memory_item_state,
                 derived_memory_item_reason=derived_memory_item_reason,
                 derived_memory_graph_status=derived_memory_graph_status,
+                structured_checkpoint_coverage=structured_checkpoint_coverage,
                 age_summary_graph_ready_count=age_summary_graph_ready_count,
                 age_summary_graph_stale_count=age_summary_graph_stale_count,
                 age_summary_graph_degraded_count=age_summary_graph_degraded_count,
@@ -986,7 +995,8 @@ class WorkflowService:
                     )
                 if repo_matches:
                     raise WorkspaceRegistrationConflictError(
-                        "repo_url is already registered and explicit workspace_id is required for updates",
+                        "repo_url is already registered and explicit "
+                        "workspace_id is required for updates",
                         details={"repo_url": data.repo_url},
                     )
 
@@ -1748,7 +1758,10 @@ class WorkflowService:
             return next_action.strip()
 
         if latest_checkpoint.summary:
-            return f"Resume from step '{latest_checkpoint.step_name}' using the latest checkpoint summary."
+            return (
+                f"Resume from step '{latest_checkpoint.step_name}' "
+                "using the latest checkpoint summary."
+            )
 
         return f"Resume from step '{latest_checkpoint.step_name}'."
 
@@ -2019,6 +2032,67 @@ class WorkflowService:
             "canonical summary state exists but derived memory items are not materialized",
             None,
         )
+
+    def _count_structured_checkpoint_coverage(
+        self,
+        uow: UnitOfWork,
+        *,
+        checkpoint_count: int,
+    ) -> dict[str, int]:
+        coverage_fields = (
+            "current_objective",
+            "next_intended_action",
+            "verify_target",
+            "resume_hint",
+            "blocker_or_risk",
+            "failure_guard",
+            "root_cause",
+            "recovery_pattern",
+            "what_remains",
+        )
+        coverage = {field_name: 0 for field_name in coverage_fields}
+        coverage["checkpoint_count"] = checkpoint_count
+
+        if checkpoint_count <= 0:
+            return coverage
+
+        repository = getattr(uow, "workflow_checkpoints", None)
+        if repository is None:
+            return coverage
+
+        checkpoints: tuple[WorkflowCheckpoint, ...] | None = None
+
+        records_by_id = getattr(repository, "_records_by_id", None)
+        if records_by_id is None:
+            values_by_id = getattr(repository, "_values_by_id", None)
+            if isinstance(values_by_id, dict):
+                records_by_id = values_by_id
+
+        if isinstance(records_by_id, dict):
+            checkpoints = tuple(records_by_id.values())
+        else:
+            list_recent = getattr(repository, "list_recent", None)
+            if callable(list_recent):
+                checkpoints = tuple(list_recent(limit=checkpoint_count))
+
+        if checkpoints is None:
+            raise PersistenceError(
+                "structured checkpoint coverage is not supported for workflow checkpoints"
+            )
+
+        for checkpoint in checkpoints:
+            checkpoint_json = getattr(checkpoint, "checkpoint_json", None)
+            if not isinstance(checkpoint_json, dict):
+                continue
+            for field_name in coverage_fields:
+                raw_value = checkpoint_json.get(field_name)
+                if isinstance(raw_value, str):
+                    if raw_value.strip():
+                        coverage[field_name] += 1
+                elif raw_value is not None:
+                    coverage[field_name] += 1
+
+        return coverage
 
     def _count_memory_items_with_file_work_metadata(self, uow: Any) -> int:
         memory_items = getattr(uow, "memory_items", None)

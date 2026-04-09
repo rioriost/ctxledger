@@ -44,6 +44,16 @@ def test_format_stats_text_uses_zero_defaults_for_missing_fields() -> None:
     assert "- derived_memory_item_state: unknown" in rendered
     assert "- derived_memory_item_reason: None" in rendered
     assert "- derived_memory_graph_status: None" in rendered
+    assert "Structured checkpoint coverage:" in rendered
+    assert "- current_objective: 0" in rendered
+    assert "- next_intended_action: 0" in rendered
+    assert "- verify_target: 0" in rendered
+    assert "- resume_hint: 0" in rendered
+    assert "- blocker_or_risk: 0" in rendered
+    assert "- failure_guard: 0" in rendered
+    assert "- root_cause: 0" in rendered
+    assert "- recovery_pattern: 0" in rendered
+    assert "- what_remains: 0" in rendered
     assert "- checkpoints: 0" in rendered
     assert "- workflow_updated_at: None" in rendered
     assert "- checkpoint_created_at: None" in rendered
@@ -191,6 +201,58 @@ def test_format_memory_stats_text_renders_values() -> None:
     assert "- episode: 2" in rendered
     assert "- episode_created_at: 2026-03-17 12:00:00+00:00" in rendered
     assert "- memory_relation_created_at: 2026-03-17 12:03:00+00:00" in rendered
+
+
+def test_format_stats_text_renders_structured_checkpoint_coverage() -> None:
+    stats = WorkflowStats(
+        workspace_count=1,
+        workflow_status_counts={
+            "running": 1,
+            "completed": 0,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        attempt_status_counts={
+            "running": 1,
+            "succeeded": 0,
+            "failed": 0,
+            "cancelled": 0,
+        },
+        verify_status_counts={
+            "pending": 0,
+            "passed": 1,
+            "failed": 0,
+            "skipped": 0,
+        },
+        checkpoint_count=9,
+        episode_count=0,
+        memory_item_count=0,
+        memory_embedding_count=0,
+        structured_checkpoint_coverage={
+            "current_objective": 7,
+            "next_intended_action": 6,
+            "verify_target": 5,
+            "resume_hint": 4,
+            "blocker_or_risk": 3,
+            "failure_guard": 2,
+            "root_cause": 8,
+            "recovery_pattern": 6,
+            "what_remains": 5,
+        },
+    )
+
+    rendered = cli_module._format_stats_text(stats)
+
+    assert "Structured checkpoint coverage:" in rendered
+    assert "- current_objective: 7" in rendered
+    assert "- next_intended_action: 6" in rendered
+    assert "- verify_target: 5" in rendered
+    assert "- resume_hint: 4" in rendered
+    assert "- blocker_or_risk: 3" in rendered
+    assert "- failure_guard: 2" in rendered
+    assert "- root_cause: 8" in rendered
+    assert "- recovery_pattern: 6" in rendered
+    assert "- what_remains: 5" in rendered
 
 
 def test_format_failures_text_renders_values() -> None:

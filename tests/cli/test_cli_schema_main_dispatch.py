@@ -623,6 +623,18 @@ def test_format_stats_text_renders_values() -> None:
             "canonical summary state exists but derived memory items are not materialized"
         ),
         derived_memory_graph_status="graph_ready",
+        structured_checkpoint_coverage={
+            "current_objective": 8,
+            "next_intended_action": 9,
+            "verify_target": 4,
+            "resume_hint": 3,
+            "blocker_or_risk": 2,
+            "failure_guard": 1,
+            "root_cause": 5,
+            "recovery_pattern": 6,
+            "what_remains": 7,
+            "checkpoint_count": 14,
+        },
         memory_summary_count=23,
         memory_summary_membership_count=24,
         age_summary_graph_ready_count=25,
@@ -668,6 +680,15 @@ def test_format_stats_text_renders_values() -> None:
         in rendered
     )
     assert "- derived_memory_graph_status: graph_ready" in rendered
+    assert "- current_objective: 8" in rendered
+    assert "- next_intended_action: 9" in rendered
+    assert "- verify_target: 4" in rendered
+    assert "- resume_hint: 3" in rendered
+    assert "- blocker_or_risk: 2" in rendered
+    assert "- failure_guard: 1" in rendered
+    assert "- root_cause: 5" in rendered
+    assert "- recovery_pattern: 6" in rendered
+    assert "- what_remains: 7" in rendered
     assert "- checkpoints: 14" in rendered
     assert "2024-10-01 00:00:00+00:00" in rendered
     assert "2024-10-06 00:00:00+00:00" in rendered
@@ -748,6 +769,18 @@ def test_stats_renders_json_output_and_closes_pool(
         checkpoint_auto_memory_skipped_count=10,
         workflow_completion_auto_memory_recorded_count=11,
         workflow_completion_auto_memory_skipped_count=12,
+        structured_checkpoint_coverage={
+            "current_objective": 2,
+            "next_intended_action": 3,
+            "verify_target": 1,
+            "resume_hint": 1,
+            "blocker_or_risk": 0,
+            "failure_guard": 0,
+            "root_cause": 2,
+            "recovery_pattern": 2,
+            "what_remains": 4,
+            "checkpoint_count": 5,
+        },
         memory_summary_count=13,
         memory_summary_membership_count=14,
         age_summary_graph_ready_count=15,
@@ -789,6 +822,18 @@ def test_stats_renders_json_output_and_closes_pool(
     assert payload["checkpoint_auto_memory_skipped_count"] == 10
     assert payload["workflow_completion_auto_memory_recorded_count"] == 11
     assert payload["workflow_completion_auto_memory_skipped_count"] == 12
+    assert payload["structured_checkpoint_coverage"] == {
+        "current_objective": 2,
+        "next_intended_action": 3,
+        "verify_target": 1,
+        "resume_hint": 1,
+        "blocker_or_risk": 0,
+        "failure_guard": 0,
+        "root_cause": 2,
+        "recovery_pattern": 2,
+        "what_remains": 4,
+        "checkpoint_count": 5,
+    }
     assert payload["memory_summary_count"] == 13
     assert payload["memory_summary_membership_count"] == 14
     assert payload["age_summary_graph_ready_count"] == 15
