@@ -301,6 +301,7 @@ class WorkflowStats:
     completion_summary_build_attempted_count: int = 0
     completion_summary_build_success_count: int = 0
     completion_summary_build_status_counts: dict[str, int] = field(default_factory=dict)
+    completion_summary_build_status_total_count: int = 0
     completion_summary_build_request_rate_base: int = 0
     completion_summary_build_attempted_rate_base: int = 0
     completion_summary_build_success_rate_base: int = 0
@@ -342,6 +343,7 @@ class MemoryStats:
     completion_summary_build_attempted_count: int = 0
     completion_summary_build_success_count: int = 0
     completion_summary_build_status_counts: dict[str, int] = field(default_factory=dict)
+    completion_summary_build_status_total_count: int = 0
     completion_summary_build_request_rate_base: int = 0
     completion_summary_build_attempted_rate_base: int = 0
     completion_summary_build_success_rate_base: int = 0
@@ -684,6 +686,9 @@ class WorkflowService:
             completion_summary_build_attempted_rate_base = memory_item_provenance_counts.get(
                 "workflow_complete_auto", 0
             )
+            completion_summary_build_status_total_count = sum(
+                completion_summary_build_status_counts.values()
+            )
             completion_summary_build_success_rate_base = completion_summary_build_attempted_count
             completion_summary_build_request_rate = self._safe_ratio(
                 completion_summary_build_request_count,
@@ -845,6 +850,9 @@ class WorkflowService:
                 completion_summary_build_attempted_rate=(completion_summary_build_attempted_rate),
                 completion_summary_build_success_rate=(completion_summary_build_success_rate),
                 completion_summary_build_status_counts=(completion_summary_build_status_counts),
+                completion_summary_build_status_total_count=(
+                    completion_summary_build_status_total_count
+                ),
                 completion_summary_build_skipped_reason_counts=(
                     completion_summary_build_skipped_reason_counts
                 ),
@@ -924,6 +932,9 @@ class WorkflowService:
             completion_summary_build_attempted_rate_base = memory_item_provenance_counts.get(
                 "workflow_complete_auto", 0
             )
+            completion_summary_build_status_total_count = sum(
+                completion_summary_build_status_counts.values()
+            )
             completion_summary_build_success_rate_base = completion_summary_build_attempted_count
             completion_summary_build_request_rate = self._safe_ratio(
                 completion_summary_build_request_count,
@@ -994,6 +1005,9 @@ class WorkflowService:
                 completion_summary_build_attempted_rate=(completion_summary_build_attempted_rate),
                 completion_summary_build_success_rate=(completion_summary_build_success_rate),
                 completion_summary_build_status_counts=(completion_summary_build_status_counts),
+                completion_summary_build_status_total_count=(
+                    completion_summary_build_status_total_count
+                ),
                 completion_summary_build_skipped_reason_counts=(
                     completion_summary_build_skipped_reason_counts
                 ),

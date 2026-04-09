@@ -84,6 +84,7 @@ def test_main_stats_renders_text_output(
             "failed": 1,
             "skipped": 2,
         },
+        completion_summary_build_status_total_count=4,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 2,
@@ -165,6 +166,7 @@ def test_main_stats_renders_text_output(
     assert "  - built: 1" in captured.out
     assert "  - failed: 1" in captured.out
     assert "  - skipped: 2" in captured.out
+    assert "- status_total: 4" in captured.out
     assert "- skipped_reason_counts:" in captured.out
     assert "  - summary_build_failed: 1" in captured.out
     assert "  - workflow_summary_build_not_requested: 2" in captured.out
@@ -255,6 +257,7 @@ def test_main_stats_renders_json_output(
             "failed": 1,
             "skipped": 1,
         },
+        completion_summary_build_status_total_count=4,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
@@ -306,6 +309,7 @@ def test_main_stats_renders_json_output(
             "failed": 1,
             "skipped": 1,
         },
+        "completion_summary_build_status_total_count": 4,
         "completion_summary_build_skipped_reason_counts": {
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
@@ -400,6 +404,7 @@ def test_main_memory_stats_renders_text_output(
             "failed": 1,
             "skipped": 2,
         },
+        completion_summary_build_status_total_count=4,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 2,
@@ -475,6 +480,7 @@ def test_main_memory_stats_renders_text_output(
     assert "  - built: 1" in captured.out
     assert "  - failed: 1" in captured.out
     assert "  - skipped: 2" in captured.out
+    assert "- status_total: 4" in captured.out
     assert "- skipped_reason_counts:" in captured.out
     assert "  - summary_build_failed: 1" in captured.out
     assert "  - workflow_summary_build_not_requested: 2" in captured.out
@@ -629,6 +635,7 @@ def test_main_memory_stats_renders_json_output(
             "failed": 1,
             "skipped": 1,
         },
+        completion_summary_build_status_total_count=4,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
@@ -707,6 +714,7 @@ def test_main_memory_stats_renders_json_output(
             "failed": 1,
             "skipped": 1,
         },
+        "completion_summary_build_status_total_count": 4,
         "completion_summary_build_skipped_reason_counts": {
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
