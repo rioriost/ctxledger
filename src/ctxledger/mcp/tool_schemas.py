@@ -124,7 +124,13 @@ WORKFLOW_CHECKPOINT_TOOL_SCHEMA = McpToolSchema(
         },
         "checkpoint_json": {
             "type": "object",
-            "description": "Optional structured checkpoint payload.",
+            "description": (
+                "Optional structured checkpoint payload. Preferred structured "
+                "fields include `current_objective`, `next_intended_action`, "
+                "`verify_target`, `resume_hint`, `blocker_or_risk`, "
+                "`failure_guard`, `root_cause`, `recovery_pattern`, and "
+                "`what_remains`."
+            ),
             "additionalProperties": True,
         },
         "verify_status": {

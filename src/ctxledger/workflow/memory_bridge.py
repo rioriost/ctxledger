@@ -175,6 +175,10 @@ _FIELD_LABEL_TO_KEY = {
     "current objective": "current_objective",
     "last planned next action": "next_intended_action",
     "next action": "next_intended_action",
+    "verify target": "verify_target",
+    "resume hint": "resume_hint",
+    "blocker or risk": "blocker_or_risk",
+    "failure guard": "failure_guard",
     "root cause": "root_cause",
     "recovery pattern": "recovery_pattern",
     "what remains": "what_remains",
@@ -1055,6 +1059,10 @@ class WorkflowMemoryBridge:
             for key in (
                 "current_objective",
                 "next_intended_action",
+                "verify_target",
+                "resume_hint",
+                "blocker_or_risk",
+                "failure_guard",
                 "root_cause",
                 "recovery_pattern",
                 "what_remains",
@@ -1266,6 +1274,10 @@ class WorkflowMemoryBridge:
         checkpoint_summary = self._normalize_text(checkpoint.summary)
         current_objective = self._checkpoint_current_objective(checkpoint)
         next_intended_action = self._checkpoint_next_intended_action(checkpoint)
+        verify_target = self._checkpoint_verify_target(checkpoint)
+        resume_hint = self._checkpoint_resume_hint(checkpoint)
+        blocker_or_risk = self._checkpoint_blocker_or_risk(checkpoint)
+        failure_guard = self._checkpoint_failure_guard(checkpoint)
         root_cause = self._checkpoint_root_cause(checkpoint)
         recovery_pattern = self._checkpoint_recovery_pattern(checkpoint)
         what_remains = self._checkpoint_what_remains(checkpoint)
@@ -1275,6 +1287,10 @@ class WorkflowMemoryBridge:
             checkpoint_summary is None
             and current_objective is None
             and next_intended_action is None
+            and verify_target is None
+            and resume_hint is None
+            and blocker_or_risk is None
+            and failure_guard is None
             and root_cause is None
             and recovery_pattern is None
             and what_remains is None
@@ -1289,6 +1305,14 @@ class WorkflowMemoryBridge:
             lines.append(f"Current objective: {current_objective}")
         if next_intended_action is not None:
             lines.append(f"Next action: {next_intended_action}")
+        if verify_target is not None:
+            lines.append(f"Verify target: {verify_target}")
+        if resume_hint is not None:
+            lines.append(f"Resume hint: {resume_hint}")
+        if blocker_or_risk is not None:
+            lines.append(f"Blocker or risk: {blocker_or_risk}")
+        if failure_guard is not None:
+            lines.append(f"Failure guard: {failure_guard}")
         if root_cause is not None:
             lines.append(f"Root cause: {root_cause}")
         if recovery_pattern is not None:
@@ -1329,6 +1353,22 @@ class WorkflowMemoryBridge:
         next_intended_action = self._checkpoint_next_intended_action(checkpoint)
         if next_intended_action is not None:
             metadata["next_intended_action"] = next_intended_action
+
+        verify_target = self._checkpoint_verify_target(checkpoint)
+        if verify_target is not None:
+            metadata["verify_target"] = verify_target
+
+        resume_hint = self._checkpoint_resume_hint(checkpoint)
+        if resume_hint is not None:
+            metadata["resume_hint"] = resume_hint
+
+        blocker_or_risk = self._checkpoint_blocker_or_risk(checkpoint)
+        if blocker_or_risk is not None:
+            metadata["blocker_or_risk"] = blocker_or_risk
+
+        failure_guard = self._checkpoint_failure_guard(checkpoint)
+        if failure_guard is not None:
+            metadata["failure_guard"] = failure_guard
 
         root_cause = self._checkpoint_root_cause(checkpoint)
         if root_cause is not None:
@@ -1381,6 +1421,70 @@ class WorkflowMemoryBridge:
                     metadata={
                         "memory_origin": "workflow_complete_auto",
                         "promotion_source": "latest_checkpoint.next_intended_action",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        verify_target = self._checkpoint_verify_target(latest_checkpoint)
+        if verify_target is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="verify_target",
+                    memory_type="workflow_verify_target",
+                    content=verify_target,
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "latest_checkpoint.verify_target",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        resume_hint = self._checkpoint_resume_hint(latest_checkpoint)
+        if resume_hint is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="resume_hint",
+                    memory_type="workflow_resume_hint",
+                    content=resume_hint,
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "latest_checkpoint.resume_hint",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        blocker_or_risk = self._checkpoint_blocker_or_risk(latest_checkpoint)
+        if blocker_or_risk is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="blocker_or_risk",
+                    memory_type="workflow_blocker_or_risk",
+                    content=blocker_or_risk,
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "latest_checkpoint.blocker_or_risk",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        failure_guard = self._checkpoint_failure_guard(latest_checkpoint)
+        if failure_guard is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="failure_guard",
+                    memory_type="workflow_failure_guard",
+                    content=failure_guard,
+                    metadata={
+                        "memory_origin": "workflow_complete_auto",
+                        "promotion_source": "latest_checkpoint.failure_guard",
                         "workflow_status": workflow.status.value,
                         "attempt_status": attempt.status.value,
                     },
@@ -1490,6 +1594,70 @@ class WorkflowMemoryBridge:
                     metadata={
                         "memory_origin": "workflow_checkpoint_auto",
                         "promotion_source": "checkpoint.next_intended_action",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        verify_target = self._checkpoint_verify_target(checkpoint)
+        if verify_target is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="verify_target",
+                    memory_type="workflow_verify_target",
+                    content=verify_target,
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "checkpoint.verify_target",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        resume_hint = self._checkpoint_resume_hint(checkpoint)
+        if resume_hint is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="resume_hint",
+                    memory_type="workflow_resume_hint",
+                    content=resume_hint,
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "checkpoint.resume_hint",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        blocker_or_risk = self._checkpoint_blocker_or_risk(checkpoint)
+        if blocker_or_risk is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="blocker_or_risk",
+                    memory_type="workflow_blocker_or_risk",
+                    content=blocker_or_risk,
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "checkpoint.blocker_or_risk",
+                        "workflow_status": workflow.status.value,
+                        "attempt_status": attempt.status.value,
+                    },
+                )
+            )
+
+        failure_guard = self._checkpoint_failure_guard(checkpoint)
+        if failure_guard is not None:
+            candidates.append(
+                CompletionPromotionCandidate(
+                    field_key="failure_guard",
+                    memory_type="workflow_failure_guard",
+                    content=failure_guard,
+                    metadata={
+                        "memory_origin": "workflow_checkpoint_auto",
+                        "promotion_source": "checkpoint.failure_guard",
                         "workflow_status": workflow.status.value,
                         "attempt_status": attempt.status.value,
                     },
@@ -2127,6 +2295,54 @@ class WorkflowMemoryBridge:
         if checkpoint is None:
             return None
         raw_value = checkpoint.checkpoint_json.get("next_intended_action")
+        if not isinstance(raw_value, str):
+            return None
+        normalized = raw_value.strip()
+        return normalized if normalized else None
+
+    @staticmethod
+    def _checkpoint_verify_target(
+        checkpoint: WorkflowCheckpoint | None,
+    ) -> str | None:
+        if checkpoint is None:
+            return None
+        raw_value = checkpoint.checkpoint_json.get("verify_target")
+        if not isinstance(raw_value, str):
+            return None
+        normalized = raw_value.strip()
+        return normalized if normalized else None
+
+    @staticmethod
+    def _checkpoint_resume_hint(
+        checkpoint: WorkflowCheckpoint | None,
+    ) -> str | None:
+        if checkpoint is None:
+            return None
+        raw_value = checkpoint.checkpoint_json.get("resume_hint")
+        if not isinstance(raw_value, str):
+            return None
+        normalized = raw_value.strip()
+        return normalized if normalized else None
+
+    @staticmethod
+    def _checkpoint_blocker_or_risk(
+        checkpoint: WorkflowCheckpoint | None,
+    ) -> str | None:
+        if checkpoint is None:
+            return None
+        raw_value = checkpoint.checkpoint_json.get("blocker_or_risk")
+        if not isinstance(raw_value, str):
+            return None
+        normalized = raw_value.strip()
+        return normalized if normalized else None
+
+    @staticmethod
+    def _checkpoint_failure_guard(
+        checkpoint: WorkflowCheckpoint | None,
+    ) -> str | None:
+        if checkpoint is None:
+            return None
+        raw_value = checkpoint.checkpoint_json.get("failure_guard")
         if not isinstance(raw_value, str):
             return None
         normalized = raw_value.strip()

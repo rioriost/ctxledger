@@ -208,6 +208,10 @@ def test_workflow_memory_bridge_records_checkpoint_memory_with_promoted_items_an
         checkpoint_json={
             "current_objective": "Restore the passing regression suite",
             "next_intended_action": "Patch the parser edge case",
+            "verify_target": "pytest -q tests/parser/test_regression.py",
+            "resume_hint": "Resume from parser normalization before rerunning focused tests",
+            "blocker_or_risk": "Separator normalization could regress valid mixed-delimiter inputs",
+            "failure_guard": "Keep malformed-separator fixtures green while patching normalization",
             "root_cause": "Tokenizer accepted malformed separators",
             "recovery_pattern": "Normalize separators before validation",
             "what_remains": "Run focused regression tests after the parser fix",
@@ -254,6 +258,10 @@ def test_workflow_memory_bridge_records_checkpoint_memory_with_promoted_items_an
         "verify_status": "passed",
         "current_objective": "Restore the passing regression suite",
         "next_intended_action": "Patch the parser edge case",
+        "verify_target": "pytest -q tests/parser/test_regression.py",
+        "resume_hint": "Resume from parser normalization before rerunning focused tests",
+        "blocker_or_risk": "Separator normalization could regress valid mixed-delimiter inputs",
+        "failure_guard": "Keep malformed-separator fixtures green while patching normalization",
         "root_cause": "Tokenizer accepted malformed separators",
         "recovery_pattern": "Normalize separators before validation",
         "what_remains": "Run focused regression tests after the parser fix",
@@ -263,6 +271,19 @@ def test_workflow_memory_bridge_records_checkpoint_memory_with_promoted_items_an
     )
     assert "Current objective: Restore the passing regression suite" in result.episode.summary
     assert "Next action: Patch the parser edge case" in result.episode.summary
+    assert "Verify target: pytest -q tests/parser/test_regression.py" in result.episode.summary
+    assert (
+        "Resume hint: Resume from parser normalization before rerunning focused tests"
+        in result.episode.summary
+    )
+    assert (
+        "Blocker or risk: Separator normalization could regress valid mixed-delimiter inputs"
+        in result.episode.summary
+    )
+    assert (
+        "Failure guard: Keep malformed-separator fixtures green while patching normalization"
+        in result.episode.summary
+    )
     assert "Root cause: Tokenizer accepted malformed separators" in result.episode.summary
     assert "Recovery pattern: Normalize separators before validation" in result.episode.summary
     assert "What remains: Run focused regression tests after the parser fix" in (
@@ -277,10 +298,14 @@ def test_workflow_memory_bridge_records_checkpoint_memory_with_promoted_items_an
     assert result.memory_item.metadata == result.episode.metadata
     assert result.memory_item.content == result.episode.summary
 
-    assert len(result.promoted_memory_items) == 6
+    assert len(result.promoted_memory_items) == 10
     assert {item.type for item in result.promoted_memory_items} == {
         "workflow_objective",
         "workflow_next_action",
+        "workflow_verify_target",
+        "workflow_resume_hint",
+        "workflow_blocker_or_risk",
+        "workflow_failure_guard",
         "workflow_root_cause",
         "workflow_recovery_pattern",
         "workflow_what_remains",
@@ -289,6 +314,10 @@ def test_workflow_memory_bridge_records_checkpoint_memory_with_promoted_items_an
     assert {item.metadata["promotion_field"] for item in result.promoted_memory_items} == {
         "current_objective",
         "next_intended_action",
+        "verify_target",
+        "resume_hint",
+        "blocker_or_risk",
+        "failure_guard",
         "root_cause",
         "recovery_pattern",
         "what_remains",
@@ -301,8 +330,33 @@ def test_workflow_memory_bridge_records_checkpoint_memory_with_promoted_items_an
     next_action_item = next(
         item for item in result.promoted_memory_items if item.type == "workflow_next_action"
     )
+    verify_target_item = next(
+        item for item in result.promoted_memory_items if item.type == "workflow_verify_target"
+    )
+    resume_hint_item = next(
+        item for item in result.promoted_memory_items if item.type == "workflow_resume_hint"
+    )
+    blocker_or_risk_item = next(
+        item for item in result.promoted_memory_items if item.type == "workflow_blocker_or_risk"
+    )
+    failure_guard_item = next(
+        item for item in result.promoted_memory_items if item.type == "workflow_failure_guard"
+    )
     assert objective_item.content == "Restore the passing regression suite"
     assert next_action_item.content == "Patch the parser edge case"
+    assert verify_target_item.content == "pytest -q tests/parser/test_regression.py"
+    assert (
+        resume_hint_item.content
+        == "Resume from parser normalization before rerunning focused tests"
+    )
+    assert (
+        blocker_or_risk_item.content
+        == "Separator normalization could regress valid mixed-delimiter inputs"
+    )
+    assert (
+        failure_guard_item.content
+        == "Keep malformed-separator fixtures green while patching normalization"
+    )
 
     assert len(result.relations) == 3
     assert {relation.relation_type for relation in result.relations} == {"supports"}
@@ -313,18 +367,18 @@ def test_workflow_memory_bridge_records_checkpoint_memory_with_promoted_items_an
     }
 
     assert result.details["auto_memory_recorded"] is True
-    assert result.details["promoted_memory_item_count"] == 6
+    assert result.details["promoted_memory_item_count"] == 10
     assert result.details["memory_relation_count"] == 3
     assert result.details["stage_details"]["gating"]["status"] == "passed"
     assert result.details["stage_details"]["summary_selection"]["status"] == "built"
     assert result.details["stage_details"]["promoted_memory_items"]["status"] == "recorded"
-    assert result.details["stage_details"]["promoted_memory_items"]["created_count"] == 6
+    assert result.details["stage_details"]["promoted_memory_items"]["created_count"] == 10
     assert result.details["stage_details"]["relations"]["status"] == "recorded"
     assert result.details["stage_details"]["relations"]["created_count"] == 3
     assert result.details["stage_details"]["embedding"]["status"] == "stored"
 
     assert len(episode_repository.episodes) == 1
-    assert len(memory_item_repository.memory_items) == 7
+    assert len(memory_item_repository.memory_items) == 11
     assert len(memory_embedding_repository.embeddings) == 1
     assert len(memory_relation_repository.relations) == 3
 
