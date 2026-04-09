@@ -144,10 +144,9 @@ def test_main_stats_renders_text_output(
     assert "- request_count: 3" in captured.out
     assert "- attempted_count: 2" in captured.out
     assert "- success_count: 1" in captured.out
-    assert (
-        "- skipped_reason_counts: {'summary_build_failed': 1, 'workflow_summary_build_not_requested': 2}"
-        in captured.out
-    )
+    assert "- skipped_reason_counts:" in captured.out
+    assert "  - summary_build_failed: 1" in captured.out
+    assert "  - workflow_summary_build_not_requested: 2" in captured.out
     assert "Derived memory state:" in captured.out
     assert "- derived_memory_item_state: canonical_only" in captured.out
     assert (
@@ -412,10 +411,9 @@ def test_main_memory_stats_renders_text_output(
     assert "- request_count: 3" in captured.out
     assert "- attempted_count: 2" in captured.out
     assert "- success_count: 1" in captured.out
-    assert (
-        "- skipped_reason_counts: {'summary_build_failed': 1, 'workflow_summary_build_not_requested': 2}"
-        in captured.out
-    )
+    assert "- skipped_reason_counts:" in captured.out
+    assert "  - summary_build_failed: 1" in captured.out
+    assert "  - workflow_summary_build_not_requested: 2" in captured.out
     assert "Memory item provenance:" in captured.out
     assert "- derived: 2" in captured.out
     assert "- episode: 17" in captured.out

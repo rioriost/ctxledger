@@ -141,7 +141,8 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
     assert "- request_count: 0" in rendered
     assert "- attempted_count: 0" in rendered
     assert "- success_count: 0" in rendered
-    assert "- skipped_reason_counts: {}" in rendered
+    assert "- skipped_reason_counts:" in rendered
+    assert "  - none" in rendered
     assert "Memory item provenance:" in rendered
     assert "- none" in rendered
     assert "- memory_relation_created_at: None" in rendered
@@ -218,10 +219,9 @@ def test_format_memory_stats_text_renders_values() -> None:
     assert "- request_count: 4" in rendered
     assert "- attempted_count: 3" in rendered
     assert "- success_count: 2" in rendered
-    assert (
-        "- skipped_reason_counts: {'summary_build_failed': 1, 'workflow_summary_build_not_requested': 1}"
-        in rendered
-    )
+    assert "- skipped_reason_counts:" in rendered
+    assert "  - summary_build_failed: 1" in rendered
+    assert "  - workflow_summary_build_not_requested: 1" in rendered
     assert "- checkpoint: 1" in rendered
     assert "- episode: 2" in rendered
     assert "- episode_created_at: 2026-03-17 12:00:00+00:00" in rendered

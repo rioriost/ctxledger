@@ -686,10 +686,9 @@ def test_format_stats_text_renders_values() -> None:
     assert "- request_count: 29" in rendered
     assert "- attempted_count: 30" in rendered
     assert "- success_count: 31" in rendered
-    assert (
-        "- skipped_reason_counts: {'workflow_summary_build_not_requested': 12, 'summary_build_failed': 1}"
-        in rendered
-    )
+    assert "- skipped_reason_counts:" in rendered
+    assert "  - summary_build_failed: 1" in rendered
+    assert "  - workflow_summary_build_not_requested: 12" in rendered
     assert "- derived_memory_item_state: canonical_only" in rendered
     assert (
         "- derived_memory_item_reason: canonical summary state exists but derived memory items are not materialized"
@@ -990,10 +989,9 @@ def test_memory_stats_renders_text_output_and_closes_pool(
     assert "- request_count: 4" in captured.out
     assert "- attempted_count: 3" in captured.out
     assert "- success_count: 2" in captured.out
-    assert (
-        "- skipped_reason_counts: {'summary_build_failed': 1, 'workflow_summary_build_not_requested': 1}"
-        in captured.out
-    )
+    assert "- skipped_reason_counts:" in captured.out
+    assert "  - summary_build_failed: 1" in captured.out
+    assert "  - workflow_summary_build_not_requested: 1" in captured.out
     assert "- memory_summaries: 7" in captured.out
     assert "- memory_summary_memberships: 8" in captured.out
     assert "- age_summary_graph_ready: 1" in captured.out

@@ -745,7 +745,20 @@ def _format_stats_text(stats: object) -> str:
         f"- request_count: {getattr(stats, 'completion_summary_build_request_count', 0)}",
         f"- attempted_count: {getattr(stats, 'completion_summary_build_attempted_count', 0)}",
         f"- success_count: {getattr(stats, 'completion_summary_build_success_count', 0)}",
-        f"- skipped_reason_counts: {getattr(stats, 'completion_summary_build_skipped_reason_counts', {})}",
+        "- skipped_reason_counts:",
+        *(
+            [
+                f"  - {reason}: {count}"
+                for reason, count in sorted(
+                    getattr(
+                        stats,
+                        "completion_summary_build_skipped_reason_counts",
+                        {},
+                    ).items()
+                )
+            ]
+            or ["  - none"]
+        ),
         "",
         "Derived memory state:",
         f"- derived_memory_item_state: {getattr(stats, 'derived_memory_item_state', 'unknown')}",
@@ -1011,7 +1024,20 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- request_count: {getattr(stats, 'completion_summary_build_request_count', 0)}",
         f"- attempted_count: {getattr(stats, 'completion_summary_build_attempted_count', 0)}",
         f"- success_count: {getattr(stats, 'completion_summary_build_success_count', 0)}",
-        f"- skipped_reason_counts: {getattr(stats, 'completion_summary_build_skipped_reason_counts', {})}",
+        "- skipped_reason_counts:",
+        *(
+            [
+                f"  - {reason}: {count}"
+                for reason, count in sorted(
+                    getattr(
+                        stats,
+                        "completion_summary_build_skipped_reason_counts",
+                        {},
+                    ).items()
+                )
+            ]
+            or ["  - none"]
+        ),
         "",
         "Derived memory state:",
         f"- derived_memory_item_state: {getattr(stats, 'derived_memory_item_state', 'unknown')}",
