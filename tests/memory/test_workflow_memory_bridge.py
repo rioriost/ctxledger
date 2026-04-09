@@ -112,6 +112,10 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
         "verify_status": "passed",
         "step_name": "validate_openai",
         "next_intended_action": "Review diff and commit",
+        "summary_build_requested": False,
+        "summary_build_attempted": False,
+        "summary_build_succeeded": False,
+        "summary_build_skipped_reason": "summary_builder_not_configured",
     }
     assert "Completion summary: Validated OpenAI embedding integration end to end" in (
         result.episode.summary
@@ -147,6 +151,13 @@ def test_workflow_memory_bridge_records_completion_memory_with_embedding() -> No
     assert result.details["stage_details"]["relations"]["status"] == "recorded"
     assert result.details["stage_details"]["relations"]["created_count"] == 1
     assert result.details["stage_details"]["embedding"]["status"] == "stored"
+    assert result.details["stage_details"]["summary_build"] == {
+        "summary_build_attempted": False,
+        "summary_build_succeeded": False,
+        "summary_build_requested": False,
+        "summary_build_status": None,
+        "summary_build_skipped_reason": "summary_builder_not_configured",
+    }
 
     assert len(result.promoted_memory_items) == 2
     assert {item.type for item in result.promoted_memory_items} == {

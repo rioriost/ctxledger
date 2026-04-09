@@ -517,6 +517,34 @@ class WorkflowMemoryBridge:
             }
         )
 
+        completion_metadata = self._merge_summary_build_outcome_metadata(
+            episode.metadata,
+            summary_build,
+        )
+        if completion_metadata != episode.metadata:
+            episode = EpisodeRecord(
+                episode_id=episode.episode_id,
+                workflow_instance_id=episode.workflow_instance_id,
+                summary=episode.summary,
+                attempt_id=episode.attempt_id,
+                metadata=completion_metadata,
+                status=episode.status,
+                created_at=episode.created_at,
+                updated_at=episode.updated_at,
+            )
+        if completion_metadata != memory_item.metadata:
+            memory_item = MemoryItemRecord(
+                memory_id=memory_item.memory_id,
+                workspace_id=memory_item.workspace_id,
+                episode_id=memory_item.episode_id,
+                type=memory_item.type,
+                provenance=memory_item.provenance,
+                content=memory_item.content,
+                metadata=completion_metadata,
+                created_at=memory_item.created_at,
+                updated_at=memory_item.updated_at,
+            )
+
         details = {
             "auto_memory_recorded": True,
             "episode_id": str(episode.episode_id),
@@ -2128,6 +2156,31 @@ class WorkflowMemoryBridge:
             ),
             "built_summary_membership_count": len(memberships),
         }
+
+    @staticmethod
+    def _merge_summary_build_outcome_metadata(
+        metadata: dict[str, Any],
+        summary_build: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        merged = dict(metadata)
+        if summary_build is None:
+            merged["summary_build_requested"] = False
+            merged["summary_build_attempted"] = False
+            merged["summary_build_succeeded"] = False
+            merged["summary_build_skipped_reason"] = "summary_builder_not_configured"
+            return merged
+
+        merged["summary_build_requested"] = bool(
+            summary_build.get("summary_build_requested", False)
+        )
+        merged["summary_build_attempted"] = bool(
+            summary_build.get("summary_build_attempted", False)
+        )
+        merged["summary_build_succeeded"] = bool(
+            summary_build.get("summary_build_succeeded", False)
+        )
+        merged["summary_build_skipped_reason"] = summary_build.get("summary_build_skipped_reason")
+        return merged
 
     def _maybe_store_embedding(self, memory_item: MemoryItemRecord) -> dict[str, Any]:
         # This helper is intentionally persistence-oriented.
