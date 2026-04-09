@@ -723,6 +723,8 @@ def _format_stats_text(stats: object) -> str:
         f"- memory_items: {getattr(stats, 'memory_item_count', 0)}",
         f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
         f"- interaction_memory_items: {getattr(stats, 'interaction_memory_item_count', 0)}",
+        f"- unlinked_interaction_memory_items: {getattr(stats, 'unlinked_interaction_memory_item_count', 0)}",
+        f"- weakly_linked_interaction_memory_items: {getattr(stats, 'weakly_linked_interaction_memory_item_count', 0)}",
         f"- file_work_memory_items: {getattr(stats, 'file_work_memory_item_count', 0)}",
         f"- derived_memory_items: {getattr(stats, 'derived_memory_item_count', 0)}",
         "",
@@ -847,6 +849,16 @@ def _stats(args: argparse.Namespace) -> int:
                     "interaction_memory_item_count": getattr(
                         stats,
                         "interaction_memory_item_count",
+                        0,
+                    ),
+                    "unlinked_interaction_memory_item_count": getattr(
+                        stats,
+                        "unlinked_interaction_memory_item_count",
+                        0,
+                    ),
+                    "weakly_linked_interaction_memory_item_count": getattr(
+                        stats,
+                        "weakly_linked_interaction_memory_item_count",
                         0,
                     ),
                     "file_work_memory_item_count": getattr(
@@ -1080,6 +1092,8 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
         f"- memory_relations: {getattr(stats, 'memory_relation_count', 0)}",
         f"- interaction_memory_items: {getattr(stats, 'interaction_memory_item_count', 0)}",
+        f"- unlinked_interaction_memory_items: {getattr(stats, 'unlinked_interaction_memory_item_count', 0)}",
+        f"- weakly_linked_interaction_memory_items: {getattr(stats, 'weakly_linked_interaction_memory_item_count', 0)}",
         f"- file_work_memory_items: {getattr(stats, 'file_work_memory_item_count', 0)}",
         f"- derived_memory_items: {getattr(stats, 'derived_memory_item_count', 0)}",
         "",
@@ -1270,6 +1284,16 @@ def _memory_stats(args: argparse.Namespace) -> int:
                     "interaction_memory_item_count": getattr(
                         stats,
                         "interaction_memory_item_count",
+                        0,
+                    ),
+                    "unlinked_interaction_memory_item_count": getattr(
+                        stats,
+                        "unlinked_interaction_memory_item_count",
+                        0,
+                    ),
+                    "weakly_linked_interaction_memory_item_count": getattr(
+                        stats,
+                        "weakly_linked_interaction_memory_item_count",
                         0,
                     ),
                     "file_work_memory_item_count": getattr(

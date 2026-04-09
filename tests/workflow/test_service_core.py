@@ -1234,6 +1234,98 @@ def test_stats_helpers_cover_records_by_id_and_values_by_id_paths() -> None:
     assert max_values == now.replace(day=12)
 
 
+def test_count_interaction_linkage_gaps_counts_unlinked_and_weakly_linked_items() -> None:
+    service = WorkflowService(lambda: None)
+
+    interaction_with_workflow = SimpleNamespace(
+        memory_id=uuid4(),
+        provenance="interaction",
+        workspace_id=uuid4(),
+        metadata={
+            "workspace_id": str(uuid4()),
+            "workflow_instance_id": str(uuid4()),
+        },
+    )
+    weakly_linked_interaction = SimpleNamespace(
+        memory_id=uuid4(),
+        provenance="interaction",
+        workspace_id=uuid4(),
+        metadata={
+            "workspace_id": str(uuid4()),
+        },
+    )
+    unlinked_interaction = SimpleNamespace(
+        memory_id=uuid4(),
+        provenance="interaction",
+        workspace_id=None,
+        metadata={},
+    )
+    non_interaction = SimpleNamespace(
+        memory_id=uuid4(),
+        provenance="episode",
+        workspace_id=uuid4(),
+        metadata={},
+    )
+
+    unlinked_count, weakly_linked_count = service._count_interaction_linkage_gaps(
+        SimpleNamespace(
+            memory_items=SimpleNamespace(
+                _records_by_id={
+                    interaction_with_workflow.memory_id: interaction_with_workflow,
+                    weakly_linked_interaction.memory_id: weakly_linked_interaction,
+                    unlinked_interaction.memory_id: unlinked_interaction,
+                    non_interaction.memory_id: non_interaction,
+                }
+            )
+        )
+    )
+
+    assert unlinked_count == 1
+    assert weakly_linked_count == 1
+
+
+def test_count_interaction_linkage_gaps_uses_workspace_listing_fallback() -> None:
+    service = WorkflowService(lambda: None)
+    workspace_id = uuid4()
+
+    weakly_linked_interaction = SimpleNamespace(
+        memory_id=uuid4(),
+        provenance="interaction",
+        workspace_id=workspace_id,
+        metadata={"workspace_id": str(workspace_id)},
+    )
+    unlinked_interaction = SimpleNamespace(
+        memory_id=uuid4(),
+        provenance="interaction",
+        workspace_id=None,
+        metadata={},
+    )
+
+    memory_items = SimpleNamespace(
+        list_by_workspace_id=lambda requested_workspace_id, limit: (
+            (
+                weakly_linked_interaction,
+                unlinked_interaction,
+            )
+            if requested_workspace_id == workspace_id
+            else ()
+        )
+    )
+    workspaces = SimpleNamespace(
+        list_all=lambda limit: (SimpleNamespace(workspace_id=workspace_id),)
+    )
+
+    unlinked_count, weakly_linked_count = service._count_interaction_linkage_gaps(
+        SimpleNamespace(
+            memory_items=memory_items,
+            workspaces=workspaces,
+        )
+    )
+
+    assert unlinked_count == 1
+    assert weakly_linked_count == 1
+
+
 def test_validate_helpers_reject_empty_values() -> None:
     service, _ = make_service_and_uow()
 

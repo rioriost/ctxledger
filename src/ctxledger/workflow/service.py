@@ -278,6 +278,8 @@ class WorkflowStats:
     workflow_completion_auto_memory_recorded_count: int = 0
     workflow_completion_auto_memory_skipped_count: int = 0
     interaction_memory_item_count: int = 0
+    unlinked_interaction_memory_item_count: int = 0
+    weakly_linked_interaction_memory_item_count: int = 0
     file_work_memory_item_count: int = 0
     memory_summary_count: int = 0
     memory_summary_membership_count: int = 0
@@ -326,6 +328,8 @@ class MemoryStats:
     workflow_completion_auto_memory_recorded_count: int = 0
     workflow_completion_auto_memory_skipped_count: int = 0
     interaction_memory_item_count: int = 0
+    unlinked_interaction_memory_item_count: int = 0
+    weakly_linked_interaction_memory_item_count: int = 0
     file_work_memory_item_count: int = 0
     memory_summary_count: int = 0
     memory_summary_membership_count: int = 0
@@ -742,6 +746,10 @@ class WorkflowService:
             )
             summary_backlog_count = max(episode_count - memory_summary_count, 0)
             interaction_memory_item_count = memory_item_provenance_counts.get("interaction", 0)
+            (
+                unlinked_interaction_memory_item_count,
+                weakly_linked_interaction_memory_item_count,
+            ) = self._count_interaction_linkage_gaps(uow)
             file_work_memory_item_count = self._count_memory_items_with_file_work_metadata(uow)
 
             workflow_status_counts = self._count_grouped_statuses(
@@ -834,6 +842,10 @@ class WorkflowService:
                     0,
                 ),
                 interaction_memory_item_count=interaction_memory_item_count,
+                unlinked_interaction_memory_item_count=(unlinked_interaction_memory_item_count),
+                weakly_linked_interaction_memory_item_count=(
+                    weakly_linked_interaction_memory_item_count
+                ),
                 file_work_memory_item_count=file_work_memory_item_count,
                 memory_summary_count=memory_summary_count,
                 memory_summary_membership_count=memory_summary_membership_count,
@@ -942,6 +954,10 @@ class WorkflowService:
                 age_summary_graph_unknown_count=age_summary_graph_unknown_count,
             )
             interaction_memory_item_count = memory_item_provenance_counts.get("interaction", 0)
+            (
+                unlinked_interaction_memory_item_count,
+                weakly_linked_interaction_memory_item_count,
+            ) = self._count_interaction_linkage_gaps(uow)
             file_work_memory_item_count = self._count_memory_items_with_file_work_metadata(uow)
             latest_derived_memory_item_created_at = self._max_datetime_for_provenance(
                 uow,
@@ -1014,6 +1030,10 @@ class WorkflowService:
                     0,
                 ),
                 interaction_memory_item_count=interaction_memory_item_count,
+                unlinked_interaction_memory_item_count=(unlinked_interaction_memory_item_count),
+                weakly_linked_interaction_memory_item_count=(
+                    weakly_linked_interaction_memory_item_count
+                ),
                 file_work_memory_item_count=file_work_memory_item_count,
                 memory_summary_count=memory_summary_count,
                 memory_summary_membership_count=memory_summary_membership_count,
@@ -2408,6 +2428,77 @@ class WorkflowService:
                 return count
 
         return 0
+
+    def _count_interaction_linkage_gaps(self, uow: Any) -> tuple[int, int]:
+        memory_items = getattr(uow, "memory_items", None)
+        if memory_items is None:
+            return 0, 0
+
+        records: tuple[Any, ...] | None = None
+
+        records_by_id = getattr(memory_items, "_records_by_id", None)
+        if records_by_id is None:
+            values_by_id = getattr(memory_items, "_values_by_id", None)
+            if isinstance(values_by_id, dict):
+                records_by_id = values_by_id
+
+        if isinstance(records_by_id, dict):
+            records = tuple(records_by_id.values())
+        else:
+            list_by_workspace_id = getattr(memory_items, "list_by_workspace_id", None)
+            workspaces = getattr(uow, "workspaces", None)
+            list_workspaces = (
+                getattr(workspaces, "list_all", None) if workspaces is not None else None
+            )
+            if callable(list_by_workspace_id) and callable(list_workspaces):
+                collected_records: list[Any] = []
+                seen_memory_ids: set[UUID] = set()
+                for workspace in list_workspaces(limit=1000):
+                    workspace_id = getattr(workspace, "workspace_id", None)
+                    if workspace_id is None:
+                        continue
+                    for memory_item in list_by_workspace_id(workspace_id, limit=10000):
+                        memory_id = getattr(memory_item, "memory_id", None)
+                        if memory_id in seen_memory_ids:
+                            continue
+                        seen_memory_ids.add(memory_id)
+                        collected_records.append(memory_item)
+                records = tuple(collected_records)
+
+        if records is None:
+            return 0, 0
+
+        unlinked_count = 0
+        weakly_linked_count = 0
+
+        for memory_item in records:
+            if getattr(memory_item, "provenance", None) != "interaction":
+                continue
+
+            metadata = getattr(memory_item, "metadata", None)
+            if not isinstance(metadata, dict):
+                metadata = {}
+
+            workspace_id = getattr(memory_item, "workspace_id", None)
+            metadata_workspace_id = metadata.get("workspace_id")
+            metadata_workflow_instance_id = metadata.get("workflow_instance_id")
+
+            has_workspace_link = workspace_id is not None or (
+                isinstance(metadata_workspace_id, str) and metadata_workspace_id.strip()
+            )
+            has_workflow_link = (
+                isinstance(metadata_workflow_instance_id, str)
+                and metadata_workflow_instance_id.strip()
+            )
+
+            if not has_workspace_link and not has_workflow_link:
+                unlinked_count += 1
+                continue
+
+            if not has_workflow_link:
+                weakly_linked_count += 1
+
+        return unlinked_count, weakly_linked_count
 
     def _map_workflow_status_to_attempt_status(
         self,

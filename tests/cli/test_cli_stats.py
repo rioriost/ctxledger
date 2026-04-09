@@ -57,6 +57,8 @@ def test_main_stats_renders_text_output(
         workflow_completion_auto_memory_recorded_count=4,
         workflow_completion_auto_memory_skipped_count=54,
         interaction_memory_item_count=7,
+        unlinked_interaction_memory_item_count=2,
+        weakly_linked_interaction_memory_item_count=3,
         file_work_memory_item_count=9,
         derived_memory_item_count=0,
         derived_memory_item_state="canonical_only",
@@ -141,6 +143,8 @@ def test_main_stats_renders_text_output(
     assert "- memory_items: 24" in captured.out
     assert "- memory_embeddings: 3" in captured.out
     assert "- interaction_memory_items: 7" in captured.out
+    assert "- unlinked_interaction_memory_items: 2" in captured.out
+    assert "- weakly_linked_interaction_memory_items: 3" in captured.out
     assert "- file_work_memory_items: 9" in captured.out
     assert "- derived_memory_items: 0" in captured.out
     assert "Remember-path observability:" in captured.out
@@ -236,6 +240,8 @@ def test_main_stats_renders_json_output(
         workflow_completion_auto_memory_recorded_count=0,
         workflow_completion_auto_memory_skipped_count=0,
         interaction_memory_item_count=2,
+        unlinked_interaction_memory_item_count=1,
+        weakly_linked_interaction_memory_item_count=1,
         file_work_memory_item_count=3,
         derived_memory_item_count=0,
         derived_memory_item_state="canonical_only",
@@ -335,6 +341,8 @@ def test_main_stats_renders_json_output(
         "episode_count": 3,
         "file_work_memory_item_count": 3,
         "interaction_memory_item_count": 2,
+        "unlinked_interaction_memory_item_count": 1,
+        "weakly_linked_interaction_memory_item_count": 1,
         "latest_checkpoint_created_at": None,
         "latest_episode_created_at": None,
         "latest_memory_embedding_created_at": None,
@@ -423,6 +431,8 @@ def test_main_memory_stats_renders_text_output(
         completion_summary_build_skipped_reason_total_count=3,
         completion_summary_build_attempted_minus_status_total_count=-2,
         interaction_memory_item_count=7,
+        unlinked_interaction_memory_item_count=2,
+        weakly_linked_interaction_memory_item_count=3,
         file_work_memory_item_count=9,
         memory_summary_count=9,
         memory_summary_membership_count=21,
@@ -466,6 +476,8 @@ def test_main_memory_stats_renders_text_output(
     assert "- memory_embeddings: 3" in captured.out
     assert "- memory_relations: 7" in captured.out
     assert "- interaction_memory_items: 7" in captured.out
+    assert "- unlinked_interaction_memory_items: 2" in captured.out
+    assert "- weakly_linked_interaction_memory_items: 3" in captured.out
     assert "- file_work_memory_items: 9" in captured.out
     assert "Remember-path observability:" in captured.out
     assert "- checkpoint_auto_memory_recorded: 12" in captured.out
@@ -696,6 +708,8 @@ def test_main_memory_stats_renders_json_output(
         "episode_count": 3,
         "file_work_memory_item_count": 2,
         "interaction_memory_item_count": 1,
+        "unlinked_interaction_memory_item_count": 0,
+        "weakly_linked_interaction_memory_item_count": 0,
         "derived_memory_item_count": 0,
         "derived_memory_item_state": "unknown",
         "derived_memory_item_reason": None,

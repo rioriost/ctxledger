@@ -35,6 +35,8 @@ def test_format_stats_text_uses_zero_defaults_for_missing_fields() -> None:
     assert "- memory_items: 0" in rendered
     assert "- memory_embeddings: 0" in rendered
     assert "- interaction_memory_items: 0" in rendered
+    assert "- unlinked_interaction_memory_items: 0" in rendered
+    assert "- weakly_linked_interaction_memory_items: 0" in rendered
     assert "- file_work_memory_items: 0" in rendered
     assert "- derived_memory_items: 0" in rendered
     assert "- checkpoint_auto_memory_recorded: 0" in rendered
@@ -137,6 +139,8 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
     rendered = cli_module._format_memory_stats_text(stats)
 
     assert "ctxledger memory-stats" in rendered
+    assert "- unlinked_interaction_memory_items: 0" in rendered
+    assert "- weakly_linked_interaction_memory_items: 0" in rendered
     assert "Remember-path observability:" in rendered
     assert "- checkpoint_auto_memory_recorded: 0" in rendered
     assert "- checkpoint_auto_memory_skipped: 0" in rendered
@@ -235,6 +239,8 @@ def test_format_memory_stats_text_renders_values() -> None:
     assert "- memory_items: 3" in rendered
     assert "- memory_embeddings: 4" in rendered
     assert "- memory_relations: 5" in rendered
+    assert "- unlinked_interaction_memory_items: 0" in rendered
+    assert "- weakly_linked_interaction_memory_items: 0" in rendered
     assert "- checkpoint_auto_memory_recorded: 7" in rendered
     assert "- checkpoint_auto_memory_skipped: 3" in rendered
     assert "- workflow_completion_auto_memory_recorded: 5" in rendered
