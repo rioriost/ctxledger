@@ -394,6 +394,90 @@ def test_build_workflow_checkpoint_tool_handler_returns_success_payload() -> Non
     ]
 
 
+def test_build_workflow_checkpoint_tool_handler_merges_top_level_structured_fields_into_checkpoint_json() -> (
+    None
+):
+    settings = make_settings()
+    resume = make_resume_fixture()
+    fake_workflow_service = FakeWorkflowService(
+        resume,
+        create_checkpoint_result=type(
+            "WorkflowCheckpointResultStub",
+            (),
+            {
+                "checkpoint": resume.latest_checkpoint,
+                "workflow_instance": resume.workflow_instance,
+                "attempt": resume.attempt,
+                "verify_report": resume.latest_verify_report,
+                "warnings": (),
+                "auto_memory_details": None,
+            },
+        )(),
+    )
+    handler, resume, fake_workflow_service = make_ready_tool_handler(
+        build_workflow_checkpoint_tool_handler,
+        settings=settings,
+        resume=resume,
+        fake_workflow_service=fake_workflow_service,
+    )
+
+    response = handler(
+        {
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "attempt_id": str(resume.attempt.attempt_id),
+            "step_name": resume.latest_checkpoint.step_name,
+            "summary": resume.latest_checkpoint.summary,
+            "checkpoint_json": {"current_objective": "Keep existing objective"},
+            "next_intended_action": "Run focused parser tests",
+            "verify_target": "pytest -q tests/parser/test_regression.py",
+            "resume_hint": "Resume from parser normalization branch",
+            "blocker_or_risk": "Parser fix could regress mixed delimiters",
+            "failure_guard": "Keep malformed separator fixtures green",
+            "root_cause": "Tokenizer accepted malformed separators",
+            "recovery_pattern": "Normalize separators before validation",
+            "what_remains": "Re-run focused regression coverage",
+            "verify_status": resume.latest_verify_report.status.value,
+            "verify_report": resume.latest_verify_report.report_json,
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": True,
+        "result": {
+            "checkpoint_id": str(resume.latest_checkpoint.checkpoint_id),
+            "workflow_instance_id": str(resume.workflow_instance.workflow_instance_id),
+            "attempt_id": str(resume.attempt.attempt_id),
+            "step_name": resume.latest_checkpoint.step_name,
+            "created_at": resume.latest_checkpoint.created_at.isoformat(),
+            "latest_verify_status": resume.latest_verify_report.status.value,
+            "warnings": [],
+            "auto_memory_details": None,
+        },
+    }
+    assert fake_workflow_service.create_checkpoint_calls == [
+        CreateCheckpointInput(
+            workflow_instance_id=resume.workflow_instance.workflow_instance_id,
+            attempt_id=resume.attempt.attempt_id,
+            step_name=resume.latest_checkpoint.step_name,
+            summary=resume.latest_checkpoint.summary,
+            checkpoint_json={
+                "current_objective": "Keep existing objective",
+                "next_intended_action": "Run focused parser tests",
+                "verify_target": "pytest -q tests/parser/test_regression.py",
+                "resume_hint": "Resume from parser normalization branch",
+                "blocker_or_risk": "Parser fix could regress mixed delimiters",
+                "failure_guard": "Keep malformed separator fixtures green",
+                "root_cause": "Tokenizer accepted malformed separators",
+                "recovery_pattern": "Normalize separators before validation",
+                "what_remains": "Re-run focused regression coverage",
+            },
+            verify_status=resume.latest_verify_report.status,
+            verify_report=resume.latest_verify_report.report_json,
+        )
+    ]
+
+
 def test_build_workflow_checkpoint_tool_handler_returns_invalid_request_for_missing_step_name() -> (
     None
 ):
@@ -443,6 +527,35 @@ def test_build_workflow_checkpoint_tool_handler_returns_server_not_ready_error()
             "code": "server_not_ready",
             "message": "workflow service is not initialized",
             "details": {},
+        },
+    }
+
+
+def test_build_workflow_checkpoint_tool_handler_returns_invalid_request_for_non_string_top_level_structured_field() -> (
+    None
+):
+    settings = make_settings()
+    handler, _, _ = make_tool_handler(
+        build_workflow_checkpoint_tool_handler,
+        settings=settings,
+    )
+
+    response = handler(
+        {
+            "workflow_instance_id": str(uuid4()),
+            "attempt_id": str(uuid4()),
+            "step_name": "implement_server_api",
+            "verify_target": ["pytest"],
+        }
+    )
+
+    assert isinstance(response, McpToolResponse)
+    assert response.payload == {
+        "ok": False,
+        "error": {
+            "code": "invalid_request",
+            "message": "verify_target must be a string when provided",
+            "details": {"field": "verify_target"},
         },
     }
 

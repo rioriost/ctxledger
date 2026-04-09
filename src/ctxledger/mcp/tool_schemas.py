@@ -122,6 +122,42 @@ WORKFLOW_CHECKPOINT_TOOL_SCHEMA = McpToolSchema(
             "type": "string",
             "description": "Optional human-readable checkpoint summary.",
         },
+        "current_objective": {
+            "type": "string",
+            "description": "Optional current objective for the checkpoint.",
+        },
+        "next_intended_action": {
+            "type": "string",
+            "description": "Optional next intended action for the checkpoint.",
+        },
+        "verify_target": {
+            "type": "string",
+            "description": "Optional explicit verification target for the checkpoint.",
+        },
+        "resume_hint": {
+            "type": "string",
+            "description": "Optional resume hint for the next continuation step.",
+        },
+        "blocker_or_risk": {
+            "type": "string",
+            "description": "Optional blocker or risk recorded with the checkpoint.",
+        },
+        "failure_guard": {
+            "type": "string",
+            "description": "Optional failure guard to preserve while continuing work.",
+        },
+        "root_cause": {
+            "type": "string",
+            "description": "Optional root cause recorded with the checkpoint.",
+        },
+        "recovery_pattern": {
+            "type": "string",
+            "description": "Optional recovery pattern recorded with the checkpoint.",
+        },
+        "what_remains": {
+            "type": "string",
+            "description": "Optional remaining work recorded with the checkpoint.",
+        },
         "checkpoint_json": {
             "type": "object",
             "description": (
@@ -129,7 +165,8 @@ WORKFLOW_CHECKPOINT_TOOL_SCHEMA = McpToolSchema(
                 "fields include `current_objective`, `next_intended_action`, "
                 "`verify_target`, `resume_hint`, `blocker_or_risk`, "
                 "`failure_guard`, `root_cause`, `recovery_pattern`, and "
-                "`what_remains`."
+                "`what_remains`. Top-level structured checkpoint fields are "
+                "normalized into this payload for compatibility."
             ),
             "additionalProperties": True,
         },

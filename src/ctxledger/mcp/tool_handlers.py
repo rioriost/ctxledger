@@ -140,6 +140,30 @@ def _parse_optional_dict_argument(
     return dict(raw_value)
 
 
+def _merge_top_level_checkpoint_fields(
+    arguments: dict[str, Any],
+    checkpoint_json: dict[str, Any],
+) -> dict[str, Any] | "McpToolResponse":
+    merged = dict(checkpoint_json)
+    for field_name in (
+        "current_objective",
+        "next_intended_action",
+        "verify_target",
+        "resume_hint",
+        "blocker_or_risk",
+        "failure_guard",
+        "root_cause",
+        "recovery_pattern",
+        "what_remains",
+    ):
+        field_value = _parse_optional_string_argument(arguments, field_name)
+        if isinstance(field_value, _mcp_tool_response_cls()):
+            return field_value
+        if field_value is not None:
+            merged[field_name] = field_value
+    return merged
+
+
 def _parse_optional_verify_status_argument(
     arguments: dict[str, Any],
 ) -> VerifyStatus | None | "McpToolResponse":
@@ -416,6 +440,10 @@ def build_workflow_checkpoint_tool_handler(
             return summary
 
         checkpoint_json = _parse_optional_dict_argument(arguments, "checkpoint_json")
+        if isinstance(checkpoint_json, _mcp_tool_response_cls()):
+            return checkpoint_json
+
+        checkpoint_json = _merge_top_level_checkpoint_fields(arguments, checkpoint_json)
         if isinstance(checkpoint_json, _mcp_tool_response_cls()):
             return checkpoint_json
 
