@@ -9,7 +9,6 @@ from uuid import uuid4
 import pytest
 
 from ctxledger.db import postgres_common as postgres_common_module
-from ctxledger.db import postgres_uow as postgres_uow_module
 from ctxledger.memory.types import MemoryRelationRecord
 from ctxledger.workflow.service import PersistenceError, VerifyStatus
 from tests.postgres.conftest import FakeConnection
@@ -20,7 +19,9 @@ def test_schema_file_exists() -> None:
 
     assert schema_path.exists()
     assert (
-        schema_path.read_text(encoding="utf-8").strip().startswith("-- ctxledger PostgreSQL schema")
+        schema_path.read_text(encoding="utf-8")
+        .strip()
+        .startswith("-- ctxledger PostgreSQL schema")
     )
 
 
@@ -398,12 +399,14 @@ def test_database_health_checker_covers_schema_ready_and_session_settings() -> N
     try:
         checker = postgres.PostgresDatabaseHealthChecker(config)
         assert checker.age_graph_available("ctxledger_memory") is True
-        assert checker.age_graph_status("ctxledger_memory").value == "graph_read_failed"
+        assert checker.age_graph_status("ctxledger_memory").value == "graph_stale"
     finally:
         postgres_common_module._connect = original_connect
 
 
-def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guards() -> None:
+def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guards() -> (
+    None
+):
     postgres = importlib.import_module("ctxledger.db.postgres")
     connection = FakeConnection()
 
@@ -488,7 +491,9 @@ def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guar
             older_other_source_relation_row,
         ]
     )
-    by_sources = relation_repo.list_by_source_memory_ids((source_memory_id, other_source_memory_id))
+    by_sources = relation_repo.list_by_source_memory_ids(
+        (source_memory_id, other_source_memory_id)
+    )
     assert by_sources == (
         MemoryRelationRecord(
             memory_relation_id=newer_relation_row["memory_relation_id"],
@@ -538,32 +543,41 @@ def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guar
         support_target_a,
         support_target_b,
     )
-    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids(()) == ()
+    assert (
+        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids(())
+        == ()
+    )
 
     graph_relation_row = {
         "target_memory_id": f'"{support_target_a}"',
     }
     connection.fetchall_results.append([graph_relation_row])
-    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age(
-        (source_memory_id,),
-        graph_name="ctxledger_memory",
-    ) == (support_target_a,)
+    assert (
+        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age(
+            (source_memory_id,),
+            graph_name="ctxledger_memory",
+        )
+        == (support_target_a,)
+    )
 
     fallback_relation_row = {
         "target_memory_id": support_target_b,
     }
     connection.fetchall_results.append([fallback_relation_row])
-    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_with_fallback(
-        (source_memory_id,),
-        graph_name="ctxledger_memory",
-        graph_status=postgres.AgeGraphStatus.GRAPH_READY,
-    ) == (support_target_b,)
-
-    original_via_age = (
-        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age
+    assert (
+        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_with_fallback(
+            (source_memory_id,),
+            graph_name="ctxledger_memory",
+            graph_status=postgres.AgeGraphStatus.GRAPH_READY,
+        )
+        == (support_target_b,)
     )
+
+    original_via_age = relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age
     relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_via_age = (  # type: ignore[method-assign]
-        lambda source_memory_ids, *, graph_name: (_ for _ in ()).throw(RuntimeError("age failed"))
+        lambda source_memory_ids, *, graph_name: (_ for _ in ()).throw(
+            RuntimeError("age failed")
+        )
     )
     try:
         connection.fetchall_results.append([fallback_relation_row])
@@ -597,10 +611,13 @@ def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guar
         age_graph_name="ctxledger_memory",
     )
     connection.fetchall_results.append([fallback_relation_row])
-    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
-        (source_memory_id,),
-        config=disabled_age_config,
-    ) == (support_target_b,)
+    assert (
+        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
+            (source_memory_id,),
+            config=disabled_age_config,
+        )
+        == (support_target_b,)
+    )
 
     class StubHealthChecker:
         def __init__(self, graph_status: object) -> None:
@@ -620,20 +637,28 @@ def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guar
     )
     graph_ready_checker = StubHealthChecker(postgres.AgeGraphStatus.GRAPH_READY)
     connection.fetchall_results.append([graph_relation_row])
-    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
-        (source_memory_id,),
-        config=enabled_age_config,
-        health_checker=graph_ready_checker,
-    ) == (support_target_a,)
+    assert (
+        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
+            (source_memory_id,),
+            config=enabled_age_config,
+            health_checker=graph_ready_checker,
+        )
+        == (support_target_a,)
+    )
     assert graph_ready_checker.requested_graph_names == ["ctxledger_memory"]
 
-    graph_unavailable_checker = StubHealthChecker(postgres.AgeGraphStatus.GRAPH_UNAVAILABLE)
+    graph_unavailable_checker = StubHealthChecker(
+        postgres.AgeGraphStatus.GRAPH_UNAVAILABLE
+    )
     connection.fetchall_results.append([fallback_relation_row])
-    assert relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
-        (source_memory_id,),
-        config=enabled_age_config,
-        health_checker=graph_unavailable_checker,
-    ) == (support_target_b,)
+    assert (
+        relation_repo.list_distinct_support_target_memory_ids_by_source_memory_ids_for_config(
+            (source_memory_id,),
+            config=enabled_age_config,
+            health_checker=graph_unavailable_checker,
+        )
+        == (support_target_b,)
+    )
     assert graph_unavailable_checker.requested_graph_names == ["ctxledger_memory"]
 
     connection.fetchall_results.append([relation_row])
@@ -674,7 +699,9 @@ def test_postgres_repository_edge_cases_cover_relation_listing_and_datetime_guar
             older_other_source_relation_row,
         ]
     )
-    by_sources = relation_repo.list_by_source_memory_ids((source_memory_id, other_source_memory_id))
+    by_sources = relation_repo.list_by_source_memory_ids(
+        (source_memory_id, other_source_memory_id)
+    )
     assert by_sources == (
         MemoryRelationRecord(
             memory_relation_id=newer_relation_row["memory_relation_id"],

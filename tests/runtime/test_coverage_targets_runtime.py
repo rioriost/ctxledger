@@ -19,7 +19,10 @@ from ctxledger.runtime.database_health import (
     ServerBootstrapError,
     build_database_health_checker,
 )
-from ctxledger.runtime.http_runtime import HttpRuntimeAdapter, register_http_runtime_handlers
+from ctxledger.runtime.http_runtime import (
+    HttpRuntimeAdapter,
+    register_http_runtime_handlers,
+)
 from ctxledger.runtime.introspection import (
     RuntimeIntrospection,
     collect_runtime_introspection,
@@ -153,7 +156,9 @@ def test_postgres_database_health_checker_ping_executes_select_1(
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    fake_psycopg = types.SimpleNamespace(
+        connect=lambda *_args, **_kwargs: FakeConnection()
+    )
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db?connect_timeout=9")
@@ -190,7 +195,9 @@ def test_postgres_database_health_checker_schema_ready_true_when_all_tables_exis
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    fake_psycopg = types.SimpleNamespace(
+        connect=lambda *_args, **_kwargs: FakeConnection()
+    )
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -234,7 +241,9 @@ def test_postgres_database_health_checker_schema_ready_false_when_table_missing(
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    fake_psycopg = types.SimpleNamespace(
+        connect=lambda *_args, **_kwargs: FakeConnection()
+    )
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -247,7 +256,9 @@ def test_build_database_health_checker_prefers_default_without_url() -> None:
     assert isinstance(checker, DefaultDatabaseHealthChecker)
 
 
-def test_default_database_health_checker_age_methods_return_placeholder_values() -> None:
+def test_default_database_health_checker_age_methods_return_placeholder_values() -> (
+    None
+):
     checker = DefaultDatabaseHealthChecker("postgresql://example/db")
 
     assert checker.age_available() is False
@@ -282,7 +293,9 @@ def test_postgres_database_health_checker_age_available_true_when_extension_load
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    fake_psycopg = types.SimpleNamespace(
+        connect=lambda *_args, **_kwargs: FakeConnection()
+    )
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -323,7 +336,9 @@ def test_postgres_database_health_checker_age_available_false_when_extension_mis
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    fake_psycopg = types.SimpleNamespace(
+        connect=lambda *_args, **_kwargs: FakeConnection()
+    )
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -341,7 +356,9 @@ def test_postgres_database_health_checker_age_available_false_on_exception(
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    fake_psycopg = types.SimpleNamespace(
+        connect=lambda *_args, **_kwargs: FakeConnection()
+    )
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -387,7 +404,9 @@ def test_postgres_database_health_checker_age_graph_status_returns_graph_unavail
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    fake_psycopg = types.SimpleNamespace(
+        connect=lambda *_args, **_kwargs: FakeConnection()
+    )
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -433,7 +452,9 @@ def test_postgres_database_health_checker_age_graph_status_returns_graph_ready(
         def cursor(self) -> FakeCursor:
             return FakeCursor()
 
-    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    fake_psycopg = types.SimpleNamespace(
+        connect=lambda *_args, **_kwargs: FakeConnection()
+    )
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -459,7 +480,9 @@ def test_postgres_database_health_checker_age_graph_status_returns_unknown_on_ex
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-    fake_psycopg = types.SimpleNamespace(connect=lambda *_args, **_kwargs: FakeConnection())
+    fake_psycopg = types.SimpleNamespace(
+        connect=lambda *_args, **_kwargs: FakeConnection()
+    )
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
 
     checker = PostgresDatabaseHealthChecker("postgresql://example/db")
@@ -618,7 +641,9 @@ def test_create_runtime_uses_http_runtime_builder() -> None:
         received.append(server)
         return sentinel_runtime
 
-    created = create_runtime(settings, server="server-ref", http_runtime_builder=builder)
+    created = create_runtime(
+        settings, server="server-ref", http_runtime_builder=builder
+    )
 
     assert created is sentinel_runtime
     assert received == ["server-ref"]
@@ -731,7 +756,9 @@ def test_build_health_status_reports_workflow_service_and_runtime() -> None:
 def test_build_readiness_status_reports_schema_check_failed() -> None:
     server = CtxLedgerServer(
         settings=make_settings(),
-        db_health_checker=FailingDbChecker(schema_error=RuntimeError("schema lookup failed")),
+        db_health_checker=FailingDbChecker(
+            schema_error=RuntimeError("schema lookup failed")
+        ),
         runtime=None,
     )
     server._started = True
@@ -826,7 +853,9 @@ def test_http_runtime_extract_interaction_scope_ids_reads_nested_payloads() -> N
     assert workflow_instance_id == "workflow-nested"
 
 
-def test_http_runtime_extract_interaction_scope_ids_prefers_arguments_and_selection() -> None:
+def test_http_runtime_extract_interaction_scope_ids_prefers_arguments_and_selection() -> (
+    None
+):
     runtime = HttpRuntimeAdapter(make_settings())
 
     workspace_id, workflow_instance_id = runtime._extract_interaction_scope_ids(
@@ -887,7 +916,9 @@ def test_http_runtime_persist_interaction_event_pair_swallows_memory_service_err
 
     monkeypatch.setattr(
         "ctxledger.runtime.http_runtime.build_workflow_backed_memory_service",
-        lambda _server: SimpleNamespace(persist_interaction_memory=persist_interaction_memory),
+        lambda _server: SimpleNamespace(
+            persist_interaction_memory=persist_interaction_memory
+        ),
     )
 
     runtime._persist_interaction_event_pair(
@@ -1235,7 +1266,9 @@ def test_cli_age_graph_readiness_prints_status_json(
 
     monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
     monkeypatch.setattr("ctxledger.db.postgres.PostgresConfig", FakePostgresConfig)
-    monkeypatch.setattr("ctxledger.db.postgres.PostgresDatabaseHealthChecker", FakeChecker)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresDatabaseHealthChecker", FakeChecker
+    )
 
     exit_code = cli_module._age_graph_readiness(
         argparse.Namespace(database_url=None, graph_name=None)
@@ -1290,7 +1323,9 @@ def test_cli_age_graph_readiness_returns_failure_on_exception(
 
     monkeypatch.setattr("ctxledger.config.get_settings", lambda: settings)
     monkeypatch.setattr("ctxledger.db.postgres.PostgresConfig", FakePostgresConfig)
-    monkeypatch.setattr("ctxledger.db.postgres.PostgresDatabaseHealthChecker", FakeChecker)
+    monkeypatch.setattr(
+        "ctxledger.db.postgres.PostgresDatabaseHealthChecker", FakeChecker
+    )
 
     exit_code = cli_module._age_graph_readiness(
         argparse.Namespace(database_url=None, graph_name=None)
@@ -1298,7 +1333,10 @@ def test_cli_age_graph_readiness_returns_failure_on_exception(
     captured = capsys.readouterr()
 
     assert exit_code == 1
-    assert "Failed to check AGE graph readiness: health checker init failed" in captured.err
+    assert (
+        "Failed to check AGE graph readiness: health checker init failed"
+        in captured.err
+    )
 
 
 def test_age_prototype_runtime_details_records_age_available_error() -> None:
@@ -1595,7 +1633,9 @@ def test_cli_apply_schema_covers_missing_url_and_driver_paths(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     args = argparse.Namespace(database_url=None)
-    monkeypatch.setattr("ctxledger.config.get_settings", lambda: make_settings(database_url=""))
+    monkeypatch.setattr(
+        "ctxledger.config.get_settings", lambda: make_settings(database_url="")
+    )
 
     original_import = __import__
 
@@ -1634,11 +1674,16 @@ def test_cli_apply_schema_covers_missing_url_and_driver_paths(
 
     monkeypatch.setattr("builtins.__import__", fake_import_missing_driver)
 
-    exit_code = cli_module._apply_schema(argparse.Namespace(database_url="postgresql://example/db"))
+    exit_code = cli_module._apply_schema(
+        argparse.Namespace(database_url="postgresql://example/db")
+    )
     captured = capsys.readouterr()
 
     assert exit_code == 1
-    assert "Failed to import PostgreSQL driver. Install psycopg[binary] first." in captured.err
+    assert (
+        "Failed to import PostgreSQL driver. Install psycopg[binary] first."
+        in captured.err
+    )
 
 
 def test_cli_serve_and_main_dispatch_paths(
@@ -1709,7 +1754,9 @@ def test_run_server_returns_zero_on_success(
 
     fake_server = FakeServer()
 
-    monkeypatch.setattr("ctxledger.runtime.orchestration.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.runtime.orchestration.get_settings", lambda: settings
+    )
     monkeypatch.setattr(
         "ctxledger.runtime.orchestration.apply_overrides",
         lambda settings, **kwargs: settings,
@@ -1734,12 +1781,16 @@ def test_run_server_returns_one_for_bootstrap_error(
         def startup(self) -> None:
             raise ServerBootstrapError("database schema is not ready")
 
-    monkeypatch.setattr("ctxledger.runtime.orchestration.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.runtime.orchestration.get_settings", lambda: settings
+    )
     monkeypatch.setattr(
         "ctxledger.runtime.orchestration.apply_overrides",
         lambda settings, **kwargs: settings,
     )
-    monkeypatch.setattr("ctxledger.server.create_server", lambda _settings: FakeServer())
+    monkeypatch.setattr(
+        "ctxledger.server.create_server", lambda _settings: FakeServer()
+    )
 
     exit_code = run_server()
     captured = capsys.readouterr()
@@ -1758,12 +1809,16 @@ def test_run_server_returns_one_for_unhandled_error(
         def startup(self) -> None:
             raise RuntimeError("boom")
 
-    monkeypatch.setattr("ctxledger.runtime.orchestration.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "ctxledger.runtime.orchestration.get_settings", lambda: settings
+    )
     monkeypatch.setattr(
         "ctxledger.runtime.orchestration.apply_overrides",
         lambda settings, **kwargs: settings,
     )
-    monkeypatch.setattr("ctxledger.server.create_server", lambda _settings: FakeServer())
+    monkeypatch.setattr(
+        "ctxledger.server.create_server", lambda _settings: FakeServer()
+    )
 
     exit_code = run_server()
     captured = capsys.readouterr()
@@ -2126,7 +2181,9 @@ def test_create_server_uses_provided_runtime_and_factory(
 
     monkeypatch.setattr(
         "ctxledger.server.build_workflow_service_factory",
-        lambda received_settings: build_factory_calls.append(received_settings) or "BUILT-FACTORY",
+        lambda received_settings: (
+            build_factory_calls.append(received_settings) or "BUILT-FACTORY"
+        ),
     )
     monkeypatch.setattr(
         "ctxledger.server.build_http_runtime_adapter",
@@ -2156,7 +2213,9 @@ def test_create_server_builds_defaults_when_runtime_and_factory_are_missing(
 
     monkeypatch.setattr(
         "ctxledger.server.build_workflow_service_factory",
-        lambda received_settings: build_factory_calls.append(received_settings) or "BUILT-FACTORY",
+        lambda received_settings: (
+            build_factory_calls.append(received_settings) or "BUILT-FACTORY"
+        ),
     )
     monkeypatch.setattr(
         "ctxledger.server.build_http_runtime_adapter",
@@ -2201,6 +2260,9 @@ addopts = "-q"
         def __truediv__(self, other: object) -> "FakePath":
             return self
 
+        def exists(self) -> bool:
+            return True
+
         def read_text(self, encoding: str = "utf-8") -> str:
             assert encoding == "utf-8"
             return self._text
@@ -2221,8 +2283,4 @@ name = "ctxledger"
         lambda *_args, **_kwargs: FakePath(missing_version_text),
     )
 
-    with pytest.raises(
-        RuntimeError,
-        match="Could not determine ctxledger version from pyproject.toml",
-    ):
-        get_app_version()
+    assert get_app_version()

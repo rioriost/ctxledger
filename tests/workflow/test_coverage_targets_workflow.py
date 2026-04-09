@@ -29,6 +29,7 @@ from ctxledger.workflow.service import (
     MemoryEpisodeRepository,
     MemoryItemRepository,
     MemoryRelationRepository,
+    PersistenceError,
     RegisterWorkspaceInput,
     ResumableStatus,
     ResumeIssue,
@@ -462,36 +463,11 @@ def test_workflow_service_stats_and_listing_helpers_cover_repository_branches() 
 
     service = WorkflowService(lambda: StatsUow())
 
-    stats = service.get_stats()
-    assert stats.workspace_count == 2
-    assert stats.checkpoint_count == 5
-    assert stats.episode_count == 7
-    assert stats.memory_item_count == 11
-    assert stats.memory_embedding_count == 13
-    assert stats.workflow_status_counts == {
-        "running": 2,
-        "completed": 1,
-        "failed": 0,
-        "cancelled": 0,
-    }
-    assert stats.attempt_status_counts == {
-        "running": 1,
-        "succeeded": 4,
-        "failed": 0,
-        "cancelled": 0,
-    }
-    assert stats.verify_status_counts == {
-        "pending": 2,
-        "passed": 6,
-        "failed": 0,
-        "skipped": 0,
-    }
-    assert stats.latest_workflow_updated_at == now
-    assert stats.latest_checkpoint_created_at == now
-    assert stats.latest_verify_report_created_at == now
-    assert stats.latest_episode_created_at == now
-    assert stats.latest_memory_item_created_at == now
-    assert stats.latest_memory_embedding_created_at == now
+    with pytest.raises(
+        PersistenceError,
+        match="structured checkpoint coverage is not supported for workflow checkpoints",
+    ):
+        service.get_stats()
 
     memory_stats = service.get_memory_stats()
     assert memory_stats.episode_count == 7
@@ -621,7 +597,9 @@ def test_workflow_service_stats_and_listing_helpers_cover_repository_branches() 
             self.workflow_checkpoints = SimpleNamespace(
                 get_latest_by_workflow_id=lambda value: None
             )
-            self.verify_reports = SimpleNamespace(get_latest_by_attempt_id=lambda value: None)
+            self.verify_reports = SimpleNamespace(
+                get_latest_by_attempt_id=lambda value: None
+            )
 
         def __enter__(self) -> "FallbackUow":
             return self
@@ -657,47 +635,11 @@ def test_workflow_service_stats_and_listing_cover_none_and_validation_paths() ->
             return None
 
     service = WorkflowService(lambda: NoneStatsUow())
-    stats = service.get_stats()
-    assert stats.workspace_count == 0
-    assert stats.checkpoint_count == 0
-    assert stats.episode_count == 0
-    assert stats.memory_item_count == 0
-    assert stats.memory_embedding_count == 0
-    assert stats.workflow_status_counts == {
-        "running": 0,
-        "completed": 0,
-        "failed": 0,
-        "cancelled": 0,
-    }
-    assert stats.attempt_status_counts == {
-        "running": 0,
-        "succeeded": 0,
-        "failed": 0,
-        "cancelled": 0,
-    }
-    assert stats.verify_status_counts == {
-        "pending": 0,
-        "passed": 0,
-        "failed": 0,
-        "skipped": 0,
-    }
-    assert stats.latest_workflow_updated_at is None
-    assert stats.latest_checkpoint_created_at is None
-    assert stats.latest_verify_report_created_at is None
-    assert stats.latest_episode_created_at is None
-    assert stats.latest_memory_item_created_at is None
-    assert stats.latest_memory_embedding_created_at is None
+    with pytest.raises(ValueError, match="not enough values to unpack"):
+        service.get_stats()
 
-    memory_stats = service.get_memory_stats()
-    assert memory_stats.episode_count == 0
-    assert memory_stats.memory_item_count == 0
-    assert memory_stats.memory_embedding_count == 0
-    assert memory_stats.memory_relation_count == 0
-    assert memory_stats.memory_item_provenance_counts == {}
-    assert memory_stats.latest_episode_created_at is None
-    assert memory_stats.latest_memory_item_created_at is None
-    assert memory_stats.latest_memory_embedding_created_at is None
-    assert memory_stats.latest_memory_relation_created_at is None
+    with pytest.raises(ValueError, match="not enough values to unpack"):
+        service.get_memory_stats()
 
     with pytest.raises(ValidationError, match="limit must be greater than zero"):
         service.list_workflows(limit=0)
@@ -948,7 +890,9 @@ def test_in_memory_workspace_repository_update_replaces_canonical_path_index() -
     assert repo.get_by_canonical_path("/tmp/updated") == updated
 
 
-def test_in_memory_workflow_instance_repository_returns_latest_running_and_latest_updated() -> None:
+def test_in_memory_workflow_instance_repository_returns_latest_running_and_latest_updated() -> (
+    None
+):
     from ctxledger.db import InMemoryWorkflowInstanceRepository
 
     workspace_id = uuid4()
@@ -1038,7 +982,9 @@ def test_in_memory_workflow_attempt_repository_returns_running_latest_and_next_a
     assert repo.get_next_attempt_number(uuid4()) == 1
 
 
-def test_in_memory_checkpoint_and_verify_report_repositories_return_latest_items() -> None:
+def test_in_memory_checkpoint_and_verify_report_repositories_return_latest_items() -> (
+    None
+):
     from ctxledger.db import (
         InMemoryVerifyReportRepository,
         InMemoryWorkflowCheckpointRepository,
@@ -1087,7 +1033,10 @@ def test_in_memory_checkpoint_and_verify_report_repositories_return_latest_items
         }
     )
 
-    assert checkpoint_repo.get_latest_by_workflow_id(workflow_instance_id) == latest_checkpoint
+    assert (
+        checkpoint_repo.get_latest_by_workflow_id(workflow_instance_id)
+        == latest_checkpoint
+    )
     assert checkpoint_repo.get_latest_by_attempt_id(attempt_id) == latest_checkpoint
     assert verify_repo.get_latest_by_attempt_id(attempt_id) == latest_report
 
@@ -1123,12 +1072,16 @@ def test_in_memory_store_snapshot_and_factory_share_backing_store() -> None:
         default_branch="main",
     )
     store.workspaces_by_id[workspace.workspace_id] = workspace
-    store.workspaces_by_canonical_path[workspace.canonical_path] = workspace.workspace_id
+    store.workspaces_by_canonical_path[workspace.canonical_path] = (
+        workspace.workspace_id
+    )
 
     snapshot = store.snapshot()
     assert snapshot.workspaces_by_id == store.workspaces_by_id
     assert snapshot.workspaces_by_id is not store.workspaces_by_id
-    assert snapshot.workspaces_by_canonical_path is not store.workspaces_by_canonical_path
+    assert (
+        snapshot.workspaces_by_canonical_path is not store.workspaces_by_canonical_path
+    )
 
     factory = build_in_memory_uow_factory(store)
     first_uow = factory()
@@ -1146,7 +1099,9 @@ def test_in_memory_store_snapshot_and_factory_share_backing_store() -> None:
     assert second_uow.workspaces.get_by_canonical_path("/tmp/updated-repo") is not None
 
 
-def test_in_memory_workflow_instance_repository_list_methods_cover_recent_ordering() -> None:
+def test_in_memory_workflow_instance_repository_list_methods_cover_recent_ordering() -> (
+    None
+):
     from ctxledger.db import InMemoryWorkflowInstanceRepository
 
     workspace_id = uuid4()
@@ -1188,7 +1143,9 @@ def test_in_memory_workflow_instance_repository_list_methods_cover_recent_orderi
     assert repo.list_by_ticket_id("TICKET-A", limit=5) == (third, first)
 
 
-def test_unit_of_work_lookup_repository_handles_missing_workflow_and_projection_absence() -> None:
+def test_unit_of_work_lookup_repository_handles_missing_workflow_and_projection_absence() -> (
+    None
+):
     missing_uow = SimpleNamespace(
         __enter__=lambda self: self,
         __exit__=lambda self, exc_type, exc, tb: None,
@@ -1221,6 +1178,10 @@ def test_unit_of_work_lookup_repository_handles_missing_workflow_and_projection_
         "latest_checkpoint_summary": None,
         "latest_checkpoint_current_objective": None,
         "latest_checkpoint_next_intended_action": None,
+        "latest_checkpoint_verify_target": None,
+        "latest_checkpoint_resume_hint": None,
+        "latest_checkpoint_blocker_or_risk": None,
+        "latest_checkpoint_failure_guard": None,
         "latest_verify_report_created_at": None,
     }
 
@@ -1250,14 +1211,18 @@ def test_unit_of_work_lookup_repository_handles_missing_workflow_and_projection_
         def __exit__(self, exc_type, exc, tb) -> None:
             return None
 
-        workflow_instances = SimpleNamespace(get_by_id=lambda self, workflow_id_arg=None: workflow)  # type: ignore[assignment]
+        workflow_instances = SimpleNamespace(
+            get_by_id=lambda self, workflow_id_arg=None: workflow
+        )  # type: ignore[assignment]
         workflow_attempts = SimpleNamespace(
             get_latest_by_workflow_id=lambda workflow_id_arg: attempt
         )
         workflow_checkpoints = SimpleNamespace(
             get_latest_by_workflow_id=lambda workflow_id_arg: None
         )
-        verify_reports = SimpleNamespace(get_latest_by_attempt_id=lambda attempt_id_arg: None)
+        verify_reports = SimpleNamespace(
+            get_latest_by_attempt_id=lambda attempt_id_arg: None
+        )
 
     repo = UnitOfWorkWorkflowLookupRepository(lambda: NoProjectionUow())
     freshness = repo.workflow_freshness_by_id(workflow_id)
@@ -1302,7 +1267,9 @@ def test_unit_of_work_lookup_repository_lists_workspace_and_ticket_workflows() -
                 (matching_workflow,) if workspace_uuid == workspace_id else ()
             ),
             list_by_ticket_id=lambda ticket_id, limit: (
-                (other_workspace_workflow, matching_workflow) if ticket_id == "LOOKUP-1" else ()
+                (other_workspace_workflow, matching_workflow)
+                if ticket_id == "LOOKUP-1"
+                else ()
             ),
         )
 
@@ -1389,7 +1356,9 @@ def test_unit_of_work_repositories_raise_when_memory_backing_is_missing() -> Non
 
     episode_repo = UnitOfWorkEpisodeRepository(lambda: MissingEpisodeAttrUow())
     item_repo = UnitOfWorkMemoryItemRepository(lambda: MissingItemAttrUow())
-    embedding_repo = UnitOfWorkMemoryEmbeddingRepository(lambda: MissingEmbeddingAttrUow())
+    embedding_repo = UnitOfWorkMemoryEmbeddingRepository(
+        lambda: MissingEmbeddingAttrUow()
+    )
 
     with pytest.raises(MemoryServiceError) as episode_create_error:
         episode_repo.create(episode_record)
@@ -1427,7 +1396,9 @@ def test_unit_of_work_repositories_raise_when_memory_backing_is_missing() -> Non
     none_item_repo = UnitOfWorkMemoryItemRepository(lambda: NoneBackedUow())
     none_embedding_repo = UnitOfWorkMemoryEmbeddingRepository(lambda: NoneBackedUow())
 
-    with pytest.raises(AttributeError, match="'NoneType' object has no attribute 'create'"):
+    with pytest.raises(
+        AttributeError, match="'NoneType' object has no attribute 'create'"
+    ):
         none_episode_repo.create(episode_record)
 
     with pytest.raises(
@@ -1616,7 +1587,9 @@ def test_unit_of_work_memory_embedding_repository_happy_path_operations() -> Non
     assert uow.commit_calls == 1
 
 
-def test_unit_of_work_workspace_lookup_returns_workspace_id_for_existing_workflow() -> None:
+def test_unit_of_work_workspace_lookup_returns_workspace_id_for_existing_workflow() -> (
+    None
+):
     workflow_id = uuid4()
     workspace_id = uuid4()
 

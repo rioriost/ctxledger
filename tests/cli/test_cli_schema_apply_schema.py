@@ -4,20 +4,11 @@ import argparse
 import json
 import sys
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
-from uuid import UUID, uuid4
 
 import pytest
 
 import ctxledger.__init__ as cli_module
-from ctxledger.version import get_app_version
-from ctxledger.workflow.service import (
-    FailureListEntry,
-    MemoryStats,
-    WorkflowListEntry,
-    WorkflowStats,
-)
 
 from .conftest import make_settings
 
@@ -91,7 +82,9 @@ def test_apply_schema_uses_explicit_database_url_and_commits(
             commit_calls.append("commit")
 
     fake_psycopg = SimpleNamespace(
-        connect=lambda database_url: connect_calls.append(database_url) or FakeConnection()
+        connect=lambda database_url: (
+            connect_calls.append(database_url) or FakeConnection()
+        )
     )
 
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
@@ -139,7 +132,10 @@ def test_apply_schema_reports_driver_import_failure(
 
     assert exit_code == 1
     assert captured.out == ""
-    assert "Failed to import PostgreSQL driver. Install psycopg[binary] first." in captured.err
+    assert (
+        "Failed to import PostgreSQL driver. Install psycopg[binary] first."
+        in captured.err
+    )
 
 
 def test_apply_schema_reports_connect_failure(
@@ -171,7 +167,10 @@ def test_apply_schema_reports_connect_failure(
 
     assert exit_code == 1
     assert captured.out == ""
-    assert "Failed to apply schema: connect exploded: postgresql://explicit/db" in captured.err
+    assert (
+        "Failed to apply schema: connect exploded: postgresql://explicit/db"
+        in captured.err
+    )
     assert call_log == [
         ("load_postgres_schema_sql", None),
         ("connect", "postgresql://explicit/db"),
@@ -345,7 +344,9 @@ def test_apply_schema_uses_settings_database_url_when_argument_is_none(
             commit_calls.append("commit")
 
     fake_psycopg = SimpleNamespace(
-        connect=lambda database_url: connect_calls.append(database_url) or FakeConnection()
+        connect=lambda database_url: (
+            connect_calls.append(database_url) or FakeConnection()
+        )
     )
 
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
@@ -444,7 +445,9 @@ def test_refresh_age_summary_graph_reports_explainability_payload(
             commit_calls.append("commit")
 
     fake_psycopg = SimpleNamespace(
-        connect=lambda database_url: connect_calls.append(database_url) or FakeConnection()
+        connect=lambda database_url: (
+            connect_calls.append(database_url) or FakeConnection()
+        )
     )
 
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
@@ -498,7 +501,11 @@ def test_refresh_age_summary_graph_uses_settings_database_url_and_graph_name(
 
     class FakeCursor:
         def __init__(self) -> None:
-            self.fetchone_results: list[object] = [{"?column?": 1}, {"count": 0}, {"count": 0}]
+            self.fetchone_results: list[object] = [
+                {"?column?": 1},
+                {"count": 0},
+                {"count": 0},
+            ]
 
         def __enter__(self) -> "FakeCursor":
             return self
@@ -534,7 +541,9 @@ def test_refresh_age_summary_graph_uses_settings_database_url_and_graph_name(
             commit_calls.append("commit")
 
     fake_psycopg = SimpleNamespace(
-        connect=lambda database_url: connect_calls.append(database_url) or FakeConnection()
+        connect=lambda database_url: (
+            connect_calls.append(database_url) or FakeConnection()
+        )
     )
 
     monkeypatch.setitem(sys.modules, "psycopg", fake_psycopg)
@@ -565,14 +574,17 @@ def test_refresh_age_summary_graph_uses_settings_database_url_and_graph_name(
     assert connect_calls == ["postgresql://from-settings/db"]
     assert commit_calls == ["commit"]
     assert executed_queries[0] == ("LOAD 'age'", None)
-    assert executed_queries[1] == ('SET search_path = ag_catalog, "$user", public', None)
+    assert executed_queries[1] == (
+        'SET search_path = ag_catalog, "$user", public',
+        None,
+    )
     assert executed_queries[2] == (
         """
-                    SELECT 1
-                    FROM ag_catalog.ag_graph
-                    WHERE name = %s
-                    LIMIT 1
-                    """,
+                SELECT 1
+                FROM ag_catalog.ag_graph
+                WHERE name = %s
+                LIMIT 1
+                """,
         ("ctxledger_settings_graph",),
     )
     assert "FROM public.memory_summaries" in executed_queries[5][0]
