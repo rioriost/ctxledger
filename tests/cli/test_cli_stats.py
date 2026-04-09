@@ -183,8 +183,8 @@ def test_main_stats_renders_text_output(
     assert "Derived memory state:" in captured.out
     assert "- derived_memory_item_state: canonical_only" in captured.out
     assert (
-        "- derived_memory_item_reason: canonical summary state exists but derived memory items are not materialized"
-        in captured.out
+        "- derived_memory_item_reason: canonical summary state exists but "
+        "derived memory items are not materialized" in captured.out
     )
     assert "- derived_memory_graph_status: graph_ready" in captured.out
     assert "Other:" in captured.out
@@ -336,7 +336,9 @@ def test_main_stats_renders_json_output(
         "completion_summary_build_success_rate_base": 3,
         "derived_memory_graph_status": "graph_ready",
         "derived_memory_item_count": 0,
-        "derived_memory_item_reason": "canonical summary state exists but derived memory items are not materialized",
+        "derived_memory_item_reason": (
+            "canonical summary state exists but derived memory items are not materialized"
+        ),
         "derived_memory_item_state": "canonical_only",
         "episode_count": 3,
         "file_work_memory_item_count": 3,
@@ -430,6 +432,7 @@ def test_main_memory_stats_renders_text_output(
         },
         completion_summary_build_skipped_reason_total_count=3,
         completion_summary_build_attempted_minus_status_total_count=-2,
+        completion_summary_build_status_minus_skipped_reason_total_count=1,
         interaction_memory_item_count=7,
         unlinked_interaction_memory_item_count=2,
         weakly_linked_interaction_memory_item_count=3,

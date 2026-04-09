@@ -693,6 +693,86 @@ def _format_stats_text(stats: object) -> str:
     workflow_status_counts = getattr(stats, "workflow_status_counts", {})
     attempt_status_counts = getattr(stats, "attempt_status_counts", {})
     verify_status_counts = getattr(stats, "verify_status_counts", {})
+    structured_checkpoint_coverage = getattr(stats, "structured_checkpoint_coverage", {})
+    completion_summary_build_status_counts = getattr(
+        stats,
+        "completion_summary_build_status_counts",
+        {},
+    )
+    completion_summary_build_skipped_reason_counts = getattr(
+        stats,
+        "completion_summary_build_skipped_reason_counts",
+        {},
+    )
+    unlinked_interaction_memory_item_count = getattr(
+        stats,
+        "unlinked_interaction_memory_item_count",
+        0,
+    )
+    weakly_linked_interaction_memory_item_count = getattr(
+        stats,
+        "weakly_linked_interaction_memory_item_count",
+        0,
+    )
+    checkpoint_auto_memory_recorded_count = getattr(
+        stats,
+        "checkpoint_auto_memory_recorded_count",
+        0,
+    )
+    checkpoint_auto_memory_skipped_count = getattr(
+        stats,
+        "checkpoint_auto_memory_skipped_count",
+        0,
+    )
+    workflow_completion_auto_memory_recorded_count = getattr(
+        stats,
+        "workflow_completion_auto_memory_recorded_count",
+        0,
+    )
+    workflow_completion_auto_memory_skipped_count = getattr(
+        stats,
+        "workflow_completion_auto_memory_skipped_count",
+        0,
+    )
+    completion_summary_build_status_total_count = sum(
+        completion_summary_build_status_counts.values()
+    )
+    completion_summary_build_skipped_reason_total_count = sum(
+        completion_summary_build_skipped_reason_counts.values()
+    )
+    completion_summary_build_attempted_minus_status_total_count = getattr(
+        stats,
+        "completion_summary_build_attempted_minus_status_total_count",
+        getattr(stats, "completion_summary_build_attempted_count", 0)
+        - completion_summary_build_status_total_count,
+    )
+    completion_summary_build_status_minus_skipped_reason_total_count = getattr(
+        stats,
+        "completion_summary_build_status_minus_skipped_reason_total_count",
+        completion_summary_build_status_total_count
+        - completion_summary_build_skipped_reason_total_count,
+    )
+    current_objective_coverage = structured_checkpoint_coverage.get(
+        "current_objective",
+        0,
+    )
+    next_intended_action_coverage = structured_checkpoint_coverage.get(
+        "next_intended_action",
+        0,
+    )
+    verify_target_coverage = structured_checkpoint_coverage.get("verify_target", 0)
+    resume_hint_coverage = structured_checkpoint_coverage.get("resume_hint", 0)
+    blocker_or_risk_coverage = structured_checkpoint_coverage.get(
+        "blocker_or_risk",
+        0,
+    )
+    failure_guard_coverage = structured_checkpoint_coverage.get("failure_guard", 0)
+    root_cause_coverage = structured_checkpoint_coverage.get("root_cause", 0)
+    recovery_pattern_coverage = structured_checkpoint_coverage.get(
+        "recovery_pattern",
+        0,
+    )
+    what_remains_coverage = structured_checkpoint_coverage.get("what_remains", 0)
 
     lines = [
         "ctxledger stats",
@@ -723,16 +803,25 @@ def _format_stats_text(stats: object) -> str:
         f"- memory_items: {getattr(stats, 'memory_item_count', 0)}",
         f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
         f"- interaction_memory_items: {getattr(stats, 'interaction_memory_item_count', 0)}",
-        f"- unlinked_interaction_memory_items: {getattr(stats, 'unlinked_interaction_memory_item_count', 0)}",
-        f"- weakly_linked_interaction_memory_items: {getattr(stats, 'weakly_linked_interaction_memory_item_count', 0)}",
+        f"- unlinked_interaction_memory_items: {unlinked_interaction_memory_item_count}",
+        (
+            f"- weakly_linked_interaction_memory_items: "
+            f"{weakly_linked_interaction_memory_item_count}"
+        ),
         f"- file_work_memory_items: {getattr(stats, 'file_work_memory_item_count', 0)}",
         f"- derived_memory_items: {getattr(stats, 'derived_memory_item_count', 0)}",
         "",
         "Remember-path observability:",
-        f"- checkpoint_auto_memory_recorded: {getattr(stats, 'checkpoint_auto_memory_recorded_count', 0)}",
-        f"- checkpoint_auto_memory_skipped: {getattr(stats, 'checkpoint_auto_memory_skipped_count', 0)}",
-        f"- workflow_completion_auto_memory_recorded: {getattr(stats, 'workflow_completion_auto_memory_recorded_count', 0)}",
-        f"- workflow_completion_auto_memory_skipped: {getattr(stats, 'workflow_completion_auto_memory_skipped_count', 0)}",
+        f"- checkpoint_auto_memory_recorded: {checkpoint_auto_memory_recorded_count}",
+        f"- checkpoint_auto_memory_skipped: {checkpoint_auto_memory_skipped_count}",
+        (
+            f"- workflow_completion_auto_memory_recorded: "
+            f"{workflow_completion_auto_memory_recorded_count}"
+        ),
+        (
+            f"- workflow_completion_auto_memory_skipped: "
+            f"{workflow_completion_auto_memory_skipped_count}"
+        ),
         "",
         "AGE operator metrics:",
         f"- memory_summaries: {getattr(stats, 'memory_summary_count', 0)}",
@@ -747,41 +836,38 @@ def _format_stats_text(stats: object) -> str:
         f"- request_count: {getattr(stats, 'completion_summary_build_request_count', 0)}",
         f"- attempted_count: {getattr(stats, 'completion_summary_build_attempted_count', 0)}",
         f"- success_count: {getattr(stats, 'completion_summary_build_success_count', 0)}",
-        f"- status_total: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
-        f"- attempted_minus_status_total_count: {getattr(stats, 'completion_summary_build_attempted_count', 0) - sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
-        f"- skipped_reason_total: {sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
-        f"- status_minus_skipped_reason_total_count: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values()) - sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
+        f"- status_total: {completion_summary_build_status_total_count}",
+        (
+            f"- attempted_minus_status_total_count: "
+            f"{completion_summary_build_attempted_minus_status_total_count}"
+        ),
+        f"- skipped_reason_total: {completion_summary_build_skipped_reason_total_count}",
+        (
+            f"- status_minus_skipped_reason_total_count: "
+            f"{completion_summary_build_status_minus_skipped_reason_total_count}"
+        ),
         "- status_counts:",
         *(
             [
                 f"  - {status}: {count}"
-                for status, count in sorted(
-                    getattr(
-                        stats,
-                        "completion_summary_build_status_counts",
-                        {},
-                    ).items()
-                )
+                for status, count in sorted(completion_summary_build_status_counts.items())
             ]
             or ["  - none"]
         ),
         f"- request_rate: {getattr(stats, 'completion_summary_build_request_rate', 0.0):.3f}",
         f"- request_rate_base: {getattr(stats, 'completion_summary_build_request_rate_base', 0)}",
         f"- attempted_rate: {getattr(stats, 'completion_summary_build_attempted_rate', 0.0):.3f}",
-        f"- attempted_rate_base: {getattr(stats, 'completion_summary_build_attempted_rate_base', 0)}",
+        (
+            f"- attempted_rate_base: "
+            f"{getattr(stats, 'completion_summary_build_attempted_rate_base', 0)}"
+        ),
         f"- success_rate: {getattr(stats, 'completion_summary_build_success_rate', 0.0):.3f}",
         f"- success_rate_base: {getattr(stats, 'completion_summary_build_success_rate_base', 0)}",
         "- skipped_reason_counts:",
         *(
             [
                 f"  - {reason}: {count}"
-                for reason, count in sorted(
-                    getattr(
-                        stats,
-                        "completion_summary_build_skipped_reason_counts",
-                        {},
-                    ).items()
-                )
+                for reason, count in sorted(completion_summary_build_skipped_reason_counts.items())
             ]
             or ["  - none"]
         ),
@@ -792,15 +878,15 @@ def _format_stats_text(stats: object) -> str:
         f"- derived_memory_graph_status: {getattr(stats, 'derived_memory_graph_status', None)}",
         "",
         "Structured checkpoint coverage:",
-        f"- current_objective: {getattr(stats, 'structured_checkpoint_coverage', {}).get('current_objective', 0)}",
-        f"- next_intended_action: {getattr(stats, 'structured_checkpoint_coverage', {}).get('next_intended_action', 0)}",
-        f"- verify_target: {getattr(stats, 'structured_checkpoint_coverage', {}).get('verify_target', 0)}",
-        f"- resume_hint: {getattr(stats, 'structured_checkpoint_coverage', {}).get('resume_hint', 0)}",
-        f"- blocker_or_risk: {getattr(stats, 'structured_checkpoint_coverage', {}).get('blocker_or_risk', 0)}",
-        f"- failure_guard: {getattr(stats, 'structured_checkpoint_coverage', {}).get('failure_guard', 0)}",
-        f"- root_cause: {getattr(stats, 'structured_checkpoint_coverage', {}).get('root_cause', 0)}",
-        f"- recovery_pattern: {getattr(stats, 'structured_checkpoint_coverage', {}).get('recovery_pattern', 0)}",
-        f"- what_remains: {getattr(stats, 'structured_checkpoint_coverage', {}).get('what_remains', 0)}",
+        f"- current_objective: {current_objective_coverage}",
+        f"- next_intended_action: {next_intended_action_coverage}",
+        f"- verify_target: {verify_target_coverage}",
+        f"- resume_hint: {resume_hint_coverage}",
+        f"- blocker_or_risk: {blocker_or_risk_coverage}",
+        f"- failure_guard: {failure_guard_coverage}",
+        f"- root_cause: {root_cause_coverage}",
+        f"- recovery_pattern: {recovery_pattern_coverage}",
+        f"- what_remains: {what_remains_coverage}",
         "",
         "Other:",
         f"- checkpoints: {getattr(stats, 'checkpoint_count', 0)}",
@@ -811,7 +897,10 @@ def _format_stats_text(stats: object) -> str:
         f"- verify_report_created_at: {getattr(stats, 'latest_verify_report_created_at', None)}",
         f"- episode_created_at: {getattr(stats, 'latest_episode_created_at', None)}",
         f"- memory_item_created_at: {getattr(stats, 'latest_memory_item_created_at', None)}",
-        f"- memory_embedding_created_at: {getattr(stats, 'latest_memory_embedding_created_at', None)}",
+        (
+            f"- memory_embedding_created_at: "
+            f"{getattr(stats, 'latest_memory_embedding_created_at', None)}"
+        ),
     ]
     return "\n".join(lines)
 
@@ -1019,9 +1108,12 @@ def _format_workflows_text(workflows: list[object] | tuple[object, ...]) -> str:
             f"- {getattr(workflow, 'workflow_instance_id', '')} "
             f"[{getattr(workflow, 'workflow_status', 'unknown')}]"
         )
-        lines.append(
-            f"  workspace={getattr(workflow, 'canonical_path', None) or getattr(workflow, 'workspace_id', '')}"
+        workspace_label = getattr(workflow, "canonical_path", None) or getattr(
+            workflow,
+            "workspace_id",
+            "",
         )
+        lines.append(f"  workspace={workspace_label}")
         lines.append(f"  ticket={getattr(workflow, 'ticket_id', '')}")
         lines.append(f"  latest_step={getattr(workflow, 'latest_step_name', None) or 'none'}")
         lines.append(f"  verify_status={getattr(workflow, 'latest_verify_status', None) or 'none'}")
@@ -1082,6 +1174,64 @@ def _workflows(args: argparse.Namespace) -> int:
 
 def _format_memory_stats_text(stats: object) -> str:
     provenance_counts = getattr(stats, "memory_item_provenance_counts", {})
+    completion_summary_build_status_counts = getattr(
+        stats,
+        "completion_summary_build_status_counts",
+        {},
+    )
+    completion_summary_build_skipped_reason_counts = getattr(
+        stats,
+        "completion_summary_build_skipped_reason_counts",
+        {},
+    )
+    unlinked_interaction_memory_item_count = getattr(
+        stats,
+        "unlinked_interaction_memory_item_count",
+        0,
+    )
+    weakly_linked_interaction_memory_item_count = getattr(
+        stats,
+        "weakly_linked_interaction_memory_item_count",
+        0,
+    )
+    checkpoint_auto_memory_recorded_count = getattr(
+        stats,
+        "checkpoint_auto_memory_recorded_count",
+        0,
+    )
+    checkpoint_auto_memory_skipped_count = getattr(
+        stats,
+        "checkpoint_auto_memory_skipped_count",
+        0,
+    )
+    workflow_completion_auto_memory_recorded_count = getattr(
+        stats,
+        "workflow_completion_auto_memory_recorded_count",
+        0,
+    )
+    workflow_completion_auto_memory_skipped_count = getattr(
+        stats,
+        "workflow_completion_auto_memory_skipped_count",
+        0,
+    )
+    completion_summary_build_status_total_count = sum(
+        completion_summary_build_status_counts.values()
+    )
+    completion_summary_build_skipped_reason_total_count = sum(
+        completion_summary_build_skipped_reason_counts.values()
+    )
+    completion_summary_build_attempted_minus_status_total_count = getattr(
+        stats,
+        "completion_summary_build_attempted_minus_status_total_count",
+        getattr(stats, "completion_summary_build_attempted_count", 0)
+        - completion_summary_build_status_total_count,
+    )
+    completion_summary_build_status_minus_skipped_reason_total_count = getattr(
+        stats,
+        "completion_summary_build_status_minus_skipped_reason_total_count",
+        completion_summary_build_status_total_count
+        - completion_summary_build_skipped_reason_total_count,
+    )
 
     lines = [
         "ctxledger memory-stats",
@@ -1092,16 +1242,25 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- memory_embeddings: {getattr(stats, 'memory_embedding_count', 0)}",
         f"- memory_relations: {getattr(stats, 'memory_relation_count', 0)}",
         f"- interaction_memory_items: {getattr(stats, 'interaction_memory_item_count', 0)}",
-        f"- unlinked_interaction_memory_items: {getattr(stats, 'unlinked_interaction_memory_item_count', 0)}",
-        f"- weakly_linked_interaction_memory_items: {getattr(stats, 'weakly_linked_interaction_memory_item_count', 0)}",
+        f"- unlinked_interaction_memory_items: {unlinked_interaction_memory_item_count}",
+        (
+            f"- weakly_linked_interaction_memory_items: "
+            f"{weakly_linked_interaction_memory_item_count}"
+        ),
         f"- file_work_memory_items: {getattr(stats, 'file_work_memory_item_count', 0)}",
         f"- derived_memory_items: {getattr(stats, 'derived_memory_item_count', 0)}",
         "",
         "Remember-path observability:",
-        f"- checkpoint_auto_memory_recorded: {getattr(stats, 'checkpoint_auto_memory_recorded_count', 0)}",
-        f"- checkpoint_auto_memory_skipped: {getattr(stats, 'checkpoint_auto_memory_skipped_count', 0)}",
-        f"- workflow_completion_auto_memory_recorded: {getattr(stats, 'workflow_completion_auto_memory_recorded_count', 0)}",
-        f"- workflow_completion_auto_memory_skipped: {getattr(stats, 'workflow_completion_auto_memory_skipped_count', 0)}",
+        f"- checkpoint_auto_memory_recorded: {checkpoint_auto_memory_recorded_count}",
+        f"- checkpoint_auto_memory_skipped: {checkpoint_auto_memory_skipped_count}",
+        (
+            f"- workflow_completion_auto_memory_recorded: "
+            f"{workflow_completion_auto_memory_recorded_count}"
+        ),
+        (
+            f"- workflow_completion_auto_memory_skipped: "
+            f"{workflow_completion_auto_memory_skipped_count}"
+        ),
         "",
         "AGE operator metrics:",
         f"- memory_summaries: {getattr(stats, 'memory_summary_count', 0)}",
@@ -1115,41 +1274,38 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- request_count: {getattr(stats, 'completion_summary_build_request_count', 0)}",
         f"- attempted_count: {getattr(stats, 'completion_summary_build_attempted_count', 0)}",
         f"- success_count: {getattr(stats, 'completion_summary_build_success_count', 0)}",
-        f"- status_total: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
-        f"- attempted_minus_status_total_count: {getattr(stats, 'completion_summary_build_attempted_count', 0) - sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
-        f"- skipped_reason_total: {sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
-        f"- status_minus_skipped_reason_total_count: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values()) - sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
+        f"- status_total: {completion_summary_build_status_total_count}",
+        (
+            f"- attempted_minus_status_total_count: "
+            f"{completion_summary_build_attempted_minus_status_total_count}"
+        ),
+        f"- skipped_reason_total: {completion_summary_build_skipped_reason_total_count}",
+        (
+            f"- status_minus_skipped_reason_total_count: "
+            f"{completion_summary_build_status_minus_skipped_reason_total_count}"
+        ),
         "- status_counts:",
         *(
             [
                 f"  - {status}: {count}"
-                for status, count in sorted(
-                    getattr(
-                        stats,
-                        "completion_summary_build_status_counts",
-                        {},
-                    ).items()
-                )
+                for status, count in sorted(completion_summary_build_status_counts.items())
             ]
             or ["  - none"]
         ),
         f"- request_rate: {getattr(stats, 'completion_summary_build_request_rate', 0.0):.3f}",
         f"- request_rate_base: {getattr(stats, 'completion_summary_build_request_rate_base', 0)}",
         f"- attempted_rate: {getattr(stats, 'completion_summary_build_attempted_rate', 0.0):.3f}",
-        f"- attempted_rate_base: {getattr(stats, 'completion_summary_build_attempted_rate_base', 0)}",
+        (
+            f"- attempted_rate_base: "
+            f"{getattr(stats, 'completion_summary_build_attempted_rate_base', 0)}"
+        ),
         f"- success_rate: {getattr(stats, 'completion_summary_build_success_rate', 0.0):.3f}",
         f"- success_rate_base: {getattr(stats, 'completion_summary_build_success_rate_base', 0)}",
         "- skipped_reason_counts:",
         *(
             [
                 f"  - {reason}: {count}"
-                for reason, count in sorted(
-                    getattr(
-                        stats,
-                        "completion_summary_build_skipped_reason_counts",
-                        {},
-                    ).items()
-                )
+                for reason, count in sorted(completion_summary_build_skipped_reason_counts.items())
             ]
             or ["  - none"]
         ),
@@ -1174,9 +1330,18 @@ def _format_memory_stats_text(stats: object) -> str:
             "Latest activity:",
             f"- episode_created_at: {getattr(stats, 'latest_episode_created_at', None)}",
             f"- memory_item_created_at: {getattr(stats, 'latest_memory_item_created_at', None)}",
-            f"- memory_embedding_created_at: {getattr(stats, 'latest_memory_embedding_created_at', None)}",
-            f"- memory_relation_created_at: {getattr(stats, 'latest_memory_relation_created_at', None)}",
-            f"- derived_memory_item_created_at: {getattr(stats, 'latest_derived_memory_item_created_at', None)}",
+            (
+                f"- memory_embedding_created_at: "
+                f"{getattr(stats, 'latest_memory_embedding_created_at', None)}"
+            ),
+            (
+                f"- memory_relation_created_at: "
+                f"{getattr(stats, 'latest_memory_relation_created_at', None)}"
+            ),
+            (
+                f"- derived_memory_item_created_at: "
+                f"{getattr(stats, 'latest_derived_memory_item_created_at', None)}"
+            ),
         ]
     )
 

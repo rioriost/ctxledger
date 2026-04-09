@@ -10,7 +10,6 @@ from ctxledger.workflow.service import (
     ActiveWorkflowExistsError,
     CompleteWorkflowInput,
     CreateCheckpointInput,
-    FailureListEntry,
     InvalidStateTransitionError,
     MemoryStats,
     PersistenceError,
@@ -497,7 +496,7 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
     expected_time = datetime(2024, 2, 1, tzinfo=UTC)
 
     class FakeUow:
-        def __enter__(self) -> "FakeUow":
+        def __enter__(self) -> FakeUow:
             self.workspaces = SimpleNamespace(
                 count_all=lambda: 2, max_datetime=lambda field: expected_time
             )
@@ -698,7 +697,7 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
     }
 
     class FakeUow:
-        def __enter__(self) -> "FakeUow":
+        def __enter__(self) -> FakeUow:
             self.workspaces = SimpleNamespace(
                 count_all=lambda: 2,
                 list_all=lambda limit: (
@@ -853,7 +852,7 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
     }
 
     class FakeUow:
-        def __enter__(self) -> "FakeUow":
+        def __enter__(self) -> FakeUow:
             self.workspaces = SimpleNamespace(
                 count_all=lambda: 2,
                 list_all=lambda limit: (
@@ -925,7 +924,7 @@ def test_get_memory_stats_collects_relation_and_provenance_information() -> None
     expected_time = datetime(2024, 3, 1, tzinfo=UTC)
 
     class FakeUow:
-        def __enter__(self) -> "FakeUow":
+        def __enter__(self) -> FakeUow:
             self.memory_episodes = SimpleNamespace(
                 count_all=lambda: 2, max_datetime=lambda field: expected_time
             )

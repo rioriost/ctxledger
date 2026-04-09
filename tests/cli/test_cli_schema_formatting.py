@@ -1,25 +1,19 @@
 from __future__ import annotations
 
 import argparse
-import json
-import sys
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
 import ctxledger.__init__ as cli_module
-from ctxledger.version import get_app_version
 from ctxledger.workflow.service import (
     FailureListEntry,
     MemoryStats,
     WorkflowListEntry,
     WorkflowStats,
 )
-
-from .conftest import make_settings
 
 
 def test_format_stats_text_uses_zero_defaults_for_missing_fields() -> None:

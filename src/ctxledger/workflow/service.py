@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from .memory_bridge import WorkflowMemoryBridge
@@ -2301,7 +2301,7 @@ class WorkflowService:
         if repository is None:
             return 0, 0, 0, {}
 
-        records: tuple[MemoryItem, ...] | None = None
+        records: tuple[Any, ...] | None = None
 
         records_by_id = getattr(repository, "_records_by_id", None)
         if records_by_id is None:
@@ -2318,7 +2318,7 @@ class WorkflowService:
                 getattr(workspaces, "list_all", None) if workspaces is not None else None
             )
             if callable(list_by_workspace_id) and callable(list_workspaces):
-                collected_records: list[MemoryItem] = []
+                collected_records: list[Any] = []
                 seen_memory_ids: set[UUID] = set()
                 for workspace in list_workspaces(limit=1000):
                     workspace_id = getattr(workspace, "workspace_id", None)
@@ -2344,7 +2344,7 @@ class WorkflowService:
         for memory_item in records:
             if getattr(memory_item, "provenance", None) != "workflow_complete_auto":
                 continue
-            metadata = getattr(memory_item, "metadata", None)
+            metadata = cast(dict[str, Any] | None, getattr(memory_item, "metadata", None))
             if not isinstance(metadata, dict):
                 continue
 
