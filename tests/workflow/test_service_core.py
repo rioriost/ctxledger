@@ -608,10 +608,13 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
         completion_summary_build_request_count=0,
         completion_summary_build_attempted_count=0,
         completion_summary_build_success_count=0,
-        completion_summary_build_skipped_reason_counts={},
         completion_summary_build_request_rate=0.0,
         completion_summary_build_attempted_rate=0.0,
         completion_summary_build_success_rate=0.0,
+        completion_summary_build_request_rate_base=3,
+        completion_summary_build_attempted_rate_base=3,
+        completion_summary_build_success_rate_base=0,
+        completion_summary_build_skipped_reason_counts={},
     )
 
     memory_stats = service.get_memory_stats()
@@ -762,6 +765,9 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
     assert stats.completion_summary_build_request_rate == 0.5
     assert stats.completion_summary_build_attempted_rate == 0.5
     assert stats.completion_summary_build_success_rate == 0.5
+    assert stats.completion_summary_build_request_rate_base == 4
+    assert stats.completion_summary_build_attempted_rate_base == 4
+    assert stats.completion_summary_build_success_rate_base == 2
 
 
 def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
@@ -879,6 +885,9 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
     assert stats.completion_summary_build_request_rate == 0.5
     assert stats.completion_summary_build_attempted_rate == 0.5
     assert stats.completion_summary_build_success_rate == 0.5
+    assert stats.completion_summary_build_request_rate_base == 4
+    assert stats.completion_summary_build_attempted_rate_base == 4
+    assert stats.completion_summary_build_success_rate_base == 2
 
 
 def test_get_memory_stats_collects_relation_and_provenance_information() -> None:

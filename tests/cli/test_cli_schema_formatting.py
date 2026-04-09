@@ -195,6 +195,9 @@ def test_format_memory_stats_text_renders_values() -> None:
         completion_summary_build_request_count=4,
         completion_summary_build_attempted_count=3,
         completion_summary_build_success_count=2,
+        completion_summary_build_request_rate_base=5,
+        completion_summary_build_attempted_rate_base=4,
+        completion_summary_build_success_rate_base=3,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
@@ -223,8 +226,11 @@ def test_format_memory_stats_text_renders_values() -> None:
     assert "- attempted_count: 3" in rendered
     assert "- success_count: 2" in rendered
     assert "- request_rate: 0.800" in rendered
+    assert "- request_rate_base: 5" in rendered
     assert "- attempted_rate: 0.750" in rendered
+    assert "- attempted_rate_base: 4" in rendered
     assert "- success_rate: 0.667" in rendered
+    assert "- success_rate_base: 3" in rendered
     assert "- skipped_reason_counts:" in rendered
     assert "  - summary_build_failed: 1" in rendered
     assert "  - workflow_summary_build_not_requested: 1" in rendered
