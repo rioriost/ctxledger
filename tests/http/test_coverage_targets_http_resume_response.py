@@ -158,7 +158,15 @@ def test_build_workflow_resume_response_uses_default_string_when_bootstrap_error
 
 def test_build_workflow_resume_response_serializes_resume_payload() -> None:
     workflow_instance_id = uuid4()
-    expected_payload = {"workflow_instance_id": str(workflow_instance_id)}
+    expected_payload = {
+        "workflow_instance_id": str(workflow_instance_id),
+        "latest_checkpoint": {
+            "verify_target": "pytest -q tests/cli/test_cli_resume.py -k json",
+            "resume_hint": "Resume from JSON payload inspection",
+            "blocker_or_risk": "JSON serializer could omit new structured checkpoint fields",
+            "failure_guard": "Keep existing latest_checkpoint JSON shape stable",
+        },
+    }
     server = make_server()
     server.workflow_service = SimpleNamespace(
         resume_workflow=lambda data: SimpleNamespace(workflow_instance_id=data.workflow_instance_id)

@@ -61,6 +61,51 @@ def serialize_workflow_resume(
                 "step_name": resume.latest_checkpoint.step_name,
                 "summary": resume.latest_checkpoint.summary,
                 "checkpoint_json": resume.latest_checkpoint.checkpoint_json,
+                "current_objective": (
+                    resume.latest_checkpoint.checkpoint_json.get("current_objective")
+                    if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "next_intended_action": (
+                    resume.latest_checkpoint.checkpoint_json.get("next_intended_action")
+                    if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "verify_target": (
+                    resume.latest_checkpoint.checkpoint_json.get("verify_target")
+                    if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "resume_hint": (
+                    resume.latest_checkpoint.checkpoint_json.get("resume_hint")
+                    if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "blocker_or_risk": (
+                    resume.latest_checkpoint.checkpoint_json.get("blocker_or_risk")
+                    if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "failure_guard": (
+                    resume.latest_checkpoint.checkpoint_json.get("failure_guard")
+                    if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "root_cause": (
+                    resume.latest_checkpoint.checkpoint_json.get("root_cause")
+                    if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "recovery_pattern": (
+                    resume.latest_checkpoint.checkpoint_json.get("recovery_pattern")
+                    if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "what_remains": (
+                    resume.latest_checkpoint.checkpoint_json.get("what_remains")
+                    if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
                 "created_at": resume.latest_checkpoint.created_at.isoformat(),
             }
             if resume.latest_checkpoint is not None

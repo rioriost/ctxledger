@@ -153,7 +153,13 @@ def test_main_resume_workflow_renders_json_output(
             attempt_id=attempt_id,
             step_name="implement_cli",
             summary="Render JSON output",
-            checkpoint_json={"next_intended_action": "Inspect JSON"},
+            checkpoint_json={
+                "next_intended_action": "Inspect JSON",
+                "verify_target": "pytest -q tests/cli/test_cli_resume.py -k json",
+                "resume_hint": "Resume from JSON payload inspection",
+                "blocker_or_risk": "JSON serializer could omit new structured checkpoint fields",
+                "failure_guard": "Keep existing latest_checkpoint JSON shape stable",
+            },
             created_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:01:00+00:00"),
         ),
         latest_verify_report=None,
@@ -188,6 +194,17 @@ def test_main_resume_workflow_renders_json_output(
             },
             "latest_checkpoint": {
                 "step_name": "implement_cli",
+                "checkpoint_json": {
+                    "next_intended_action": "Inspect JSON",
+                    "verify_target": "pytest -q tests/cli/test_cli_resume.py -k json",
+                    "resume_hint": "Resume from JSON payload inspection",
+                    "blocker_or_risk": "JSON serializer could omit new structured checkpoint fields",
+                    "failure_guard": "Keep existing latest_checkpoint JSON shape stable",
+                },
+                "verify_target": "pytest -q tests/cli/test_cli_resume.py -k json",
+                "resume_hint": "Resume from JSON payload inspection",
+                "blocker_or_risk": "JSON serializer could omit new structured checkpoint fields",
+                "failure_guard": "Keep existing latest_checkpoint JSON shape stable",
             },
             "resumable_status": "resumable",
             "next_hint": "Inspect JSON",
@@ -213,6 +230,35 @@ def test_main_resume_workflow_renders_json_output(
     assert payload["workflow"]["workflow_instance_id"] == str(workflow_instance_id)
     assert payload["attempt"]["attempt_id"] == str(attempt_id)
     assert payload["latest_checkpoint"]["step_name"] == "implement_cli"
+    assert (
+        payload["latest_checkpoint"]["checkpoint_json"]["verify_target"]
+        == "pytest -q tests/cli/test_cli_resume.py -k json"
+    )
+    assert (
+        payload["latest_checkpoint"]["checkpoint_json"]["resume_hint"]
+        == "Resume from JSON payload inspection"
+    )
+    assert (
+        payload["latest_checkpoint"]["checkpoint_json"]["blocker_or_risk"]
+        == "JSON serializer could omit new structured checkpoint fields"
+    )
+    assert (
+        payload["latest_checkpoint"]["checkpoint_json"]["failure_guard"]
+        == "Keep existing latest_checkpoint JSON shape stable"
+    )
+    assert (
+        payload["latest_checkpoint"]["verify_target"]
+        == "pytest -q tests/cli/test_cli_resume.py -k json"
+    )
+    assert payload["latest_checkpoint"]["resume_hint"] == "Resume from JSON payload inspection"
+    assert (
+        payload["latest_checkpoint"]["blocker_or_risk"]
+        == "JSON serializer could omit new structured checkpoint fields"
+    )
+    assert (
+        payload["latest_checkpoint"]["failure_guard"]
+        == "Keep existing latest_checkpoint JSON shape stable"
+    )
     assert payload["resumable_status"] == "resumable"
     assert payload["next_hint"] == "Inspect JSON"
     assert payload["warnings"] == []

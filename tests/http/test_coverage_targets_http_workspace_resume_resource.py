@@ -350,6 +350,12 @@ def test_build_workspace_resume_resource_response_uow_branch_uses_latest_when_ru
         "uri": f"workspace://{workspace_id}/resume",
         "resource": {
             "workflow_instance_id": str(workflow_instance_id),
+            "latest_checkpoint": {
+                "verify_target": "pytest -q tests/cli/test_cli_resume.py -k json",
+                "resume_hint": "Resume from JSON payload inspection",
+                "blocker_or_risk": "JSON serializer could omit new structured checkpoint fields",
+                "failure_guard": "Keep existing latest_checkpoint JSON shape stable",
+            },
         },
         "selection": {
             "strategy": "running_or_latest",
@@ -474,6 +480,12 @@ def test_build_workspace_resume_resource_response_uow_branch_prefers_running_wor
         "uri": f"workspace://{workspace_id}/resume",
         "resource": {
             "workflow_instance_id": str(running_workflow_instance_id),
+            "latest_checkpoint": {
+                "verify_target": "pytest -q tests/cli/test_cli_resume.py -k json",
+                "resume_hint": "Resume from JSON payload inspection",
+                "blocker_or_risk": "JSON serializer could omit new structured checkpoint fields",
+                "failure_guard": "Keep existing latest_checkpoint JSON shape stable",
+            },
         },
         "selection": {
             "strategy": "running_or_latest",
