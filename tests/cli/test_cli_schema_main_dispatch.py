@@ -891,6 +891,7 @@ def test_stats_renders_json_output_and_closes_pool(
     assert payload["completion_summary_build_status_total_count"] == 9
     assert payload["completion_summary_build_attempted_minus_status_total_count"] == -5
     assert payload["completion_summary_build_skipped_reason_total_count"] == 3
+    assert payload["completion_summary_build_status_minus_skipped_reason_total_count"] == 6
     assert payload["memory_summary_count"] == 13
     assert payload["memory_summary_membership_count"] == 14
     assert payload["age_summary_graph_ready_count"] == 15
@@ -1041,6 +1042,7 @@ def test_memory_stats_renders_text_output_and_closes_pool(
     assert "- status_total: 3" in captured.out
     assert "- attempted_minus_status_total_count: 0" in captured.out
     assert "- skipped_reason_total: 2" in captured.out
+    assert "- status_minus_skipped_reason_total_count: 1" in captured.out
     assert "- memory_summaries: 7" in captured.out
     assert "- memory_summary_memberships: 8" in captured.out
     assert "- age_summary_graph_ready: 1" in captured.out

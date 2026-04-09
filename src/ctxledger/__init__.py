@@ -748,6 +748,7 @@ def _format_stats_text(stats: object) -> str:
         f"- status_total: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
         f"- attempted_minus_status_total_count: {getattr(stats, 'completion_summary_build_attempted_count', 0) - sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
         f"- skipped_reason_total: {sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
+        f"- status_minus_skipped_reason_total_count: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values()) - sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
         "- status_counts:",
         *(
             [
@@ -957,6 +958,10 @@ def _stats(args: argparse.Namespace) -> int:
                         "completion_summary_build_skipped_reason_total_count",
                         0,
                     ),
+                    "completion_summary_build_status_minus_skipped_reason_total_count": (
+                        getattr(stats, "completion_summary_build_status_total_count", 0)
+                        - getattr(stats, "completion_summary_build_skipped_reason_total_count", 0)
+                    ),
                     "age_summary_graph_ready_count": stats.age_summary_graph_ready_count,
                     "age_summary_graph_stale_count": stats.age_summary_graph_stale_count,
                     "age_summary_graph_degraded_count": stats.age_summary_graph_degraded_count,
@@ -1099,6 +1104,7 @@ def _format_memory_stats_text(stats: object) -> str:
         f"- status_total: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
         f"- attempted_minus_status_total_count: {getattr(stats, 'completion_summary_build_attempted_count', 0) - sum(getattr(stats, 'completion_summary_build_status_counts', {}).values())}",
         f"- skipped_reason_total: {sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
+        f"- status_minus_skipped_reason_total_count: {sum(getattr(stats, 'completion_summary_build_status_counts', {}).values()) - sum(getattr(stats, 'completion_summary_build_skipped_reason_counts', {}).values())}",
         "- status_counts:",
         *(
             [
@@ -1373,6 +1379,10 @@ def _memory_stats(args: argparse.Namespace) -> int:
                         stats,
                         "completion_summary_build_skipped_reason_total_count",
                         0,
+                    ),
+                    "completion_summary_build_status_minus_skipped_reason_total_count": (
+                        getattr(stats, "completion_summary_build_status_total_count", 0)
+                        - getattr(stats, "completion_summary_build_skipped_reason_total_count", 0)
                     ),
                     "age_summary_graph_ready_count": stats.age_summary_graph_ready_count,
                     "age_summary_graph_stale_count": stats.age_summary_graph_stale_count,

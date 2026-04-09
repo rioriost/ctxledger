@@ -125,6 +125,7 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
         completion_summary_build_status_counts={},
         completion_summary_build_status_total_count=0,
         completion_summary_build_attempted_minus_status_total_count=0,
+        completion_summary_build_status_minus_skipped_reason_total_count=0,
         completion_summary_build_skipped_reason_counts={},
         completion_summary_build_skipped_reason_total_count=0,
         latest_episode_created_at=None,
@@ -148,6 +149,7 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
     assert "- status_counts:" in rendered
     assert "- status_total: 0" in rendered
     assert "- attempted_minus_status_total_count: 0" in rendered
+    assert "- status_minus_skipped_reason_total_count: 0" in rendered
     assert "- skipped_reason_counts:" in rendered
     assert "- skipped_reason_total: 0" in rendered
     assert rendered.count("  - none") >= 2
@@ -212,6 +214,7 @@ def test_format_memory_stats_text_renders_values() -> None:
         },
         completion_summary_build_status_total_count=3,
         completion_summary_build_attempted_minus_status_total_count=0,
+        completion_summary_build_status_minus_skipped_reason_total_count=1,
         completion_summary_build_skipped_reason_counts={
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
@@ -251,6 +254,7 @@ def test_format_memory_stats_text_renders_values() -> None:
     assert "  - skipped: 1" in rendered
     assert "- status_total: 3" in rendered
     assert "- attempted_minus_status_total_count: 0" in rendered
+    assert "- status_minus_skipped_reason_total_count: 1" in rendered
     assert "- skipped_reason_counts:" in rendered
     assert "- skipped_reason_total: 2" in rendered
     assert "  - summary_build_failed: 1" in rendered
