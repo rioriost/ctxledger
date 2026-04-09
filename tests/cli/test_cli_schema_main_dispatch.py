@@ -635,6 +635,7 @@ def test_format_stats_text_renders_values() -> None:
             "what_remains": 7,
             "checkpoint_count": 14,
         },
+        summary_backlog_count=0,
         memory_summary_count=23,
         memory_summary_membership_count=24,
         age_summary_graph_ready_count=25,
@@ -690,6 +691,7 @@ def test_format_stats_text_renders_values() -> None:
     assert "- recovery_pattern: 6" in rendered
     assert "- what_remains: 7" in rendered
     assert "- checkpoints: 14" in rendered
+    assert "- summary_backlog: 0" in rendered
     assert "2024-10-01 00:00:00+00:00" in rendered
     assert "2024-10-06 00:00:00+00:00" in rendered
     assert "- workflow_updated_at: 2024-10-01 00:00:00+00:00" in rendered
@@ -781,6 +783,7 @@ def test_stats_renders_json_output_and_closes_pool(
             "what_remains": 4,
             "checkpoint_count": 5,
         },
+        summary_backlog_count=0,
         memory_summary_count=13,
         memory_summary_membership_count=14,
         age_summary_graph_ready_count=15,
@@ -834,6 +837,7 @@ def test_stats_renders_json_output_and_closes_pool(
         "what_remains": 4,
         "checkpoint_count": 5,
     }
+    assert payload["summary_backlog_count"] == 0
     assert payload["memory_summary_count"] == 13
     assert payload["memory_summary_membership_count"] == 14
     assert payload["age_summary_graph_ready_count"] == 15

@@ -54,6 +54,7 @@ def test_format_stats_text_uses_zero_defaults_for_missing_fields() -> None:
     assert "- root_cause: 0" in rendered
     assert "- recovery_pattern: 0" in rendered
     assert "- what_remains: 0" in rendered
+    assert "- summary_backlog: 0" in rendered
     assert "- checkpoints: 0" in rendered
     assert "- workflow_updated_at: None" in rendered
     assert "- checkpoint_created_at: None" in rendered
@@ -239,6 +240,7 @@ def test_format_stats_text_renders_structured_checkpoint_coverage() -> None:
             "recovery_pattern": 6,
             "what_remains": 5,
         },
+        summary_backlog_count=0,
     )
 
     rendered = cli_module._format_stats_text(stats)
@@ -253,6 +255,8 @@ def test_format_stats_text_renders_structured_checkpoint_coverage() -> None:
     assert "- root_cause: 8" in rendered
     assert "- recovery_pattern: 6" in rendered
     assert "- what_remains: 5" in rendered
+    assert "- summary_backlog: 0" in rendered
+    assert "- summary_backlog: 0" in rendered
 
 
 def test_format_failures_text_renders_values() -> None:

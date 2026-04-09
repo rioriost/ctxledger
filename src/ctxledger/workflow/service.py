@@ -286,6 +286,7 @@ class WorkflowStats:
     derived_memory_item_reason: str | None = None
     derived_memory_graph_status: str | None = None
     structured_checkpoint_coverage: dict[str, int] = field(default_factory=dict)
+    summary_backlog_count: int = 0
     age_summary_graph_ready_count: int = 0
     age_summary_graph_stale_count: int = 0
     age_summary_graph_degraded_count: int = 0
@@ -667,6 +668,7 @@ class WorkflowService:
                 age_summary_graph_degraded_count=age_summary_graph_degraded_count,
                 age_summary_graph_unknown_count=age_summary_graph_unknown_count,
             )
+            summary_backlog_count = max(episode_count - memory_summary_count, 0)
             interaction_memory_item_count = memory_item_provenance_counts.get("interaction", 0)
             file_work_memory_item_count = self._count_memory_items_with_file_work_metadata(uow)
 
@@ -768,6 +770,7 @@ class WorkflowService:
                 derived_memory_item_reason=derived_memory_item_reason,
                 derived_memory_graph_status=derived_memory_graph_status,
                 structured_checkpoint_coverage=structured_checkpoint_coverage,
+                summary_backlog_count=summary_backlog_count,
                 age_summary_graph_ready_count=age_summary_graph_ready_count,
                 age_summary_graph_stale_count=age_summary_graph_stale_count,
                 age_summary_graph_degraded_count=age_summary_graph_degraded_count,
