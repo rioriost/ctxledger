@@ -1341,6 +1341,23 @@ def _resume_workflow(args: argparse.Namespace) -> int:
             print(f"Latest checkpoint step: {resume.latest_checkpoint.step_name}")
             if resume.latest_checkpoint.summary:
                 print(f"Latest checkpoint summary: {resume.latest_checkpoint.summary}")
+            checkpoint_json = (
+                resume.latest_checkpoint.checkpoint_json
+                if isinstance(resume.latest_checkpoint.checkpoint_json, dict)
+                else {}
+            )
+            verify_target = checkpoint_json.get("verify_target")
+            if isinstance(verify_target, str) and verify_target.strip():
+                print(f"Verify target: {verify_target}")
+            resume_hint = checkpoint_json.get("resume_hint")
+            if isinstance(resume_hint, str) and resume_hint.strip():
+                print(f"Resume hint: {resume_hint}")
+            blocker_or_risk = checkpoint_json.get("blocker_or_risk")
+            if isinstance(blocker_or_risk, str) and blocker_or_risk.strip():
+                print(f"Blocker or risk: {blocker_or_risk}")
+            failure_guard = checkpoint_json.get("failure_guard")
+            if isinstance(failure_guard, str) and failure_guard.strip():
+                print(f"Failure guard: {failure_guard}")
         else:
             print("Latest checkpoint: none")
 

@@ -86,6 +86,10 @@ class UnitOfWorkWorkflowLookupRepository:
                     "latest_checkpoint_summary": None,
                     "latest_checkpoint_current_objective": None,
                     "latest_checkpoint_next_intended_action": None,
+                    "latest_checkpoint_verify_target": None,
+                    "latest_checkpoint_resume_hint": None,
+                    "latest_checkpoint_blocker_or_risk": None,
+                    "latest_checkpoint_failure_guard": None,
                     "latest_verify_report_created_at": None,
                 }
 
@@ -136,6 +140,30 @@ class UnitOfWorkWorkflowLookupRepository:
                 ),
                 "latest_checkpoint_next_intended_action": (
                     latest_checkpoint.checkpoint_json.get("next_intended_action")
+                    if latest_checkpoint is not None
+                    and isinstance(latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "latest_checkpoint_verify_target": (
+                    latest_checkpoint.checkpoint_json.get("verify_target")
+                    if latest_checkpoint is not None
+                    and isinstance(latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "latest_checkpoint_resume_hint": (
+                    latest_checkpoint.checkpoint_json.get("resume_hint")
+                    if latest_checkpoint is not None
+                    and isinstance(latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "latest_checkpoint_blocker_or_risk": (
+                    latest_checkpoint.checkpoint_json.get("blocker_or_risk")
+                    if latest_checkpoint is not None
+                    and isinstance(latest_checkpoint.checkpoint_json, dict)
+                    else None
+                ),
+                "latest_checkpoint_failure_guard": (
+                    latest_checkpoint.checkpoint_json.get("failure_guard")
                     if latest_checkpoint is not None
                     and isinstance(latest_checkpoint.checkpoint_json, dict)
                     else None
@@ -306,7 +334,12 @@ class InMemoryWorkflowLookupRepository:
             "latest_checkpoint_next_intended_action": workflow_info.get(
                 "latest_checkpoint_next_intended_action"
             ),
-            "latest_verify_report_created_at": workflow_info.get("latest_verify_report_created_at"),
+            "latest_checkpoint_verify_target": workflow_info.get("latest_checkpoint_verify_target"),
+            "latest_checkpoint_resume_hint": workflow_info.get("latest_checkpoint_resume_hint"),
+            "latest_checkpoint_blocker_or_risk": workflow_info.get(
+                "latest_checkpoint_blocker_or_risk"
+            ),
+            "latest_checkpoint_failure_guard": workflow_info.get("latest_checkpoint_failure_guard"),
         }
 
     def workspace_id_by_workflow_id(self, workflow_instance_id: UUID) -> UUID | None:

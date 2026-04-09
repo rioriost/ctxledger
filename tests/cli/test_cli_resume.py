@@ -55,7 +55,13 @@ def test_main_resume_workflow_renders_text_output(
             attempt_id=uuid4(),
             step_name="implement_cli",
             summary="Resume from latest checkpoint",
-            checkpoint_json={"next_intended_action": "Run CLI resume command"},
+            checkpoint_json={
+                "next_intended_action": "Run CLI resume command",
+                "verify_target": "pytest -q tests/cli/test_cli_resume.py",
+                "resume_hint": "Resume from CLI output verification",
+                "blocker_or_risk": "Output formatting could drift between text and JSON modes",
+                "failure_guard": "Keep existing resume text lines stable while adding new fields",
+            },
             created_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:01:00+00:00"),
         ),
         latest_verify_report=None,
@@ -94,6 +100,15 @@ def test_main_resume_workflow_renders_text_output(
     assert "Resumable status: resumable" in captured.out
     assert f"Workspace: {tmp_path}" in captured.out
     assert "Latest checkpoint step: implement_cli" in captured.out
+    assert "Verify target: pytest -q tests/cli/test_cli_resume.py" in captured.out
+    assert "Resume hint: Resume from CLI output verification" in captured.out
+    assert (
+        "Blocker or risk: Output formatting could drift between text and JSON modes" in captured.out
+    )
+    assert (
+        "Failure guard: Keep existing resume text lines stable while adding new fields"
+        in captured.out
+    )
     assert "Next hint: Run CLI resume command" in captured.out
     assert captured.err == ""
 
@@ -304,7 +319,13 @@ def test_main_resume_workflow_renders_text_output_without_verify_status_summary_
             attempt_id=uuid4(),
             step_name="implement_cli",
             summary="",
-            checkpoint_json={"next_intended_action": "Review warnings"},
+            checkpoint_json={
+                "next_intended_action": "Review warnings",
+                "verify_target": "pytest -q tests/cli/test_cli_resume.py -k warnings",
+                "resume_hint": "Resume from warning review before rerunning CLI checks",
+                "blocker_or_risk": "Warning handling could hide the new structured fields",
+                "failure_guard": "Do not print empty checkpoint summary lines",
+            },
             created_at=SimpleNamespace(isoformat=lambda: "2024-01-01T00:01:00+00:00"),
         ),
         latest_verify_report=None,
@@ -344,6 +365,10 @@ def test_main_resume_workflow_renders_text_output_without_verify_status_summary_
     assert "Verify status:" not in captured.out
     assert "Latest checkpoint step: implement_cli" in captured.out
     assert "Latest checkpoint summary:" not in captured.out
+    assert "Verify target: pytest -q tests/cli/test_cli_resume.py -k warnings" in captured.out
+    assert "Resume hint: Resume from warning review before rerunning CLI checks" in captured.out
+    assert "Blocker or risk: Warning handling could hide the new structured fields" in captured.out
+    assert "Failure guard: Do not print empty checkpoint summary lines" in captured.out
     assert "- stale_context: Context may be stale" in captured.out
     assert "- needs_verify: Verification is pending" in captured.out
     assert "Next hint: Review warnings" in captured.out
@@ -429,9 +454,7 @@ def test_main_dispatches_resume_workflow(
 
     monkeypatch.setattr(cli_module, "_resume_workflow", fake_resume_workflow)
 
-    result = cli_module.main(
-        ["resume-workflow", "--workflow-instance-id", "workflow-123"]
-    )
+    result = cli_module.main(["resume-workflow", "--workflow-instance-id", "workflow-123"])
 
     assert result == 9
     assert received_ids == ["workflow-123"]

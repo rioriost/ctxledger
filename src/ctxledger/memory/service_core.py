@@ -1176,6 +1176,10 @@ class MemoryService(
             "next_intended_action": latest_task_recall_signals.get(
                 "latest_checkpoint_next_intended_action"
             ),
+            "verify_target": latest_task_recall_signals.get("latest_checkpoint_verify_target"),
+            "resume_hint": latest_task_recall_signals.get("latest_checkpoint_resume_hint"),
+            "blocker_or_risk": latest_task_recall_signals.get("latest_checkpoint_blocker_or_risk"),
+            "failure_guard": latest_task_recall_signals.get("latest_checkpoint_failure_guard"),
         }
         selected_task_recall_checkpoint_json = {
             "current_objective": selected_task_recall_signals.get(
@@ -1184,6 +1188,12 @@ class MemoryService(
             "next_intended_action": selected_task_recall_signals.get(
                 "latest_checkpoint_next_intended_action"
             ),
+            "verify_target": selected_task_recall_signals.get("latest_checkpoint_verify_target"),
+            "resume_hint": selected_task_recall_signals.get("latest_checkpoint_resume_hint"),
+            "blocker_or_risk": selected_task_recall_signals.get(
+                "latest_checkpoint_blocker_or_risk"
+            ),
+            "failure_guard": selected_task_recall_signals.get("latest_checkpoint_failure_guard"),
         }
         task_recall_latest_workflow_terminal = bool(
             latest_task_recall_signals.get("workflow_is_terminal", False)
@@ -1227,12 +1237,26 @@ class MemoryService(
             "next_intended_action": latest_detour_task_recall_signals.get(
                 "latest_checkpoint_next_intended_action"
             ),
+            "verify_target": latest_detour_task_recall_signals.get(
+                "latest_checkpoint_verify_target"
+            ),
+            "resume_hint": latest_detour_task_recall_signals.get("latest_checkpoint_resume_hint"),
+            "blocker_or_risk": latest_detour_task_recall_signals.get(
+                "latest_checkpoint_blocker_or_risk"
+            ),
+            "failure_guard": latest_detour_task_recall_signals.get(
+                "latest_checkpoint_failure_guard"
+            ),
         }
         task_recall_prior_mainline_workflow_id = None
         task_recall_prior_mainline_signals: dict[str, str | bool | None] = {}
         task_recall_prior_mainline_checkpoint_json = {
             "current_objective": None,
             "next_intended_action": None,
+            "verify_target": None,
+            "resume_hint": None,
+            "blocker_or_risk": None,
+            "failure_guard": None,
         }
 
         if latest_detour_task_recall_workflow_id is not None:
