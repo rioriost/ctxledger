@@ -51,6 +51,8 @@ RULE checkpoint_discipline
 DO workflow_checkpoint_for_meaningful_progress
 DO checkpoint_session_intake_when_user_request_sets_or_changes_objective
 DO checkpoint_before_final_response_when_meaningful_work_occurred_without_later_checkpoint
+DO preserve continuation_critical_structure_in_checkpoints_when_known
+DO preserve next_concrete_action_and_verification_context_in_planning_or_validation_checkpoints_when_known
 AFTER:
 - planning_or_narrowing
 - root_cause_or_key_decision
@@ -61,14 +63,41 @@ AFTER:
 - user_request_interpretation_or_scope_lock
 - documentation_slice_completion
 
-RULE checkpoint_content
-INCLUDE in_checkpoint_when_possible:
+RULE checkpoint_required_structured_fields
+INCLUDE in_checkpoint_when_known:
+- current_objective
+- next_intended_action
+- verify_status
+- what_remains
+
+RULE checkpoint_preferred_structured_fields
+PREFER including in_checkpoint_when_known:
+- root_cause
+- recovery_pattern
+- verify_target
+- resume_hint
+- blocker_or_risk
+- failure_guard
 - what_changed
 - what_was_learned
-- what_remains
-- next_intended_action
-- verification_status_if_known
-- blocker_or_risk_if_any
+
+RULE checkpoint_prose_context
+USE checkpoint_prose_for:
+- rationale
+- tradeoffs
+- nuance
+- human_readable_context
+DO NOT use prose_as_only_carrier_when required_structured_fields_are_known
+
+RULE checkpoint_next_narrow_action
+FOR active_work
+DO preserve one_executable_next_action_in_checkpoint_when_known
+PREFER one_narrow_slice_over_broad_future_intent
+
+RULE checkpoint_verify_target
+WHEN verification_target_is_known
+DO record verify_target_explicitly
+PREFER named_test_or_suite_or_command_or_validation_surface_over_generic_claims
 
 RULE completion_guard
 NEVER complete_workflow_when:
@@ -167,6 +196,21 @@ USE memory_search_for:
 - interaction_or_file_work_signals_when_debugging_or_repeating_work
 - file_work_linked_context_restoration_when_resuming_or_continuing_work
 
+RULE interaction_promotion_usage
+USE interaction_memory_for:
+- bounded_recall
+- resumability_support
+- historical_progress_lookup
+- file_work_intent_recall
+PROMOTE only_high_signal_interaction_material_for:
+- root_cause_clarification
+- retry_decision
+- resume_decision
+- fallback_prevention_decision
+- user_correction_that_changes_execution_direction
+- orchestration_boundary_finding
+- file_work_intent_that_materially_affects_recovery
+
 RULE remember_episode_usage
 USE memory_remember_episode_for_high_signal_knowledge:
 - non_obvious_root_cause
@@ -207,6 +251,10 @@ DO include_structured_checkpoint_fields_when_known:
 - recovery_pattern
 - what_remains
 - verify_status
+- verify_target
+- resume_hint
+- blocker_or_risk
+- failure_guard
 
 RULE prefer_high_signal_episodes
 PREFER fewer_higher_signal_memory_episodes_over_repetition
@@ -215,22 +263,57 @@ RULE summary_build_requesting
 WHEN explicit_closeout_summary_is_needed
 DO set latest_checkpoint.checkpoint_json.build_episode_summary = true
 BEFORE workflow_complete
+DO request_summary_build_more_often_for:
+- high_signal_workflow_completion_with_passed_verification
+- repeated_checkpoint_theme_with_clear_reuse_value
+- high_signal_failure_and_recovery_lesson
+- closeout_with_reusable_process_lesson
+
+RULE summary_build_high_signal_triggering
+PREFER requesting_summary_build_for:
+- high_signal_closeout_with_passed_verification
+- repeated_theme_closeout_with_reuse_value
+- high_signal_failure_and_recovery
+- reusable_process_lesson
+DO NOT request_summary_build_only_because workflow_is_terminal
 
 RULE closeout_memory_fallback
 IF workflow_completion_auto_memory_is_skipped_or_insufficient
 THEN use memory_remember_episode_only_for_new_high_signal_knowledge
 
-RULE observability_validation
+RULE observability_baseline_checks
 AFTER deployment_or_runtime_behavior_change
 CHECK when_relevant:
 - stats
 - memory-stats
 - age-graph-readiness
 
+RULE observability_agent_quality_checks
+CHECK when_relevant:
+- structured_checkpoint_coverage
+- summary_build_request_rate
+- summary_build_success_visibility
+- summary_build_skip_visibility
+- aggregate_resume_success_visibility
+- aggregate_resume_failure_visibility
+- fallback_prevention_visibility
+
+RULE observability_hygiene_checks
+CHECK when_relevant:
+- summary_backlog
+- unlinked_interaction_volume
+- weak_linkage_visibility
+- null_workspace_memory_volume
+- missing_expected_file_work_coverage_when_detectable
+
 RULE observability_signal_reading
 READ as operator_signals_not_canonical_truth:
 - interaction_memory_item_count
 - file_work_memory_item_count
+- structured_checkpoint_coverage
+- summary_backlog
+- unlinked_interaction_volume
+- null_workspace_memory_volume
 
 RULE file_work_recording_required
 DO record file-touching work in ctxledger when the agent:
@@ -301,6 +384,7 @@ DO treat_investigation_documentation_planning_and_explanation_work_as_trackable_
 RULE prefer_structure_over_prose
 WHEN structured_tool_fields_and_prose_both_exist
 PREFER structured_fields
+NEVER omit required_structured_checkpoint_fields_only_because prose_summary_exists
 
 RULE parallelize_independent_operations
 PREFER parallel_execution_over_serial_execution
