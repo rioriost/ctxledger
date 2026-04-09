@@ -18,6 +18,14 @@ The project currently follows a lightweight, human-maintained changelog style.
 - startup-time automatic AGE summary-graph refresh when derived graph readiness
   is missing, stale, or otherwise needs rebuild help after restart
 
+## [1.1.1]
+
+### Changed
+
+- optimized `bootstrap-age-graph` work as the `1.1.1` release slice so startup
+  no longer needs to pay the full prior rebuild cost for the constrained AGE
+  graph path
+
 ### Changed
 
 - Grafana and observability SQL now align file-work counting with the bounded

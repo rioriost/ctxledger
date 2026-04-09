@@ -11,7 +11,7 @@ services:
         condition: service_healthy
     environment:
       CTXLEDGER_APP_NAME: ctxledger
-      CTXLEDGER_APP_VERSION: 0.9.0
+      CTXLEDGER_APP_VERSION: 1.1.1
       CTXLEDGER_ENV: docker
       CTXLEDGER_DATABASE_URL: postgresql://ctxledger:ctxledger@postgres:5432/ctxledger
       CTXLEDGER_TRANSPORT: http
@@ -42,7 +42,7 @@ services:
       [
         "sh",
         "-lc",
-        "/opt/ctxledger-venv/bin/python -m ctxledger.__init__ apply-schema && /opt/ctxledger-venv/bin/python scripts/ensure_age_extension.py --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger && /opt/ctxledger-venv/bin/python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory && (/opt/ctxledger-venv/bin/python scripts/setup_grafana_observability.py || echo 'Skipping Grafana observability setup because Grafana DB credentials are not configured')",
+        'if [ "$${CTXLEDGER_PRIVATE_INIT_REBUILD_AGE_GRAPH:-false}" = "true" ]; then AGE_BOOTSTRAP_CMD="/opt/ctxledger-venv/bin/python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory --rebuild"; echo "Running explicit AGE graph rebuild for private init"; elif [ "$${CTXLEDGER_PRIVATE_INIT_BOOTSTRAP_AGE_GRAPH:-false}" = "true" ]; then AGE_BOOTSTRAP_CMD="/opt/ctxledger-venv/bin/python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory"; echo "Running opt-in AGE graph bootstrap for private init"; else AGE_BOOTSTRAP_CMD="echo Skipping AGE bootstrap because private init bootstrap is disabled by default"; fi && /opt/ctxledger-venv/bin/python -m ctxledger.__init__ apply-schema && /opt/ctxledger-venv/bin/python scripts/ensure_age_extension.py --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger && sh -lc "$$AGE_BOOTSTRAP_CMD" && (/opt/ctxledger-venv/bin/python scripts/setup_grafana_observability.py || echo ''Skipping Grafana observability setup because Grafana DB credentials are not configured'')',
       ]
     volumes:
       - ..:/app
@@ -171,7 +171,7 @@ services:
         condition: service_healthy
     environment:
       CTXLEDGER_APP_NAME: ctxledger
-      CTXLEDGER_APP_VERSION: 0.9.0
+      CTXLEDGER_APP_VERSION: 1.1.1
       CTXLEDGER_ENV: docker
       CTXLEDGER_DATABASE_URL: postgresql://ctxledger:ctxledger@postgres:5432/ctxledger
       CTXLEDGER_TRANSPORT: http

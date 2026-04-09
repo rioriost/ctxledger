@@ -148,6 +148,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--graph-name",
         help="Override the AGE graph name instead of using CTXLEDGER_DB_AGE_GRAPH_NAME",
     )
+    bootstrap_age_graph_parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Force full AGE graph rebuild instead of the default incremental bootstrap",
+    )
 
     age_graph_readiness_parser = subparsers.add_parser(
         "age-graph-readiness",
@@ -258,6 +263,7 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
         settings = get_settings()
         database_url = args.database_url or settings.database.url
         graph_name = args.graph_name or settings.database.age_graph_name
+        rebuild = bool(getattr(args, "rebuild", False))
 
         if not database_url:
             return _print_missing_database_url(include_override_hint=True)
@@ -284,33 +290,38 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                     (graph_name,),
                 )
                 if cursor.fetchone() is None:
-                    cursor.execute(f"SELECT ag_catalog.create_graph({graph_name_literal})")
-                cursor.execute(
-                    f"""
-                    SELECT *
-                    FROM cypher(
-                        {graph_name_literal},
-                        $$
-                        MATCH (n)
-                        DETACH DELETE n
-                        RETURN 1 AS cleared
-                        $$
-                    ) AS (cleared agtype)
-                    """,
-                )
-                cursor.execute(
-                    f"""
-                    SELECT *
-                    FROM cypher(
-                        {graph_name_literal},
-                        $$
-                        UNWIND [] AS ignored
-                        RETURN ignored
-                        $$
-                    ) AS (ignored agtype)
-                    WHERE false
-                    """,
-                )
+                    cursor.execute(
+                        f"SELECT ag_catalog.create_graph({graph_name_literal})"
+                    )
+
+                if rebuild:
+                    cursor.execute(
+                        f"""
+                        SELECT *
+                        FROM cypher(
+                            {graph_name_literal},
+                            $$
+                            MATCH (n)
+                            DETACH DELETE n
+                            RETURN 1 AS cleared
+                            $$
+                        ) AS (cleared agtype)
+                        """,
+                    )
+                    cursor.execute(
+                        f"""
+                        SELECT *
+                        FROM cypher(
+                            {graph_name_literal},
+                            $$
+                            UNWIND [] AS ignored
+                            RETURN ignored
+                            $$
+                        ) AS (ignored agtype)
+                        WHERE false
+                        """,
+                    )
+
                 cursor.execute(
                     """
                     SELECT memory_id
@@ -335,7 +346,7 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                         FROM cypher(
                             {graph_name_literal},
                             $$
-                            CREATE (n:memory_item {{memory_id: $memory_id}})
+                            MERGE (n:memory_item {{memory_id: $memory_id}})
                             RETURN n
                             $$,
                             %s
@@ -343,6 +354,7 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                         """,
                         (memory_item_params,),
                     )
+
                 cursor.execute(
                     """
                     SELECT
@@ -383,11 +395,9 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                             $$
                             MATCH (source:memory_item {{memory_id: $source_memory_id}})
                             MATCH (target:memory_item {{memory_id: $target_memory_id}})
-                            CREATE (source)-[r:supports {{
-                                memory_relation_id: $memory_relation_id,
-                                source_memory_id: $source_memory_id,
-                                target_memory_id: $target_memory_id
-                            }}]->(target)
+                            MERGE (source)-[r:supports {{memory_relation_id: $memory_relation_id}}]->(target)
+                            SET r.source_memory_id = $source_memory_id,
+                                r.target_memory_id = $target_memory_id
                             RETURN r
                             $$,
                             %s
@@ -395,9 +405,10 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                         """,
                         (supports_params,),
                     )
+
                 cursor.execute(
                     f"""
-                    SELECT count(*)
+                    SELECT *
                     FROM cypher(
                         {graph_name_literal},
                         $$
@@ -408,15 +419,19 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                     """,
                 )
                 memory_item_node_count_row = cursor.fetchone()
-                memory_item_node_count = (
+                raw_memory_item_node_count = (
                     memory_item_node_count_row[0]
                     if isinstance(memory_item_node_count_row, tuple)
-                    else memory_item_node_count_row["count"]
+                    else memory_item_node_count_row.get(
+                        "node_count",
+                        memory_item_node_count_row["count"],
+                    )
                 )
+                memory_item_node_count = int(str(raw_memory_item_node_count).strip('"'))
 
                 cursor.execute(
                     f"""
-                    SELECT count(*)
+                    SELECT *
                     FROM cypher(
                         {graph_name_literal},
                         $$
@@ -427,17 +442,22 @@ def _bootstrap_age_graph(args: argparse.Namespace) -> int:
                     """,
                 )
                 supports_edge_count_row = cursor.fetchone()
-                supports_edge_count = (
+                raw_supports_edge_count = (
                     supports_edge_count_row[0]
                     if isinstance(supports_edge_count_row, tuple)
-                    else supports_edge_count_row["count"]
+                    else supports_edge_count_row.get(
+                        "edge_count",
+                        supports_edge_count_row["count"],
+                    )
                 )
+                supports_edge_count = int(str(raw_supports_edge_count).strip('"'))
             connection.commit()
 
+        mode = "rebuilt" if rebuild else "incrementally synchronized"
         print(
             f"AGE graph bootstrap completed for '{graph_name}' "
-            f"(memory_item nodes repopulated={memory_item_node_count}, "
-            f"supports edges repopulated={supports_edge_count})."
+            f"(mode={mode}, memory_item nodes={memory_item_node_count}, "
+            f"supports edges={supports_edge_count})."
         )
         return 0
     except Exception as exc:
@@ -693,7 +713,9 @@ def _format_stats_text(stats: object) -> str:
     workflow_status_counts = getattr(stats, "workflow_status_counts", {})
     attempt_status_counts = getattr(stats, "attempt_status_counts", {})
     verify_status_counts = getattr(stats, "verify_status_counts", {})
-    structured_checkpoint_coverage = getattr(stats, "structured_checkpoint_coverage", {})
+    structured_checkpoint_coverage = getattr(
+        stats, "structured_checkpoint_coverage", {}
+    )
     completion_summary_build_status_counts = getattr(
         stats,
         "completion_summary_build_status_counts",
@@ -850,7 +872,9 @@ def _format_stats_text(stats: object) -> str:
         *(
             [
                 f"  - {status}: {count}"
-                for status, count in sorted(completion_summary_build_status_counts.items())
+                for status, count in sorted(
+                    completion_summary_build_status_counts.items()
+                )
             ]
             or ["  - none"]
         ),
@@ -867,7 +891,9 @@ def _format_stats_text(stats: object) -> str:
         *(
             [
                 f"  - {reason}: {count}"
-                for reason, count in sorted(completion_summary_build_skipped_reason_counts.items())
+                for reason, count in sorted(
+                    completion_summary_build_skipped_reason_counts.items()
+                )
             ]
             or ["  - none"]
         ),
@@ -1047,7 +1073,9 @@ def _stats(args: argparse.Namespace) -> int:
                     ),
                     "completion_summary_build_attempted_minus_status_total_count": (
                         getattr(stats, "completion_summary_build_attempted_count", 0)
-                        - getattr(stats, "completion_summary_build_status_total_count", 0)
+                        - getattr(
+                            stats, "completion_summary_build_status_total_count", 0
+                        )
                     ),
                     "completion_summary_build_skipped_reason_counts": getattr(
                         stats,
@@ -1061,7 +1089,11 @@ def _stats(args: argparse.Namespace) -> int:
                     ),
                     "completion_summary_build_status_minus_skipped_reason_total_count": (
                         getattr(stats, "completion_summary_build_status_total_count", 0)
-                        - getattr(stats, "completion_summary_build_skipped_reason_total_count", 0)
+                        - getattr(
+                            stats,
+                            "completion_summary_build_skipped_reason_total_count",
+                            0,
+                        )
                     ),
                     "age_summary_graph_ready_count": stats.age_summary_graph_ready_count,
                     "age_summary_graph_stale_count": stats.age_summary_graph_stale_count,
@@ -1115,8 +1147,12 @@ def _format_workflows_text(workflows: list[object] | tuple[object, ...]) -> str:
         )
         lines.append(f"  workspace={workspace_label}")
         lines.append(f"  ticket={getattr(workflow, 'ticket_id', '')}")
-        lines.append(f"  latest_step={getattr(workflow, 'latest_step_name', None) or 'none'}")
-        lines.append(f"  verify_status={getattr(workflow, 'latest_verify_status', None) or 'none'}")
+        lines.append(
+            f"  latest_step={getattr(workflow, 'latest_step_name', None) or 'none'}"
+        )
+        lines.append(
+            f"  verify_status={getattr(workflow, 'latest_verify_status', None) or 'none'}"
+        )
         lines.append(f"  updated_at={getattr(workflow, 'updated_at', None)}")
         lines.append("")
 
@@ -1288,7 +1324,9 @@ def _format_memory_stats_text(stats: object) -> str:
         *(
             [
                 f"  - {status}: {count}"
-                for status, count in sorted(completion_summary_build_status_counts.items())
+                for status, count in sorted(
+                    completion_summary_build_status_counts.items()
+                )
             ]
             or ["  - none"]
         ),
@@ -1305,7 +1343,9 @@ def _format_memory_stats_text(stats: object) -> str:
         *(
             [
                 f"  - {reason}: {count}"
-                for reason, count in sorted(completion_summary_build_skipped_reason_counts.items())
+                for reason, count in sorted(
+                    completion_summary_build_skipped_reason_counts.items()
+                )
             ]
             or ["  - none"]
         ),
@@ -1405,7 +1445,9 @@ def _failures(args: argparse.Namespace) -> int:
                         "error_code": failure.error_code,
                         "error_message": failure.error_message,
                         "attempt_id": (
-                            str(failure.attempt_id) if failure.attempt_id is not None else None
+                            str(failure.attempt_id)
+                            if failure.attempt_id is not None
+                            else None
                         ),
                         "occurred_at": _isoformat_or_none(failure.occurred_at),
                         "resolved_at": _isoformat_or_none(failure.resolved_at),
@@ -1445,7 +1487,9 @@ def _memory_stats(args: argparse.Namespace) -> int:
                     "memory_item_count": stats.memory_item_count,
                     "memory_embedding_count": stats.memory_embedding_count,
                     "memory_relation_count": stats.memory_relation_count,
-                    "memory_item_provenance_counts": (stats.memory_item_provenance_counts),
+                    "memory_item_provenance_counts": (
+                        stats.memory_item_provenance_counts
+                    ),
                     "interaction_memory_item_count": getattr(
                         stats,
                         "interaction_memory_item_count",
@@ -1557,7 +1601,9 @@ def _memory_stats(args: argparse.Namespace) -> int:
                     ),
                     "completion_summary_build_attempted_minus_status_total_count": (
                         getattr(stats, "completion_summary_build_attempted_count", 0)
-                        - getattr(stats, "completion_summary_build_status_total_count", 0)
+                        - getattr(
+                            stats, "completion_summary_build_status_total_count", 0
+                        )
                     ),
                     "completion_summary_build_skipped_reason_counts": getattr(
                         stats,
@@ -1571,7 +1617,11 @@ def _memory_stats(args: argparse.Namespace) -> int:
                     ),
                     "completion_summary_build_status_minus_skipped_reason_total_count": (
                         getattr(stats, "completion_summary_build_status_total_count", 0)
-                        - getattr(stats, "completion_summary_build_skipped_reason_total_count", 0)
+                        - getattr(
+                            stats,
+                            "completion_summary_build_skipped_reason_total_count",
+                            0,
+                        )
                     ),
                     "age_summary_graph_ready_count": stats.age_summary_graph_ready_count,
                     "age_summary_graph_stale_count": stats.age_summary_graph_stale_count,
@@ -1628,7 +1678,9 @@ def _build_episode_summary(args: argparse.Namespace) -> int:
             db_health_checker = PostgresDatabaseHealthChecker(postgres_config)
 
             memory_service = memory_service_module.MemoryService(
-                episode_repository=memory_service_module.UnitOfWorkEpisodeRepository(uow_factory),
+                episode_repository=memory_service_module.UnitOfWorkEpisodeRepository(
+                    uow_factory
+                ),
                 memory_item_repository=memory_service_module.UnitOfWorkMemoryItemRepository(
                     uow_factory
                 ),
@@ -1636,7 +1688,9 @@ def _build_episode_summary(args: argparse.Namespace) -> int:
                     uow_factory
                 ),
                 memory_summary_membership_repository=(
-                    memory_service_module.UnitOfWorkMemorySummaryMembershipRepository(uow_factory)
+                    memory_service_module.UnitOfWorkMemorySummaryMembershipRepository(
+                        uow_factory
+                    )
                 ),
                 workflow_lookup=memory_service_module.UnitOfWorkWorkflowLookupRepository(
                     uow_factory
@@ -1693,7 +1747,9 @@ def _build_episode_summary(args: argparse.Namespace) -> int:
             ),
             "memberships": [
                 {
-                    "memory_summary_membership_id": str(membership.memory_summary_membership_id),
+                    "memory_summary_membership_id": str(
+                        membership.memory_summary_membership_id
+                    ),
                     "memory_summary_id": str(membership.memory_summary_id),
                     "memory_id": str(membership.memory_id),
                     "membership_order": membership.membership_order,
@@ -1714,7 +1770,9 @@ def _build_episode_summary(args: argparse.Namespace) -> int:
         print(f"Summary kind: {args.summary_kind}")
         print(f"Status: {result.status}")
         print(f"Summary built: {'yes' if result.summary_built else 'no'}")
-        print(f"Replaced existing summary: {'yes' if result.replaced_existing_summary else 'no'}")
+        print(
+            f"Replaced existing summary: {'yes' if result.replaced_existing_summary else 'no'}"
+        )
         print(f"Skipped reason: {result.skipped_reason or 'none'}")
 
         if result.summary is not None:
