@@ -89,6 +89,7 @@ def test_main_stats_renders_text_output(
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 2,
         },
+        completion_summary_build_skipped_reason_total_count=3,
         latest_workflow_updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_checkpoint_created_at=datetime(2026, 3, 15, 9, 1, 0, tzinfo=UTC),
         latest_verify_report_created_at=datetime(2026, 3, 15, 9, 2, 0, tzinfo=UTC),
@@ -167,6 +168,7 @@ def test_main_stats_renders_text_output(
     assert "  - failed: 1" in captured.out
     assert "  - skipped: 2" in captured.out
     assert "- status_total: 4" in captured.out
+    assert "- skipped_reason_total: 3" in captured.out
     assert "- skipped_reason_counts:" in captured.out
     assert "  - summary_build_failed: 1" in captured.out
     assert "  - workflow_summary_build_not_requested: 2" in captured.out
@@ -262,6 +264,7 @@ def test_main_stats_renders_json_output(
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
         },
+        completion_summary_build_skipped_reason_total_count=2,
         latest_workflow_updated_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_checkpoint_created_at=None,
         latest_verify_report_created_at=None,
@@ -314,6 +317,7 @@ def test_main_stats_renders_json_output(
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
         },
+        "completion_summary_build_skipped_reason_total_count": 2,
         "completion_summary_build_success_count": 2,
         "completion_summary_build_success_rate": 0.5,
         "completion_summary_build_success_rate_base": 3,
@@ -409,6 +413,7 @@ def test_main_memory_stats_renders_text_output(
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 2,
         },
+        completion_summary_build_skipped_reason_total_count=3,
         interaction_memory_item_count=7,
         file_work_memory_item_count=9,
         memory_summary_count=9,
@@ -481,6 +486,7 @@ def test_main_memory_stats_renders_text_output(
     assert "  - failed: 1" in captured.out
     assert "  - skipped: 2" in captured.out
     assert "- status_total: 4" in captured.out
+    assert "- skipped_reason_total: 3" in captured.out
     assert "- skipped_reason_counts:" in captured.out
     assert "  - summary_build_failed: 1" in captured.out
     assert "  - workflow_summary_build_not_requested: 2" in captured.out
@@ -640,6 +646,7 @@ def test_main_memory_stats_renders_json_output(
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
         },
+        completion_summary_build_skipped_reason_total_count=2,
         latest_episode_created_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_memory_item_created_at=None,
         latest_memory_embedding_created_at=None,
@@ -719,6 +726,7 @@ def test_main_memory_stats_renders_json_output(
             "summary_build_failed": 1,
             "workflow_summary_build_not_requested": 1,
         },
+        "completion_summary_build_skipped_reason_total_count": 2,
         "workflow_completion_auto_memory_recorded_count": 0,
         "workflow_completion_auto_memory_skipped_count": 0,
     }

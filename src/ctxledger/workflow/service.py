@@ -309,6 +309,7 @@ class WorkflowStats:
     completion_summary_build_attempted_rate: float = 0.0
     completion_summary_build_success_rate: float = 0.0
     completion_summary_build_skipped_reason_counts: dict[str, int] = field(default_factory=dict)
+    completion_summary_build_skipped_reason_total_count: int = 0
 
 
 @dataclass(slots=True, frozen=True)
@@ -351,6 +352,7 @@ class MemoryStats:
     completion_summary_build_attempted_rate: float = 0.0
     completion_summary_build_success_rate: float = 0.0
     completion_summary_build_skipped_reason_counts: dict[str, int] = field(default_factory=dict)
+    completion_summary_build_skipped_reason_total_count: int = 0
 
 
 @dataclass(slots=True, frozen=True)
@@ -689,6 +691,9 @@ class WorkflowService:
             completion_summary_build_status_total_count = sum(
                 completion_summary_build_status_counts.values()
             )
+            completion_summary_build_skipped_reason_total_count = sum(
+                completion_summary_build_skipped_reason_counts.values()
+            )
             completion_summary_build_success_rate_base = completion_summary_build_attempted_count
             completion_summary_build_request_rate = self._safe_ratio(
                 completion_summary_build_request_count,
@@ -856,6 +861,9 @@ class WorkflowService:
                 completion_summary_build_skipped_reason_counts=(
                     completion_summary_build_skipped_reason_counts
                 ),
+                completion_summary_build_skipped_reason_total_count=(
+                    completion_summary_build_skipped_reason_total_count
+                ),
             )
 
     def get_memory_stats(self) -> MemoryStats:
@@ -935,6 +943,9 @@ class WorkflowService:
             completion_summary_build_status_total_count = sum(
                 completion_summary_build_status_counts.values()
             )
+            completion_summary_build_skipped_reason_total_count = sum(
+                completion_summary_build_skipped_reason_counts.values()
+            )
             completion_summary_build_success_rate_base = completion_summary_build_attempted_count
             completion_summary_build_request_rate = self._safe_ratio(
                 completion_summary_build_request_count,
@@ -1010,6 +1021,9 @@ class WorkflowService:
                 ),
                 completion_summary_build_skipped_reason_counts=(
                     completion_summary_build_skipped_reason_counts
+                ),
+                completion_summary_build_skipped_reason_total_count=(
+                    completion_summary_build_skipped_reason_total_count
                 ),
             )
 

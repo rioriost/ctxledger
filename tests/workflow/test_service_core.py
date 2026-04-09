@@ -617,6 +617,7 @@ def test_get_stats_collects_counts_and_latest_timestamps() -> None:
         completion_summary_build_status_counts={},
         completion_summary_build_status_total_count=0,
         completion_summary_build_skipped_reason_counts={},
+        completion_summary_build_skipped_reason_total_count=0,
     )
 
     memory_stats = service.get_memory_stats()
@@ -780,6 +781,7 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
         "skipped": 1,
     }
     assert stats.completion_summary_build_status_total_count == 3
+    assert stats.completion_summary_build_skipped_reason_total_count == 2
 
 
 def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
@@ -910,6 +912,7 @@ def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
         "skipped": 1,
     }
     assert stats.completion_summary_build_status_total_count == 3
+    assert stats.completion_summary_build_skipped_reason_total_count == 2
 
 
 def test_get_memory_stats_collects_relation_and_provenance_information() -> None:

@@ -816,6 +816,7 @@ def test_stats_renders_json_output_and_closes_pool(
             "skipped": 6,
         },
         completion_summary_build_status_total_count=9,
+        completion_summary_build_skipped_reason_total_count=3,
         memory_summary_count=13,
         memory_summary_membership_count=14,
         age_summary_graph_ready_count=15,
@@ -888,6 +889,7 @@ def test_stats_renders_json_output_and_closes_pool(
         "skipped": 6,
     }
     assert payload["completion_summary_build_status_total_count"] == 9
+    assert payload["completion_summary_build_skipped_reason_total_count"] == 3
     assert payload["memory_summary_count"] == 13
     assert payload["memory_summary_membership_count"] == 14
     assert payload["age_summary_graph_ready_count"] == 15
@@ -977,6 +979,7 @@ def test_memory_stats_renders_text_output_and_closes_pool(
             "skipped": 1,
         },
         completion_summary_build_status_total_count=3,
+        completion_summary_build_skipped_reason_total_count=2,
         memory_summary_count=7,
         memory_summary_membership_count=8,
         age_summary_graph_ready_count=1,
@@ -1035,6 +1038,7 @@ def test_memory_stats_renders_text_output_and_closes_pool(
     assert "  - built: 2" in captured.out
     assert "  - skipped: 1" in captured.out
     assert "- status_total: 3" in captured.out
+    assert "- skipped_reason_total: 2" in captured.out
     assert "- memory_summaries: 7" in captured.out
     assert "- memory_summary_memberships: 8" in captured.out
     assert "- age_summary_graph_ready: 1" in captured.out
