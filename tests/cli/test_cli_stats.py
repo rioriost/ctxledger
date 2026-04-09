@@ -344,6 +344,13 @@ def test_main_memory_stats_renders_text_output(
         checkpoint_auto_memory_skipped_count=45,
         workflow_completion_auto_memory_recorded_count=4,
         workflow_completion_auto_memory_skipped_count=54,
+        completion_summary_build_request_count=3,
+        completion_summary_build_attempted_count=2,
+        completion_summary_build_success_count=1,
+        completion_summary_build_skipped_reason_counts={
+            "summary_build_failed": 1,
+            "workflow_summary_build_not_requested": 2,
+        },
         interaction_memory_item_count=7,
         file_work_memory_item_count=9,
         memory_summary_count=9,
@@ -401,6 +408,14 @@ def test_main_memory_stats_renders_text_output(
     assert "- age_summary_graph_stale: 0" in captured.out
     assert "- age_summary_graph_degraded: 0" in captured.out
     assert "- age_summary_graph_unknown: 0" in captured.out
+    assert "Completion summary build observability:" in captured.out
+    assert "- request_count: 3" in captured.out
+    assert "- attempted_count: 2" in captured.out
+    assert "- success_count: 1" in captured.out
+    assert (
+        "- skipped_reason_counts: {'summary_build_failed': 1, 'workflow_summary_build_not_requested': 2}"
+        in captured.out
+    )
     assert "Memory item provenance:" in captured.out
     assert "- derived: 2" in captured.out
     assert "- episode: 17" in captured.out
@@ -538,6 +553,13 @@ def test_main_memory_stats_renders_json_output(
         derived_memory_item_count=0,
         derived_memory_item_state="unknown",
         derived_memory_item_reason=None,
+        completion_summary_build_request_count=4,
+        completion_summary_build_attempted_count=3,
+        completion_summary_build_success_count=2,
+        completion_summary_build_skipped_reason_counts={
+            "summary_build_failed": 1,
+            "workflow_summary_build_not_requested": 1,
+        },
         latest_episode_created_at=datetime(2026, 3, 15, 9, 0, 0, tzinfo=UTC),
         latest_memory_item_created_at=None,
         latest_memory_embedding_created_at=None,
@@ -598,6 +620,13 @@ def test_main_memory_stats_renders_json_output(
         "age_summary_graph_stale_count": 0,
         "age_summary_graph_degraded_count": 0,
         "age_summary_graph_unknown_count": 0,
+        "completion_summary_build_request_count": 4,
+        "completion_summary_build_attempted_count": 3,
+        "completion_summary_build_success_count": 2,
+        "completion_summary_build_skipped_reason_counts": {
+            "summary_build_failed": 1,
+            "workflow_summary_build_not_requested": 1,
+        },
         "workflow_completion_auto_memory_recorded_count": 0,
         "workflow_completion_auto_memory_skipped_count": 0,
     }

@@ -938,6 +938,13 @@ def test_memory_stats_renders_text_output_and_closes_pool(
         checkpoint_auto_memory_skipped_count=1,
         workflow_completion_auto_memory_recorded_count=3,
         workflow_completion_auto_memory_skipped_count=0,
+        completion_summary_build_request_count=4,
+        completion_summary_build_attempted_count=3,
+        completion_summary_build_success_count=2,
+        completion_summary_build_skipped_reason_counts={
+            "summary_build_failed": 1,
+            "workflow_summary_build_not_requested": 1,
+        },
         memory_summary_count=7,
         memory_summary_membership_count=8,
         age_summary_graph_ready_count=1,
@@ -979,6 +986,14 @@ def test_memory_stats_renders_text_output_and_closes_pool(
     assert "- checkpoint_auto_memory_skipped: 1" in captured.out
     assert "- workflow_completion_auto_memory_recorded: 3" in captured.out
     assert "- workflow_completion_auto_memory_skipped: 0" in captured.out
+    assert "Completion summary build observability:" in captured.out
+    assert "- request_count: 4" in captured.out
+    assert "- attempted_count: 3" in captured.out
+    assert "- success_count: 2" in captured.out
+    assert (
+        "- skipped_reason_counts: {'summary_build_failed': 1, 'workflow_summary_build_not_requested': 1}"
+        in captured.out
+    )
     assert "- memory_summaries: 7" in captured.out
     assert "- memory_summary_memberships: 8" in captured.out
     assert "- age_summary_graph_ready: 1" in captured.out

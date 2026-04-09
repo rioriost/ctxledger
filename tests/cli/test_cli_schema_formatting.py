@@ -54,7 +54,7 @@ def test_format_stats_text_uses_zero_defaults_for_missing_fields() -> None:
     assert "- root_cause: 0" in rendered
     assert "- recovery_pattern: 0" in rendered
     assert "- what_remains: 0" in rendered
-    assert "- summary_backlog: 0" in rendered
+    assert "- summary_backlog_count: 0" in rendered
     assert "- checkpoints: 0" in rendered
     assert "- workflow_updated_at: None" in rendered
     assert "- checkpoint_created_at: None" in rendered
@@ -119,6 +119,10 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
         checkpoint_auto_memory_skipped_count=0,
         workflow_completion_auto_memory_recorded_count=0,
         workflow_completion_auto_memory_skipped_count=0,
+        completion_summary_build_request_count=0,
+        completion_summary_build_attempted_count=0,
+        completion_summary_build_success_count=0,
+        completion_summary_build_skipped_reason_counts={},
         latest_episode_created_at=None,
         latest_memory_item_created_at=None,
         latest_memory_embedding_created_at=None,
@@ -133,6 +137,11 @@ def test_format_memory_stats_text_renders_none_when_provenance_missing() -> None
     assert "- checkpoint_auto_memory_skipped: 0" in rendered
     assert "- workflow_completion_auto_memory_recorded: 0" in rendered
     assert "- workflow_completion_auto_memory_skipped: 0" in rendered
+    assert "Completion summary build observability:" in rendered
+    assert "- request_count: 0" in rendered
+    assert "- attempted_count: 0" in rendered
+    assert "- success_count: 0" in rendered
+    assert "- skipped_reason_counts: {}" in rendered
     assert "Memory item provenance:" in rendered
     assert "- none" in rendered
     assert "- memory_relation_created_at: None" in rendered
@@ -182,6 +191,13 @@ def test_format_memory_stats_text_renders_values() -> None:
         checkpoint_auto_memory_skipped_count=3,
         workflow_completion_auto_memory_recorded_count=5,
         workflow_completion_auto_memory_skipped_count=2,
+        completion_summary_build_request_count=4,
+        completion_summary_build_attempted_count=3,
+        completion_summary_build_success_count=2,
+        completion_summary_build_skipped_reason_counts={
+            "summary_build_failed": 1,
+            "workflow_summary_build_not_requested": 1,
+        },
         latest_episode_created_at=datetime(2026, 3, 17, 12, 0, 0, tzinfo=UTC),
         latest_memory_item_created_at=datetime(2026, 3, 17, 12, 1, 0, tzinfo=UTC),
         latest_memory_embedding_created_at=datetime(2026, 3, 17, 12, 2, 0, tzinfo=UTC),
@@ -198,6 +214,14 @@ def test_format_memory_stats_text_renders_values() -> None:
     assert "- checkpoint_auto_memory_skipped: 3" in rendered
     assert "- workflow_completion_auto_memory_recorded: 5" in rendered
     assert "- workflow_completion_auto_memory_skipped: 2" in rendered
+    assert "Completion summary build observability:" in rendered
+    assert "- request_count: 4" in rendered
+    assert "- attempted_count: 3" in rendered
+    assert "- success_count: 2" in rendered
+    assert (
+        "- skipped_reason_counts: {'summary_build_failed': 1, 'workflow_summary_build_not_requested': 1}"
+        in rendered
+    )
     assert "- checkpoint: 1" in rendered
     assert "- episode: 2" in rendered
     assert "- episode_created_at: 2026-03-17 12:00:00+00:00" in rendered
@@ -255,8 +279,8 @@ def test_format_stats_text_renders_structured_checkpoint_coverage() -> None:
     assert "- root_cause: 8" in rendered
     assert "- recovery_pattern: 6" in rendered
     assert "- what_remains: 5" in rendered
-    assert "- summary_backlog: 0" in rendered
-    assert "- summary_backlog: 0" in rendered
+
+    assert "- summary_backlog_count: 0" in rendered
 
 
 def test_format_failures_text_renders_values() -> None:

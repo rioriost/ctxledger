@@ -331,6 +331,10 @@ class MemoryStats:
     latest_memory_embedding_created_at: datetime | None = None
     latest_memory_relation_created_at: datetime | None = None
     latest_derived_memory_item_created_at: datetime | None = None
+    completion_summary_build_request_count: int = 0
+    completion_summary_build_attempted_count: int = 0
+    completion_summary_build_success_count: int = 0
+    completion_summary_build_skipped_reason_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(slots=True, frozen=True)
@@ -860,6 +864,12 @@ class WorkflowService:
                 uow,
                 provenance="derived",
             )
+            (
+                completion_summary_build_request_count,
+                completion_summary_build_attempted_count,
+                completion_summary_build_success_count,
+                completion_summary_build_skipped_reason_counts,
+            ) = self._count_completion_summary_build_outcomes(uow)
 
             return MemoryStats(
                 episode_count=episode_count,
@@ -901,6 +911,12 @@ class WorkflowService:
                 latest_memory_embedding_created_at=latest_memory_embedding_created_at,
                 latest_memory_relation_created_at=latest_memory_relation_created_at,
                 latest_derived_memory_item_created_at=latest_derived_memory_item_created_at,
+                completion_summary_build_request_count=(completion_summary_build_request_count),
+                completion_summary_build_attempted_count=(completion_summary_build_attempted_count),
+                completion_summary_build_success_count=(completion_summary_build_success_count),
+                completion_summary_build_skipped_reason_counts=(
+                    completion_summary_build_skipped_reason_counts
+                ),
             )
 
     def list_workflows(

@@ -758,6 +758,120 @@ def test_get_stats_counts_completion_summary_build_outcomes() -> None:
     }
 
 
+def test_get_memory_stats_counts_completion_summary_build_outcomes() -> None:
+    service, _ = make_service_and_uow()
+
+    workspace_id_1 = uuid4()
+    workspace_id_2 = uuid4()
+    shared_memory_id = uuid4()
+
+    records_by_workspace = {
+        workspace_id_1: (
+            SimpleNamespace(
+                memory_id=shared_memory_id,
+                provenance="workflow_complete_auto",
+                metadata={
+                    "summary_build_requested": True,
+                    "summary_build_attempted": True,
+                    "summary_build_succeeded": True,
+                },
+            ),
+            SimpleNamespace(
+                memory_id=uuid4(),
+                provenance="workflow_complete_auto",
+                metadata={
+                    "summary_build_requested": True,
+                    "summary_build_attempted": True,
+                    "summary_build_succeeded": False,
+                    "summary_build_skipped_reason": "summary_build_failed",
+                },
+            ),
+        ),
+        workspace_id_2: (
+            SimpleNamespace(
+                memory_id=shared_memory_id,
+                provenance="workflow_complete_auto",
+                metadata={
+                    "summary_build_requested": True,
+                    "summary_build_attempted": True,
+                    "summary_build_succeeded": True,
+                },
+            ),
+            SimpleNamespace(
+                memory_id=uuid4(),
+                provenance="workflow_complete_auto",
+                metadata={
+                    "summary_build_requested": False,
+                    "summary_build_attempted": False,
+                    "summary_build_succeeded": False,
+                    "summary_build_skipped_reason": "workflow_summary_build_not_requested",
+                },
+            ),
+            SimpleNamespace(
+                memory_id=uuid4(),
+                provenance="episode",
+                metadata={
+                    "summary_build_requested": True,
+                    "summary_build_attempted": True,
+                    "summary_build_succeeded": True,
+                    "summary_build_skipped_reason": "should_not_be_counted",
+                },
+            ),
+        ),
+    }
+
+    class FakeUow:
+        def __enter__(self) -> "FakeUow":
+            self.workspaces = SimpleNamespace(
+                count_all=lambda: 2,
+                list_all=lambda limit: (
+                    SimpleNamespace(workspace_id=workspace_id_1),
+                    SimpleNamespace(workspace_id=workspace_id_2),
+                ),
+            )
+            self.workflow_checkpoints = SimpleNamespace(
+                count_all=lambda: 0,
+                max_datetime=lambda field: None,
+            )
+            self.memory_episodes = SimpleNamespace(
+                count_all=lambda: 0,
+                max_datetime=lambda field: None,
+            )
+            self.memory_items = SimpleNamespace(
+                count_all=lambda: 4,
+                count_by_provenance=lambda: {
+                    "workflow_complete_auto": 4,
+                },
+                list_by_workspace_id=lambda workspace_id, limit: records_by_workspace[workspace_id],
+                max_datetime=lambda field: None,
+            )
+            self.memory_embeddings = SimpleNamespace(
+                count_all=lambda: 0,
+                max_datetime=lambda field: None,
+            )
+            self.memory_relations = SimpleNamespace(
+                count_all=lambda: 0,
+                max_datetime=lambda field: None,
+            )
+            self.workflow_instances = SimpleNamespace(count_all=lambda: 4)
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    service._uow_factory = lambda: FakeUow()  # type: ignore[assignment]
+
+    stats = service.get_memory_stats()
+
+    assert stats.completion_summary_build_request_count == 2
+    assert stats.completion_summary_build_attempted_count == 2
+    assert stats.completion_summary_build_success_count == 1
+    assert stats.completion_summary_build_skipped_reason_counts == {
+        "summary_build_failed": 1,
+        "workflow_summary_build_not_requested": 1,
+    }
+
+
 def test_get_memory_stats_collects_relation_and_provenance_information() -> None:
     service, _ = make_service_and_uow()
 
