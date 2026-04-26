@@ -146,6 +146,61 @@ If you use `envrcctl`, run:
 envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
 ```
 
+##### Run under Podman
+
+The same compose files are designed to run cleanly under rootless Podman.
+The recommended runtime is `podman compose` (the Docker Compose v2 plugin
+talking to the Podman socket), because it has the broadest support for
+`condition: service_completed_successfully` used by `ctxledger-private-init`:
+
+```/dev/null/sh#L1-1
+podman compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
+```
+
+`podman-compose` (the Python implementation) also works on recent
+versions, but older releases may not honor
+`condition: service_completed_successfully`. If you must use it, prefer
+the latest `podman-compose` from your distribution.
+
+For systemd-managed Podman deployments, Quadlet (`.container`,
+`.kube`, `.pod`) is the recommended path and `restart:` policies in
+the compose files can be replaced by `Restart=always` in a Quadlet
+unit. Quadlet unit files are not shipped in this repository.
+
+##### Optional: live-edit development overlay
+
+The production compose files do not bind-mount the repository into the
+containers; the application is baked into the `ctxledger:local` image at
+build time. For a live-edit workflow, add the dev overlay:
+
+```/dev/null/sh#L1-4
+docker compose \
+  -f docker/docker-compose.yml \
+  -f docker/docker-compose.small-auth.yml \
+  -f docker/docker-compose.dev.yml up --build
+```
+
+The dev overlay re-introduces `..:/app:Z` and the `auth-small` source
+mount. The `:Z` SELinux relabel is required on rootless Podman /
+SELinux-enforcing hosts and is silently ignored by Docker Desktop.
+
+##### Optional: deploy to a non-`localhost` host
+
+Two environment variables let the small stack run on a different host
+without editing compose:
+
+- `CTXLEDGER_PUBLIC_HOST`
+  - default `localhost`
+  - drives Grafana `GF_SERVER_DOMAIN` and `GF_SERVER_ROOT_URL` when
+    `CTXLEDGER_GRAFANA_DOMAIN` / `CTXLEDGER_GRAFANA_ROOT_URL` are not set
+  - update your `mkcert` SAN list to include the same name when serving
+    TLS from a non-`localhost` host
+- `CTXLEDGER_BIND_HOST`
+  - default empty (bind on all interfaces, matching prior behavior)
+  - prefixes the host port mappings for postgres `55432`, grafana `3000`,
+    and traefik `8443`
+  - set to `127.0.0.1` to restrict the stack to loopback
+
 #### 8. Verify the endpoint
 
 Without auth, the endpoint should reject the request:
@@ -414,6 +469,9 @@ Core local startup files:
 
 - `docker/docker-compose.yml`
 - `docker/docker-compose.small-auth.yml`
+- `docker/docker-compose.dev.yml` (optional live-edit overlay)
+- `docker/auth_small/Dockerfile` (pre-built `auth-small` proxy image)
+- `scripts/private_init_entrypoint.sh` (entrypoint for `ctxledger-private-init`)
 
 Current development posture:
 

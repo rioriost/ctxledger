@@ -141,6 +141,44 @@ docker compose --env-file .env -f docker/docker-compose.yml -f docker/docker-com
 envrcctl exec -- docker compose -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
 ```
 
+##### Podman での起動
+
+同じ compose ファイルは rootless Podman でもそのまま動作します。推奨は `podman compose` (Podman socket と組み合わせた Docker Compose v2 plugin) です。`ctxledger-private-init` が依存する `condition: service_completed_successfully` のサポートが最も広いためです。
+
+```/dev/null/sh#L1-1
+podman compose --env-file .env -f docker/docker-compose.yml -f docker/docker-compose.small-auth.yml up -d --build
+```
+
+`podman-compose` (Python 実装) も最近のバージョンなら動きますが、古い版では `condition: service_completed_successfully` を尊重しないことがあります。利用するなら最新版を推奨します。
+
+systemd で本格運用する場合は Quadlet (`.container`, `.kube`, `.pod`) が一級市民で、compose の `restart:` は Quadlet unit 側の `Restart=always` に置き換えられます。Quadlet unit ファイルはこのリポジトリでは配布していません。
+
+##### live-edit 用の development overlay (任意)
+
+production の compose ファイルは repository を bind mount しません。アプリは build 時に `ctxledger:local` image に焼き込まれます。編集→即反映が欲しい場合は dev overlay を重ねます。
+
+```/dev/null/sh#L1-4
+docker compose \
+  -f docker/docker-compose.yml \
+  -f docker/docker-compose.small-auth.yml \
+  -f docker/docker-compose.dev.yml up --build
+```
+
+dev overlay は `..:/app:Z` と `auth-small` の source mount を再導入します。`:Z` は rootless Podman / SELinux enforcing host では必須で、Docker Desktop では無視されます。
+
+##### `localhost` 以外のホストにデプロイする (任意)
+
+compose を編集せずにホストを切り替えるための環境変数が 2 つあります。
+
+- `CTXLEDGER_PUBLIC_HOST`
+  - default は `localhost`
+  - `CTXLEDGER_GRAFANA_DOMAIN` / `CTXLEDGER_GRAFANA_ROOT_URL` が未設定の時に Grafana の `GF_SERVER_DOMAIN` / `GF_SERVER_ROOT_URL` を駆動
+  - `localhost` 以外のホストで TLS を提供する場合は、同じ名前を `mkcert` の SAN にも追加してください
+- `CTXLEDGER_BIND_HOST`
+  - default は空 (全 interface に bind、従来通りの挙動)
+  - postgres `55432`, grafana `3000`, traefik `8443` のホストポートマッピングに prefix として付与
+  - `127.0.0.1` を指定すれば loopback だけに制限できる
+
 #### 8. endpoint を確認する
 
 認証なしでは拒否されるはずです。
@@ -424,6 +462,9 @@ ctxledger bootstrap-age-graph
 
 - `docker/docker-compose.yml`
 - `docker/docker-compose.small-auth.yml`
+- `docker/docker-compose.dev.yml` (任意の live-edit overlay)
+- `docker/auth_small/Dockerfile` (`auth-small` proxy の事前ビルド image)
+- `scripts/private_init_entrypoint.sh` (`ctxledger-private-init` の entrypoint)
 
 現在の development posture:
 

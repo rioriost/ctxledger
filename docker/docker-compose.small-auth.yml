@@ -4,14 +4,13 @@ services:
       context: ..
       dockerfile: Dockerfile
     image: ctxledger:local
-    container_name: ctxledger-server-private-init
     restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       CTXLEDGER_APP_NAME: ctxledger
-      CTXLEDGER_APP_VERSION: 1.1.1
+      CTXLEDGER_APP_VERSION: 1.2.0
       CTXLEDGER_ENV: docker
       CTXLEDGER_DATABASE_URL: postgresql://ctxledger:ctxledger@postgres:5432/ctxledger
       CTXLEDGER_TRANSPORT: http
@@ -25,6 +24,8 @@ services:
       CTXLEDGER_DB_CONNECT_TIMEOUT_SECONDS: 5
       CTXLEDGER_DB_AGE_ENABLED: "true"
       CTXLEDGER_DB_AGE_GRAPH_NAME: ctxledger_memory
+      CTXLEDGER_PRIVATE_INIT_REBUILD_AGE_GRAPH: ${CTXLEDGER_PRIVATE_INIT_REBUILD_AGE_GRAPH:-false}
+      CTXLEDGER_PRIVATE_INIT_BOOTSTRAP_AGE_GRAPH: ${CTXLEDGER_PRIVATE_INIT_BOOTSTRAP_AGE_GRAPH:-false}
       CTXLEDGER_EMBEDDING_ENABLED: "true"
       CTXLEDGER_EMBEDDING_PROVIDER: ${CTXLEDGER_EMBEDDING_PROVIDER:-local_stub}
       CTXLEDGER_EMBEDDING_MODEL: ${OPENAI_MODEL:-text-embedding-3-small}
@@ -38,18 +39,10 @@ services:
       PYTHONPATH: /app/src
       PATH: /root/.local/bin:/opt/ctxledger-venv/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
     working_dir: /app
-    command:
-      [
-        "sh",
-        "-lc",
-        'if [ "$${CTXLEDGER_PRIVATE_INIT_REBUILD_AGE_GRAPH:-false}" = "true" ]; then AGE_BOOTSTRAP_CMD="/opt/ctxledger-venv/bin/python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory --rebuild"; echo "Running explicit AGE graph rebuild for private init"; elif [ "$${CTXLEDGER_PRIVATE_INIT_BOOTSTRAP_AGE_GRAPH:-false}" = "true" ]; then AGE_BOOTSTRAP_CMD="/opt/ctxledger-venv/bin/python -m ctxledger.__init__ bootstrap-age-graph --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger --graph-name ctxledger_memory"; echo "Running opt-in AGE graph bootstrap for private init"; else AGE_BOOTSTRAP_CMD="echo Skipping AGE bootstrap because private init bootstrap is disabled by default"; fi && /opt/ctxledger-venv/bin/python -m ctxledger.__init__ apply-schema && /opt/ctxledger-venv/bin/python scripts/ensure_age_extension.py --database-url postgresql://ctxledger:ctxledger@postgres:5432/ctxledger && sh -lc "$$AGE_BOOTSTRAP_CMD" && (/opt/ctxledger-venv/bin/python scripts/setup_grafana_observability.py || echo ''Skipping Grafana observability setup because Grafana DB credentials are not configured'')',
-      ]
-    volumes:
-      - ..:/app
+    command: ["scripts/private_init_entrypoint.sh"]
 
   traefik:
     image: traefik:v3.1
-    container_name: ctxledger-traefik
     restart: unless-stopped
     depends_on:
       auth-small:
@@ -67,42 +60,34 @@ services:
       - --accesslog=true
       - --log.level=INFO
     ports:
-      - "8443:8443"
+      - "${CTXLEDGER_BIND_HOST:-}:8443:8443"
     volumes:
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - ./traefik/certs:/etc/traefik/certs:ro
     healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep '[t]raefik' >/dev/null 2>&1 || exit 1"]
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 10s
 
   auth-small:
-    image: python:3.14-slim
-    container_name: ctxledger-auth-small
+    build:
+      context: ..
+      dockerfile: docker/auth_small/Dockerfile
+    image: ctxledger-auth-small:local
     restart: unless-stopped
     environment:
       AUTH_SMALL_BEARER_TOKEN: ${CTXLEDGER_SMALL_AUTH_TOKEN:-replace-me-with-a-strong-secret}
       AUTH_SMALL_USER: local-dev
       AUTH_SMALL_MODE: static-token
-      PYTHONPATH: /app/src
-    working_dir: /app
-    command:
-      [
-        "sh",
-        "-lc",
-        "python -m pip install --upgrade uv && rm -rf /tmp/auth-small-venv && uv venv /tmp/auth-small-venv && VIRTUAL_ENV=/tmp/auth-small-venv PATH=/tmp/auth-small-venv/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin uv pip install fastapi 'uvicorn[standard]' && /tmp/auth-small-venv/bin/python -m uvicorn auth_small_app:app --app-dir /app/src --host 0.0.0.0 --port 8090",
-      ]
     expose:
       - "8090"
-    volumes:
-      - ./auth_small/src:/app/src:ro
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8090/healthz'', timeout=5).read()"',
+          "curl -fsS http://127.0.0.1:8090/healthz > /dev/null || exit 1",
         ]
       interval: 10s
       timeout: 5s
@@ -111,7 +96,6 @@ services:
 
   grafana:
     image: grafana/grafana:11.1.7
-    container_name: ctxledger-grafana
     restart: unless-stopped
     depends_on:
       postgres:
@@ -121,8 +105,8 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${CTXLEDGER_GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${CTXLEDGER_GRAFANA_ADMIN_PASSWORD:-ctxledger-grafana-change-me}
-      GF_SERVER_DOMAIN: ${CTXLEDGER_GRAFANA_DOMAIN:-localhost}
-      GF_SERVER_ROOT_URL: ${CTXLEDGER_GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_SERVER_DOMAIN: ${CTXLEDGER_GRAFANA_DOMAIN:-${CTXLEDGER_PUBLIC_HOST:-localhost}}
+      GF_SERVER_ROOT_URL: ${CTXLEDGER_GRAFANA_ROOT_URL:-http://${CTXLEDGER_PUBLIC_HOST:-localhost}:3000}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_USERS_ALLOW_ORG_CREATE: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
@@ -139,7 +123,7 @@ services:
       CTXLEDGER_GRAFANA_POSTGRES_SSLMODE: ${CTXLEDGER_GRAFANA_POSTGRES_SSLMODE:-disable}
       CTXLEDGER_DATABASE_URL: ${CTXLEDGER_DATABASE_URL:-postgresql://ctxledger:ctxledger@postgres:5432/ctxledger}
     ports:
-      - "3000:3000"
+      - "${CTXLEDGER_BIND_HOST:-}:3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -164,14 +148,13 @@ services:
       context: ..
       dockerfile: Dockerfile
     image: ctxledger:local
-    container_name: ctxledger-server-private
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       CTXLEDGER_APP_NAME: ctxledger
-      CTXLEDGER_APP_VERSION: 1.1.1
+      CTXLEDGER_APP_VERSION: 1.2.0
       CTXLEDGER_ENV: docker
       CTXLEDGER_DATABASE_URL: postgresql://ctxledger:ctxledger@postgres:5432/ctxledger
       CTXLEDGER_TRANSPORT: http
@@ -211,13 +194,11 @@ services:
       ]
     expose:
       - "8080"
-    volumes:
-      - ..:/app
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8080/debug/runtime'', timeout=5).read()"',
+          "curl -fsS http://127.0.0.1:8080/debug/runtime > /dev/null || exit 1",
         ]
       interval: 10s
       timeout: 5s

@@ -18,6 +18,82 @@ The project currently follows a lightweight, human-maintained changelog style.
 - startup-time automatic AGE summary-graph refresh when derived graph readiness
   is missing, stale, or otherwise needs rebuild help after restart
 
+## [1.2.0]
+
+### Added
+
+- `docker/auth_small/Dockerfile` so the `auth-small` proxy ships as a
+  pre-built image instead of doing `pip install` at container start. The
+  image bakes `fastapi` and `uvicorn[standard]` and exposes `curl` for a
+  real HTTP healthcheck.
+- `scripts/private_init_entrypoint.sh` extracted from the previously inline
+  `sh -lc '...'` payload in `docker/docker-compose.small-auth.yml`. The
+  script reads `CTXLEDGER_PRIVATE_INIT_REBUILD_AGE_GRAPH` and
+  `CTXLEDGER_PRIVATE_INIT_BOOTSTRAP_AGE_GRAPH` directly, removing the
+  fragile `$${VAR}` double-escaping that broke under `podman-compose`.
+- `docker/docker-compose.dev.yml` overlay that re-introduces the live-edit
+  bind mounts (`..:/app:Z` and `./auth_small/src:/app/src:ro,Z`) for the
+  development workflow. SELinux `:Z` labels are documented as required on
+  rootless Podman / SELinux-enforcing hosts and ignored by Docker Desktop.
+- `CTXLEDGER_PUBLIC_HOST` and `CTXLEDGER_BIND_HOST` environment knobs.
+  `CTXLEDGER_PUBLIC_HOST` (default `localhost`) drives Grafana
+  `GF_SERVER_DOMAIN` / `GF_SERVER_ROOT_URL` defaults so the small stack
+  can be deployed on a non-localhost host without editing compose.
+  `CTXLEDGER_BIND_HOST` (default empty) prefixes host port mappings so
+  operators can restrict postgres `55432`, grafana `3000`, and traefik
+  `8443` to loopback or a specific NIC.
+
+### Changed
+
+- `docker/docker-compose.yml` and `docker/docker-compose.small-auth.yml` no
+  longer mount the repository root (`..:/app`) into the application
+  containers. The application is already baked into the `ctxledger:local`
+  image by the existing `Dockerfile`, so the production code path now
+  uses that baked image directly. Live-edit workflows have moved to the
+  new `docker/docker-compose.dev.yml` overlay.
+- removed hardcoded `container_name:` from compose services. The Compose
+  project name (`name: ctxledger`) provides the prefix, so multiple
+  instances of the stack on the same Podman/Docker host no longer collide
+  on container names.
+- replaced the `python -c "import urllib.request..."` healthchecks on the
+  `ctxledger`, `ctxledger-private`, and `auth-small` services with
+  `curl -fsS` against `/debug/runtime` and `/healthz`. `curl` is already
+  present in the `ctxledger` image and is now also installed in the
+  `auth-small` image.
+- replaced the `ps aux | grep '[t]raefik'` traefik healthcheck with
+  `traefik healthcheck --ping`, which uses the existing `--ping=true`
+  static configuration and avoids busybox `ps` false positives.
+- `auth-small` no longer runs `python -m pip install --upgrade uv && uv
+  pip install fastapi 'uvicorn[standard]'` at container start. It now
+  uses the new `ctxledger-auth-small:local` image, so the proxy starts
+  in seconds without network access and is no longer broken by PyPI
+  outages or `restart: unless-stopped` retry loops.
+- `ctxledger-private-init` `command:` is now a single-element array
+  pointing at `scripts/private_init_entrypoint.sh`, eliminating the
+  ~200-character inline shell that was fragile under `podman-compose`
+  variable interpolation.
+- `CTXLEDGER_APP_VERSION` defaults in both compose files bumped from
+  `1.1.1` to `1.2.0`. `pyproject.toml` and `uv.lock` updated accordingly.
+
+### Fixed
+
+- the small stack now runs cleanly under rootless `podman compose`
+  (Compose v2 plugin against the Podman socket) without SELinux relabel
+  collateral damage on `.git`, without runtime PyPI dependency, and
+  without inline shell quoting fragility. `docker compose` behavior on
+  Docker Desktop is preserved.
+
+### Notes
+
+- For systemd-managed Podman deployments, Quadlet (`.container`,
+  `.kube`, `.pod`) is the recommended path. `restart:` policies in the
+  compose files can be replaced by `Restart=always` in a Quadlet unit.
+  Quadlet unit files are not shipped in this release.
+- Operators on `podman-compose` (Python implementation) older than the
+  release that supports `condition: service_completed_successfully`
+  should switch to `podman compose` (Compose v2 plugin) for full
+  compatibility with the `ctxledger-private-init` dependency contract.
+
 ## [1.1.1]
 
 ### Changed

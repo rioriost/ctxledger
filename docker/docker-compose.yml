@@ -11,7 +11,6 @@ services:
         POSTGRES_MAJOR: 17
         APACHE_AGE_REF: PG17/v1.7.0-rc0
         PGVECTOR_REF: v0.8.2
-    container_name: ctxledger-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ctxledger
@@ -19,7 +18,7 @@ services:
       POSTGRES_PASSWORD: ctxledger
       PGDATA: /var/lib/postgresql/data
     ports:
-      - "55432:5432"
+      - "${CTXLEDGER_BIND_HOST:-}:55432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,14 +33,13 @@ services:
       context: ..
       dockerfile: Dockerfile
     image: ctxledger:local
-    container_name: ctxledger-server
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       CTXLEDGER_APP_NAME: ctxledger
-      CTXLEDGER_APP_VERSION: 1.1.1
+      CTXLEDGER_APP_VERSION: 1.2.0
       CTXLEDGER_ENV: docker
       CTXLEDGER_DATABASE_URL: postgresql://ctxledger:ctxledger@postgres:5432/ctxledger
       CTXLEDGER_TRANSPORT: http
@@ -73,13 +71,11 @@ services:
       ]
     expose:
       - "8080"
-    volumes:
-      - ..:/app
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          'python -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8080/debug/runtime'', timeout=5).read()"',
+          "curl -fsS http://127.0.0.1:8080/debug/runtime > /dev/null || exit 1",
         ]
       interval: 10s
       timeout: 5s

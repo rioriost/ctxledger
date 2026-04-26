@@ -1,0 +1,50 @@
+# Development overlay for the ctxledger Compose stack.
+#
+# This overlay re-introduces the live-edit bind mounts that the production
+# compose files intentionally do not carry. Use it only for local
+# development where you want edits in the working tree to take effect
+# inside the running containers without rebuilding the image.
+#
+# Usage (small/local pattern, with auth):
+#
+#   docker compose \
+#       -f docker/docker-compose.yml \
+#       -f docker/docker-compose.small-auth.yml \
+#       -f docker/docker-compose.dev.yml \
+#       up --build
+#
+# Or for the bare ctxledger service without the auth/proxy/grafana stack:
+#
+#   docker compose \
+#       -f docker/docker-compose.yml \
+#       -f docker/docker-compose.dev.yml \
+#       up --build
+#
+# Notes:
+#   * The `:Z` SELinux relabel suffix is required on SELinux-enforcing
+#     hosts (Fedora, RHEL, CentOS Stream) when running under rootless
+#     Podman. Docker Desktop on macOS / Windows ignores `:Z` and treats
+#     the mount as a normal bind mount, so it is safe to leave in place.
+#   * Relabeling the entire repository root with `:Z` rewrites SELinux
+#     labels on every file under `..`, including `.git`. If that is a
+#     concern on your host, consider mounting only `../src` instead by
+#     editing the bind targets below.
+#   * The auth-small source mount is read-only because the FastAPI app
+#     does not need to write back into the repo.
+
+services:
+  ctxledger:
+    volumes:
+      - ..:/app:Z
+
+  ctxledger-private:
+    volumes:
+      - ..:/app:Z
+
+  ctxledger-private-init:
+    volumes:
+      - ..:/app:Z
+
+  auth-small:
+    volumes:
+      - ./auth_small/src:/app/src:ro,Z
