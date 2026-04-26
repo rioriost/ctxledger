@@ -35,6 +35,12 @@ The project currently follows a lightweight, human-maintained changelog style.
   bind mounts (`..:/app:Z` and `./auth_small/src:/app/src:ro,Z`) for the
   development workflow. SELinux `:Z` labels are documented as required on
   rootless Podman / SELinux-enforcing hosts and ignored by Docker Desktop.
+- `docker/docker-compose.test-ports.yml` regression-test overlay that
+  shifts published host ports off the production defaults
+  (`55433` / `3001` / `8444`) so a side-by-side test stack can run on the
+  same Docker host as a live production stack. Uses the Compose v2
+  `!override` tag to fully replace the base `ports` lists instead of
+  appending to them.
 - `CTXLEDGER_PUBLIC_HOST` and `CTXLEDGER_BIND_HOST` environment knobs.
   `CTXLEDGER_PUBLIC_HOST` (default `localhost`) drives Grafana
   `GF_SERVER_DOMAIN` / `GF_SERVER_ROOT_URL` defaults so the small stack
@@ -82,6 +88,15 @@ The project currently follows a lightweight, human-maintained changelog style.
   collateral damage on `.git`, without runtime PyPI dependency, and
   without inline shell quoting fragility. `docker compose` behavior on
   Docker Desktop is preserved.
+- `Dockerfile` now `COPY`s `docs/sql` into the image so
+  `scripts/setup_grafana_observability.py` can locate
+  `docs/sql/observability_views.sql` without depending on the production
+  `..:/app` bind mount that 1.2.0 removes. Without this, the new
+  `private_init_entrypoint.sh` would log
+  `observability SQL file not found: docs/sql/observability_views.sql`
+  on a fresh stack and skip Grafana view provisioning. Verified against a
+  side-by-side test deployment that the `observability` schema is
+  populated with all 10 views after a clean bring-up.
 
 ### Notes
 

@@ -21,6 +21,7 @@ COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src ./src
 COPY schemas ./schemas
 COPY scripts ./scripts
+COPY docs/sql ./docs/sql
 RUN chmod +x /app/scripts/run_azure_bootstrap.sh \
     /app/scripts/start_with_bootstrap.sh \
     /app/scripts/private_init_entrypoint.sh

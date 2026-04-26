@@ -1,0 +1,33 @@
+# Regression-test-only override for the 1.2.0 podman-compose compatibility
+# release. Shifts published host ports off the production defaults so this
+# stack can run side-by-side with the existing production ctxledger stack
+# on the same Docker host.
+#
+# Usage:
+#   docker compose --project-name ctxledgertest \
+#       --env-file .env.test \
+#       -f docker/docker-compose.yml \
+#       -f docker/docker-compose.small-auth.yml \
+#       -f docker/docker-compose.test-ports.yml \
+#       up -d --build
+#
+# The mkcert-issued localhost certificate is reused, so the test stack is
+# reachable at https://localhost:8444 (instead of 8443).
+#
+# The `!override` tag tells Docker Compose v2 to replace the base file's
+# `ports` list entirely instead of appending to it. Without it the test
+# stack would try to bind both the production port and the test port and
+# collide with the running production stack.
+
+services:
+  postgres:
+    ports: !override
+      - "${CTXLEDGER_BIND_HOST:-127.0.0.1}:55433:5432"
+
+  grafana:
+    ports: !override
+      - "${CTXLEDGER_BIND_HOST:-127.0.0.1}:3001:3000"
+
+  traefik:
+    ports: !override
+      - "${CTXLEDGER_BIND_HOST:-127.0.0.1}:8444:8443"
