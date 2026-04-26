@@ -41,13 +41,18 @@ The project currently follows a lightweight, human-maintained changelog style.
   same Docker host as a live production stack. Uses the Compose v2
   `!override` tag to fully replace the base `ports` lists instead of
   appending to them.
-- `CTXLEDGER_PUBLIC_HOST` and `CTXLEDGER_BIND_HOST` environment knobs.
-  `CTXLEDGER_PUBLIC_HOST` (default `localhost`) drives Grafana
-  `GF_SERVER_DOMAIN` / `GF_SERVER_ROOT_URL` defaults so the small stack
-  can be deployed on a non-localhost host without editing compose.
-  `CTXLEDGER_BIND_HOST` (default empty) prefixes host port mappings so
-  operators can restrict postgres `55432`, grafana `3000`, and traefik
-  `8443` to loopback or a specific NIC.
+- `CTXLEDGER_BIND_HOST` environment knob (default empty) that prefixes
+  host port mappings so operators can restrict postgres `55432`, grafana
+  `3000`, and traefik `8443` to loopback or a specific NIC.
+- `CTXLEDGER_PUBLIC_HOST` documented as an env-file convention that
+  operators can reference inside their own env file when setting
+  `CTXLEDGER_GRAFANA_DOMAIN` and `CTXLEDGER_GRAFANA_ROOT_URL` for a
+  non-`localhost` deployment. The compose files do not interpolate
+  `CTXLEDGER_PUBLIC_HOST` directly because `podman-compose` 1.5.x does
+  not support nested variable substitution
+  (`containers/podman-compose#1064`); resolving the public host once in
+  the env file and letting the resolved values flow into the stack works
+  on both Docker Compose v2 and `podman-compose` 1.5.x.
 
 ### Changed
 
@@ -97,6 +102,27 @@ The project currently follows a lightweight, human-maintained changelog style.
   on a fresh stack and skip Grafana view provisioning. Verified against a
   side-by-side test deployment that the `observability` schema is
   populated with all 10 views after a clean bring-up.
+- All base image references in the Compose stack and `Dockerfile`s are
+  now fully qualified (`docker.io/library/python:3.14-slim`,
+  `docker.io/library/postgres:17`, `docker.io/library/traefik:v3.1`,
+  `docker.io/grafana/grafana:11.1.7`) so they build and pull without
+  prompting on Podman hosts that have strict short-name resolution
+  enabled (the RHEL 10 default). Docker Desktop accepts the qualified
+  names without behavior change.
+- `GF_SERVER_DOMAIN` and `GF_SERVER_ROOT_URL` defaults in
+  `docker-compose.small-auth.yml` are now flat single-level
+  `${CTXLEDGER_GRAFANA_DOMAIN:-localhost}` and
+  `${CTXLEDGER_GRAFANA_ROOT_URL:-http://localhost:3000}` instead of
+  nested `${...:-${...:-...}}` forms. The nested form rendered
+  incorrectly on `podman-compose` 1.5.x (Grafana would fail to start
+  with `Invalid root_url. url=http://localhost:3001:3000}/`).
+- `docker/docker-compose.test-ports.yml` uses literal `127.0.0.1` host
+  IPs instead of `${CTXLEDGER_BIND_HOST:-127.0.0.1}` because
+  `podman-compose` 1.5.x does not run env-variable interpolation on
+  list entries that have been replaced via the `!override` tag, which
+  caused `Error: invalid port format` during `up`. The base compose
+  files still honor `CTXLEDGER_BIND_HOST` for production deployments
+  where no `!override` is involved.
 
 ### Notes
 

@@ -168,12 +168,17 @@ dev overlay は `..:/app:Z` と `auth-small` の source mount を再導入しま
 
 ##### `localhost` 以外のホストにデプロイする (任意)
 
-compose を編集せずにホストを切り替えるための環境変数が 2 つあります。
+compose を編集せずにホストを切り替えるための env 知識が 2 種類あります。
 
+- `CTXLEDGER_GRAFANA_DOMAIN` と `CTXLEDGER_GRAFANA_ROOT_URL`
+  - `http://localhost:3000` 以外で公開する時は、env file で両方を直接設定する
+  - 例: ホスト名が `ctxledger.lan` の場合
+    - `CTXLEDGER_GRAFANA_DOMAIN=ctxledger.lan`
+    - `CTXLEDGER_GRAFANA_ROOT_URL=http://ctxledger.lan:3000`
+  - そのホストで TLS を提供する場合は、同じ名前を `mkcert` (または利用 CA) の SAN にも追加
 - `CTXLEDGER_PUBLIC_HOST`
-  - default は `localhost`
-  - `CTXLEDGER_GRAFANA_DOMAIN` / `CTXLEDGER_GRAFANA_ROOT_URL` が未設定の時に Grafana の `GF_SERVER_DOMAIN` / `GF_SERVER_ROOT_URL` を駆動
-  - `localhost` 以外のホストで TLS を提供する場合は、同じ名前を `mkcert` の SAN にも追加してください
+  - env file 内で参照するための約束ごと (例: `CTXLEDGER_GRAFANA_DOMAIN=${CTXLEDGER_PUBLIC_HOST}`)
+  - compose 側では直接 interpolation しません。`podman-compose` 1.5.x が入れ子の変数置換に未対応のため (`containers/podman-compose#1064`)。env file 側で 1 度解決した値を流す方針です
 - `CTXLEDGER_BIND_HOST`
   - default は空 (全 interface に bind、従来通りの挙動)
   - postgres `55432`, grafana `3000`, traefik `8443` のホストポートマッピングに prefix として付与

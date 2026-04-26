@@ -7,7 +7,7 @@ services:
       context: ..
       dockerfile: docker/postgres-age/Dockerfile
       args:
-        POSTGRES_BASE_IMAGE: postgres:17
+        POSTGRES_BASE_IMAGE: docker.io/library/postgres:17
         POSTGRES_MAJOR: 17
         APACHE_AGE_REF: PG17/v1.7.0-rc0
         PGVECTOR_REF: v0.8.2

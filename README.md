@@ -186,15 +186,24 @@ SELinux-enforcing hosts and is silently ignored by Docker Desktop.
 
 ##### Optional: deploy to a non-`localhost` host
 
-Two environment variables let the small stack run on a different host
+Two environment knobs let the small stack run on a different host
 without editing compose:
 
+- `CTXLEDGER_GRAFANA_DOMAIN` and `CTXLEDGER_GRAFANA_ROOT_URL`
+  - set both directly in your env file when the stack is reachable at
+    something other than `http://localhost:3000`
+  - example for a host named `ctxledger.lan`:
+    - `CTXLEDGER_GRAFANA_DOMAIN=ctxledger.lan`
+    - `CTXLEDGER_GRAFANA_ROOT_URL=http://ctxledger.lan:3000`
+  - update your `mkcert` (or other CA) SAN list to include the same name
+    when serving TLS from that host
 - `CTXLEDGER_PUBLIC_HOST`
-  - default `localhost`
-  - drives Grafana `GF_SERVER_DOMAIN` and `GF_SERVER_ROOT_URL` when
-    `CTXLEDGER_GRAFANA_DOMAIN` / `CTXLEDGER_GRAFANA_ROOT_URL` are not set
-  - update your `mkcert` SAN list to include the same name when serving
-    TLS from a non-`localhost` host
+  - documented convention you can reference inside your own env file
+    (for example `CTXLEDGER_GRAFANA_DOMAIN=${CTXLEDGER_PUBLIC_HOST}`)
+  - the compose files do not interpolate it directly because
+    `podman-compose` 1.5.x does not support nested variable substitution
+    (`containers/podman-compose#1064`); resolve it once in your env file
+    and the resolved values flow into the stack
 - `CTXLEDGER_BIND_HOST`
   - default empty (bind on all interfaces, matching prior behavior)
   - prefixes the host port mappings for postgres `55432`, grafana `3000`,

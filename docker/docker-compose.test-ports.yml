@@ -1,10 +1,17 @@
 # Regression-test-only override for the 1.2.0 podman-compose compatibility
 # release. Shifts published host ports off the production defaults so this
 # stack can run side-by-side with the existing production ctxledger stack
-# on the same Docker host.
+# on the same Docker / Podman host.
 #
 # Usage:
 #   docker compose --project-name ctxledgertest \
+#       --env-file .env.test \
+#       -f docker/docker-compose.yml \
+#       -f docker/docker-compose.small-auth.yml \
+#       -f docker/docker-compose.test-ports.yml \
+#       up -d --build
+#
+#   podman compose --project-name ctxledgertest \
 #       --env-file .env.test \
 #       -f docker/docker-compose.yml \
 #       -f docker/docker-compose.small-auth.yml \
@@ -18,16 +25,26 @@
 # `ports` list entirely instead of appending to it. Without it the test
 # stack would try to bind both the production port and the test port and
 # collide with the running production stack.
+#
+# IMPORTANT: the host_ip is hardcoded to 127.0.0.1 here on purpose.
+# `podman-compose` 1.5.0 does not run env-variable interpolation on list
+# entries that have been replaced via the `!override` tag, so a value like
+# `${CTXLEDGER_BIND_HOST:-127.0.0.1}:8444:8443` survives into the runtime
+# command line literally and `podman run` rejects it as an invalid port
+# format. Docker Compose v2 does interpolate correctly. Keeping a literal
+# loopback address here makes this regression-test overlay portable across
+# both runtimes. The base compose files still honor `CTXLEDGER_BIND_HOST`
+# for production deployments.
 
 services:
   postgres:
     ports: !override
-      - "${CTXLEDGER_BIND_HOST:-127.0.0.1}:55433:5432"
+      - "127.0.0.1:55433:5432"
 
   grafana:
     ports: !override
-      - "${CTXLEDGER_BIND_HOST:-127.0.0.1}:3001:3000"
+      - "127.0.0.1:3001:3000"
 
   traefik:
     ports: !override
-      - "${CTXLEDGER_BIND_HOST:-127.0.0.1}:8444:8443"
+      - "127.0.0.1:8444:8443"

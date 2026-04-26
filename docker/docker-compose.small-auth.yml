@@ -42,7 +42,7 @@ services:
     command: ["scripts/private_init_entrypoint.sh"]
 
   traefik:
-    image: traefik:v3.1
+    image: docker.io/library/traefik:v3.1
     restart: unless-stopped
     depends_on:
       auth-small:
@@ -62,8 +62,16 @@ services:
     ports:
       - "${CTXLEDGER_BIND_HOST:-}:8443:8443"
     volumes:
-      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-      - ./traefik/certs:/etc/traefik/certs:ro
+      # `:Z` is a private SELinux relabel that lets rootless Podman on
+      # SELinux-enforcing hosts (Fedora, RHEL, CentOS Stream) read these
+      # files and, critically, lets the Traefik file provider attach an
+      # inotify watcher to /etc/traefik/dynamic.yml. Without it, Traefik
+      # logs `Cannot start the provider *file.Provider error="error
+      # adding file watcher: permission denied"` and serves 404 for
+      # every route. Docker Desktop on macOS / Windows ignores `:Z` and
+      # treats both entries as ordinary read-only bind mounts.
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro,Z
+      - ./traefik/certs:/etc/traefik/certs:ro,Z
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 10s
@@ -95,7 +103,7 @@ services:
       start_period: 10s
 
   grafana:
-    image: grafana/grafana:11.1.7
+    image: docker.io/grafana/grafana:11.1.7
     restart: unless-stopped
     depends_on:
       postgres:
@@ -105,8 +113,15 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${CTXLEDGER_GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${CTXLEDGER_GRAFANA_ADMIN_PASSWORD:-ctxledger-grafana-change-me}
-      GF_SERVER_DOMAIN: ${CTXLEDGER_GRAFANA_DOMAIN:-${CTXLEDGER_PUBLIC_HOST:-localhost}}
-      GF_SERVER_ROOT_URL: ${CTXLEDGER_GRAFANA_ROOT_URL:-http://${CTXLEDGER_PUBLIC_HOST:-localhost}:3000}
+      # NOTE: kept as a single-level ${VAR:-default} for compatibility with
+      # podman-compose 1.5.x, which does not support nested variable
+      # substitution (containers/podman-compose#1064). To deploy on a
+      # non-localhost host, set CTXLEDGER_GRAFANA_DOMAIN and
+      # CTXLEDGER_GRAFANA_ROOT_URL directly in your env file.
+      # CTXLEDGER_PUBLIC_HOST remains a documented convention for env files
+      # but is not interpolated here.
+      GF_SERVER_DOMAIN: ${CTXLEDGER_GRAFANA_DOMAIN:-localhost}
+      GF_SERVER_ROOT_URL: ${CTXLEDGER_GRAFANA_ROOT_URL:-http://localhost:3000}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_USERS_ALLOW_ORG_CREATE: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
